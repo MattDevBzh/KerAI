@@ -37,4 +37,37 @@ describe('webview protocol boundary', () => {
       }),
     ).toThrow();
   });
+  it('strictly validates context, human replies and versioned approvals', () => {
+    const launch = {
+      initialContext: 'US-42',
+      mcpServerIds: ['ado'],
+      memoryIds: [],
+      useProjectMemory: false,
+    };
+    expect(
+      parseMessage({
+        type: 'previewRun',
+        requestId: 'preview',
+        featureId: 'feature',
+        stepId: 'dev',
+        launch,
+      }),
+    ).toMatchObject({ launch });
+    expect(
+      parseMessage({ type: 'answerHumanRequest', requestId: 'question', answer: 'Use CSV' }),
+    ).toMatchObject({ answer: 'Use CSV' });
+    for (const payload of [
+      {
+        type: 'previewRun',
+        requestId: 'preview',
+        featureId: 'feature',
+        stepId: 'dev',
+        launch: { ...launch, mcpServerIds: ['ado', 'ado'] },
+      },
+      { type: 'runStep', featureId: 'feature', stepId: 'dev', previewFingerprint: 'unverified' },
+      { type: 'approveStep', featureId: 'feature', stepId: 'dev', expectedRevision: -1 },
+      { type: 'setMcpSecret', serverId: 'ado', key: '../secret', value: 'never stored' },
+    ])
+      expect(() => parseMessage(payload)).toThrow();
+  });
 });

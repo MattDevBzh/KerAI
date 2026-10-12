@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readdir, readFile, mkdir, writeFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { RunInput, RunCallbacks, RunEvent } from '../shared/types';
+import type { RunInput, RunCallbacks, RunEvent, TestEvidence } from '../shared/types';
 import { PolicyEngine, isSensitivePath, sha256 } from './PolicyEngine';
 import { runProcess, redact } from './process';
 
@@ -37,6 +37,7 @@ export class ToolHost {
   readonly fileHashes: Record<string, string> = {};
   private policy!: PolicyEngine;
   private writes: Promise<unknown> = Promise.resolve();
+  private observedFiles = new Set<string>();
   constructor(
     private input: RunInput,
     private callbacks: RunCallbacks,
@@ -53,8 +54,10 @@ export class ToolHost {
   async createTools(): Promise<Tool[]> {
     const info = await gitInfo(this.input.workspacePath);
     const owned: Record<string, string> = {};
-    for (const step of this.input.feature.steps)
-      for (const attempt of step.attempts) Object.assign(owned, attempt.fileHashes ?? {});
+    const attempts = this.input.feature.steps
+      .flatMap((step) => step.attempts)
+      .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
+    for (const attempt of attempts) Object.assign(owned, attempt.fileHashes ?? {});
     this.policy = new PolicyEngine(
       this.input.workspacePath,
       this.input.step.policy,
@@ -110,6 +113,7 @@ export class ToolHost {
           const content = await readFile(target);
           if (content.includes(0)) throw new Error('Fichier binaire non pris en charge.');
           await this.policy.recordRead(relative, content);
+          this.observedFiles.add(path.posix.normalize(relative));
           return { path: relative, content: content.toString('utf8'), sha256: sha256(content) };
         },
       ),
@@ -229,25 +233,67 @@ export class ToolHost {
           z.object({ id: z.string() }),
           async ({ id }) => {
             const command = this.policy.assertCommand(id, this.input.settings.testCommands);
-            this.emit(
-              'info',
-              `Test ${command.name} : ${command.command} ${command.args.join(' ')}`,
-            );
-            const result = await runProcess(
-              command.command,
-              command.args,
-              this.input.workspacePath,
-              {
-                signal: this.signal,
-                timeoutMs: 300_000,
-                onLine: (line) => this.emit('info', line),
-              },
-            );
-            this.emit(
-              result.code === 0 ? 'info' : 'error',
-              `Test ${command.name} terminé : code ${result.code}.`,
-            );
-            return result;
+            const run = this.writes
+              .catch(() => undefined)
+              .then(async () => {
+                if (this.signal.aborted) throw new Error('Exécution annulée.');
+                this.emit(
+                  'info',
+                  `Test ${command.name} : ${command.command} ${command.args.join(' ')}`,
+                );
+                const fileHashes = await this.evidenceHashes();
+                const evidence: TestEvidence = {
+                  id: randomUUID(),
+                  source: 'host',
+                  commandId: command.id,
+                  name: command.name,
+                  command: command.command,
+                  args: [...command.args],
+                  startedAt: new Date().toISOString(),
+                  finishedAt: '',
+                  exitCode: null,
+                  stdout: '',
+                  stderr: '',
+                  truncated: false,
+                  fileHashes,
+                };
+                try {
+                  const result = await runProcess(
+                    command.command,
+                    command.args,
+                    this.input.workspacePath,
+                    {
+                      signal: this.signal,
+                      timeoutMs: 300_000,
+                      onLine: (line) => this.emit('info', line),
+                    },
+                  );
+                  evidence.exitCode = result.code;
+                  evidence.stdout = result.stdout.slice(-32000);
+                  evidence.stderr = result.stderr.slice(-32000);
+                  evidence.truncated =
+                    result.truncated ||
+                    result.stdout.length > 32000 ||
+                    result.stderr.length > 32000;
+                  const after = await this.evidenceHashes();
+                  if (Object.entries(fileHashes).some(([file, hash]) => after[file] !== hash))
+                    evidence.error =
+                      'Des fichiers observés ont changé pendant les tests. Relance les tests sur leur version finale.';
+                  this.emit(
+                    result.code === 0 && !evidence.error ? 'info' : 'error',
+                    `Test ${command.name} terminé : code ${result.code}.`,
+                  );
+                  return { ...result, ...(evidence.error ? { warning: evidence.error } : {}) };
+                } catch (error) {
+                  evidence.error = redact(error instanceof Error ? error.message : String(error));
+                  throw error;
+                } finally {
+                  evidence.finishedAt = new Date().toISOString();
+                  this.callbacks.onEvidence?.(evidence);
+                }
+              });
+            this.writes = run;
+            return await run;
           },
         ),
       );
@@ -261,6 +307,22 @@ export class ToolHost {
       studio_run_test: ['execute', 'studio_run_test'],
     };
     return tools.filter((tool) => capabilities[tool.name].some((name) => requested.has(name)));
+  }
+  private async evidenceHashes(): Promise<Record<string, string>> {
+    const files = new Set([...this.observedFiles, ...Object.keys(this.fileHashes)]);
+    for (const step of this.input.feature.steps)
+      for (const attempt of step.attempts)
+        for (const file of Object.keys(attempt.fileHashes ?? {})) files.add(file);
+    const hashes: Record<string, string> = {};
+    for (const file of files) {
+      try {
+        hashes[file] = sha256(await readFile(await this.policy.resolve(file)));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        hashes[file] = '<missing>';
+      }
+    }
+    return hashes;
   }
   private async list(relative: string): Promise<string[]> {
     const absolute = await this.policy.resolve(relative);

@@ -1,0 +1,167 @@
+{
+  "checkedAt": "2026-10-12T23:21:22.907Z",
+  "cliVersion": "1.0.63",
+  "sdkVersion": "1.0.20",
+  "authentication": {
+    "state": "ready",
+    "authenticated": true
+  },
+  "fixtureOnly": true,
+  "modelPromptsSent": 0,
+  "modelUsageEvents": 0,
+  "discoveryAndExactScopeValidated": true,
+  "diagnosticToolExecution": "unsupported",
+  "nativePermissionExecutionValidated": false,
+  "modelDrivenMcpExecutionValidated": false,
+  "permissionPolicyValidation": "injected-transport unit tests only",
+  "limitations": [
+    "CLI 1.0.63 rejects session.tools.execute before invoking the MCP fixture or permission callback.",
+    "This does not prove that model-driven MCP tool calls are unavailable; that separate path was not invoked.",
+    "Current SDK/docs prescribe approve-once; its acceptance by the installed CLI permission callback remains unverified.",
+    "No remote MCP, OAuth, Azure DevOps data, model invocation or credential exchange was tested."
+  ],
+  "sources": [
+    "https://docs.github.com/en/copilot/how-tos/copilot-sdk/features/hooks",
+    "https://github.com/github/copilot-sdk/blob/main/nodejs/README.md"
+  ],
+  "catalog": {
+    "state": "ready",
+    "checkedAt": "2026-10-12T23:21:11.544Z",
+    "tools": [
+      {
+        "name": "read_story",
+        "description": "Read a fixture story"
+      },
+      {
+        "name": "write_story",
+        "description": "Simulated write, never changes disk"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "label": "auto-read",
+      "policy": "read-only",
+      "tool": "read_story",
+      "autoApproveReadOnly": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-read_story",
+          "server": "fixture",
+          "tool": "read_story"
+        }
+      ],
+      "outcome": {
+        "error": "Unhandled method session.tools.execute"
+      }
+    },
+    {
+      "label": "deny-write-readonly",
+      "policy": "read-only",
+      "tool": "write_story",
+      "autoApproveReadOnly": true,
+      "humanApproval": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-write_story",
+          "server": "fixture",
+          "tool": "write_story"
+        }
+      ],
+      "outcome": {
+        "error": "Unhandled method session.tools.execute"
+      }
+    },
+    {
+      "label": "deny-write-human",
+      "policy": "workspace-write",
+      "tool": "write_story",
+      "autoApproveReadOnly": false,
+      "humanApproval": false,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-write_story",
+          "server": "fixture",
+          "tool": "write_story"
+        }
+      ],
+      "outcome": {
+        "error": "Unhandled method session.tools.execute"
+      }
+    },
+    {
+      "label": "approve-write-human",
+      "policy": "workspace-write",
+      "tool": "write_story",
+      "autoApproveReadOnly": false,
+      "humanApproval": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-write_story",
+          "server": "fixture",
+          "tool": "write_story"
+        }
+      ],
+      "outcome": {
+        "error": "Unhandled method session.tools.execute"
+      }
+    }
+  ],
+  "latestAdapterPreflight": {
+    "checkedAt": "2026-10-12T23:34:15.785Z",
+    "cliVersion": "1.0.63",
+    "state": "refused_before_prompt",
+    "modelPromptsSent": 0,
+    "missingMethod": "session.managedSettings.get",
+    "message": "Exécution refusée avant tout prompt : confinement des outils non vérifiable. Unhandled method session.managedSettings.get Mets Copilot CLI à jour manuellement vers une version compatible avec le SDK 1.0.20.",
+    "note": "The earlier catalog and tools.execute diagnostics above predate the stronger native permission preflight. The current adapter refuses MCP runs on this CLI; host studio tools without MCP remain supported. Discovery remains available."
+  }
+}

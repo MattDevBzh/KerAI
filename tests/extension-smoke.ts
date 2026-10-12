@@ -46,7 +46,81 @@ export async function run(): Promise<void> {
     stepId: feature.steps[0].id,
     agentId: 'fs-specs',
     skills: [],
+    initialContext: 'US-208 : contexte initial saisi à la main.',
+    askBeforeRun: true,
   });
+  assert.equal(
+    api.getState()!.features.at(-1)!.steps[0].initialContext,
+    'US-208 : contexte initial saisi à la main.',
+  );
+  await api.dispatch({
+    type: 'previewRun',
+    requestId: 'smoke-preview',
+    featureId: feature.id,
+    stepId: feature.steps[0].id,
+    launch: {
+      initialContext: 'US-209 : aperçu sans modèle.',
+      mcpServerIds: [],
+      memoryIds: [],
+      useProjectMemory: false,
+    },
+  });
+  await assert.rejects(
+    api.dispatch({ type: 'runStep', featureId: feature.id, stepId: feature.steps[0].id }),
+    /contexte/,
+  );
+  await api.dispatch({
+    type: 'saveBudget',
+    featureId: feature.id,
+    budget: { maxRuns: 5, maxPromptChars: 50000, modelProfile: 'current' },
+  });
+  await api.dispatch({
+    type: 'saveAutopilot',
+    featureId: feature.id,
+    config: { checkpoints: ['plan', 'review'], maxRuns: 5, maxCorrectionCycles: 0, stepInputs: {} },
+  });
+  await api.dispatch({
+    type: 'saveMemory',
+    entry: {
+      id: 'smoke-convention',
+      title: 'Convention',
+      content: 'Use the existing store.',
+      category: 'convention',
+      enabled: true,
+      agentIds: [],
+      updatedAt: '2026-10-13',
+    },
+  });
+  await api.dispatch({
+    type: 'saveSettings',
+    settings: {
+      ...api.getState()!.settings,
+      mcpServers: [
+        {
+          id: 'smoke-mcp',
+          name: 'MCP saved without executing it',
+          transport: 'stdio',
+          command: 'node',
+          args: ['fixture.mjs'],
+          tools: ['read_story'],
+          envKeys: ['SMOKE_KEY'],
+          headers: {},
+          enabled: false,
+          autoApproveReadOnly: false,
+        },
+      ],
+    },
+  });
+  await api.dispatch({
+    type: 'setMcpSecret',
+    serverId: 'smoke-mcp',
+    key: 'SMOKE_KEY',
+    value: 'isolated-smoke-secret',
+  });
+  assert.ok(!JSON.stringify(api.getState()).includes('isolated-smoke-secret'));
+  await api.dispatch({ type: 'setMcpSecret', serverId: 'smoke-mcp', key: 'SMOKE_KEY', value: '' });
+  assert.equal(api.getState()!.memory?.length, 1);
+  assert.equal(api.getState()!.features.at(-1)!.autopilot?.status, 'idle');
   await api.dispatch({
     type: 'saveAgent',
     agent: {
@@ -72,6 +146,6 @@ export async function run(): Promise<void> {
     'Smoke extension host',
   );
   console.log(
-    'PASS: activation, panel, defaults, create, configure, avatar persistence, kit install, close/reopen recovery. No paid prompt.',
+    'PASS: activation, panel/CSP, defaults, manual context preview, missing-preview refusal, MCP/secret settings, budget/autopilot/memory, avatars, kit, close/reopen recovery. No paid prompt.',
   );
 }

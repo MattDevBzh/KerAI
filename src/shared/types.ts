@@ -1,3 +1,20 @@
+import type {
+  McpServerConfig,
+  McpCatalog,
+  RunLaunchOptions,
+  RunPreview,
+  HumanRequest,
+  FeatureBudget,
+  AutopilotState,
+  AutopilotConfig,
+  TestEvidence,
+  ReviewReport,
+  AcceptanceCriterion,
+  ReviewComment,
+  MemoryEntry,
+  ModelProfile,
+} from './evolutions';
+export * from './evolutions';
 export type PolicyProfile = 'read-only' | 'workspace-write' | 'tests';
 export type StepStatus =
   | 'pending'
@@ -22,6 +39,9 @@ export interface WorkflowStep {
   maxAttempts: number;
   artifact: string;
   dependsOn: string[];
+  initialContext?: string;
+  mcpServerIds?: string[];
+  askBeforeRun?: boolean;
 }
 export interface Workflow {
   id: string;
@@ -49,6 +69,8 @@ export interface Usage {
   cost?: number;
   unit?: string;
   source: 'measured';
+  incompleteTokens?: boolean;
+  incompleteCost?: boolean;
 }
 export interface Artifact {
   name: string;
@@ -72,6 +94,14 @@ export interface Attempt {
   error?: string;
   approvedAt?: string;
   fileHashes?: Record<string, string>;
+  launch?: RunLaunchOptions;
+  promptFingerprint?: string;
+  promptCharacters?: number;
+  memorySnapshot?: MemoryEntry[];
+  evidence?: TestEvidence[];
+  review?: ReviewReport;
+  revision?: number;
+  approvedBy?: 'human' | 'autopilot';
 }
 export interface FeatureStep extends WorkflowStep {
   status: StepStatus;
@@ -90,6 +120,10 @@ export interface Feature {
   activeStepId: string;
   steps: FeatureStep[];
   archived?: boolean;
+  autopilot?: AutopilotState;
+  budget?: FeatureBudget;
+  criteria?: AcceptanceCriterion[];
+  reviewComments?: ReviewComment[];
 }
 export interface AgentProfile {
   id: string;
@@ -132,6 +166,11 @@ export interface StudioSettings {
   testCommands: TestCommand[];
   testPaths: string[];
   hooks: HookDefinition[];
+  mcpServers?: McpServerConfig[];
+  budgetDefaults?: FeatureBudget;
+  modelProfiles?: Partial<
+    Record<Exclude<ModelProfile, 'current'>, { model: string; reasoning?: string }>
+  >;
 }
 export interface ModelInfo {
   id: string;
@@ -148,7 +187,7 @@ export interface RuntimeStatus {
   error?: string;
 }
 export interface StudioState {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   workspace: { name: string; path: string; trusted: boolean; branch: string };
   features: Feature[];
   workflows: Workflow[];
@@ -157,6 +196,9 @@ export interface StudioState {
   runtime: RuntimeStatus;
   settings: StudioSettings;
   notices: string[];
+  mcpCatalogs?: Record<string, McpCatalog>;
+  humanRequests?: HumanRequest[];
+  memory?: MemoryEntry[];
 }
 export type ClientMessage =
   | { type: 'ready' | 'refresh' | 'checkRuntime' | 'installKit' | 'openSettings' }
@@ -168,9 +210,35 @@ export type ClientMessage =
       agentId?: string;
       model?: string;
     }
-  | { type: 'runStep'; featureId: string; stepId: string; feedback?: string; resume?: boolean }
+  | {
+      type: 'runStep';
+      featureId: string;
+      stepId: string;
+      feedback?: string;
+      resume?: boolean;
+      launch?: RunLaunchOptions;
+      previewFingerprint?: string;
+    }
+  | {
+      type: 'previewRun';
+      requestId: string;
+      featureId: string;
+      stepId: string;
+      feedback?: string;
+      resume?: boolean;
+      launch: RunLaunchOptions;
+    }
+  | { type: 'answerHumanRequest'; requestId: string; answer: string }
+  | { type: 'testMcp'; serverId: string }
+  | { type: 'setMcpSecret'; serverId: string; key: string; value: string }
   | { type: 'cancelRun'; featureId: string }
-  | { type: 'approveStep'; featureId: string; stepId: string }
+  | {
+      type: 'approveStep';
+      featureId: string;
+      stepId: string;
+      expectedAttemptId?: string;
+      expectedRevision?: number;
+    }
   | { type: 'answerQuestions'; featureId: string; stepId: string; answers: Record<string, string> }
   | { type: 'saveArtifact'; featureId: string; stepId: string; content: string }
   | {
@@ -182,6 +250,9 @@ export type ClientMessage =
       reasoning?: string;
       skills: string[];
       maxAttempts?: number;
+      initialContext?: string;
+      mcpServerIds?: string[];
+      askBeforeRun?: boolean;
     }
   | { type: 'archiveFeature'; featureId: string; archived: boolean }
   | { type: 'openDiff'; path: string }
@@ -203,11 +274,25 @@ export type ClientMessage =
     }
   | { type: 'saveSkill'; id: string; content: string }
   | { type: 'saveSettings'; settings: StudioSettings }
-  | { type: 'createWorkflow' };
+  | { type: 'createWorkflow' }
+  | { type: 'saveWorkflow'; workflow: Workflow }
+  | { type: 'saveAutopilot'; featureId: string; config: AutopilotConfig }
+  | { type: 'startAutopilot' | 'pauseAutopilot'; featureId: string }
+  | { type: 'saveBudget'; featureId: string; budget: FeatureBudget }
+  | { type: 'saveCriteria'; featureId: string; criteria: AcceptanceCriterion[] }
+  | {
+      type: 'addReviewComment';
+      featureId: string;
+      comment: Omit<ReviewComment, 'id' | 'createdAt' | 'resolved'>;
+    }
+  | { type: 'resolveReviewComment'; featureId: string; commentId: string; resolved: boolean }
+  | { type: 'saveMemory'; entry: MemoryEntry }
+  | { type: 'deleteMemory'; id: string };
 export type HostMessage =
   | { type: 'state'; state: StudioState }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
+  | { type: 'runPreview'; requestId: string; preview: RunPreview }
   | { type: 'navigate'; view: 'create' | 'dashboard'; featureId?: string };
 export interface RunInput {
   feature: Feature;
@@ -218,6 +303,11 @@ export interface RunInput {
   workspacePath: string;
   settings: StudioSettings;
   resumeSessionId?: string;
+  launch?: RunLaunchOptions;
+  memory?: MemoryEntry[];
+  preparedPrompt?: string;
+  mcpServers?: McpServerConfig[];
+  automation?: { reviewStepId?: string; correctionStepId?: string };
 }
 export interface RunResult {
   content: string;
@@ -227,13 +317,29 @@ export interface RunResult {
   questions: Question[];
   changedFiles: string[];
   fileHashes?: Record<string, string>;
+  review?: ReviewReport;
 }
 export interface RunCallbacks {
   onEvent(event: RunEvent): void;
   onSession(id: string): void;
+  /** Cumulative, deduplicated usage for this attempt, including runs that later fail. */
+  onUsage?(usage: Usage): void;
+  onEvidence?(evidence: TestEvidence): void;
+  onQuestion?(question: {
+    question: string;
+    choices?: string[];
+    allowFreeform: boolean;
+  }): Promise<string>;
+  onMcpPermission?(request: {
+    serverId: string;
+    toolName: string;
+    args: string;
+    readOnly: boolean;
+  }): Promise<boolean>;
 }
 export interface AgentAdapter {
   check(): Promise<RuntimeStatus>;
   run(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal): Promise<RunResult>;
   dispose(): Promise<void>;
+  discoverMcp?(server: McpServerConfig): Promise<McpCatalog>;
 }

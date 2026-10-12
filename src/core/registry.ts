@@ -241,4 +241,23 @@ export class AgentRegistry {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, content, 'utf8');
   }
+  async saveWorkflow(input: Workflow): Promise<void> {
+    const { source: _source, ...definition } = input;
+    const workflow = validateWorkflow(definition);
+    const data = await this.load();
+    if (
+      workflow.steps.some(
+        (step) =>
+          !data.agents.some((agent) => agent.id === step.agentId) ||
+          step.skills.some((skill) => !data.skills.some((s) => s.id === skill)),
+      )
+    )
+      throw new Error('Agent ou skill inconnu dans le workflow.');
+    const path = await safePath(
+      this.workspacePath,
+      `.feature-studio/workflows/${identifier.parse(workflow.id)}.yaml`,
+    );
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, stringify(workflow), 'utf8');
+  }
 }

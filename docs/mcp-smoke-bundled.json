@@ -1,0 +1,441 @@
+{
+  "checkedAt": "2026-10-12T23:34:05.200Z",
+  "cliVersion": "1.0.96",
+  "sdkVersion": "1.0.20",
+  "authentication": {
+    "state": "ready",
+    "authenticated": true
+  },
+  "fixtureOnly": true,
+  "modelPromptsSent": 0,
+  "modelUsageEvents": 0,
+  "discoveryAndExactScopeValidated": true,
+  "runtimeKind": "SDK bundled runtime wrapper",
+  "diagnosticToolExecution": "validated local fixture",
+  "nativePermissionExecutionValidated": true,
+  "modelDrivenMcpExecutionValidated": false,
+  "permissionPolicyValidation": "native invocation pipeline and injected-transport unit tests",
+  "limitations": [
+    "Only deterministic fixture tool calls were executed; write_story simulates a write and never changes disk.",
+    "This does not prove that model-driven MCP tool calls are unavailable; that separate path was not invoked.",
+    "No remote MCP, OAuth, Azure DevOps data, model invocation or credential exchange was tested."
+  ],
+  "sources": [
+    "https://docs.github.com/en/copilot/how-tos/copilot-sdk/features/hooks",
+    "https://github.com/github/copilot-sdk/blob/main/nodejs/README.md"
+  ],
+  "catalog": {
+    "state": "ready",
+    "checkedAt": "2026-10-12T23:33:54.635Z",
+    "tools": [
+      {
+        "name": "read_story",
+        "description": "Read a fixture story"
+      },
+      {
+        "name": "write_story",
+        "description": "Simulated write, never changes disk"
+      },
+      {
+        "name": "unknown_story",
+        "description": "Unknown access annotation; deterministic response only"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "label": "auto-read",
+      "policy": "read-only",
+      "tool": "read_story",
+      "autoApproveReadOnly": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-read_story",
+          "server": "fixture",
+          "tool": "read_story"
+        }
+      ],
+      "nativePermissionRequests": [],
+      "humanPermissionCallbacks": 0,
+      "outcome": {
+        "textResultForLlm": "{\"id\":42,\"title\":\"A fixture story\",\"called\":\"read_story\"}",
+        "binaryResultsForLlm": [],
+        "resultType": "success",
+        "sessionLog": "{\"id\":42,\"title\":\"A fixture story\",\"called\":\"read_story\"}",
+        "toolTelemetry": {
+          "metrics": {
+            "mcp_result_content_bytes": 57
+          }
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "{\"id\":42,\"title\":\"A fixture story\",\"called\":\"read_story\"}"
+          }
+        ]
+      }
+    },
+    {
+      "label": "deny-write-readonly",
+      "policy": "read-only",
+      "tool": "write_story",
+      "autoApproveReadOnly": true,
+      "humanApproval": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-write_story",
+          "server": "fixture",
+          "tool": "write_story"
+        }
+      ],
+      "nativePermissionRequests": [
+        {
+          "kind": "mcp",
+          "toolCallId": "direct-fixture-write_story",
+          "serverName": "fixture",
+          "toolName": "fixture-write_story",
+          "toolTitle": "write_story",
+          "args": {
+            "title": "simulated, no disk write"
+          },
+          "readOnly": false
+        }
+      ],
+      "humanPermissionCallbacks": 0,
+      "outcome": {
+        "textResultForLlm": "The user rejected this tool call. User feedback: Cette étape interdit les opérations MCP d’écriture ou dont la lecture seule n’est pas attestée par le runtime.",
+        "resultType": "denied",
+        "sessionLog": "The user rejected this tool call. User feedback: Cette étape interdit les opérations MCP d’écriture ou dont la lecture seule n’est pas attestée par le runtime.",
+        "error": "The user rejected this tool call. User feedback: Cette étape interdit les opérations MCP d’écriture ou dont la lecture seule n’est pas attestée par le runtime.",
+        "toolTelemetry": {
+          "properties": {
+            "failure_category": "permission_denied",
+            "failure_stage": "permission"
+          }
+        }
+      }
+    },
+    {
+      "label": "deny-write-human",
+      "policy": "workspace-write",
+      "tool": "write_story",
+      "autoApproveReadOnly": false,
+      "humanApproval": false,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-write_story",
+          "server": "fixture",
+          "tool": "write_story"
+        }
+      ],
+      "permission": {
+        "serverId": "fixture",
+        "toolName": "write_story",
+        "args": "{\"title\":\"simulated, no disk write\"}",
+        "readOnly": false
+      },
+      "nativePermissionRequests": [
+        {
+          "kind": "mcp",
+          "toolCallId": "direct-fixture-write_story",
+          "serverName": "fixture",
+          "toolName": "fixture-write_story",
+          "toolTitle": "write_story",
+          "args": {
+            "title": "simulated, no disk write"
+          },
+          "readOnly": false,
+          "managedApprovalRequired": true
+        }
+      ],
+      "humanPermissionCallbacks": 1,
+      "outcome": {
+        "textResultForLlm": "The user rejected this tool call. User feedback: L’utilisateur a refusé cette opération MCP.",
+        "resultType": "denied",
+        "sessionLog": "The user rejected this tool call. User feedback: L’utilisateur a refusé cette opération MCP.",
+        "error": "The user rejected this tool call. User feedback: L’utilisateur a refusé cette opération MCP.",
+        "toolTelemetry": {
+          "properties": {
+            "failure_category": "permission_denied",
+            "failure_stage": "permission"
+          }
+        }
+      }
+    },
+    {
+      "label": "approve-write-human",
+      "policy": "workspace-write",
+      "tool": "write_story",
+      "autoApproveReadOnly": false,
+      "humanApproval": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-write_story",
+          "server": "fixture",
+          "tool": "write_story"
+        }
+      ],
+      "permission": {
+        "serverId": "fixture",
+        "toolName": "write_story",
+        "args": "{\"title\":\"simulated, no disk write\"}",
+        "readOnly": false
+      },
+      "nativePermissionRequests": [
+        {
+          "kind": "mcp",
+          "toolCallId": "direct-fixture-write_story",
+          "serverName": "fixture",
+          "toolName": "fixture-write_story",
+          "toolTitle": "write_story",
+          "args": {
+            "title": "simulated, no disk write"
+          },
+          "readOnly": false,
+          "managedApprovalRequired": true
+        }
+      ],
+      "humanPermissionCallbacks": 1,
+      "outcome": {
+        "textResultForLlm": "{\"id\":1,\"title\":\"A fixture story\",\"called\":\"write_story\"}",
+        "binaryResultsForLlm": [],
+        "resultType": "success",
+        "sessionLog": "{\"id\":1,\"title\":\"A fixture story\",\"called\":\"write_story\"}",
+        "toolTelemetry": {
+          "metrics": {
+            "mcp_result_content_bytes": 57
+          }
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "{\"id\":1,\"title\":\"A fixture story\",\"called\":\"write_story\"}"
+          }
+        ]
+      }
+    },
+    {
+      "label": "deny-read-human",
+      "policy": "read-only",
+      "tool": "read_story",
+      "autoApproveReadOnly": false,
+      "humanApproval": false,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-read_story",
+          "server": "fixture",
+          "tool": "read_story"
+        }
+      ],
+      "permission": {
+        "serverId": "fixture",
+        "toolName": "read_story",
+        "args": "{\"id\":42}",
+        "readOnly": true
+      },
+      "nativePermissionRequests": [
+        {
+          "kind": "mcp",
+          "toolCallId": "direct-fixture-read_story",
+          "serverName": "fixture",
+          "toolName": "fixture-read_story",
+          "toolTitle": "read_story",
+          "args": {
+            "id": 42
+          },
+          "readOnly": true,
+          "managedApprovalRequired": true
+        }
+      ],
+      "humanPermissionCallbacks": 1,
+      "outcome": {
+        "textResultForLlm": "The user rejected this tool call. User feedback: L’utilisateur a refusé cette opération MCP.",
+        "resultType": "denied",
+        "sessionLog": "The user rejected this tool call. User feedback: L’utilisateur a refusé cette opération MCP.",
+        "error": "The user rejected this tool call. User feedback: L’utilisateur a refusé cette opération MCP.",
+        "toolTelemetry": {
+          "properties": {
+            "failure_category": "permission_denied",
+            "failure_stage": "permission"
+          }
+        }
+      }
+    },
+    {
+      "label": "approve-read-human",
+      "policy": "read-only",
+      "tool": "read_story",
+      "autoApproveReadOnly": false,
+      "humanApproval": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-read_story",
+          "server": "fixture",
+          "tool": "read_story"
+        }
+      ],
+      "permission": {
+        "serverId": "fixture",
+        "toolName": "read_story",
+        "args": "{\"id\":42}",
+        "readOnly": true
+      },
+      "nativePermissionRequests": [
+        {
+          "kind": "mcp",
+          "toolCallId": "direct-fixture-read_story",
+          "serverName": "fixture",
+          "toolName": "fixture-read_story",
+          "toolTitle": "read_story",
+          "args": {
+            "id": 42
+          },
+          "readOnly": true,
+          "managedApprovalRequired": true
+        }
+      ],
+      "humanPermissionCallbacks": 1,
+      "outcome": {
+        "textResultForLlm": "{\"id\":42,\"title\":\"A fixture story\",\"called\":\"read_story\"}",
+        "binaryResultsForLlm": [],
+        "resultType": "success",
+        "sessionLog": "{\"id\":42,\"title\":\"A fixture story\",\"called\":\"read_story\"}",
+        "toolTelemetry": {
+          "metrics": {
+            "mcp_result_content_bytes": 57
+          }
+        },
+        "contents": [
+          {
+            "type": "text",
+            "text": "{\"id\":42,\"title\":\"A fixture story\",\"called\":\"read_story\"}"
+          }
+        ]
+      }
+    },
+    {
+      "label": "deny-unknown-readonly",
+      "policy": "read-only",
+      "tool": "unknown_story",
+      "autoApproveReadOnly": true,
+      "humanApproval": true,
+      "catalog": [
+        {
+          "name": "studio_list_files"
+        },
+        {
+          "name": "studio_read_file"
+        },
+        {
+          "name": "studio_git_diff"
+        },
+        {
+          "name": "studio_ask_human"
+        },
+        {
+          "name": "fixture-unknown_story",
+          "server": "fixture",
+          "tool": "unknown_story"
+        }
+      ],
+      "nativePermissionRequests": [
+        {
+          "kind": "mcp",
+          "toolCallId": "direct-fixture-unknown_story",
+          "serverName": "fixture",
+          "toolName": "fixture-unknown_story",
+          "toolTitle": "unknown_story",
+          "args": {
+            "title": "simulated, no disk write"
+          },
+          "readOnly": false
+        }
+      ],
+      "humanPermissionCallbacks": 0,
+      "outcome": {
+        "textResultForLlm": "The user rejected this tool call. User feedback: Cette étape interdit les opérations MCP d’écriture ou dont la lecture seule n’est pas attestée par le runtime.",
+        "resultType": "denied",
+        "sessionLog": "The user rejected this tool call. User feedback: Cette étape interdit les opérations MCP d’écriture ou dont la lecture seule n’est pas attestée par le runtime.",
+        "error": "The user rejected this tool call. User feedback: Cette étape interdit les opérations MCP d’écriture ou dont la lecture seule n’est pas attestée par le runtime.",
+        "toolTelemetry": {
+          "properties": {
+            "failure_category": "permission_denied",
+            "failure_stage": "permission"
+          }
+        }
+      }
+    }
+  ]
+}

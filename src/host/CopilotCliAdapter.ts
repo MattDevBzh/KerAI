@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { z } from 'zod';
 import {
   CopilotClient,
   RuntimeConnection,
@@ -19,7 +20,20 @@ import type {
   RunResult,
   RuntimeStatus,
   Usage,
+  McpServerConfig,
+  McpCatalog,
+  ReviewReport,
 } from '../shared/types';
+import { buildPrompt } from '../core/context';
+export { buildPrompt } from '../core/context';
+import {
+  decideMcpPermission,
+  McpStreamRedactor,
+  redactMcp,
+  resolveMcpPlan,
+  verifyMcpCatalog,
+  type McpSecretResolver,
+} from './McpRuntime';
 
 export interface CopilotCliAdapterOptions {
   cliPath: string | (() => string);
@@ -28,6 +42,7 @@ export interface CopilotCliAdapterOptions {
   /** Injection for transport tests. Production uses the official SDK. */
   clientFactory?: (options: CopilotClientOptions) => CopilotClient;
   checkTimeoutMs?: number;
+  resolveMcpSecret?: McpSecretResolver;
 }
 
 export class RunCancelledError extends Error {
@@ -126,34 +141,52 @@ export function parseQuestions(content: string): { content: string; questions: Q
   return { content: content.replace(marker, '').trim(), questions };
 }
 
-export function buildPrompt(input: RunInput): string {
-  const approved = input.feature.steps.flatMap((step) => {
-    const attempt = step.attempts.at(-1);
-    return step.status === 'approved' && attempt?.status === 'approved' && attempt.artifact
-      ? [`### ${step.name}\n${attempt.artifact.content}`]
-      : [];
-  });
-  const answers = Object.entries(input.attempt.answers)
-    .map(([id, answer]) => `${id}: ${answer}`)
-    .join('\n');
-  return [
-    `Feature : ${input.feature.title}\n${input.feature.description}`,
-    `Étape : ${input.step.name}\n${input.step.description}\nProfil technique : ${input.step.policy}`,
-    `Instructions de l'agent ${input.agent.name} :\n${input.agent.instructions}`,
-    ...input.skills.map((s) => `Compétence ${s.name} :\n${s.content}`),
-    approved.length ? `Livrables approuvés :\n${approved.join('\n\n')}` : '',
-    input.attempt.feedback ? `Retour humain :\n${input.attempt.feedback}` : '',
-    answers ? `Réponses humaines :\n${answers}` : '',
-    input.attempt.artifact
-      ? `Livrable précédent à reprendre :\n${input.attempt.artifact.content}`
-      : '',
-    'Produis le livrable de cette étape dans ta réponse finale. Utilise uniquement les outils studio fournis. ' +
-      'Si une information humaine manque, arrête les actions dépendantes et termine avec un seul bloc :\n' +
-      '```feature-studio-questions\n{"questions":[{"id":"question_id","text":"Question précise","choices":["Option A","Option B"]}]}\n```\n' +
-      'Les choices sont facultatifs. Ne suppose jamais une réponse humaine. Aucun outil shell natif, MCP, publication ou push n’est autorisé.',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+const reviewSchema = z
+  .object({
+    verdict: z.enum(['pass', 'changes_requested']),
+    summary: z.string().trim().min(1).max(10_000),
+    findings: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[a-zA-Z][\w-]{0,63}$/),
+            severity: z.enum(['info', 'warning', 'blocking']),
+            message: z.string().trim().min(1).max(4_000),
+            file: z.string().min(1).max(1_000).optional(),
+            line: z.number().int().positive().max(1_000_000).optional(),
+          })
+          .strict(),
+      )
+      .max(100),
+  })
+  .strict();
+
+/** Structured review is optional; an absent or malformed report is never invented as a pass. */
+export function parseReview(content: string): ReviewReport | undefined {
+  const blocks = [...content.matchAll(/```feature-studio-review\s*\n([\s\S]*?)```/g)];
+  if (!blocks.length) {
+    if (content.includes('```feature-studio-review')) throw new Error('Bloc de revue incomplet.');
+    return undefined;
+  }
+  if (blocks.length !== 1 || blocks[0][1].length > 128_000)
+    throw new Error('Bloc de revue invalide.');
+  let value: unknown;
+  try {
+    value = JSON.parse(blocks[0][1]);
+  } catch {
+    throw new Error('Le bloc de revue contient un JSON invalide.');
+  }
+  const parsed = reviewSchema.safeParse(value);
+  if (!parsed.success) throw new Error('Le bloc de revue ne respecte pas le contrat attendu.');
+  const report = parsed.data;
+  if (
+    new Set(report.findings.map((f) => f.id)).size !== report.findings.length ||
+    report.findings.some((f) => ['__proto__', 'constructor', 'prototype'].includes(f.id))
+  )
+    throw new Error('Identifiants de constats de revue invalides ou dupliqués.');
+  if (report.verdict === 'pass' && report.findings.some((f) => f.severity === 'blocking'))
+    throw new Error('Revue contradictoire : un constat bloquant interdit le verdict pass.');
+  return report;
 }
 
 export class CopilotCliAdapter implements AgentAdapter {
@@ -260,6 +293,84 @@ export class CopilotCliAdapter implements AgentAdapter {
     }
   }
 
+  /** Explicit server connection + tools/list only. No send, sampling or tool execution. */
+  async discoverMcp(server: McpServerConfig): Promise<McpCatalog> {
+    let client: CopilotClient | undefined;
+    let session: CopilotSession | undefined;
+    const controller = new AbortController();
+    this.runs.add(controller);
+    const timer = setTimeout(
+      () => controller.abort(new Error('La découverte MCP a expiré.')),
+      this.options.checkTimeoutMs ?? 90_000,
+    );
+    let secrets = new Set<string>();
+    try {
+      const plan = await withSignal(
+        resolveMcpPlan([server], this.options.resolveMcpSecret, true),
+        controller.signal,
+      );
+      secrets = plan.secrets;
+      client = await this.newClient();
+      await withSignal(client.start(), controller.signal);
+      session = await withSignal(
+        client.createSession({
+          sessionId: randomUUID(),
+          tools: [],
+          availableTools: [],
+          mcpServers: plan.servers,
+          workingDirectory: join(this.options.storagePath, 'copilot-runtime'),
+          enableConfigDiscovery: false,
+          skipCustomInstructions: true,
+          enableFileHooks: false,
+          enableSkills: false,
+          enableHostGitOperations: false,
+          enableSessionStore: false,
+          enableOnDemandInstructionDiscovery: false,
+          skipEmbeddingRetrieval: true,
+          memory: { enabled: false },
+          remoteSession: 'off',
+          mcpOAuthTokenStorage: 'in-memory',
+          onPermissionRequest: () => ({
+            kind: 'reject',
+            feedback: 'La découverte MCP ne permet aucune exécution d’outil.',
+          }),
+          hooks: { onPreToolUse: () => ({ permissionDecision: 'deny' }) },
+        }),
+        controller.signal,
+      );
+      await withSignal(session.rpc.tools.initializeAndValidate(), controller.signal);
+      // CLI 1.0.63 requires config here; newer runtimes also support config-free start-by-name.
+      await withSignal(
+        session.rpc.mcp.startServer({ serverName: server.id, config: plan.servers[server.id] }),
+        controller.signal,
+      );
+      const catalog = await withSignal(
+        session.rpc.mcp.listTools({ serverName: server.id }),
+        controller.signal,
+      );
+      return {
+        state: 'ready',
+        checkedAt: new Date().toISOString(),
+        tools: catalog.tools.map((tool) => ({
+          name: tool.name,
+          description: redactMcp(tool.description ?? '', secrets),
+        })),
+      };
+    } catch (error) {
+      return {
+        state: 'error',
+        tools: [],
+        checkedAt: new Date().toISOString(),
+        error: redactMcp(errorMessage(error), secrets),
+      };
+    } finally {
+      clearTimeout(timer);
+      this.runs.delete(controller);
+      controller.abort(new RunCancelledError('Diagnostic terminé.'));
+      if (client) await this.close(client, session);
+    }
+  }
+
   async run(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal): Promise<RunResult> {
     if (signal.aborted) throw cancelled(signal);
     const controller = new AbortController();
@@ -277,8 +388,14 @@ export class CopilotCliAdapter implements AgentAdapter {
     let session: CopilotSession | undefined;
     let unsubscribe: (() => void) | undefined;
     let abortRuntime: (() => void) | undefined;
+    let secrets = new Set<string>();
     const emit = (kind: RunEvent['kind'], message: string) =>
-      callbacks.onEvent({ id: randomUUID(), at: new Date().toISOString(), kind, message });
+      callbacks.onEvent({
+        id: randomUUID(),
+        at: new Date().toISOString(),
+        kind,
+        message: redactMcp(message, secrets),
+      });
     try {
       client = await this.newClient();
       if (controller.signal.aborted) throw cancelled(controller.signal);
@@ -288,10 +405,69 @@ export class CopilotCliAdapter implements AgentAdapter {
         throw new Error(
           'Copilot CLI n’est pas connecté dans l’environnement Feature Studio. Lance le diagnostic de connexion.',
         );
-      const tools = await withSignal(
-        this.options.getTools(input, callbacks, controller.signal),
-        controller.signal,
-      );
+      const tools = [
+        ...(await withSignal(
+          this.options.getTools(input, callbacks, controller.signal),
+          controller.signal,
+        )),
+      ];
+      tools.push({
+        name: 'studio_ask_human',
+        description:
+          'Ask the human a question and wait for their real answer. Never invent a response. Cancels with the active attempt.',
+        parameters: {
+          type: 'object',
+          properties: {
+            question: { type: 'string', minLength: 1, maxLength: 2_000 },
+            choices: {
+              type: 'array',
+              items: { type: 'string', minLength: 1, maxLength: 300 },
+              minItems: 2,
+              maxItems: 8,
+            },
+            allowFreeform: { type: 'boolean' },
+          },
+          required: ['question'],
+          additionalProperties: false,
+        },
+        skipPermission: true,
+        defer: 'never',
+        handler: async (raw, invocation) => {
+          const schema = z
+            .object({
+              question: z.string().trim().min(1).max(2_000),
+              choices: z.array(z.string().trim().min(1).max(300)).min(2).max(8).optional(),
+              allowFreeform: z.boolean().default(true),
+            })
+            .strict();
+          const question = schema.parse(raw);
+          if (!callbacks.onQuestion)
+            throw new Error(
+              'Aucun dialogue humain n’est disponible pour cette question. Termine avec le bloc de questions structuré.',
+            );
+          const requestSignal = invocation.signal
+            ? AbortSignal.any([controller.signal, invocation.signal])
+            : controller.signal;
+          if (requestSignal.aborted) throw cancelled(requestSignal);
+          const answer = await withSignal(
+            callbacks.onQuestion({
+              ...question,
+              question: redactMcp(question.question, secrets),
+              choices: question.choices?.map((choice) => redactMcp(choice, secrets)),
+            }),
+            requestSignal,
+          );
+          if (typeof answer !== 'string' || !answer.trim())
+            throw new Error('Une réponse humaine non vide est nécessaire.');
+          if (redactMcp(answer, secrets) !== answer)
+            throw new Error(
+              'Renseigne les identifiants MCP dans les réglages sécurisés, pas dans une réponse destinée au modèle.',
+            );
+          if (!question.allowFreeform && question.choices && !question.choices.includes(answer))
+            throw new Error('La réponse doit correspondre à un choix proposé.');
+          return { resultType: 'success', textResultForLlm: JSON.stringify({ answer }) };
+        },
+      });
       const allowed = new Set(tools.map((t) => t.name));
       if (
         !tools.length ||
@@ -303,6 +479,26 @@ export class CopilotCliAdapter implements AgentAdapter {
         throw new Error(
           'Catalogue hôte invalide : des outils studio uniques, avec handlers, sont requis.',
         );
+      const mcp = await withSignal(
+        resolveMcpPlan(input.mcpServers ?? [], this.options.resolveMcpSecret),
+        controller.signal,
+      );
+      secrets = mcp.secrets;
+      // Native MCP reads can bypass callbacks when the runtime classifies them read-only.
+      // Exact managed asks force the normal MCP request (with readOnly) when auto approval is off.
+      const mcpAskRules = [...mcp.grants.values()]
+        .filter((g) => !g.autoApproveReadOnly)
+        .map((g) => `Mcp(${g.serverId}/${g.toolName})`);
+      const allAllowed = [...allowed, ...mcp.grants.keys()];
+      // CLI 1.0.63 custom agents require server/tool aliases; newer SDK docs use server-tool.
+      // Both denote the same explicit grant. The session allowlist + catalog verification stays exact.
+      const agentAllowed = [
+        ...allowed,
+        ...[...mcp.grants.values()].flatMap((grant) => [
+          grant.runtimeName,
+          `${grant.serverId}/${grant.toolName}`,
+        ]),
+      ];
       const models = await withSignal(client.listModels(), controller.signal);
       const requestedModel =
         input.step.model || input.agent.model || input.settings.defaultModel || undefined;
@@ -328,7 +524,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         streaming: true,
         tools: tools.map((t) => ({ ...t, skipPermission: true, defer: 'never' })),
         // Exact custom names work on older v3 runtimes too. No wildcards or builtin aliases.
-        availableTools: [...allowed],
+        availableTools: allAllowed,
         excludedTools: [
           'bash',
           'powershell',
@@ -349,7 +545,17 @@ export class CopilotCliAdapter implements AgentAdapter {
         enableSkills: false,
         skillDirectories: [],
         pluginDirectories: [],
-        mcpServers: {},
+        mcpServers: mcp.servers,
+        managedSettings: mcp.grants.size
+          ? {
+              permissions: {
+                disableBypassPermissionsMode: 'disable',
+                disableAssistedPermissionsMode: true,
+                ask: mcpAskRules,
+              },
+            }
+          : undefined,
+        mcpOAuthTokenStorage: 'in-memory',
         enableHostGitOperations: false,
         enableSessionStore: false,
         enableExperimentalMode: false,
@@ -361,19 +567,25 @@ export class CopilotCliAdapter implements AgentAdapter {
         includeSubAgentStreamingEvents: false,
         customAgentsLocalOnly: true,
         infiniteSessions: { enabled: true },
-        onPermissionRequest: () => ({
-          kind: 'reject',
-          feedback:
-            'Feature Studio interdit les outils natifs et externes. Seuls les handlers studio appliquent les permissions.',
-        }),
+        onPermissionRequest: (request) =>
+          controller.signal.aborted
+            ? { kind: 'reject', feedback: 'Tentative annulée ou terminée.' }
+            : withSignal(
+                decideMcpPermission(mcp, request, input.step.policy, callbacks),
+                controller.signal,
+              ),
         hooks: {
           onPreToolUse: (request) => {
-            if (!allowed.has(request.toolName) || controller.signal.aborted)
+            if (
+              (!allowed.has(request.toolName) && !mcp.grants.has(request.toolName)) ||
+              controller.signal.aborted
+            )
               return {
                 permissionDecision: 'deny',
                 permissionDecisionReason:
                   'Outil hors du périmètre Feature Studio ou tentative annulée.',
               };
+            // Hook 'ask' creates kind:'hook' without a readOnly attestation; use native MCP asks.
             return {};
           },
         },
@@ -387,8 +599,10 @@ export class CopilotCliAdapter implements AgentAdapter {
             name: 'feature-studio',
             displayName: input.agent.name,
             description: input.agent.description,
-            prompt: input.agent.instructions,
-            tools: [...allowed],
+            // Role instructions appear once in the exact business prompt shown in preview.
+            prompt:
+              'Les instructions de rôle sont dans le prompt métier de cette étape. Utilise uniquement le catalogue autorisé.',
+            tools: agentAllowed,
             infer: false,
           },
         ],
@@ -411,16 +625,42 @@ export class CopilotCliAdapter implements AgentAdapter {
       // A protocol handshake does not prove support for additive SDK configuration.
       // Inspect the actual model-facing catalog before the first paid request.
       try {
+        if (mcp.grants.size) {
+          const policy = await withSignal(session.rpc.managedSettings.get(), controller.signal);
+          const value = policy.settings as
+            | {
+                permissions?: {
+                  ask?: unknown;
+                  disableBypassPermissionsMode?: unknown;
+                  disableAssistedPermissionsMode?: unknown;
+                };
+              }
+            | undefined;
+          const permissions = value?.permissions;
+          const ask = permissions?.ask;
+          if (
+            policy.failClosed ||
+            policy.clientManaged !== true ||
+            !policy.bypassPermissionsDisabled ||
+            permissions?.disableAssistedPermissionsMode !== true ||
+            !Array.isArray(ask) ||
+            mcpAskRules.some((rule) => !ask.includes(rule))
+          )
+            throw new Error('La politique MCP native requise n’est pas attestée par ce runtime.');
+          const configured = await withSignal(
+            session.rpc.permissions.configure({
+              approveAllReadPermissionRequests: false,
+              approveAllToolPermissionRequests: false,
+              rules: { approved: [], denied: [] },
+            }),
+            controller.signal,
+          );
+          if (!configured.success)
+            throw new Error('Le runtime refuse le mode manuel des permissions MCP.');
+        }
         await withSignal(session.rpc.tools.initializeAndValidate(), controller.signal);
         const catalog = await withSignal(session.rpc.tools.getCurrentMetadata(), controller.signal);
-        if (
-          !catalog.tools ||
-          catalog.tools.length !== allowed.size ||
-          catalog.tools.some((t) => !allowed.has(t.name) || t.mcpServerName || t.namespacedName)
-        )
-          throw new Error(
-            'Le runtime expose un catalogue différent des seuls outils hôtes autorisés.',
-          );
+        verifyMcpCatalog(catalog.tools, allowed, mcp);
       } catch (error) {
         if (controller.signal.aborted) throw cancelled(controller.signal);
         throw new Error(
@@ -429,12 +669,14 @@ export class CopilotCliAdapter implements AgentAdapter {
       }
       emit(
         'info',
-        `Catalogue vérifié : ${allowed.size} outils hôtes. Session ${session.sessionId}.`,
+        `Catalogue vérifié : ${allowed.size} outils hôtes, ${mcp.grants.size} outils MCP sélectionnés. Session ${session.sessionId}.`,
       );
       let content = '';
       let actualModel: string | undefined;
       let usage: Usage | undefined;
       const seen = new Set<string>();
+      const usageIds = new Set<string>();
+      const stream = new McpStreamRedactor(secrets);
       let resolveIdle!: () => void;
       let rejectIdle!: (error: Error) => void;
       const idle = new Promise<void>((resolve, reject) => {
@@ -446,10 +688,50 @@ export class CopilotCliAdapter implements AgentAdapter {
       const onEvent = (event: SessionEvent) => {
         if (seen.has(event.id)) return;
         seen.add(event.id);
+        // Usage is consumed before any event/log callback, including runs later cancelled or rejected.
+        if (event.type === 'assistant.usage') {
+          const data = event.data;
+          const usageId = data.accounting?.usageId
+            ? `${data.accounting.sourceSessionId}:${data.accounting.usageId}`
+            : (data.apiCallId ?? event.id);
+          if (usageIds.has(usageId)) return;
+          usageIds.add(usageId);
+          if (!event.agentId && data.model && data.model !== 'auto') actualModel = data.model;
+          usage ??= { source: 'measured' };
+          // Preserve known amounts, but never present a partial ledger as a complete total.
+          if (!numeric(data.inputTokens) || !numeric(data.outputTokens))
+            usage.incompleteTokens = true;
+          if (!numeric(data.copilotUsage?.totalNanoAiu)) usage.incompleteCost = true;
+          if (numeric(data.inputTokens))
+            usage.inputTokens = (usage.inputTokens ?? 0) + data.inputTokens;
+          if (numeric(data.outputTokens))
+            usage.outputTokens = (usage.outputTokens ?? 0) + data.outputTokens;
+          if (numeric(data.copilotUsage?.totalNanoAiu)) {
+            usage.cost = (usage.cost ?? 0) + data.copilotUsage.totalNanoAiu;
+            usage.unit = 'nano-AIU';
+          }
+          usage.model = actualModel;
+          try {
+            callbacks.onUsage?.({ ...usage });
+          } catch (error) {
+            const failure = new Error(redactMcp(errorMessage(error), secrets));
+            rejectIdle(failure);
+            controller.abort(failure);
+            return;
+          }
+          emit(
+            'usage',
+            `Usage mesuré${actualModel ? ` (${actualModel})` : ''} : ${data.inputTokens ?? '?'} tokens entrants, ${data.outputTokens ?? '?'} sortants.`,
+          );
+          return;
+        }
         if (event.agentId) return;
         switch (event.type) {
           case 'assistant.message_delta':
-            emit('message', event.data.deltaContent);
+            {
+              const safe = stream.push(event.data.deltaContent);
+              if (safe) emit('message', safe);
+            }
             break;
           case 'assistant.message':
             if (!event.data.toolRequests?.length) content = event.data.content;
@@ -463,25 +745,6 @@ export class CopilotCliAdapter implements AgentAdapter {
               event.data.success ? 'Outil terminé.' : 'Échec d’un outil.',
             );
             break;
-          case 'assistant.usage': {
-            const data = event.data;
-            if (data.model && data.model !== 'auto') actualModel = data.model;
-            usage ??= { source: 'measured' };
-            if (numeric(data.inputTokens))
-              usage.inputTokens = (usage.inputTokens ?? 0) + data.inputTokens;
-            if (numeric(data.outputTokens))
-              usage.outputTokens = (usage.outputTokens ?? 0) + data.outputTokens;
-            if (numeric(data.copilotUsage?.totalNanoAiu)) {
-              usage.cost = (usage.cost ?? 0) + data.copilotUsage.totalNanoAiu;
-              usage.unit = 'nano-AIU';
-            }
-            usage.model = actualModel;
-            emit(
-              'usage',
-              `Usage mesuré${actualModel ? ` (${actualModel})` : ''} : ${data.inputTokens ?? '?'} tokens entrants, ${data.outputTokens ?? '?'} sortants.`,
-            );
-            break;
-          }
           case 'session.error':
             rejectIdle(new Error(event.data.message));
             emit('error', event.data.message);
@@ -496,20 +759,33 @@ export class CopilotCliAdapter implements AgentAdapter {
         }
       };
       unsubscribe = session.on(onEvent);
-      await withSignal(session.send({ prompt: buildPrompt(input) }), controller.signal);
+      await withSignal(
+        session.send({ prompt: input.preparedPrompt ?? buildPrompt(input) }),
+        controller.signal,
+      );
       await withSignal(idle, controller.signal);
+      {
+        const remainder = stream.finish();
+        if (remainder) emit('message', remainder);
+      }
       if (!content.trim())
         throw new Error(
           'Copilot a terminé sans livrable final. Les fragments partiels ne sont pas validés comme livrable.',
         );
-      const parsed = parseQuestions(content);
+      const parsed = parseQuestions(redactMcp(content, secrets));
+      const review = parseReview(parsed.content);
       return {
         ...parsed,
         sessionId: session.sessionId,
         model: actualModel,
         usage,
         changedFiles: [],
+        review,
       };
+    } catch (error) {
+      const message = redactMcp(errorMessage(error), secrets);
+      if (error instanceof Error && error.message === message) throw error;
+      throw new Error(message);
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', relay);

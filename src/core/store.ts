@@ -2,8 +2,20 @@ import { mkdir, readFile, rename, open, unlink } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { Feature, StudioSettings } from '../shared/types';
+import type { Feature, StudioSettings, MemoryEntry } from '../shared/types';
 import { WorkflowEngine, workflowSchema } from './workflow';
+import {
+  autopilotStateSchema,
+  budgetSchema,
+  commentSchema,
+  criterionSchema,
+  evidenceSchema,
+  launchSchema,
+  mcpServerSchema,
+  memorySchema,
+  reviewSchema,
+} from './evolutionSchemas';
+import { defaultBudget } from './budgets';
 
 export const defaultSettings: StudioSettings = {
   defaultModel: '',
@@ -11,6 +23,9 @@ export const defaultSettings: StudioSettings = {
   testCommands: [],
   testPaths: ['tests', 'test', '__tests__'],
   hooks: [],
+  mcpServers: [],
+  budgetDefaults: structuredClone(defaultBudget),
+  modelProfiles: {},
 };
 const status = z.enum([
   'pending',
@@ -49,14 +64,24 @@ const attempt = z.object({
   error: z.string().optional(),
   approvedAt: z.string().optional(),
   fileHashes: z.record(z.string(), z.string()).optional(),
+  launch: launchSchema.optional(),
+  promptFingerprint: z.string().max(256).optional(),
+  promptCharacters: z.number().int().nonnegative().max(5000000).optional(),
+  memorySnapshot: z.array(memorySchema).max(256).optional(),
+  evidence: z.array(evidenceSchema).max(1000).optional(),
+  review: reviewSchema.optional(),
+  revision: z.number().int().nonnegative().optional(),
+  approvedBy: z.enum(['human', 'autopilot']).optional(),
   usage: z
     .object({
-      inputTokens: z.number().optional(),
-      outputTokens: z.number().optional(),
+      inputTokens: z.number().nonnegative().finite().optional(),
+      outputTokens: z.number().nonnegative().finite().optional(),
       model: z.string().optional(),
-      cost: z.number().optional(),
+      cost: z.number().nonnegative().finite().optional(),
       unit: z.string().optional(),
       source: z.literal('measured'),
+      incompleteTokens: z.boolean().optional(),
+      incompleteCost: z.boolean().optional(),
     })
     .optional(),
 });
@@ -73,6 +98,10 @@ const feature = z
     status: z.enum(['draft', 'running', 'attention', 'completed']),
     activeStepId: z.string(),
     archived: z.boolean().optional(),
+    autopilot: autopilotStateSchema.optional(),
+    budget: budgetSchema.optional(),
+    criteria: z.array(criterionSchema).max(200).optional(),
+    reviewComments: z.array(commentSchema).max(1000).optional(),
     steps: z
       .array(workflowSchema.shape.steps.element.extend({ status, attempts: z.array(attempt) }))
       .min(1),
@@ -92,6 +121,32 @@ const feature = z
       context.addIssue({ code: 'custom', message: 'Étape active inconnue.' });
     if (steps.some((step) => step.status !== 'pending' && !step.attempts.length))
       context.addIssue({ code: 'custom', message: 'État sans tentative.' });
+    if (
+      value.autopilot &&
+      [
+        ...value.autopilot.checkpoints,
+        ...Object.keys(value.autopilot.stepInputs),
+        ...(value.autopilot.reviewStepId ? [value.autopilot.reviewStepId] : []),
+        ...(value.autopilot.correctionStepId ? [value.autopilot.correctionStepId] : []),
+      ].some((id) => !steps.some((step) => step.id === id))
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Configuration du pilote liée à une étape inconnue.',
+      });
+    if (value.criteria && new Set(value.criteria.map((c) => c.id)).size !== value.criteria.length)
+      context.addIssue({ code: 'custom', message: 'Critères dupliqués.' });
+    if (
+      value.reviewComments?.some(
+        (comment) =>
+          !steps.some(
+            (step) =>
+              step.id === comment.stepId &&
+              step.attempts.some((attempt) => attempt.id === comment.attemptId),
+          ),
+      )
+    )
+      context.addIssue({ code: 'custom', message: 'Commentaire lié à une tentative inconnue.' });
   });
 export const settingsSchema = z
   .object({
@@ -116,15 +171,53 @@ export const settingsSchema = z
         enabled: z.boolean(),
       }),
     ),
+    mcpServers: z
+      .array(mcpServerSchema)
+      .max(100)
+      .refine(
+        (servers) => new Set(servers.map((server) => server.id)).size === servers.length,
+        'MCP dupliqués.',
+      )
+      .optional(),
+    budgetDefaults: budgetSchema.optional(),
+    modelProfiles: z
+      .object({
+        economy: z
+          .object({ model: z.string().max(200), reasoning: z.string().max(100).optional() })
+          .strict()
+          .optional(),
+        balanced: z
+          .object({ model: z.string().max(200), reasoning: z.string().max(100).optional() })
+          .strict()
+          .optional(),
+        quality: z
+          .object({ model: z.string().max(200), reasoning: z.string().max(100).optional() })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 const persistedSchema = z
-  .object({ schemaVersion: z.literal(1), features: z.array(feature), settings: settingsSchema })
+  .object({
+    schemaVersion: z.literal(2),
+    features: z.array(feature),
+    settings: settingsSchema,
+    memory: z
+      .array(memorySchema)
+      .max(1000)
+      .refine(
+        (entries) => new Set(entries.map((entry) => entry.id)).size === entries.length,
+        'Mémoires dupliquées.',
+      ),
+  })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 1;
+  schemaVersion: 2;
   features: Feature[];
   settings: StudioSettings;
+  memory: MemoryEntry[];
 }
 const queues = new Map<string, Promise<unknown>>();
 
@@ -141,42 +234,61 @@ export class Store {
       raw = JSON.parse(await readFile(this.path, 'utf8'));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-        return { schemaVersion: 1, features: [], settings: structuredClone(defaultSettings) };
+        return {
+          schemaVersion: 2,
+          features: [],
+          settings: structuredClone(defaultSettings),
+          memory: [],
+        };
       throw new Error(`Stockage illisible, original conservé : ${(error as Error).message}`);
     }
     if (!raw || typeof raw !== 'object' || !('schemaVersion' in raw))
       throw new Error('Version de stockage absente.');
     const version = (raw as { schemaVersion: unknown }).schemaVersion;
-    if (version !== 0 && version !== 1)
+    if (version !== 0 && version !== 1 && version !== 2)
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    const migration = version === 0;
+    const migration = version !== 2;
     if (migration) {
-      const old = raw as { features?: unknown; settings?: Partial<StudioSettings> };
+      const old = raw as {
+        features?: unknown;
+        settings?: Partial<StudioSettings>;
+        memory?: unknown;
+      };
       raw = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
+        memory: old.memory ?? [],
       };
     }
     const state = persistedSchema.parse(raw) as PersistedStudio;
     const engine = new WorkflowEngine(state.features);
     let recovered = false;
-    for (const item of state.features)
+    for (const item of state.features) {
+      if (item.autopilot?.status === 'running') {
+        item.autopilot.status = 'paused';
+        item.autopilot.reason =
+          'Pilote interrompu : reprise humaine explicite requise après redémarrage.';
+        item.autopilot.updatedAt = new Date().toISOString();
+        recovered = true;
+      }
       for (const step of item.steps)
         if (step.status === 'running') {
           engine.interruptRun(item.id, step.id);
           recovered = true;
         }
-    if (migration || recovered) await this.save(state.features, state.settings);
+    }
+    if (migration || recovered) await this.save(state.features, state.settings, state.memory);
     return state;
   }
-  save(features: Feature[], settings: StudioSettings): Promise<void> {
+  save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
     const snapshot =
       JSON.stringify(
         persistedSchema.parse({
-          schemaVersion: 1,
+          schemaVersion: 2,
           features: structuredClone(features),
           settings: structuredClone(settings),
+          memory: structuredClone(memory),
         }),
         null,
         2,

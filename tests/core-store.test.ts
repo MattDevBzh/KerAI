@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, defaultSettings } from '../src/core/store';
 import { WorkflowEngine } from '../src/core/workflow';
+import type { MemoryEntry } from '../src/shared/types';
 
 const roots: string[] = [];
 async function setup() {
@@ -72,16 +73,16 @@ describe('durable versioned store', () => {
     expect((await store.load()).features[0].title).toBe('last');
     expect(await readdir(root)).toEqual(['state.json']);
   });
-  it('migrates v0 settings omissions, persisting v1', async () => {
+  it('migrates v0 settings omissions, persisting v2', async () => {
     const { store } = await setup();
     await writeFile(
       store.path,
       JSON.stringify({ schemaVersion: 0, features: [], settings: { defaultModel: '' } }),
     );
     const state = await store.load();
-    expect(state.schemaVersion).toBe(1);
+    expect(state.schemaVersion).toBe(2);
     expect(state.settings.timeoutMinutes).toBe(20);
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(1);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(2);
   });
   it('rejects unknown versions and corruption without changing the original file', async () => {
     const { store } = await setup();
@@ -110,5 +111,124 @@ describe('durable versioned store', () => {
     expect(restored.fileHashes).toEqual({ 'src/a.ts': 'sha256' });
     expect(restored.artifact?.content).toBe('# Artifact');
     expect(restored.usage).toEqual({ source: 'measured', inputTokens: 12, outputTokens: 8 });
+  });
+  it('migrates v1 preserving historical artifacts, answers, logs and outcomes', async () => {
+    const { store } = await setup(),
+      { engine, item } = feature();
+    const attempt = engine.beginRun(item.id, 'run');
+    engine.appendEvent(item.id, 'run', {
+      id: 'event',
+      at: 'then',
+      kind: 'message',
+      message: 'History',
+    });
+    engine.finishRun(item.id, 'run', {
+      content: 'Historical artifact',
+      questions: [{ id: 'q', text: 'Question' }],
+      changedFiles: ['src/a.ts'],
+      fileHashes: { 'src/a.ts': 'hash' },
+      usage: { source: 'measured', inputTokens: 11, outputTokens: 22 },
+    });
+    engine.answerQuestions(item.id, 'run', { q: 'Historical answer' });
+    const historical = structuredClone(engine.features);
+    await writeFile(
+      store.path,
+      JSON.stringify({
+        schemaVersion: 1,
+        features: historical,
+        settings: {
+          defaultModel: '',
+          timeoutMinutes: 20,
+          testCommands: [],
+          testPaths: ['tests'],
+          hooks: [],
+        },
+      }),
+    );
+    const migrated = await store.load();
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.features).toEqual(historical);
+    expect(migrated.memory).toEqual([]);
+    expect(migrated.features[0].autopilot).toBeUndefined();
+    expect(migrated.features[0].steps[0].attempts[0].id).toBe(attempt.id);
+  });
+  it('persists local memory, launch/evidence/review and pauses a running pilot after reboot', async () => {
+    const { store } = await setup(),
+      { engine, item } = feature();
+    item.autopilot = {
+      checkpoints: ['run'],
+      maxRuns: 10,
+      maxCorrectionCycles: 1,
+      stepInputs: {
+        run: {
+          initialContext: 'Human context',
+          mcpServerIds: [],
+          memoryIds: ['memory'],
+          useProjectMemory: true,
+        },
+      },
+      status: 'running',
+      runs: 1,
+      correctionCycles: 0,
+      updatedAt: 'now',
+    };
+    const memory: MemoryEntry = {
+      id: 'memory',
+      title: 'Convention',
+      content: '  Preserve whitespace\n',
+      category: 'convention',
+      enabled: true,
+      agentIds: [],
+      updatedAt: 'now',
+    };
+    const attempt = engine.beginRun(item.id, 'run');
+    attempt.launch = item.autopilot.stepInputs.run;
+    attempt.memorySnapshot = [memory];
+    attempt.promptFingerprint = 'fingerprint';
+    attempt.promptCharacters = 120;
+    attempt.evidence = [
+      {
+        id: 'proof',
+        source: 'host',
+        commandId: 'unit',
+        name: 'Unit',
+        command: 'node',
+        args: [],
+        startedAt: 'now',
+        finishedAt: 'then',
+        exitCode: 0,
+        stdout: 'Passed',
+        stderr: '',
+        truncated: false,
+        fileHashes: {},
+      },
+    ];
+    attempt.review = { verdict: 'pass', summary: 'Observed', findings: [] };
+    attempt.usage = {
+      source: 'measured',
+      inputTokens: 10,
+      outputTokens: 5,
+      cost: 12,
+      unit: 'nano-AIU',
+      incompleteTokens: true,
+      incompleteCost: true,
+    };
+    await store.save(engine.features, defaultSettings, [memory]);
+    const restored = await store.load();
+    expect(restored.memory).toEqual([memory]);
+    expect(restored.features[0].autopilot).toMatchObject({
+      status: 'paused',
+      runs: 1,
+      correctionCycles: 0,
+      reason: expect.stringMatching(/reprise humaine/),
+    });
+    const saved = restored.features[0].steps[0].attempts[0];
+    expect(saved.status).toBe('interrupted');
+    expect(saved.memorySnapshot).toEqual([memory]);
+    expect(saved.evidence).toEqual(attempt.evidence);
+    expect(saved.review).toEqual(attempt.review);
+    expect(saved.launch).toEqual(attempt.launch);
+    expect(saved.usage).toEqual(attempt.usage);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).memory).toEqual([memory]);
   });
 });

@@ -331,3 +331,421 @@ describe('StudioService execution gates', () => {
     expect(second.steps[0].status).toBe('awaiting_review');
   });
 });
+
+describe('manual context, human questions and MCP sessions', () => {
+  const launch = {
+    initialContext: 'US-208 : export CSV avec accents',
+    mcpServerIds: [] as string[],
+    memoryIds: [] as string[],
+    useProjectMemory: false,
+  };
+  it('binds a run to its preview, persists the user story and selects only explicit MCPs', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    await f.service.saveSettings({
+      ...f.service.state.settings,
+      mcpServers: [
+        {
+          id: 'ado',
+          name: 'Azure DevOps',
+          transport: 'stdio',
+          command: 'fixture',
+          args: [],
+          envKeys: [],
+          headers: {},
+          tools: ['wit_work_item'],
+          autoApproveReadOnly: true,
+          enabled: true,
+        },
+      ],
+    });
+    const feature = await f.service.createFeature({
+      title: 'Initial context',
+      description: '',
+      workflowId: 'single',
+    });
+    const options = { ...launch, mcpServerIds: ['ado'] };
+    const preview = f.service.previewRun(feature.id, 'session', '', false, options);
+    expect(preview.prompt).toContain('US-208');
+    await expect(
+      f.service.runStep(
+        feature.id,
+        'session',
+        '',
+        false,
+        { ...options, initialContext: 'changed' },
+        preview.fingerprint,
+      ),
+    ).rejects.toThrow(/aperçu/);
+    expect(f.adapter.run).not.toHaveBeenCalled();
+    await f.service.runStep(feature.id, 'session', '', false, options, preview.fingerprint);
+    expect(f.inputs[0].preparedPrompt).toBe(preview.prompt);
+    expect(f.inputs[0].mcpServers?.map((server) => server.id)).toEqual(['ado']);
+    const saved = (await f.service.store.load()).features[0].steps[0].attempts[0];
+    expect(saved.launch?.initialContext).toBe(launch.initialContext);
+    expect(saved.promptFingerprint).toBe(preview.fingerprint);
+  });
+  it('awaits live human answers and permission, preserving the exchange through finish and reload', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Interaction',
+      description: '',
+      workflowId: 'single',
+    });
+    f.run(async (_input, callbacks) => {
+      expect(await callbacks.onQuestion!({ question: 'Quelle US ?', allowFreeform: true })).toBe(
+        'US-207',
+      );
+      expect(
+        await callbacks.onMcpPermission!({
+          serverId: 'ado',
+          toolName: 'wit_add_work_item',
+          args: '{"title":"US"}',
+          readOnly: false,
+        }),
+      ).toBe(false);
+      return finished();
+    });
+    const running = f.service.runStep(feature.id, 'session', '', false, launch);
+    await vi.waitFor(() => expect(f.service.state.humanRequests).toHaveLength(1));
+    const question = f.service.state.humanRequests![0];
+    expect(question.kind).toBe('question');
+    f.service.answerHumanRequest(question.id, 'US-207');
+    await vi.waitFor(() => expect(f.service.state.humanRequests![0]?.kind).toBe('mcp-permission'));
+    expect(() =>
+      f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'perhaps'),
+    ).toThrow(/réponses proposées/);
+    f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'deny');
+    await running;
+    const saved = (await f.service.store.load()).features[0].steps[0].attempts[0];
+    expect(saved.questions[0].text).toBe('Quelle US ?');
+    expect(saved.answers[question.id]).toBe('US-207');
+    expect(feature.steps[0].status).toBe('awaiting_review');
+    expect(f.service.state.humanRequests).toEqual([]);
+  });
+  it('clears pending human requests on cancellation and keeps already reported usage', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Cancel',
+      description: '',
+      workflowId: 'single',
+    });
+    f.run(async (_input, callbacks) => {
+      callbacks.onUsage!({ source: 'measured', inputTokens: 80, outputTokens: 12 });
+      await callbacks.onQuestion!({ question: 'Blocked?', allowFreeform: true });
+      return finished();
+    });
+    const running = f.service.runStep(feature.id, 'session');
+    await vi.waitFor(() => expect(f.service.state.humanRequests).toHaveLength(1));
+    f.service.cancel(feature.id);
+    await running;
+    expect(feature.steps[0].status).toBe('cancelled');
+    expect(feature.steps[0].attempts[0].usage?.inputTokens).toBe(80);
+    expect(f.service.state.humanRequests).toEqual([]);
+  });
+  it('discovers MCP tools without an agent run and refuses disabled MCP selections', async () => {
+    const f = await fixture();
+    await f.service.saveSettings({
+      ...f.service.state.settings,
+      mcpServers: [
+        {
+          id: 'ado',
+          name: 'ADO',
+          transport: 'stdio',
+          command: 'fixture',
+          args: [],
+          envKeys: [],
+          headers: {},
+          tools: ['read'],
+          autoApproveReadOnly: false,
+          enabled: false,
+        },
+      ],
+    });
+    f.adapter.discoverMcp = vi.fn(async () => ({
+      state: 'ready' as const,
+      tools: [{ name: 'read', description: 'Read US' }],
+    }));
+    await f.service.testMcp('ado');
+    expect(f.service.state.mcpCatalogs?.ado.state).toBe('ready');
+    expect(f.adapter.run).not.toHaveBeenCalled();
+    const feature = await f.service.createFeature({
+      title: 'MCP',
+      description: '',
+      workflowId: 'single',
+    });
+    expect(() =>
+      f.service.previewRun(feature.id, 'session', '', false, { ...launch, mcpServerIds: ['ado'] }),
+    ).toThrow(/activé/);
+  });
+});
+
+describe('bounded autopilot and local project memory', () => {
+  it('runs to a human checkpoint then completes with a real host test receipt and bounded measured calls', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    await f.service.saveSettings({
+      ...f.service.state.settings,
+      testCommands: [
+        {
+          id: 'unit',
+          name: 'Unit',
+          command: process.execPath,
+          args: ['-e', 'console.log("passed")'],
+        },
+      ],
+    });
+    const feature = await f.service.createFeature({
+      title: 'Autopilot',
+      description: '',
+      workflowId: 'feature',
+    });
+    await f.service.saveAutopilot(feature.id, {
+      checkpoints: ['plan'],
+      maxRuns: 5,
+      maxCorrectionCycles: 0,
+      reviewStepId: 'review',
+      correctionStepId: 'dev',
+      stepInputs: {
+        specs: {
+          initialContext: 'My initial US',
+          mcpServerIds: [],
+          memoryIds: [],
+          useProjectMemory: false,
+        },
+      },
+    });
+    f.run(async (input, callbacks, signal) => {
+      if (input.step.id === 'tests') {
+        const tools = await f.service.getTools(input, callbacks, signal);
+        expect((await invoke(tools, 'studio_run_test', { id: 'unit' })).resultType).toBe('success');
+      }
+      return {
+        ...finished(),
+        ...(input.step.id === 'review'
+          ? { review: { verdict: 'pass' as const, summary: 'Reviewed', findings: [] } }
+          : {}),
+      };
+    });
+    await f.service.startAutopilot(feature.id);
+    expect(f.inputs.map((input) => input.step.id)).toEqual(['specs', 'plan']);
+    expect(f.inputs[0].preparedPrompt).toContain('My initial US');
+    expect(feature.autopilot?.status).toBe('paused');
+    expect(feature.steps[0].status).toBe('approved');
+    const plan = feature.steps[1].attempts[0];
+    await f.service.approveStep(feature.id, 'plan', plan.id, plan.revision ?? 0);
+    await f.service.startAutopilot(feature.id);
+    expect(feature.status).toBe('completed');
+    expect(feature.autopilot?.runs).toBe(5);
+    expect(feature.autopilot?.status).toBe('completed');
+    expect(feature.steps[3].attempts[0].evidence?.[0]).toMatchObject({
+      source: 'host',
+      exitCode: 0,
+      stdout: 'passed\n',
+    });
+    expect(f.inputs).toHaveLength(5);
+  });
+  it('pauses on human questions without automatically advancing after the answer', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Pause',
+      description: '',
+      workflowId: 'single',
+    });
+    await f.service.saveAutopilot(feature.id, {
+      checkpoints: [],
+      maxRuns: 1,
+      maxCorrectionCycles: 0,
+      stepInputs: {},
+    });
+    f.run(async (_input, callbacks) => {
+      await callbacks.onQuestion!({ question: 'Scope?', allowFreeform: true });
+      return finished();
+    });
+    const running = f.service.startAutopilot(feature.id);
+    await vi.waitFor(() => expect(f.service.state.humanRequests).toHaveLength(1));
+    expect(feature.autopilot?.status).toBe('paused');
+    f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'Only export');
+    await running;
+    expect(feature.steps[0].status).toBe('awaiting_review');
+    expect(f.inputs).toHaveLength(1);
+    await f.service.startAutopilot(feature.id);
+    expect(feature.status).toBe('completed');
+    expect(f.inputs).toHaveLength(1); // validation is local and allowed even at the call limit
+  });
+  it('blocks excess calls and never silently chooses an unconfigured economy model', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Budget',
+      description: '',
+      workflowId: 'single',
+    });
+    await f.service.saveBudget(feature.id, {
+      maxRuns: 1,
+      maxPromptChars: 60000,
+      modelProfile: 'economy',
+    });
+    await expect(f.service.runStep(feature.id, 'session')).rejects.toThrow(/Configure le modèle/);
+    await f.service.saveSettings({
+      ...f.service.state.settings,
+      modelProfiles: { economy: { model: 'fixture-real-model', reasoning: 'low' } },
+    });
+    await f.service.runStep(feature.id, 'session');
+    expect(f.inputs[0].step.model).toBe('fixture-real-model');
+    await expect(f.service.runStep(feature.id, 'session')).rejects.toThrow(
+      /nombre maximal de runs/,
+    );
+    expect(f.inputs).toHaveLength(1);
+  });
+  it('uses only opt-in approved memory and rejects a source invalidated by replay', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const source = await f.service.createFeature({
+      title: 'Source',
+      description: '',
+      workflowId: 'single',
+    });
+    await f.service.runStep(source.id, 'session');
+    const attempt = source.steps[0].attempts[0];
+    await f.service.approveStep(source.id, 'session', attempt.id, attempt.revision ?? 0);
+    await f.service.saveMemory({
+      id: 'architecture',
+      title: 'Validated decision',
+      content: 'Prefer existing store',
+      category: 'decision',
+      enabled: true,
+      agentIds: [],
+      updatedAt: '',
+      source: { featureId: source.id, stepId: 'session', attemptId: attempt.id },
+    });
+    const target = await f.service.createFeature({
+      title: 'Target',
+      description: '',
+      workflowId: 'single',
+    });
+    expect(f.service.previewRun(target.id, 'session').prompt).not.toContain(
+      'Prefer existing store',
+    );
+    const launch = {
+      initialContext: '',
+      mcpServerIds: [],
+      memoryIds: ['architecture'],
+      useProjectMemory: true,
+    };
+    expect(f.service.previewRun(target.id, 'session', '', false, launch).prompt).toContain(
+      'Prefer existing store',
+    );
+    f.service.engine.saveArtifact(source.id, 'session', 'Changed decision');
+    expect(() => f.service.previewRun(target.id, 'session', '', false, launch)).toThrow(
+      /plus validé/,
+    );
+    expect(f.inputs).toHaveLength(1); // memory saving and preview are entirely local
+  });
+});
+
+describe('host approval proofs and revision guards', () => {
+  it('rejects changed test inputs and obsolete revisions instead of approving stale proof', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    await f.service.saveSettings({
+      ...f.service.state.settings,
+      testCommands: [
+        {
+          id: 'unit',
+          name: 'Unit',
+          command: process.execPath,
+          args: ['-e', 'console.log("passed")'],
+        },
+      ],
+    });
+    const feature = await f.service.createFeature({
+      title: 'Proof',
+      description: '',
+      workflowId: 'single',
+    });
+    feature.steps[0].policy = 'tests';
+    feature.steps[0].agentId = 'fs-tests';
+    f.run(async (input, callbacks, signal) => {
+      const tools = await f.service.getTools(input, callbacks, signal);
+      await invoke(tools, 'studio_write_file', { path: 'tests/fixture.ts', content: 'initial' });
+      await invoke(tools, 'studio_run_test', { id: 'unit' });
+      return finished();
+    });
+    await f.service.runStep(feature.id, 'session');
+    const attempt = feature.steps[0].attempts[0];
+    await expect(f.service.approveStep(feature.id, 'session', attempt.id, -1)).rejects.toThrow(
+      /changé/,
+    );
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(join(f.workspace, 'tests/fixture.ts'), 'human change');
+    await expect(
+      f.service.approveStep(feature.id, 'session', attempt.id, attempt.revision ?? 0),
+    ).rejects.toThrow(/preuve de test est obsolète/);
+    expect(feature.steps[0].status).toBe('awaiting_review');
+    await writeFile(join(f.workspace, 'tests/fixture.ts'), 'initial');
+    await f.service.approveStep(feature.id, 'session', attempt.id, attempt.revision ?? 0);
+    expect(feature.status).toBe('completed');
+    await f.service.saveCriteria(feature.id, [
+      { id: 'criterion', text: 'Human acceptance', status: 'pending', evidence: '' },
+    ]);
+    expect(feature.status).toBe('attention');
+    await f.service.saveCriteria(feature.id, [
+      { id: 'criterion', text: 'Human acceptance', status: 'passed', evidence: 'Verified by Matt' },
+    ]);
+    expect(feature.status).toBe('completed');
+  });
+});
+
+describe('branch and memory invalidation regressions', () => {
+  it('binds a newly created feature to the actual branch after an external checkout', async () => {
+    const f = await fixture();
+    await git(f.workspace, 'checkout', '-b', 'new-feature');
+    const feature = await f.service.createFeature({
+      title: 'Fresh branch',
+      description: '',
+      workflowId: 'single',
+    });
+    expect(feature.branch).toBe('new-feature');
+    await f.service.checkRuntime();
+    await f.service.runStep(feature.id, 'session');
+    expect(feature.steps[0].status).toBe('awaiting_review');
+  });
+  it('refuses memory sourced from a downstream artifact before a replay invalidates it', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Cross-step memory',
+      description: '',
+      workflowId: 'feature',
+    });
+    for (const id of ['specs', 'plan']) {
+      await f.service.runStep(feature.id, id);
+      const attempt = f.service.engine.getStep(feature.id, id).attempts.at(-1)!;
+      await f.service.approveStep(feature.id, id, attempt.id, attempt.revision ?? 0);
+    }
+    await f.service.saveMemory({
+      id: 'old-plan',
+      title: 'Old plan',
+      content: 'Old decision',
+      category: 'decision',
+      enabled: true,
+      agentIds: [],
+      updatedAt: '',
+      source: { featureId: feature.id, stepId: 'plan', attemptId: feature.steps[1].attempts[0].id },
+    });
+    expect(() =>
+      f.service.previewRun(feature.id, 'specs', '', false, {
+        initialContext: '',
+        mcpServerIds: [],
+        memoryIds: ['old-plan'],
+        useProjectMemory: true,
+      }),
+    ).toThrow(/va invalider/);
+    expect(feature.steps[1].status).toBe('approved');
+    expect(f.inputs).toHaveLength(2);
+  });
+});

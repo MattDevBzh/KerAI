@@ -7,6 +7,8 @@ import {
   Archive,
   Bot,
   BookOpen,
+  BrainCircuit,
+  FileCheck2,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -54,8 +56,29 @@ import type {
 } from '../src/shared/types';
 import { initialView, isDemo, isHosted, persistView, send, subscribe } from './bridge';
 import { demoState } from './demo';
+import { LaunchDialog, HumanRequests, McpSettings, McpPicker } from './ExecutionUI';
+import './evolution.css';
+import {
+  AutopilotBar,
+  BudgetMeter,
+  ModelBudgetSettings,
+  EvidencePanel,
+  ValidationCenter,
+  ReviewWorkspace,
+  ProjectMemoryView,
+  WorkflowLibrary,
+  attentionCount,
+} from './StudioUI';
 
-type View = 'dashboard' | 'agents' | 'skills' | 'automations' | 'settings';
+type View =
+  | 'dashboard'
+  | 'validation'
+  | 'workflows'
+  | 'memory'
+  | 'agents'
+  | 'skills'
+  | 'automations'
+  | 'settings';
 const statuses: Record<StepStatus, { label: string; tone: string }> = {
   pending: { label: 'À venir', tone: 'neutral' },
   running: { label: 'En cours', tone: 'lavender' },
@@ -87,6 +110,9 @@ const date = (value: string) =>
   }).format(new Date(value));
 const nav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'validation', label: 'Validation', icon: FileCheck2 },
+  { id: 'workflows', label: 'Parcours', icon: Workflow },
+  { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'skills', label: 'Skills', icon: BookOpen },
   { id: 'automations', label: 'Automatisations', icon: Zap },
@@ -333,6 +359,9 @@ export default function App() {
               {n.id === 'dashboard' && activeFeatures.length > 0 && (
                 <small>{activeFeatures.length}</small>
               )}
+              {n.id === 'validation' && attentionCount(state) > 0 && (
+                <small>{attentionCount(state)}</small>
+              )}
             </button>
           ))}
         </nav>
@@ -429,6 +458,26 @@ export default function App() {
           </div>
         )}
         <main>
+          {Boolean(state.humanRequests?.length) && (
+            <div className="human-global-banner">
+              <MessageSquare size={15} />
+              <span>
+                {state.humanRequests!.length} demande{state.humanRequests!.length > 1 ? 's' : ''}{' '}
+                humaine{state.humanRequests!.length > 1 ? 's' : ''} en attente
+              </span>
+              <button
+                className="text-button"
+                onClick={() => {
+                  const r = state.humanRequests![0];
+                  setView('dashboard');
+                  setFeatureId(r.featureId);
+                  setStepId(r.stepId);
+                }}
+              >
+                Ouvrir la demande <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
           {view === 'dashboard' &&
             (selected ? (
               <FeatureDetail
@@ -451,6 +500,19 @@ export default function App() {
                 }}
               />
             ))}
+          {view === 'validation' && (
+            <ValidationCenter
+              state={state}
+              dispatch={dispatch}
+              onOpen={(id, step) => {
+                setView('dashboard');
+                setFeatureId(id);
+                setStepId(step);
+              }}
+            />
+          )}
+          {view === 'memory' && <ProjectMemoryView state={state} dispatch={dispatch} />}
+          {view === 'workflows' && <WorkflowLibrary state={state} dispatch={dispatch} />}
           {view === 'agents' && (
             <Library
               title="Des agents, chacun son regard."
@@ -1126,6 +1188,10 @@ function FeatureDetail({
           </button>
         </div>
       </div>
+      <div className="feature-control-band">
+        <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
+        <BudgetMeter feature={feature} state={state} dispatch={dispatch} />
+      </div>
       <div className="journey-heading">
         <span className="eyebrow">LE PARCOURS</span>
         <span>
@@ -1197,7 +1263,9 @@ function StepPanel({
   const [attemptId, setAttemptId] = useState('');
   const attempt = step.attempts.find((a) => a.id === attemptId) ?? latest;
   const historic = Boolean(attempt && latest && attempt.id !== latest.id);
-  const [tab, setTab] = useState<'artifact' | 'activity' | 'diffs'>('artifact');
+  const [tab, setTab] = useState<'artifact' | 'activity' | 'diffs' | 'evidence' | 'review'>(
+    'artifact',
+  );
   const [edit, setEdit] = useState(false);
   const [content, setContent] = useState(latest?.artifact?.content ?? '');
   const [savedContent, setSavedContent] = useState(latest?.artifact?.content ?? '');
@@ -1205,6 +1273,7 @@ function StepPanel({
   const [feedback, setFeedback] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [config, setConfig] = useState(false);
+  const [launchResume, setLaunchResume] = useState<boolean | null>(null);
   useEffect(() => {
     const received = latest?.artifact?.content ?? '';
     if (received === content) setSavedContent(received);
@@ -1239,14 +1308,7 @@ function StepPanel({
             ? 'Restaurez la session pour poursuivre.'
             : '';
   const run = (resume = false) => {
-    const action = () =>
-      dispatch({
-        type: 'runStep',
-        featureId: feature.id,
-        stepId: step.id,
-        feedback: feedback.trim(),
-        ...(resume ? { resume: true } : {}),
-      });
+    const action = () => setLaunchResume(resume);
     if ((latest || step.status === 'approved') && !resume)
       confirm(
         step.status === 'approved' ? 'Rejouer une étape validée ?' : 'Relancer cette étape ?',
@@ -1259,6 +1321,17 @@ function StepPanel({
   };
   return (
     <div className="step-layout">
+      {launchResume !== null && (
+        <LaunchDialog
+          feature={feature}
+          step={step}
+          state={state}
+          resume={launchResume}
+          feedback={feedback}
+          dispatch={dispatch}
+          onClose={() => setLaunchResume(null)}
+        />
+      )}
       <section className="workbench">
         <div className="workbench-heading">
           <div>
@@ -1309,7 +1382,11 @@ function StepPanel({
                 values.agentId !== step.agentId ||
                 (values.model ?? '') !== (step.model ?? '') ||
                 (values.reasoning ?? '') !== (step.reasoning ?? '') ||
-                JSON.stringify(values.skills) !== JSON.stringify(step.skills);
+                JSON.stringify(values.skills) !== JSON.stringify(step.skills) ||
+                (values.initialContext ?? '') !== (step.initialContext ?? '') ||
+                JSON.stringify(values.mcpServerIds ?? []) !==
+                  JSON.stringify(step.mcpServerIds ?? []) ||
+                Boolean(values.askBeforeRun) !== Boolean(step.askBeforeRun);
               if (step.status === 'approved' && contextChanged)
                 confirm(
                   'Modifier une étape validée ?',
@@ -1349,6 +1426,24 @@ function StepPanel({
           >
             <FileCode2 size={15} /> Fichiers <span>{attempt?.changedFiles.length ?? 0}</span>
           </button>
+          <button
+            role="tab"
+            id="tab-evidence"
+            aria-controls="step-content"
+            aria-selected={tab === 'evidence'}
+            onClick={() => setTab('evidence')}
+          >
+            <ShieldCheck size={15} /> Preuves <span>{attempt?.evidence?.length ?? 0}</span>
+          </button>
+          <button
+            role="tab"
+            id="tab-review"
+            aria-controls="step-content"
+            aria-selected={tab === 'review'}
+            onClick={() => setTab('review')}
+          >
+            <MessageSquare size={15} /> Relecture
+          </button>
         </div>
         <div
           id="step-content"
@@ -1356,6 +1451,17 @@ function StepPanel({
           aria-labelledby={`tab-${tab}`}
           className="workbench-content"
         >
+          {tab === 'evidence' && <EvidencePanel attempt={attempt} />}
+          {tab === 'review' && (
+            <ReviewWorkspace
+              key={`${attempt?.id}-${JSON.stringify(feature.criteria)}`}
+              feature={feature}
+              step={step}
+              attempt={attempt}
+              state={state}
+              dispatch={dispatch}
+            />
+          )}
           {tab === 'artifact' &&
             (attempt?.artifact ? (
               <>
@@ -1514,6 +1620,12 @@ function StepPanel({
         </div>
       </section>
       <aside className="step-aside">
+        <HumanRequests
+          requests={(state.humanRequests ?? []).filter(
+            (r) => r.featureId === feature.id && r.stepId === step.id,
+          )}
+          dispatch={dispatch}
+        />
         <div className="decision-card">
           <span className="eyebrow">À VOUS DE DONNER LE CAP</span>
           <h3>
@@ -1651,7 +1763,13 @@ function StepPanel({
                         'Valider cette étape ?',
                         'Cette décision approuve le livrable actuel et débloque les étapes qui en dépendent.',
                         () =>
-                          dispatch({ type: 'approveStep', featureId: feature.id, stepId: step.id }),
+                          dispatch({
+                            type: 'approveStep',
+                            featureId: feature.id,
+                            stepId: step.id,
+                            expectedAttemptId: latest?.id,
+                            expectedRevision: latest?.revision ?? 0,
+                          }),
                       )
                     }
                   >
@@ -1789,6 +1907,9 @@ function StepConfig({
     reasoning?: string;
     skills: string[];
     maxAttempts: number;
+    initialContext?: string;
+    mcpServerIds?: string[];
+    askBeforeRun?: boolean;
   }) => void;
 }) {
   const [agent, setAgent] = useState(step.agentId);
@@ -1796,6 +1917,9 @@ function StepConfig({
   const [reasoning, setReasoning] = useState(step.reasoning ?? '');
   const [skills, setSkills] = useState(step.skills);
   const [maxAttempts, setMaxAttempts] = useState(step.maxAttempts);
+  const [initialContext, setInitialContext] = useState(step.initialContext ?? '');
+  const [mcpServerIds, setMcpServerIds] = useState(step.mcpServerIds ?? []);
+  const [askBeforeRun, setAskBeforeRun] = useState(step.askBeforeRun ?? false);
   const efforts = state.runtime.models.find((m) => m.id === model)?.reasoningEfforts ?? [];
   return (
     <form
@@ -1860,6 +1984,24 @@ function StepConfig({
           {step.attempts.length > 1 ? 's' : ''}. Chaque nouvelle tentative peut consommer votre
           quota Copilot. Augmenter la limite autorise ces exécutions supplémentaires.
         </small>
+      </label>
+      <label className="field">
+        <span>Contexte initial de l’étape</span>
+        <textarea
+          rows={3}
+          value={initialContext}
+          onChange={(e) => setInitialContext(e.target.value)}
+          placeholder="Le contexte proposé à chaque lancement de cette étape."
+        />
+      </label>
+      <McpPicker state={state} selected={mcpServerIds} onChange={setMcpServerIds} />
+      <label className="inline-check">
+        <input
+          type="checkbox"
+          checked={askBeforeRun}
+          onChange={(e) => setAskBeforeRun(e.target.checked)}
+        />
+        <span>Demander un contexte humain avant exécution automatique</span>
       </label>
       <fieldset className="skill-options">
         <legend>Skills pour cette étape</legend>
@@ -2252,6 +2394,12 @@ function SettingsView({
       type: 'saveSettings',
       settings: {
         ...draft,
+        mcpServers: draft.mcpServers?.map((s) => ({
+          ...s,
+          args: s.args.filter(Boolean),
+          tools: s.tools.map((t) => t.trim()).filter(Boolean),
+          envKeys: s.envKeys.map((t) => t.trim()).filter(Boolean),
+        })),
         testPaths: lines(draft.testPaths.join('\n')),
         testCommands: draft.testCommands.map((c) => ({
           ...c,
@@ -2283,6 +2431,13 @@ function SettingsView({
       <form onSubmit={submit}>
         {!automation && (
           <>
+            <McpSettings
+              servers={draft.mcpServers ?? []}
+              state={state}
+              onChange={(mcpServers) => set({ mcpServers })}
+              dispatch={dispatch}
+            />
+            <ModelBudgetSettings settings={draft} state={state} onChange={set} />
             <section className="settings-card">
               <div className="settings-card-title">
                 <span className="settings-icon color-2">

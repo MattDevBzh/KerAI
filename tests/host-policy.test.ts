@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link, realpath } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Tool } from '@github/copilot-sdk';
-import type { RunInput } from '../src/shared/types';
+import type { RunInput, TestEvidence } from '../src/shared/types';
 import { PolicyEngine, sha256 } from '../src/host/PolicyEngine';
 import { ToolHost, gitInfo } from '../src/host/ToolHost';
 import { runProcess } from '../src/host/process';
@@ -153,6 +153,119 @@ describe('host file and command policy', () => {
 });
 
 describe('host tools and Git boundaries', () => {
+  it('serializes host writes behind running tests so proof observes a stable host version', async () => {
+    const root = await setup();
+    const data = input(root, 'tests');
+    data.settings.testCommands = [
+      {
+        id: 'read',
+        name: 'Read fixture',
+        command: process.execPath,
+        args: [
+          '-e',
+          "setTimeout(()=>console.log(require('fs').readFileSync('tests/code.ts','utf8')),80)",
+        ],
+      },
+    ];
+    const proofs: TestEvidence[] = [];
+    const host = new ToolHost(
+      data,
+      {
+        onEvent() {},
+        onSession() {},
+        onEvidence(proof) {
+          proofs.push(proof);
+        },
+      },
+      new AbortController().signal,
+    );
+    const tools = await host.createTools();
+    await invoke(tools, 'studio_write_file', { path: 'tests/code.ts', content: 'before' });
+    const running = invoke(tools, 'studio_run_test', { id: 'read' });
+    const editing = invoke(tools, 'studio_write_file', { path: 'tests/code.ts', content: 'after' });
+    const [result, write] = await Promise.all([running, editing]);
+    expect(result.textResultForLlm).toContain('before');
+    expect(write.resultType).toBe('success');
+    expect(proofs[0]).toMatchObject({
+      exitCode: 0,
+      fileHashes: { 'tests/code.ts': sha256('before') },
+    });
+    expect(proofs[0].error).toBeUndefined();
+    expect(await readFile(join(root, 'tests/code.ts'), 'utf8')).toBe('after');
+  });
+  it('uses chronological write ownership across a development correction and older test attempts', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    await mkdir(join(root, 'tests'));
+    await writeFile(join(root, 'tests/code.ts'), 'C');
+    const data = input(root, 'workspace-write');
+    const first = {
+      ...structuredClone(data.attempt),
+      id: 'first',
+      startedAt: '2026-01-01',
+      fileHashes: { 'tests/code.ts': sha256('A') },
+    };
+    const second = {
+      ...structuredClone(data.attempt),
+      id: 'second',
+      startedAt: '2026-01-02',
+      fileHashes: { 'tests/code.ts': sha256('B') },
+    };
+    data.attempt.startedAt = '2026-01-03';
+    data.attempt.fileHashes = { 'tests/code.ts': sha256('C') };
+    data.feature.steps[0].attempts = [first, data.attempt];
+    data.feature.steps.push({ ...structuredClone(data.step), id: 'tests', attempts: [second] });
+    const host = new ToolHost(data, { onEvent() {}, onSession() {} }, new AbortController().signal);
+    const tools = await host.createTools();
+    await invoke(tools, 'studio_read_file', { path: 'tests/code.ts' });
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'tests/code.ts', content: 'D' }))
+        .resultType,
+    ).toBe('success');
+  });
+  it('records actual failing test output and marks files changed by a command as obsolete', async () => {
+    const root = await setup();
+    await writeFile(join(root, 'source.ts'), 'before');
+    const data = input(root, 'tests');
+    data.settings.testCommands = [
+      {
+        id: 'failing',
+        name: 'Failing test',
+        command: process.execPath,
+        args: ['-e', "console.error('assertion failed'); process.exitCode=3"],
+      },
+      {
+        id: 'mutating',
+        name: 'Mutating test',
+        command: process.execPath,
+        args: ['-e', "require('fs').writeFileSync('source.ts','after')"],
+      },
+    ];
+    const evidence: TestEvidence[] = [];
+    const host = new ToolHost(
+      data,
+      {
+        onEvent() {},
+        onSession() {},
+        onEvidence(proof) {
+          evidence.push(proof);
+        },
+      },
+      new AbortController().signal,
+    );
+    const tools = await host.createTools();
+    await invoke(tools, 'studio_read_file', { path: 'source.ts' });
+    await invoke(tools, 'studio_run_test', { id: 'failing' });
+    expect(evidence[0]).toMatchObject({
+      source: 'host',
+      exitCode: 3,
+      stderr: 'assertion failed\n',
+      fileHashes: { 'source.ts': sha256('before') },
+    });
+    await invoke(tools, 'studio_run_test', { id: 'mutating' });
+    expect(evidence[1].exitCode).toBe(0);
+    expect(evidence[1].error).toMatch(/changé pendant/);
+  });
   it('does not expose write or command tools to a readonly session', async () => {
     const root = await setup();
     const data = input(root, 'read-only');

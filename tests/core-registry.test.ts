@@ -109,4 +109,47 @@ describe('agent, skill and workflow registry', () => {
       true,
     );
   });
+  it('saves strict workspace workflows without changing feature snapshots or following symlinks', async () => {
+    const { root, registry } = await setup(),
+      original = (await registry.load()).workflows.find((w) => w.id === 'single')!;
+    const { WorkflowEngine } = await import('../src/core/workflow');
+    const engine = new WorkflowEngine(),
+      feature = engine.createFeature(original, { title: 'Existing', description: '' });
+    await registry.saveWorkflow({
+      ...original,
+      name: 'Customized',
+      steps: original.steps.map((step) => ({
+        ...step,
+        initialContext: 'Manual context',
+        mcpServerIds: ['local-server'],
+        askBeforeRun: true,
+      })),
+    });
+    const reloaded = (await registry.load()).workflows.find((w) => w.id === 'single')!;
+    expect(reloaded.name).toBe('Customized');
+    expect(reloaded.steps[0].initialContext).toBe('Manual context');
+    expect(feature.workflowName).toBe(original.name);
+    expect(feature.steps[0].initialContext).toBeUndefined();
+    await expect(
+      registry.saveWorkflow({
+        ...original,
+        steps: original.steps.map((s) => ({ ...s, dependsOn: [s.id] })),
+      }),
+    ).rejects.toThrow(/Cycle/);
+    await expect(
+      registry.saveWorkflow({
+        ...original,
+        steps: original.steps.map((s) => ({ ...s, agentId: 'unknown' })),
+      }),
+    ).rejects.toThrow(/inconnu/);
+    const outside = await mkdtemp(join(tmpdir(), 'studio-workflow-outside-'));
+    roots.push(outside);
+    await symlink(
+      join(outside, 'target.yaml'),
+      join(root, '.feature-studio/workflows/linked.yaml'),
+    );
+    await expect(registry.saveWorkflow({ ...original, id: 'linked' })).rejects.toThrow(
+      /symbolique/,
+    );
+  });
 });

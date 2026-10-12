@@ -27,13 +27,15 @@ Sources : [SDK TypeScript et options actuelles](https://github.com/github/copilo
 
 Les flags classiques `--allow-tool=write` ne confinent pas les écritures par chemin. Les règles `shell(command:*)` autorisent un nom/préfixe de commande, sans garantir que ses arguments ou le code exécuté respectent les limites du workspace. Le `cwd` et les instructions en langage naturel ne suffisent pas pour une restriction de tests.
 
-L'adaptateur injecte exclusivement les outils `studio_*` fournis par `ToolHost` : liste, lecture, recherche, écriture, diff et commande de test configurée. Chaque handler vérifie les permissions dans `PolicyEngine` et reçoit le signal d'annulation. Il n'existe aucun shell libre accessible au modèle. Les chemins et les commandes sont évalués par l'hôte ; les profils `read-only`, `workspace-write` et `tests` sélectionnent les capacités correspondantes.
+L'adaptateur injecte les outils `studio_*` fournis par `ToolHost` : liste, lecture, recherche, écriture, diff et commande de test configurée. Chaque handler vérifie les permissions dans `PolicyEngine` et reçoit le signal d'annulation. Il n'existe aucun shell libre accessible au modèle. Les chemins et les commandes sont évalués par l'hôte ; les profils `read-only`, `workspace-write` et `tests` sélectionnent les capacités correspondantes.
 
-La session reçoit une `availableTools` exacte, une `excludedTools` défensive, un `onPermissionRequest` qui rejette toute demande native/externe, et un `onPreToolUse` qui refuse tout nom hors allowlist. Les handlers hôtes portent `skipPermission: true` et `defer: 'never'`, car leur politique est vérifiée dans l'extension. Ne pas remplacer cela par `approveAll` ou `--allow-all`.
+La session reçoit une `availableTools` exacte, une `excludedTools` défensive, un `onPermissionRequest` qui rejette toute demande native non autorisée et applique la politique des MCP explicitement sélectionnés, et un `onPreToolUse` qui refuse tout nom hors allowlist. Les handlers hôtes portent `skipPermission: true` et `defer: 'never'`, car leur politique est vérifiée dans l'extension. Ne pas remplacer cela par `approveAll` ou `--allow-all`.
 
 Les MCP intégrés sont désactivés au lancement. Le runtime démarre dans un répertoire neutre avec configuration personnelle isolée. La découverte de configuration, les instructions natives, les hooks fichiers, les plugins, les skills natifs, les outils git natifs, la mémoire et le contrôle distant sont désactivés. Les instructions/skills demandés sont injectés explicitement par Feature Studio.
 
-Avant **chaque premier prompt**, l'adaptateur appelle `session.tools.initializeAndValidate`, puis `session.tools.getCurrentMetadata`. Le catalogue doit contenir exactement les noms des handlers hôtes, sans outil MCP. Toute absence d'introspection, catalogue inattendu ou erreur fait refuser l'exécution avant le prompt. Le handshake de protocole seul ne prouve pas les restrictions des champs SDK additionnels.
+Avant **chaque premier prompt**, l'adaptateur appelle `session.tools.initializeAndValidate`, puis `session.tools.getCurrentMetadata`. Le catalogue doit contenir exactement les noms des handlers hôtes, l’outil de question humaine et les outils MCP explicitement sélectionnés avec leur provenance vérifiable. Toute absence d'introspection, catalogue inattendu ou erreur fait refuser l'exécution avant le prompt. Le handshake de protocole seul ne prouve pas les restrictions des champs SDK additionnels.
+
+Avec des MCP, un contrôle supplémentaire atteste la politique native via `session.managedSettings.get` et désactive les approbations générales avec `session.permissions.configure`. Des règles exactes `Mcp(serveur/outil)` imposent la demande humaine quand les lectures automatiques sont désactivées ; le callback refuse les écritures et opérations non attestées en profil lecture seule. **Le CLI 1.0.63 ne fournit pas cette attestation et les runs MCP y sont refusés avant prompt.** Les sept scénarios natifs réussis sur le wrapper runtime SDK 1.0.96 et cette limite de compatibilité sont détaillés dans [MCP.md](MCP.md).
 
 Dans ce SDK, omettre `onPermissionRequest` laisse les demandes en attente ; cela ne garantit pas un rejet immédiat. Le handler explicite est donc indispensable. Certaines pages de documentation décrivent encore l'ancien comportement.
 
@@ -45,7 +47,9 @@ Les agents CLI se définissent dans `.github/agents/*.agent.md` ou `~/.copilot/a
 
 Feature Studio transmet le profil sélectionné au SDK comme `customAgents: [{ name, displayName, description, prompt, tools, infer: false }]`, puis `agent: 'feature-studio'`. Les règles et skills du kit sont chargés par l'hôte et ajoutés au prompt. Cela évite qu'un agent personnel prioritaire ou un MCP déclaré dans un fichier remplace les capacités de la tentative.
 
-Les informations humaines manquantes sont renvoyées par un bloc final explicite, validé strictement :
+L’outil hôte `studio_ask_human` permet de poser une question pendant l’exécution et attend une vraie réponse du cockpit. L’annulation interrompt l’attente ; aucun accord ni réponse n’est simulé. Le contexte initial est fourni dans un formulaire avant chaque lancement manuel, puis enregistré avec son empreinte. Les instructions du rôle sont incluses une seule fois dans le prompt métier ; le custom agent ne reçoit qu’une enveloppe technique générique.
+
+Un bloc final explicite reste disponible en repli, validé strictement :
 
 ````md
 ```feature-studio-questions
@@ -89,4 +93,12 @@ Une recette distincte, avec **un seul prompt réel autorisé** dans une fixture 
 
 La session produite par cette recette a ensuite été reprise **sans nouveau prompt**. `session.getMessages`, via `getEvents`, a retrouvé les échanges et le résultat de lecture contenant le marqueur. L'agent `feature-studio` est resté sélectionné. Le catalogue a été revérifié avec exactement `studio_list_files`, `studio_read_file` et `studio_git_diff`, conformément au profil `read`. Le dernier message assistant n'a pas été retrouvé dans le transcript natif : voir la compensation hôte décrite ci-dessus. Les champs `resume` de la preuve distinguent ces résultats.
 
-Les **18 tests automatisés** de `tests/adapter.test.ts` utilisent un transport injecté : flux, catalogue inattendu/inaccessible, questions, annulation, timeout, quota, reprise des restrictions, modèles indisponibles, exclusion des livrables périmés et arrêt du runtime même si la déconnexion native est rejetée. Ils n'appellent aucun modèle. La recette réelle confirme ce parcours de lecture précis ; elle ne constitue pas une mesure générale de qualité, de coûts ou de performance.
+Les tests automatisés de `tests/adapter.test.ts` et `tests/mcp.test.ts` utilisent un transport injecté : flux, catalogue inattendu/inaccessible, questions, annulation, timeout, quota, reprise des restrictions, modèles indisponibles, exclusion des livrables périmés et arrêt du runtime même si la déconnexion native est rejetée. Ils n'appellent aucun modèle. La recette réelle confirme ce parcours de lecture précis ; elle ne constitue pas une mesure générale de qualité, de coûts ou de performance.
+
+## Évolutions 0.2 : contexte, MCP et comptage
+
+Le prompt métier est compilé de manière déterministe par `core/context.ts` : demande de feature, agent/skills, US de la tentative, mémoire explicitement cochée, derniers livrables approuvés, feedback et réponses humaines. Les descendants d’une étape rejouée sont exclus avant composition. Les instructions système et l’historique interne du SDK restent distincts de cet aperçu.
+
+Les callbacks d’usage sont cumulés et dédupliqués par identifiant d’événement. Une mesure reçue avant erreur, timeout ou annulation reste persistée ; une fin sans usage ne l’efface pas. Les budgets comptent toutes les tentatives et suspendent les nouveaux appels si un seuil est atteint ou si une mesure requise reste inconnue. Les seuils ne peuvent garantir le coût d’un appel déjà en cours.
+
+Le support MCP local, HTTP et SSE, l’authentification Azure DevOps et la preuve réelle sans prompt sont décrits dans [MCP.md](MCP.md). Aucun nouveau prompt payant n’a été nécessaire pour valider cette itération ; les résultats du smoke historique ci-dessus appartiennent à la livraison 0.1.

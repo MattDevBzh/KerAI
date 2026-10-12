@@ -26,7 +26,10 @@ export function send(message: ClientMessage) {
 }
 export function subscribe(callback: (message: HostMessage) => void) {
   const handler = (event: MessageEvent<HostMessage>) => {
-    if (event.data && ['state', 'error', 'notice', 'navigate'].includes(event.data.type))
+    if (
+      event.data &&
+      ['state', 'error', 'notice', 'navigate', 'runPreview'].includes(event.data.type)
+    )
       callback(event.data);
   };
   window.addEventListener('message', handler);

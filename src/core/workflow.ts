@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Attempt, Feature, FeatureStep, RunEvent, RunResult, Workflow } from '../shared/types';
+import { launchSchema, reviewSchema } from './evolutionSchemas';
+import { approvalBlockers, featureCompletionBlockers } from './validation';
+import { defaultBudget } from './budgets';
 
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
 export const workflowSchema = z
@@ -25,6 +28,9 @@ export const workflowSchema = z
             maxAttempts: z.number().int().min(1).max(100),
             artifact: z.string().regex(/^[^/\\]+\.md$/),
             dependsOn: z.array(id),
+            initialContext: z.string().max(60000).optional(),
+            mcpServerIds: z.array(id).max(256).optional(),
+            askBeforeRun: z.boolean().optional(),
           })
           .strict(),
       )
@@ -88,6 +94,9 @@ export class WorkflowEngine {
       updatedAt: now,
       branch: input.branch ?? '',
       status: 'draft',
+      budget: structuredClone(defaultBudget),
+      criteria: [],
+      reviewComments: [],
       activeStepId: validated.steps.find((s) => !s.dependsOn.length)!.id,
       steps: validated.steps.map((step) => ({
         ...structuredClone(step),
@@ -123,7 +132,9 @@ export class WorkflowEngine {
   private touch(feature: Feature) {
     feature.updatedAt = new Date().toISOString();
     feature.status = feature.steps.every((s) => s.status === 'approved')
-      ? 'completed'
+      ? featureCompletionBlockers(feature).length
+        ? 'attention'
+        : 'completed'
       : feature.steps.some((s) => s.status === 'running')
         ? 'running'
         : feature.steps.some((s) => !['pending'].includes(s.status))
@@ -135,6 +146,9 @@ export class WorkflowEngine {
         s.dependsOn.every((dep) => feature.steps.find((d) => d.id === dep)?.status === 'approved'),
     );
     if (next) feature.activeStepId = next.id;
+  }
+  refreshFeatureStatus(featureId: string): void {
+    this.touch(this.getFeature(featureId));
   }
   private invalidate(feature: Feature, stepId: string) {
     const invalid = new Set([stepId]);
@@ -184,6 +198,7 @@ export class WorkflowEngine {
       questions: [],
       answers: previous ? { ...previous.answers } : {},
       changedFiles: [],
+      revision: 0,
       ...(previous?.artifact ? { artifact: structuredClone(previous.artifact) } : {}),
       ...(resume ? { sessionId: previous!.sessionId } : {}),
     };
@@ -208,21 +223,31 @@ export class WorkflowEngine {
       )
     )
       throw new Error('Questions invalides.');
+    const questions = [
+      ...new Map(
+        [...attempt.questions, ...result.questions].map((question) => [
+          question.id,
+          structuredClone(question),
+        ]),
+      ).values(),
+    ];
     Object.assign(attempt, {
       sessionId: result.sessionId ?? attempt.sessionId,
       model: result.model ?? attempt.model,
-      usage: result.usage,
-      questions: structuredClone(result.questions),
+      usage: result.usage ?? attempt.usage,
+      review: result.review ? reviewSchema.parse(result.review) : attempt.review,
+      questions,
       changedFiles: [...result.changedFiles],
-      fileHashes: result.fileHashes ? { ...result.fileHashes } : undefined,
+      fileHashes: result.fileHashes ? { ...result.fileHashes } : attempt.fileHashes,
       finishedAt: new Date().toISOString(),
       artifact: {
         name: step.artifact,
         content: result.content,
         updatedAt: new Date().toISOString(),
       },
+      revision: (attempt.revision ?? 0) + 1,
     });
-    step.status = attempt.status = result.questions.some((q) => !attempt.answers[q.id]?.trim())
+    step.status = attempt.status = questions.some((q) => !attempt.answers[q.id]?.trim())
       ? 'waiting_input'
       : 'awaiting_review';
     this.touch(feature);
@@ -254,20 +279,25 @@ export class WorkflowEngine {
   interruptRun(featureId: string, stepId: string) {
     this.terminate(featureId, stepId, 'interrupted', 'Session interrompue.');
   }
-  approveStep(featureId: string, stepId: string) {
+  approveStep(
+    featureId: string,
+    stepId: string,
+    actor: 'human' | 'autopilot' = 'human',
+    expectedAttemptId?: string,
+    expectedRevision?: number,
+  ) {
     const [feature, step] = this.pair(featureId, stepId),
       attempt = this.latest(step);
-    if (step.status !== 'awaiting_review')
-      throw new Error('Cette étape attend un résultat à relire.');
-    if (!attempt.artifact?.content.trim()) throw new Error('Un livrable non vide est nécessaire.');
-    if (attempt.questions.some((q) => !attempt.answers[q.id]?.trim()))
-      throw new Error('Des questions restent ouvertes.');
     if (
-      !step.dependsOn.every((dep) => feature.steps.find((s) => s.id === dep)?.status === 'approved')
+      (expectedAttemptId !== undefined && expectedAttemptId !== attempt.id) ||
+      (expectedRevision !== undefined && expectedRevision !== (attempt.revision ?? 0))
     )
-      throw new Error('Une dépendance a été invalidée.');
+      throw new Error('Validation obsolète : la tentative ou le livrable a changé.');
+    const blockers = approvalBlockers(feature, step, actor);
+    if (blockers.length) throw new Error(blockers.join(' '));
     step.status = attempt.status = 'approved';
     attempt.approvedAt = new Date().toISOString();
+    attempt.approvedBy = actor;
     this.touch(feature);
   }
   saveArtifact(featureId: string, stepId: string, content: string) {
@@ -278,10 +308,12 @@ export class WorkflowEngine {
     if (!['awaiting_review', 'waiting_input', 'approved'].includes(step.status))
       throw new Error('Ce livrable ne peut pas être modifié dans cet état.');
     attempt.artifact = { name: step.artifact, content, updatedAt: new Date().toISOString() };
+    attempt.revision = (attempt.revision ?? 0) + 1;
     if (step.status === 'approved') {
       this.invalidate(feature, step.id);
       step.status = attempt.status = 'awaiting_review';
       delete attempt.approvedAt;
+      delete attempt.approvedBy;
     }
     this.touch(feature);
   }
@@ -294,6 +326,7 @@ export class WorkflowEngine {
         throw new Error('Réponse à une question inconnue.');
     }
     Object.assign(attempt.answers, answers);
+    attempt.revision = (attempt.revision ?? 0) + 1;
     this.touch(feature);
     // Les réponses sont fournies au prochain run : elles ne valident pas un livrable que l'agent n'a pas encore complété.
   }
@@ -306,12 +339,21 @@ export class WorkflowEngine {
       reasoning?: string;
       skills: string[];
       maxAttempts?: number;
+      initialContext?: string;
+      mcpServerIds?: string[];
+      askBeforeRun?: boolean;
     },
   ) {
     const [feature, step] = this.pair(featureId, stepId);
     if (feature.steps.some((s) => s.status === 'running'))
       throw new Error('Configuration indisponible pendant une tentative.');
     if (!config.agentId.trim()) throw new Error('Agent obligatoire.');
+    launchSchema.parse({
+      initialContext: config.initialContext ?? step.initialContext ?? '',
+      mcpServerIds: config.mcpServerIds ?? step.mcpServerIds ?? [],
+      memoryIds: [],
+      useProjectMemory: false,
+    });
     if (
       config.maxAttempts !== undefined &&
       (!Number.isInteger(config.maxAttempts) ||
@@ -326,10 +368,18 @@ export class WorkflowEngine {
       step.agentId !== config.agentId ||
       (step.model ?? '') !== (config.model ?? '') ||
       (step.reasoning ?? '') !== (config.reasoning ?? '') ||
+      (config.initialContext !== undefined &&
+        (step.initialContext ?? '') !== config.initialContext) ||
+      (config.mcpServerIds !== undefined &&
+        JSON.stringify([...(step.mcpServerIds ?? [])].sort()) !==
+          JSON.stringify([...config.mcpServerIds].sort())) ||
       JSON.stringify([...step.skills].sort()) !== JSON.stringify([...config.skills].sort());
-    const { maxAttempts, ...selection } = config;
+    const { maxAttempts, initialContext, mcpServerIds, askBeforeRun, ...selection } = config;
     Object.assign(step, selection);
     if (maxAttempts !== undefined) step.maxAttempts = maxAttempts;
+    if (initialContext !== undefined) step.initialContext = initialContext;
+    if (mcpServerIds !== undefined) step.mcpServerIds = [...mcpServerIds];
+    if (askBeforeRun !== undefined) step.askBeforeRun = askBeforeRun;
     if (changed && step.attempts.length) {
       this.invalidate(feature, step.id);
       step.status = 'stale';

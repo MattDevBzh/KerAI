@@ -85,6 +85,8 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot'),
           storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
           getTools: (input, callbacks, signal) => next.getTools(input, callbacks, signal),
+          resolveMcpSecret: (serverId, key) =>
+            context.secrets.get(`studio-mcp:${sha256(root)}:${serverId}:${key}`),
         });
         next.on('state', (state) => send({ type: 'state', state }));
         next.on('errorNotice', (message) => report(new Error(message)));
@@ -127,27 +129,81 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'runStep':
+        if (!message.previewFingerprint || !message.launch)
+          throw new Error('Prépare le contexte de cette tentative avant de la lancer.');
         void current
-          .runStep(message.featureId, message.stepId, message.feedback, message.resume)
+          .runStep(
+            message.featureId,
+            message.stepId,
+            message.feedback,
+            message.resume,
+            message.launch,
+            message.previewFingerprint,
+          )
           .catch(report);
         return;
+      case 'previewRun':
+        send({
+          type: 'runPreview',
+          requestId: message.requestId,
+          preview: current.previewRun(
+            message.featureId,
+            message.stepId,
+            message.feedback,
+            message.resume,
+            message.launch,
+          ),
+        });
+        return;
+      case 'answerHumanRequest':
+        current.answerHumanRequest(message.requestId, message.answer);
+        return;
+      case 'testMcp':
+        void current.testMcp(message.serverId).catch(report);
+        return;
+      case 'setMcpSecret': {
+        current.assertTrusted();
+        const server = current.state.settings.mcpServers?.find(
+          (item) => item.id === message.serverId,
+        );
+        if (!server || ![...server.envKeys, ...Object.values(server.headers)].includes(message.key))
+          throw new Error('Cette clé n’est pas référencée par le MCP enregistré.');
+        const key = `studio-mcp:${sha256(current.workspacePath)}:${message.serverId}:${message.key}`;
+        if (message.value) await context.secrets.store(key, message.value);
+        else await context.secrets.delete(key);
+        notice(
+          message.value
+            ? 'Secret enregistré dans le trousseau VS Code.'
+            : 'Secret supprimé du trousseau.',
+        );
+        return;
+      }
       case 'cancelRun':
         current.cancel(message.featureId);
         return;
       case 'approveStep':
-        current.engine.approveStep(message.featureId, message.stepId);
-        await current.persist();
+        if (!message.expectedAttemptId || message.expectedRevision === undefined)
+          throw new Error('Recharge le livrable avant de le valider.');
+        await current.approveStep(
+          message.featureId,
+          message.stepId,
+          message.expectedAttemptId,
+          message.expectedRevision,
+        );
         return;
       case 'answerQuestions':
+        current.assertTrusted();
         current.engine.answerQuestions(message.featureId, message.stepId, message.answers);
         await current.persist();
         return;
       case 'saveArtifact':
+        current.assertConfigurable(message.featureId);
         current.engine.saveArtifact(message.featureId, message.stepId, message.content);
         await current.persist();
         notice('Livrable enregistré.');
         return;
       case 'configureStep': {
+        current.assertConfigurable(message.featureId);
         if (
           !current.state.agents.some((agent) => agent.id === message.agentId) ||
           message.skills.some((id) => !current.state.skills.some((skill) => skill.id === id))
@@ -159,22 +215,26 @@ export async function activate(context: vscode.ExtensionContext) {
           reasoning: message.reasoning,
           skills: message.skills,
           maxAttempts: message.maxAttempts,
+          initialContext: message.initialContext,
+          mcpServerIds: message.mcpServerIds,
+          askBeforeRun: message.askBeforeRun,
         });
         await current.persist();
         return;
       }
       case 'archiveFeature':
+        current.assertConfigurable(message.featureId);
         current.engine.archiveFeature(message.featureId, message.archived);
         await current.persist();
         return;
       case 'saveAgent':
-        current.assertTrusted();
+        current.assertConfigurable();
         await current.registry.saveAgent(message.agent);
         await current.refresh();
         notice('Agent enregistré dans .github/agents.');
         return;
       case 'saveSkill':
-        current.assertTrusted();
+        current.assertConfigurable();
         await current.registry.saveSkill(message.id, message.content);
         await current.refresh();
         notice('Skill enregistré dans .github/skills.');
@@ -185,26 +245,36 @@ export async function activate(context: vscode.ExtensionContext) {
         const oldScripts = JSON.stringify([
           previous.testCommands,
           previous.hooks.filter((h) => h.enabled),
+          previous.mcpServers?.filter((server) => server.enabled),
         ]);
         const newScripts = JSON.stringify([
           message.settings.testCommands,
           message.settings.hooks.filter((h) => h.enabled),
+          message.settings.mcpServers?.filter((server) => server.enabled),
         ]);
         if (
           oldScripts !== newScripts &&
-          (message.settings.testCommands.length || message.settings.hooks.some((h) => h.enabled))
+          (message.settings.testCommands.length ||
+            message.settings.hooks.some((h) => h.enabled) ||
+            message.settings.mcpServers?.some((server) => server.enabled))
         ) {
-          const commands = [
-            ...message.settings.testCommands,
-            ...message.settings.hooks.filter((h) => h.enabled),
-          ]
-            .map((c) => `${c.name} : ${c.command} ${c.args.join(' ')}`)
-            .join('\n');
+          const commands =
+            [...message.settings.testCommands, ...message.settings.hooks.filter((h) => h.enabled)]
+              .map((c) => `${c.name} : ${c.command} ${c.args.join(' ')}`)
+              .join('\n') +
+            '\n' +
+            (message.settings.mcpServers ?? [])
+              .filter((server) => server.enabled)
+              .map(
+                (server) =>
+                  `MCP ${server.name} : ${server.transport === 'stdio' ? [server.command, ...server.args].join(' ') : server.url} · outils : ${server.tools.join(', ')} · lectures automatiques : ${server.autoApproveReadOnly ? 'oui' : 'non'}`,
+              )
+              .join('\n');
           const choice = await vscode.window.showWarningMessage(
-            'Autoriser ces commandes locales pour les prochaines sessions ?',
+            'Autoriser ces commandes et connexions pour les prochaines sessions ?',
             {
               modal: true,
-              detail: `${commands}\n\nElles tournent avec les droits de ton compte. Une commande de test peut exécuter les scripts du projet. Les hooks sont ignorés en lecture seule.`,
+              detail: `${commands}\n\nLes commandes locales tournent sous ton compte. Les MCP sélectionnés pour une tentative peuvent accéder aux services de ton organisation. Une écriture MCP reste soumise à une autorisation par appel. Les hooks sont ignorés en lecture seule.`,
             },
             'Autoriser',
           );
@@ -215,7 +285,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'installKit': {
-        current.assertTrusted();
+        current.assertConfigurable();
         const result = await current.registry.installKit();
         await current.refresh();
         notice(
@@ -288,6 +358,13 @@ export async function activate(context: vscode.ExtensionContext) {
               attempt.artifact?.content ?? attempt.error ?? 'Aucun livrable.',
             );
             if (attempt.feedback) parts.push(`Feedback : ${attempt.feedback}`);
+            if (attempt.launch?.initialContext)
+              parts.push(`Contexte initial :\n${attempt.launch.initialContext}`);
+            if (attempt.usage) parts.push(`Usage mesuré : ${JSON.stringify(attempt.usage)}`);
+            for (const proof of attempt.evidence ?? [])
+              parts.push(
+                `#### Preuve hôte · ${proof.name}\n${proof.command} ${proof.args.join(' ')}\n${proof.startedAt} → ${proof.finishedAt}\nCode : ${proof.exitCode ?? 'inconnu'}${proof.truncated ? ' · sortie tronquée' : ''}\n\n\`\`\`text\n${proof.stdout}\n${proof.stderr}\n\`\`\``,
+              );
             for (const question of attempt.questions)
               parts.push(
                 `- ${question.text}\n  Réponse : ${attempt.answers[question.id] ?? 'En attente'}`,
@@ -298,6 +375,50 @@ export async function activate(context: vscode.ExtensionContext) {
         await vscode.window.showTextDocument(destination);
         return;
       }
+      case 'saveWorkflow':
+        current.assertTrusted();
+        if (
+          message.workflow.steps.some(
+            (step) =>
+              !current.state.agents.some((agent) => agent.id === step.agentId) ||
+              step.skills.some((id) => !current.state.skills.some((skill) => skill.id === id)),
+          )
+        )
+          throw new Error('Un agent ou une skill du parcours n’existe pas.');
+        await current.registry.saveWorkflow(message.workflow);
+        await current.refresh();
+        notice('Parcours enregistré. Les sessions existantes conservent leur définition.');
+        return;
+      case 'saveAutopilot':
+        await current.saveAutopilot(message.featureId, message.config);
+        return;
+      case 'startAutopilot':
+        void current.startAutopilot(message.featureId).catch(report);
+        return;
+      case 'pauseAutopilot':
+        current.assertTrusted();
+        current.pauseAutopilot(message.featureId);
+        await current.persist();
+        return;
+      case 'saveBudget':
+        await current.saveBudget(message.featureId, message.budget);
+        return;
+      case 'saveCriteria':
+        await current.saveCriteria(message.featureId, message.criteria);
+        return;
+      case 'addReviewComment':
+        await current.addReviewComment(message.featureId, message.comment);
+        return;
+      case 'resolveReviewComment':
+        await current.resolveReviewComment(message.featureId, message.commentId, message.resolved);
+        return;
+      case 'saveMemory':
+        await current.saveMemory(message.entry);
+        notice('Mémoire enregistrée localement, sans appel IA.');
+        return;
+      case 'deleteMemory':
+        await current.deleteMemory(message.id);
+        return;
       case 'createWorkflow': {
         current.assertTrusted();
         const name = await vscode.window.showInputBox({

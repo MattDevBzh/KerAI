@@ -1,0 +1,139 @@
+/** User-owned configuration. Credentials are resolved only in the extension host. */
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  transport: 'stdio' | 'http' | 'sse';
+  command?: string;
+  args: string[];
+  url?: string;
+  envKeys: string[];
+  /** HTTP header name -> SecretStorage/environment key, never the header value. */
+  headers: Record<string, string>;
+  tools: string[];
+  autoApproveReadOnly: boolean;
+  enabled: boolean;
+}
+export interface McpCatalog {
+  state: 'checking' | 'ready' | 'error';
+  tools: { name: string; description: string }[];
+  error?: string;
+  checkedAt?: string;
+}
+export interface RunLaunchOptions {
+  initialContext: string;
+  mcpServerIds: string[];
+  memoryIds: string[];
+  useProjectMemory: boolean;
+}
+export interface PromptSection {
+  id: string;
+  label: string;
+  source: 'human' | 'agent' | 'skill' | 'artifact' | 'memory' | 'system';
+  content: string;
+}
+export interface RunPreview {
+  featureId: string;
+  stepId: string;
+  fingerprint: string;
+  prompt: string;
+  sections: PromptSection[];
+  characters: number;
+  estimatedTokens: number;
+  maxCharacters: number;
+  errors: string[];
+}
+export interface HumanRequest {
+  id: string;
+  featureId: string;
+  stepId: string;
+  kind: 'question' | 'mcp-permission';
+  question: string;
+  choices?: string[];
+  allowFreeform: boolean;
+  details?: string;
+}
+export type ModelProfile = 'current' | 'economy' | 'balanced' | 'quality';
+export interface FeatureBudget {
+  maxRuns: number;
+  maxTokens?: number;
+  maxNanoAiu?: number;
+  maxPromptChars: number;
+  modelProfile: ModelProfile;
+}
+export interface UsageTotals {
+  runs: number;
+  inputTokens: number;
+  outputTokens: number;
+  nanoAiu: number;
+  unknownTokenRuns: number;
+  unknownCostRuns: number;
+}
+export interface AutopilotConfig {
+  checkpoints: string[];
+  maxRuns: number;
+  maxCorrectionCycles: number;
+  reviewStepId?: string;
+  correctionStepId?: string;
+  stepInputs: Record<string, RunLaunchOptions>;
+}
+export interface AutopilotState extends AutopilotConfig {
+  status: 'idle' | 'running' | 'paused' | 'completed';
+  runs: number;
+  correctionCycles: number;
+  reason?: string;
+  updatedAt: string;
+}
+export interface TestEvidence {
+  id: string;
+  source: 'host';
+  commandId: string;
+  name: string;
+  command: string;
+  args: string[];
+  startedAt: string;
+  finishedAt: string;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  truncated: boolean;
+  error?: string;
+  fileHashes: Record<string, string>;
+}
+export interface ReviewReport {
+  verdict: 'pass' | 'changes_requested';
+  summary: string;
+  findings: {
+    id: string;
+    severity: 'info' | 'warning' | 'blocking';
+    message: string;
+    file?: string;
+    line?: number;
+  }[];
+}
+export interface AcceptanceCriterion {
+  id: string;
+  text: string;
+  status: 'pending' | 'passed' | 'failed';
+  evidence: string;
+}
+export interface ReviewComment {
+  id: string;
+  stepId: string;
+  attemptId: string;
+  file?: string;
+  line?: number;
+  text: string;
+  blocking: boolean;
+  resolved: boolean;
+  createdAt: string;
+}
+export interface MemoryEntry {
+  id: string;
+  title: string;
+  content: string;
+  category: 'convention' | 'architecture' | 'decision' | 'context';
+  enabled: boolean;
+  agentIds: string[];
+  updatedAt: string;
+  source?: { featureId: string; stepId: string; attemptId: string };
+}

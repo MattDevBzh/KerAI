@@ -8,8 +8,14 @@ import type {
   CopilotClientOptions,
   SessionConfig,
   SessionEvent,
+  CurrentToolMetadata,
 } from '@github/copilot-sdk';
-import { buildPrompt, CopilotCliAdapter, parseQuestions } from '../src/host/CopilotCliAdapter';
+import {
+  buildPrompt,
+  CopilotCliAdapter,
+  parseQuestions,
+  parseReview,
+} from '../src/host/CopilotCliAdapter';
 import type { RunCallbacks, RunInput } from '../src/shared/types';
 
 function input(): RunInput {
@@ -90,11 +96,34 @@ function transport() {
   const session = {
     sessionId: 'persistent-session',
     rpc: {
+      managedSettings: {
+        get: vi.fn(async () => ({
+          failClosed: false,
+          clientManaged: true,
+          bypassPermissionsDisabled: true,
+          settings: config?.managedSettings,
+        })),
+      },
+      permissions: { configure: vi.fn(async () => ({ success: true })) },
+      mcp: {
+        startServer: vi.fn(async () => {}),
+        listTools: vi.fn(async () => ({
+          tools: [
+            { name: 'read_story', description: 'Read' },
+            { name: 'write_story', description: 'Write' },
+          ],
+        })),
+      },
       tools: {
         initializeAndValidate: vi.fn(async () => ({})),
-        getCurrentMetadata: vi.fn(async () => ({
-          tools: [{ name: 'studio_read_file', description: 'Read' }],
-        })),
+        getCurrentMetadata: vi.fn(
+          async (): Promise<{ tools: CurrentToolMetadata[] }> => ({
+            tools: [
+              { name: 'studio_read_file', description: 'Read' },
+              { name: 'studio_ask_human', description: 'Ask' },
+            ],
+          }),
+        ),
       },
     },
     on: vi.fn((fn: (event: SessionEvent) => void) => {
@@ -183,6 +212,25 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(options?.workingDirectory).toBe(options?.baseDirectory);
     expect(options?.connection).toMatchObject({ kind: 'stdio', path: '/bin/copilot' });
   });
+  it('discovers server tools without prompt or model-visible execution tools', async () => {
+    const catalog = await adapter.discoverMcp({
+      id: 'fixture',
+      name: 'Fixture',
+      transport: 'stdio',
+      command: 'node',
+      args: ['fixture.mjs'],
+      envKeys: [],
+      headers: {},
+      tools: [],
+      enabled: false,
+      autoApproveReadOnly: false,
+    });
+    expect(catalog.state).toBe('ready');
+    expect(catalog.tools.map((t) => t.name)).toEqual(['read_story', 'write_story']);
+    expect(fake.config?.availableTools).toEqual([]);
+    expect(fake.config?.mcpServers?.fixture.tools).toEqual(['*']);
+    expect(fake.session.send).not.toHaveBeenCalled();
+  });
   it('streams actual deltas and returns only final artifact, observed model and usage', async () => {
     const result = await adapter.run(input(), callbacks, new AbortController().signal);
     expect(result).toMatchObject({
@@ -204,7 +252,7 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
   it('supplies exact allowlist, disables ambient settings and explicitly rejects native permissions', async () => {
     await adapter.run(input(), callbacks, new AbortController().signal);
     expect(fake.config).toMatchObject({
-      availableTools: ['studio_read_file'],
+      availableTools: ['studio_read_file', 'studio_ask_human'],
       enableConfigDiscovery: false,
       enableFileHooks: false,
       enableSkills: false,
@@ -235,6 +283,80 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
       ),
     ).toMatchObject({ kind: 'reject' });
   });
+  it('adds selected MCP tools with exact provenance and both custom-agent namespace aliases', async () => {
+    const run = input();
+    run.mcpServers = [
+      {
+        id: 'fixture',
+        name: 'Fixture',
+        transport: 'stdio',
+        command: 'node',
+        args: ['fixture.mjs'],
+        envKeys: [],
+        headers: {},
+        tools: ['read_story'],
+        enabled: true,
+        autoApproveReadOnly: false,
+      },
+    ];
+    fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({
+      tools: [
+        { name: 'studio_read_file', description: 'Read' },
+        { name: 'studio_ask_human', description: 'Ask' },
+        {
+          name: 'fixture-read_story',
+          description: 'Read story',
+          mcpServerName: 'fixture',
+          mcpToolName: 'read_story',
+          namespacedName: 'fixture/read_story',
+        },
+      ],
+    });
+    let decision: unknown;
+    fake.setOnSend(() => {
+      decision = fake.config!.hooks!.onPreToolUse!(
+        {
+          sessionId: 's',
+          timestamp: new Date(),
+          workingDirectory: '/workspace',
+          toolName: 'fixture-read_story',
+          toolArgs: { id: 1 },
+        },
+        { sessionId: 's' },
+      );
+      fake.emit('assistant.message', { content: 'Final' });
+      fake.emit('session.idle', {});
+    });
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(decision).toEqual({});
+    expect(fake.config?.availableTools).toEqual([
+      'studio_read_file',
+      'studio_ask_human',
+      'fixture-read_story',
+    ]);
+    expect(fake.config?.customAgents?.[0].tools).toEqual([
+      'studio_read_file',
+      'studio_ask_human',
+      'fixture-read_story',
+      'fixture/read_story',
+    ]);
+    expect(fake.config?.customAgents?.[0].prompt).not.toContain(run.agent.instructions);
+    expect(fake.config?.managedSettings?.permissions?.ask).toEqual(['Mcp(fixture/read_story)']);
+    expect(fake.session.rpc.permissions.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approveAllReadPermissionRequests: false,
+        approveAllToolPermissionRequests: false,
+      }),
+    );
+    fake.session.rpc.managedSettings.get.mockRejectedValue(
+      new Error('Unhandled method session.managedSettings.get'),
+    );
+    fake.session.send.mockClear();
+    await expect(adapter.run(run, callbacks, new AbortController().signal)).rejects.toThrow(
+      'confinement des outils non vérifiable',
+    );
+    expect(fake.session.send).not.toHaveBeenCalled();
+  });
   it('refuses paid send when runtime exposes native tools or cannot introspect them', async () => {
     fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({
       tools: [{ name: 'bash', description: 'Shell' }],
@@ -258,6 +380,159 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(result.model).toBeUndefined();
     expect(result.usage).toBeUndefined();
   });
+  it('sends the exact prepared preview and never silently recompiles it', async () => {
+    const run = input();
+    run.preparedPrompt = 'Exact reviewed prompt';
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.session.send).toHaveBeenCalledWith({ prompt: 'Exact reviewed prompt' });
+  });
+  it('waits for a real human answer inside the same run', async () => {
+    let answer!: (value: string) => void;
+    callbacks.onQuestion = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    let toolResponse: unknown;
+    fake.setOnSend(() => {
+      const tool = fake.config!.tools!.find((t) => t.name === 'studio_ask_human')!;
+      void Promise.resolve(
+        tool.handler!(
+          { question: 'Quel périmètre ?', choices: ['A', 'B'], allowFreeform: false },
+          { sessionId: 's', toolCallId: 'ask', toolName: tool.name, arguments: {} },
+        ),
+      ).then(
+        (result) => {
+          toolResponse = result;
+          fake.emit('assistant.message', { content: 'Livrable après réponse' });
+          fake.emit('session.idle', {});
+        },
+        (error) => fake.emit('session.error', { message: String(error), errorType: 'tool' }),
+      );
+    });
+    let finished = false;
+    const run = adapter.run(input(), callbacks, new AbortController().signal).then((result) => {
+      finished = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(callbacks.onQuestion).toHaveBeenCalled());
+    expect(finished).toBe(false);
+    answer('B');
+    expect((await run).content).toBe('Livrable après réponse');
+    expect(toolResponse).toMatchObject({ textResultForLlm: '{"answer":"B"}' });
+  });
+  it('rejects absent human dialogs instead of inventing a default answer', async () => {
+    fake.setOnSend(() => {
+      const tool = fake.config!.tools!.find((t) => t.name === 'studio_ask_human')!;
+      void Promise.resolve(
+        tool.handler!(
+          { question: 'Question ?' },
+          { sessionId: 's', toolCallId: 'ask', toolName: tool.name, arguments: {} },
+        ),
+      ).then(
+        () => fake.emit('session.idle', {}),
+        (error) => fake.emit('session.error', { message: String(error), errorType: 'tool' }),
+      );
+    });
+    await expect(adapter.run(input(), callbacks, new AbortController().signal)).rejects.toThrow(
+      'Aucun dialogue humain',
+    );
+  });
+  it('cancels a pending human question without sending an invented answer', async () => {
+    const controller = new AbortController();
+    callbacks.onQuestion = vi.fn(() => new Promise<string>(() => {}));
+    fake.setOnSend(() => {
+      const tool = fake.config!.tools!.find((t) => t.name === 'studio_ask_human')!;
+      void Promise.resolve(
+        tool.handler!(
+          { question: 'Question ?' },
+          { sessionId: 's', toolCallId: 'ask', toolName: tool.name, arguments: {} },
+        ),
+      ).catch(() => {});
+    });
+    const run = adapter.run(input(), callbacks, controller.signal);
+    const rejected = expect(run).rejects.toThrow('annulée');
+    await vi.waitFor(() => expect(callbacks.onQuestion).toHaveBeenCalled());
+    controller.abort();
+    await rejected;
+    expect(fake.session.abort).toHaveBeenCalled();
+  });
+  it('reports cumulative deduplicated usage before logs, including usage before a budget cancellation', async () => {
+    const controller = new AbortController();
+    const order: string[] = [];
+    callbacks.onEvent = (event) => {
+      if (event.kind === 'usage') order.push('event');
+    };
+    callbacks.onUsage = vi.fn((snapshot) => {
+      order.push('usage');
+      if ((snapshot.inputTokens ?? 0) >= 20) controller.abort(new Error('Budget dépassé'));
+    });
+    fake.setOnSend(() => {
+      const usage = {
+        model: 'real-model',
+        inputTokens: 10,
+        outputTokens: 2,
+        apiCallId: 'call-1',
+        copilotUsage: { totalNanoAiu: 50 },
+      };
+      fake.emit('assistant.usage', usage, { id: 'usage-1' });
+      fake.emit('assistant.usage', usage, { id: 'usage-1' });
+      fake.emit('assistant.usage', usage, { id: 'usage-other-id' });
+      fake.emit('assistant.usage', { ...usage, apiCallId: 'call-2' }, { id: 'usage-2' });
+    });
+    await expect(adapter.run(input(), callbacks, controller.signal)).rejects.toThrow(
+      'Budget dépassé',
+    );
+    expect(callbacks.onUsage).toHaveBeenCalledTimes(2);
+    expect(callbacks.onUsage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ inputTokens: 20, outputTokens: 4, cost: 100, unit: 'nano-AIU' }),
+    );
+    expect(order.slice(0, 2)).toEqual(['usage', 'event']);
+    expect(fake.session.abort).toHaveBeenCalled();
+  });
+  it('keeps incomplete accounting markers after later complete usage events', async () => {
+    callbacks.onUsage = vi.fn();
+    fake.setOnSend(() => {
+      fake.emit('assistant.usage', {
+        inputTokens: 10,
+        outputTokens: 2,
+        copilotUsage: { totalNanoAiu: 50 },
+      });
+      fake.emit('assistant.usage', { inputTokens: 3 });
+      fake.emit('assistant.usage', {
+        inputTokens: 4,
+        outputTokens: 1,
+        copilotUsage: { totalNanoAiu: 0 },
+      });
+      fake.emit('assistant.message', { messageId: 'answer', content: 'Livrable' });
+      fake.emit('session.idle', {});
+    });
+    const result = await adapter.run(input(), callbacks, new AbortController().signal);
+    expect(callbacks.onUsage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ inputTokens: 10, outputTokens: 2, cost: 50 }),
+    );
+    expect(callbacks.onUsage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        inputTokens: 13,
+        outputTokens: 2,
+        cost: 50,
+        incompleteTokens: true,
+        incompleteCost: true,
+      }),
+    );
+    expect(result.usage).toEqual(
+      expect.objectContaining({
+        inputTokens: 17,
+        outputTokens: 3,
+        cost: 50,
+        incompleteTokens: true,
+        incompleteCost: true,
+      }),
+    );
+  });
   it('restores permission filters, handlers and agent config on resume', async () => {
     const run = input();
     run.resumeSessionId = 'previous-session';
@@ -265,7 +540,7 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(fake.client.resumeSession).toHaveBeenCalledWith(
       'previous-session',
       expect.objectContaining({
-        availableTools: ['studio_read_file'],
+        availableTools: ['studio_read_file', 'studio_ask_human'],
         allowTranscriptRecovery: false,
         agent: 'feature-studio',
       }),
@@ -341,6 +616,24 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
 });
 
 describe('human questions and canonical approved context', () => {
+  it('parses strict review reports and never invents a pass for unstructured text', () => {
+    expect(parseReview('Looks fine')).toBeUndefined();
+    expect(
+      parseReview(
+        '```feature-studio-review\n{"verdict":"changes_requested","summary":"Bug observé","findings":[{"id":"bug","severity":"blocking","message":"Corriger","file":"app.ts","line":5}]}\n```',
+      ),
+    ).toMatchObject({ verdict: 'changes_requested', findings: [{ id: 'bug', line: 5 }] });
+    expect(() =>
+      parseReview(
+        '```feature-studio-review\n{"verdict":"pass","summary":"OK","findings":[{"id":"bug","severity":"blocking","message":"Bug"}]}\n```',
+      ),
+    ).toThrow('contradictoire');
+    expect(() =>
+      parseReview(
+        '```feature-studio-review\n{"verdict":"pass","summary":"OK","findings":[],"approved":true}\n```',
+      ),
+    ).toThrow('contrat');
+  });
   it('extracts strict question JSON and preserves normal JSON code examples', () => {
     const text =
       '# Spec\n```json\n{"name":"example"}\n```\n```feature-studio-questions\n{"questions":[{"id":"scope","text":"Quel périmètre ?","choices":["A","B"]}]}\n```';

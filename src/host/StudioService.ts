@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { basename } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type {
   AgentAdapter,
@@ -8,12 +9,33 @@ import type {
   RunInput,
   StudioSettings,
   StudioState,
+  RunLaunchOptions,
+  RunPreview,
+  AutopilotConfig,
+  FeatureBudget,
+  MemoryEntry,
+  HumanRequest,
+  ReviewComment,
+  AcceptanceCriterion,
 } from '../shared/types';
 import { AgentRegistry } from '../core/registry';
 import { Store, settingsSchema } from '../core/store';
 import { WorkflowEngine } from '../core/workflow';
 import { gitInfo, ToolHost } from './ToolHost';
 import { runProcess, redact } from './process';
+import { emptyLaunch, previewContext, selectMemory } from '../core/context';
+import { defaultBudget, budgetBlockReason } from '../core/budgets';
+import { nextAutopilotAction } from '../core/autopilot';
+import { currentTestEvidence } from '../core/validation';
+import {
+  launchSchema,
+  autopilotConfigSchema,
+  budgetSchema,
+  memorySchema,
+  criterionSchema,
+  commentSchema,
+} from '../core/evolutionSchemas';
+import { PolicyEngine, sha256 } from './PolicyEngine';
 
 export class StudioService extends EventEmitter {
   engine = new WorkflowEngine();
@@ -30,6 +52,16 @@ export class StudioService extends EventEmitter {
   private publishTimer?: NodeJS.Timeout;
   private disposed = false;
   private toolHosts = new Map<string, ToolHost>();
+  private automation?: { featureId: string; done: Promise<void> };
+  private pendingHumans = new Map<
+    string,
+    {
+      request: HumanRequest;
+      resolve: (answer: string) => void;
+      reject: (error: Error) => void;
+      cleanup: () => void;
+    }
+  >();
   constructor(
     readonly workspacePath: string,
     defaultsPath: string,
@@ -45,7 +77,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       workspace: {
         name: basename(this.workspacePath),
         path: this.workspacePath,
@@ -56,6 +88,9 @@ export class StudioService extends EventEmitter {
       ...data,
       runtime: { state: 'unchecked', models: [] },
       settings: persisted.settings,
+      memory: persisted.memory ?? [],
+      mcpCatalogs: {},
+      humanRequests: [],
     };
   }
   snapshot(): StudioState {
@@ -76,7 +111,7 @@ export class StudioService extends EventEmitter {
   async persist(): Promise<void> {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
-    await this.store.save(this.engine.features, this.state.settings);
+    await this.store.save(this.engine.features, this.state.settings, this.state.memory ?? []);
     this.publish();
   }
   private schedule(): void {
@@ -120,14 +155,19 @@ export class StudioService extends EventEmitter {
     agentId?: string;
     model?: string;
   }): Promise<Feature> {
+    this.assertTrusted();
     const workflow = this.state.workflows.find((item) => item.id === input.workflowId);
     if (!workflow) throw new Error('Workflow inconnu.');
     if (input.agentId && !this.state.agents.some((agent) => agent.id === input.agentId))
       throw new Error('Agent inconnu.');
+    const info = await gitInfo(this.workspacePath);
+    this.assertTrusted();
+    this.state.workspace.branch = info.branch;
     const feature = this.engine.createFeature(workflow, {
       ...input,
-      branch: this.state.workspace.branch,
+      branch: info.branch,
     });
+    feature.budget = structuredClone(this.state.settings.budgetDefaults ?? defaultBudget);
     await this.persist();
     return feature;
   }
@@ -136,21 +176,17 @@ export class StudioService extends EventEmitter {
     this.toolHosts.set(input.attempt.id, host);
     return await host.createTools();
   }
-  async runStep(featureId: string, stepId: string, feedback = '', resume = false): Promise<void> {
-    this.assertTrusted();
-    if (this.active) throw new Error('Une exécution est déjà active dans ce workspace.');
-    if (this.state.runtime.state !== 'ready' || !this.state.runtime.authenticated)
-      throw new Error('Connecte le CLI Copilot avant de lancer un agent.');
-    const feature = this.engine.getFeature(featureId),
-      step = this.engine.getStep(featureId, stepId);
-    const info = await gitInfo(this.workspacePath);
-    if (feature.branch !== info.branch)
-      throw new Error(
-        `Cette session est liée à la branche ${feature.branch}. Reviens sur cette branche avant de la lancer.`,
-      );
-    // Recheck after asynchronous Git inspection so rapid double clicks cannot start two runs.
-    this.assertTrusted();
-    if (this.active) throw new Error('Une exécution est déjà active dans ce workspace.');
+  private prepareInput(
+    featureId: string,
+    stepId: string,
+    feedback = '',
+    resume = false,
+    launch?: RunLaunchOptions,
+  ): RunInput {
+    const originalFeature = this.engine.getFeature(featureId);
+    const originalStep = this.engine.getStep(featureId, stepId);
+    const feature = structuredClone(originalFeature);
+    const step = feature.steps.find((item) => item.id === stepId)!;
     const agent = this.state.agents.find((item) => item.id === step.agentId);
     if (!agent) throw new Error('Agent introuvable.');
     const skillIds = [...new Set([...agent.skills, ...step.skills])];
@@ -158,29 +194,220 @@ export class StudioService extends EventEmitter {
       throw new Error(
         'Une skill configurée est absente. Corrige la configuration avant de lancer cette étape.',
       );
-    const previousSessionId = resume ? step.attempts.at(-1)?.sessionId : undefined;
+    const selected = launchSchema.parse(
+      launch ?? {
+        ...emptyLaunch(),
+        initialContext: step.initialContext ?? '',
+        mcpServerIds: step.mcpServerIds ?? [],
+      },
+    );
+    const mcpServers = selected.mcpServerIds.map((id) => {
+      const server = this.state.settings.mcpServers?.find((item) => item.id === id);
+      if (!server?.enabled || !server.tools.length)
+        throw new Error(`Le MCP ${id} doit être activé avec des outils autorisés avant lancement.`);
+      return structuredClone(server);
+    });
+    const memory = selectMemory(this.state.memory ?? [], selected, agent.id);
+    if (
+      selected.useProjectMemory &&
+      selected.memoryIds.some((id) => !memory.some((entry) => entry.id === id))
+    )
+      throw new Error(
+        'Une mémoire sélectionnée est absente, désactivée ou ne concerne pas cet agent.',
+      );
+    for (const entry of memory) {
+      if (!entry.source) continue;
+      const sourceStep = this.engine.features
+        .find((item) => item.id === entry.source!.featureId)
+        ?.steps.find((item) => item.id === entry.source!.stepId);
+      if (
+        !sourceStep ||
+        sourceStep.status !== 'approved' ||
+        sourceStep.attempts.at(-1)?.id !== entry.source.attemptId
+      )
+        throw new Error(
+          `La mémoire « ${entry.title} » provient d’un livrable qui n’est plus validé. Révise cette entrée avant utilisation.`,
+        );
+    }
+    const budget = feature.budget ?? this.state.settings.budgetDefaults ?? defaultBudget;
+    if (budget.modelProfile !== 'current') {
+      const profile = this.state.settings.modelProfiles?.[budget.modelProfile];
+      if (!profile?.model)
+        throw new Error(
+          `Configure le modèle du profil ${budget.modelProfile} dans Réglages avant de l’utiliser.`,
+        );
+      step.model = profile.model;
+      step.reasoning = profile.reasoning;
+    }
+    // A replay must never send approved descendants that it is about to invalidate.
+    const invalid = new Set([step.id]);
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const candidate of feature.steps)
+        if (!invalid.has(candidate.id) && candidate.dependsOn.some((id) => invalid.has(id))) {
+          invalid.add(candidate.id);
+          changed = true;
+        }
+    }
+    for (const candidate of feature.steps)
+      if (candidate.id !== step.id && invalid.has(candidate.id) && candidate.status !== 'pending')
+        candidate.status = 'stale';
+    for (const entry of memory)
+      if (entry.source?.featureId === featureId && invalid.has(entry.source.stepId))
+        throw new Error(
+          `La mémoire « ${entry.title} » provient d’une étape que cette tentative va invalider. Désélectionne-la avant de continuer.`,
+        );
+    const previous = originalStep.attempts.at(-1);
+    const attempt = {
+      id: 'preview',
+      startedAt: '',
+      status: 'running' as const,
+      feedback,
+      logs: [],
+      questions: [],
+      answers: { ...previous?.answers },
+      changedFiles: [],
+      ...(previous?.artifact ? { artifact: structuredClone(previous.artifact) } : {}),
+      launch: selected,
+    };
+    return {
+      feature,
+      step,
+      attempt,
+      agent: structuredClone(agent),
+      skills: this.state.skills.filter((skill) => skillIds.includes(skill.id)),
+      workspacePath: this.workspacePath,
+      settings: structuredClone(this.state.settings),
+      resumeSessionId: resume ? previous?.sessionId : undefined,
+      launch: selected,
+      memory: structuredClone(memory),
+      mcpServers,
+      automation: feature.autopilot
+        ? {
+            reviewStepId: feature.autopilot.reviewStepId,
+            correctionStepId: feature.autopilot.correctionStepId,
+          }
+        : undefined,
+    };
+  }
+  previewRun(
+    featureId: string,
+    stepId: string,
+    feedback = '',
+    resume = false,
+    launch?: RunLaunchOptions,
+  ): RunPreview {
+    this.assertTrusted();
+    const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
+    const blocked = budgetBlockReason(input.feature);
+    return previewContext(input, blocked ? [blocked] : []);
+  }
+  async runStep(
+    featureId: string,
+    stepId: string,
+    feedback = '',
+    resume = false,
+    launch?: RunLaunchOptions,
+    previewFingerprint?: string,
+    automated = false,
+  ): Promise<void> {
+    this.assertTrusted();
+    if (this.automation && !automated)
+      throw new Error('Mets le pilote en pause avant de lancer une tentative manuelle.');
+    if (this.active) throw new Error('Une exécution est déjà active dans ce workspace.');
+    if (this.state.runtime.state !== 'ready' || !this.state.runtime.authenticated)
+      throw new Error('Connecte le CLI Copilot avant de lancer un agent.');
+    const info = await gitInfo(this.workspacePath);
+    this.assertTrusted();
+    if (this.automation && !automated)
+      throw new Error('Mets le pilote en pause avant de lancer une tentative manuelle.');
+    if (
+      automated &&
+      (this.automation?.featureId !== featureId ||
+        this.engine.getFeature(featureId).autopilot?.status !== 'running')
+    )
+      throw new Error('Le pilote a été mis en pause avant le lancement.');
+    if (this.active) throw new Error('Une exécution est déjà active dans ce workspace.');
+    const feature = this.engine.getFeature(featureId),
+      step = this.engine.getStep(featureId, stepId);
+    if (feature.branch !== info.branch)
+      throw new Error(
+        `Cette session est liée à la branche ${feature.branch}. Reviens sur cette branche avant de la lancer.`,
+      );
+    const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
+    const preview = previewContext(input);
+    if (preview.errors.length) throw new Error(preview.errors.join(' '));
+    if (previewFingerprint && previewFingerprint !== preview.fingerprint)
+      throw new Error(
+        'Le contexte a changé depuis son aperçu. Actualise l’aperçu avant de lancer.',
+      );
+    const blocked = budgetBlockReason(feature);
+    if (blocked) throw new Error(blocked);
     const attempt = this.engine.beginRun(featureId, stepId, feedback, resume);
+    attempt.launch = structuredClone(input.launch!);
+    attempt.memorySnapshot = structuredClone(input.memory ?? []);
+    attempt.promptFingerprint = preview.fingerprint;
+    attempt.promptCharacters = preview.characters;
+    attempt.evidence = [];
+    attempt.revision = 0;
+    input.attempt = structuredClone(attempt);
+    input.preparedPrompt = preview.prompt;
+    if (automated && feature.autopilot) {
+      feature.autopilot.runs++;
+      feature.autopilot.updatedAt = new Date().toISOString();
+    }
     let complete!: () => void;
     const done = new Promise<void>((resolve) => {
       complete = resolve;
     });
     const controller = new AbortController();
     this.active = { featureId, stepId, controller, done };
-    const input: RunInput = {
-      feature: structuredClone(feature),
-      step: structuredClone(step),
-      attempt: structuredClone(attempt),
-      agent: structuredClone(agent),
-      skills: this.state.skills.filter((skill) =>
-        [...agent.skills, ...step.skills].includes(skill.id),
-      ),
-      workspacePath: this.workspacePath,
-      settings: structuredClone(this.state.settings),
-      resumeSessionId: previousSessionId,
-    };
     let streamText = '',
       streamId = '';
     const callbacks: RunCallbacks = {
+      onUsage: (usage) => {
+        attempt.usage = structuredClone(usage);
+        if (usage.model) attempt.model = usage.model;
+        this.schedule();
+      },
+      onEvidence: (evidence) => {
+        attempt.evidence ??= [];
+        attempt.evidence.push(structuredClone(evidence));
+        attempt.revision = (attempt.revision ?? 0) + 1;
+        this.schedule();
+      },
+      onQuestion: async (question) => {
+        const id = 'q-' + randomUUID();
+        attempt.questions.push({
+          id,
+          text: question.question,
+          ...(question.choices ? { choices: question.choices } : {}),
+        });
+        await this.persist();
+        const answer = await this.askHuman(
+          { id, featureId, stepId, kind: 'question', ...question },
+          controller.signal,
+        );
+        attempt.answers[id] = answer;
+        await this.persist();
+        return answer;
+      },
+      onMcpPermission: async (request) => {
+        const answer = await this.askHuman(
+          {
+            id: 'mcp-' + randomUUID(),
+            featureId,
+            stepId,
+            kind: 'mcp-permission',
+            question: `Autoriser ${request.toolName} sur ${request.serverId} pour cet appel ?`,
+            choices: ['allow', 'deny'],
+            allowFreeform: false,
+            details: redact(request.args).slice(0, 6000),
+          },
+          controller.signal,
+        );
+        return answer === 'allow';
+      },
       onEvent: (event) => {
         const last = attempt.logs.at(-1);
         if (event.kind === 'message' && last?.id === streamId) {
@@ -239,9 +466,332 @@ export class StudioService extends EventEmitter {
     }
   }
   cancel(featureId: string): void {
+    this.pauseAutopilot(featureId, 'Exécution arrêtée par l’utilisateur.');
     if (this.active?.featureId !== featureId)
       throw new Error('Aucune exécution active pour cette session.');
     this.active.controller.abort();
+  }
+  private async askHuman(request: HumanRequest, signal: AbortSignal): Promise<string> {
+    this.assertTrusted();
+    if (signal.aborted) throw new Error('Exécution annulée.');
+    this.pauseAutopilot(
+      request.featureId,
+      request.kind === 'question'
+        ? 'Une réponse humaine est nécessaire. Reprends le pilote après l’échange.'
+        : 'Un appel MCP attend une autorisation humaine.',
+    );
+    return await new Promise<string>((resolve, reject) => {
+      const cleanup = () => {
+        signal.removeEventListener('abort', abort);
+        this.pendingHumans.delete(request.id);
+        this.state.humanRequests = [...this.pendingHumans.values()].map((item) => item.request);
+        this.publish();
+      };
+      const abort = () => {
+        cleanup();
+        reject(new Error('Demande humaine interrompue avec la tentative.'));
+      };
+      this.pendingHumans.set(request.id, { request, resolve, reject, cleanup });
+      this.state.humanRequests = [...this.pendingHumans.values()].map((item) => item.request);
+      signal.addEventListener('abort', abort, { once: true });
+      this.publish();
+    });
+  }
+  answerHumanRequest(requestId: string, answer: string): void {
+    this.assertTrusted();
+    const pending = this.pendingHumans.get(requestId);
+    if (!pending) throw new Error('Cette demande n’est plus active.');
+    const value = answer.trim();
+    if (!value || value.length > 30000)
+      throw new Error('Une réponse de 1 à 30 000 caractères est requise.');
+    if (!pending.request.allowFreeform && !pending.request.choices?.includes(value))
+      throw new Error('Choisis une des réponses proposées.');
+    pending.cleanup();
+    pending.resolve(value);
+  }
+  async testMcp(serverId: string): Promise<void> {
+    this.assertTrusted();
+    if (this.active || this.automation)
+      throw new Error('Arrête l’exécution avant de tester une connexion MCP.');
+    const server = this.state.settings.mcpServers?.find((item) => item.id === serverId);
+    if (!server) throw new Error('Enregistre d’abord la configuration de ce MCP.');
+    if (!this.adapter.discoverMcp)
+      throw new Error('Cet adaptateur ne permet pas la découverte MCP.');
+    this.state.mcpCatalogs ??= {};
+    if (this.state.mcpCatalogs[serverId]?.state === 'checking') return;
+    this.state.mcpCatalogs[serverId] = { state: 'checking', tools: [] };
+    this.publish();
+    try {
+      this.state.mcpCatalogs[serverId] = await this.adapter.discoverMcp(structuredClone(server));
+    } catch (error) {
+      this.state.mcpCatalogs[serverId] = {
+        state: 'error',
+        tools: [],
+        error: redact((error as Error).message),
+      };
+    }
+    this.publish();
+  }
+  assertConfigurable(featureId?: string): void {
+    this.assertTrusted();
+    if (this.active && (!featureId || this.active.featureId === featureId))
+      throw new Error('Arrête la tentative avant de modifier cette configuration.');
+    if (this.automation && (!featureId || this.automation.featureId === featureId))
+      throw new Error(
+        'Mets le pilote en pause et attends la fin de sa tentative avant de modifier sa configuration.',
+      );
+  }
+  async saveAutopilot(featureId: string, config: AutopilotConfig): Promise<void> {
+    this.assertConfigurable(featureId);
+    const feature = this.engine.getFeature(featureId),
+      parsed = autopilotConfigSchema.parse(config);
+    const ids = new Set(feature.steps.map((step) => step.id));
+    if (
+      [
+        ...parsed.checkpoints,
+        ...Object.keys(parsed.stepInputs),
+        parsed.reviewStepId,
+        parsed.correctionStepId,
+      ]
+        .filter(Boolean)
+        .some((id) => !ids.has(id!))
+    )
+      throw new Error('Une étape du pilote est inconnue.');
+    if (Boolean(parsed.reviewStepId) !== Boolean(parsed.correctionStepId))
+      throw new Error(
+        'La boucle de correction nécessite une étape de relecture et une étape à corriger.',
+      );
+    if (parsed.reviewStepId && parsed.correctionStepId) {
+      const reaches = (id: string, target: string, visited = new Set<string>()): boolean => {
+        if (visited.has(id)) return false;
+        visited.add(id);
+        return feature.steps
+          .find((step) => step.id === id)!
+          .dependsOn.some((dep) => dep === target || reaches(dep, target, visited));
+      };
+      if (!reaches(parsed.reviewStepId, parsed.correctionStepId))
+        throw new Error('L’étape à corriger doit précéder la relecture dans ce parcours.');
+    }
+    for (const [id, input] of Object.entries(parsed.stepInputs))
+      this.prepareInput(featureId, id, '', false, input);
+    feature.autopilot = {
+      ...parsed,
+      status: 'idle',
+      runs: 0,
+      correctionCycles: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.persist();
+  }
+  pauseAutopilot(
+    featureId: string,
+    reason = 'Pause demandée ; la tentative en cours peut terminer.',
+  ): void {
+    const feature = this.engine.getFeature(featureId);
+    if (feature.autopilot?.status === 'running') {
+      feature.autopilot.status = 'paused';
+      feature.autopilot.reason = reason.slice(0, 2000);
+      feature.autopilot.updatedAt = new Date().toISOString();
+      this.schedule();
+    }
+  }
+  async startAutopilot(featureId: string): Promise<void> {
+    this.assertTrusted();
+    if (this.active || this.automation)
+      throw new Error('Une exécution ou un pilote est déjà actif.');
+    const feature = this.engine.getFeature(featureId);
+    if (!feature.autopilot)
+      throw new Error('Configure le pilote et ses limites avant de le lancer.');
+    if (feature.archived) throw new Error('La session est archivée.');
+    if (this.state.runtime.state !== 'ready' || !this.state.runtime.authenticated)
+      throw new Error('Connecte le CLI Copilot avant de lancer le pilote.');
+    let complete!: () => void;
+    const done = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    this.automation = { featureId, done };
+    feature.autopilot.status = 'running';
+    feature.autopilot.reason = undefined;
+    feature.autopilot.updatedAt = new Date().toISOString();
+    try {
+      await this.persist();
+      while (!this.disposed && feature.autopilot.status === 'running') {
+        this.assertTrusted();
+        const action = nextAutopilotAction(feature);
+        if (action.kind === 'pause') {
+          this.pauseAutopilot(featureId, action.reason);
+          break;
+        }
+        if (action.kind === 'complete') {
+          feature.autopilot.status = 'completed';
+          feature.autopilot.reason = 'Parcours terminé.';
+          break;
+        }
+        if (action.kind === 'approve') {
+          const attempt = this.engine.getStep(featureId, action.stepId).attempts.at(-1)!;
+          await this.approveStep(
+            featureId,
+            action.stepId,
+            attempt.id,
+            attempt.revision ?? 0,
+            'autopilot',
+          );
+        } else {
+          if (action.kind === 'correct') feature.autopilot.correctionCycles++;
+          await this.runStep(
+            featureId,
+            action.stepId,
+            action.feedback ?? '',
+            action.kind === 'run' && Boolean(action.resume),
+            feature.autopilot.stepInputs[action.stepId],
+            undefined,
+            true,
+          );
+        }
+        await this.persist();
+      }
+    } catch (error) {
+      this.pauseAutopilot(featureId, redact((error as Error).message));
+      this.error(error);
+    } finally {
+      if (feature.autopilot.status === 'running')
+        this.pauseAutopilot(featureId, 'Pilote interrompu ; reprise manuelle requise.');
+      feature.autopilot.updatedAt = new Date().toISOString();
+      this.automation = undefined;
+      try {
+        await this.persist();
+      } finally {
+        complete();
+      }
+    }
+  }
+  async approveStep(
+    featureId: string,
+    stepId: string,
+    expectedAttemptId: string,
+    expectedRevision: number,
+    actor: 'human' | 'autopilot' = 'human',
+  ): Promise<void> {
+    this.assertTrusted();
+    if (actor === 'human') this.assertConfigurable(featureId);
+    const step = this.engine.getStep(featureId, stepId),
+      attempt = step.attempts.at(-1);
+    if (
+      !attempt ||
+      attempt.id !== expectedAttemptId ||
+      (attempt.revision ?? 0) !== expectedRevision
+    )
+      throw new Error('Le livrable a changé. Relis la version actuelle avant validation.');
+    const feature = this.engine.getFeature(featureId);
+    const related = new Set([step.id]);
+    const ancestors = (id: string): void => {
+      for (const dep of feature.steps.find((item) => item.id === id)!.dependsOn)
+        if (!related.has(dep)) {
+          related.add(dep);
+          ancestors(dep);
+        }
+    };
+    ancestors(step.id);
+    const proofs = feature.steps
+      .filter((item) => related.has(item.id))
+      .flatMap((item) => {
+        const latest = item.attempts.at(-1);
+        return latest ? currentTestEvidence(latest) : [];
+      });
+    const policy = new PolicyEngine(this.workspacePath, 'read-only', []);
+    for (const evidence of proofs)
+      for (const [file, hash] of Object.entries(evidence.fileHashes)) {
+        let current = '<missing>';
+        try {
+          current = sha256(await readFile(await policy.resolve(file)));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
+        if (current !== hash)
+          throw new Error(
+            `La preuve de test est obsolète : ${file} a changé. Relance les tests avant validation.`,
+          );
+      }
+    // Recheck revision after asynchronous reads before touching the approval.
+    this.assertTrusted();
+    this.engine.approveStep(featureId, stepId, actor, expectedAttemptId, expectedRevision);
+    await this.persist();
+  }
+  async saveBudget(featureId: string, budget: FeatureBudget): Promise<void> {
+    this.assertConfigurable(featureId);
+    this.engine.getFeature(featureId).budget = budgetSchema.parse(budget);
+    await this.persist();
+  }
+  private revise(featureId: string): void {
+    const feature = this.engine.getFeature(featureId);
+    feature.updatedAt = new Date().toISOString();
+    for (const step of feature.steps) {
+      const attempt = step.attempts.at(-1);
+      if (attempt) attempt.revision = (attempt.revision ?? 0) + 1;
+    }
+    this.engine.refreshFeatureStatus(featureId);
+  }
+  async saveCriteria(featureId: string, criteria: AcceptanceCriterion[]): Promise<void> {
+    this.assertConfigurable(featureId);
+    const parsed = criteria.map((item) => criterionSchema.parse(item));
+    if (new Set(parsed.map((item) => item.id)).size !== parsed.length)
+      throw new Error('Identifiants de critères dupliqués.');
+    this.engine.getFeature(featureId).criteria = parsed;
+    this.revise(featureId);
+    await this.persist();
+  }
+  async addReviewComment(
+    featureId: string,
+    comment: Omit<ReviewComment, 'id' | 'createdAt' | 'resolved'>,
+  ): Promise<void> {
+    this.assertConfigurable(featureId);
+    const feature = this.engine.getFeature(featureId),
+      step = this.engine.getStep(featureId, comment.stepId);
+    if (!step.attempts.some((attempt) => attempt.id === comment.attemptId))
+      throw new Error('La tentative commentée n’existe pas.');
+    const parsed = commentSchema.parse({
+      ...comment,
+      id: randomUUID(),
+      createdAt: new Date().toISOString(),
+      resolved: false,
+    });
+    feature.reviewComments ??= [];
+    feature.reviewComments.push(parsed);
+    this.revise(featureId);
+    await this.persist();
+  }
+  async resolveReviewComment(
+    featureId: string,
+    commentId: string,
+    resolved: boolean,
+  ): Promise<void> {
+    this.assertConfigurable(featureId);
+    const comment = this.engine
+      .getFeature(featureId)
+      .reviewComments?.find((item) => item.id === commentId);
+    if (!comment) throw new Error('Remarque inconnue.');
+    comment.resolved = resolved;
+    this.revise(featureId);
+    await this.persist();
+  }
+  async saveMemory(entry: MemoryEntry): Promise<void> {
+    this.assertConfigurable();
+    const parsed = memorySchema.parse({ ...entry, updatedAt: new Date().toISOString() });
+    if (parsed.source) {
+      const step = this.engine.getStep(parsed.source.featureId, parsed.source.stepId);
+      if (step.status !== 'approved' || step.attempts.at(-1)?.id !== parsed.source.attemptId)
+        throw new Error('Une mémoire issue d’un livrable exige sa dernière version validée.');
+    }
+    const memory = (this.state.memory ??= []);
+    const index = memory.findIndex((item) => item.id === parsed.id);
+    if (index < 0) memory.push(parsed);
+    else memory[index] = parsed;
+    await this.persist();
+  }
+  async deleteMemory(id: string): Promise<void> {
+    this.assertConfigurable();
+    this.state.memory = (this.state.memory ?? []).filter((entry) => entry.id !== id);
+    await this.persist();
   }
   private async hooks(
     event: 'beforeRun' | 'afterRun',
@@ -276,18 +826,23 @@ export class StudioService extends EventEmitter {
   }
   async saveSettings(settings: StudioSettings): Promise<void> {
     this.assertTrusted();
-    if (this.active) throw new Error('Arrête la tentative avant de changer les réglages.');
+    if (this.active || this.automation)
+      throw new Error('Arrête la tentative et le pilote avant de changer les réglages.');
     this.state.settings = settingsSchema.parse(settings);
     await this.persist();
   }
   async dispose(): Promise<void> {
     this.disposed = true;
+    if (this.automation)
+      this.pauseAutopilot(this.automation.featureId, 'Cockpit fermé ; reprise manuelle requise.');
     const active = this.active;
     active?.controller.abort();
     if (this.saveTimer) clearTimeout(this.saveTimer);
     if (this.publishTimer) clearTimeout(this.publishTimer);
     await this.adapter?.dispose();
     await active?.done;
-    if (this.state) await this.store.save(this.engine.features, this.state.settings);
+    await this.automation?.done;
+    if (this.state)
+      await this.store.save(this.engine.features, this.state.settings, this.state.memory ?? []);
   }
 }

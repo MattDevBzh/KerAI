@@ -179,6 +179,32 @@ describe('workflow transitions', () => {
   });
 });
 describe('strict workflow DAG validation', () => {
+  it('preserves output when only run confirmation changes, and invalidates context/MCP changes', () => {
+    const { engine, id } = setup();
+    complete(engine, id, 'specs');
+    complete(engine, id, 'plan');
+    const specs = engine.getStep(id, 'specs'),
+      selection = {
+        agentId: specs.agentId,
+        model: specs.model,
+        reasoning: specs.reasoning,
+        skills: [...specs.skills],
+      };
+    engine.configureStep(id, 'specs', { ...selection, askBeforeRun: true });
+    expect(specs.status).toBe('approved');
+    expect(engine.getStep(id, 'plan').status).toBe('approved');
+    engine.configureStep(id, 'specs', {
+      ...selection,
+      initialContext: 'A revised user story',
+      mcpServerIds: ['server'],
+    });
+    expect(specs.status).toBe('stale');
+    expect(engine.getStep(id, 'plan').status).toBe('stale');
+    engine.configureStep(id, 'specs', selection);
+    expect(specs.initialContext).toBe('A revised user story');
+    expect(specs.mcpServerIds).toEqual(['server']);
+    expect(specs.askBeforeRun).toBe(true);
+  });
   it('rejects unknown keys, duplicate IDs, missing dependencies and cycles', () => {
     expect(() => validateWorkflow({ ...workflow, unexpected: true })).toThrow();
     expect(() => validateWorkflow({ ...workflow, steps: [step('a'), step('a')] })).toThrow(

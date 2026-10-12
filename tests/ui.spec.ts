@@ -18,13 +18,41 @@ async function hosted(page: Page, state = fresh()) {
     const messages: unknown[] = [];
     Object.assign(window, {
       testMessages: messages,
+      autoPreview: true,
       acquireVsCodeApi: () => ({
         getState: () => saved,
         setState: (v: object) => (saved = v),
-        postMessage: (m: { type: string }) => {
+        postMessage: (m: ClientMessage) => {
           messages.push(m);
           if (m.type === 'ready')
             setTimeout(() => window.postMessage({ type: 'state', state: data }, '*'), 0);
+          if (m.type === 'previewRun' && Reflect.get(window, 'autoPreview')) {
+            const content = m.launch.initialContext;
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'runPreview',
+                    requestId: m.requestId,
+                    preview: {
+                      featureId: m.featureId,
+                      stepId: m.stepId,
+                      fingerprint: 'a'.repeat(64),
+                      prompt: content || 'Instructions de test déterministes',
+                      sections: [
+                        { id: 'human', label: 'Votre contexte', source: 'human', content },
+                      ],
+                      characters: content.length,
+                      estimatedTokens: Math.ceil(content.length / 4),
+                      maxCharacters: 60000,
+                      errors: [],
+                    },
+                  },
+                  '*',
+                ),
+              0,
+            );
+          }
         },
       }),
     });
@@ -36,6 +64,13 @@ async function hosted(page: Page, state = fresh()) {
 }
 async function messages(page: Page) {
   return page.evaluate(() => Reflect.get(window, 'testMessages') as ClientMessage[]);
+}
+async function finishLaunch(page: Page, resume = false) {
+  await page.getByRole('button', { name: 'Préparer l’aperçu', exact: true }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  await page
+    .getByRole('button', { name: resume ? 'Lancer la reprise' : 'Lancer cette étape', exact: true })
+    .click();
 }
 test('le navigateur affiche un accès VS Code, la démo nécessite un choix explicite', async ({
   page,
@@ -221,6 +256,7 @@ test('relance et annulation passent par une confirmation, le statut reste celui 
   await expect(page.getByRole('dialog', { name: 'Relancer cette étape ?' })).toBeVisible();
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await finishLaunch(page);
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'runStep',
     featureId: 'command-palette',
@@ -253,6 +289,7 @@ test('avatars reflètent les états et la réduction du mouvement, reprise de se
   await hosted(page, state);
   await page.locator('.session-card').first().click();
   await page.getByRole('button', { name: 'Reprendre la session' }).click();
+  await finishLaunch(page, true);
   expect((await messages(page)).at(-1)).toMatchObject({ type: 'runStep', resume: true });
   step.status = 'running';
   await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
@@ -308,6 +345,7 @@ test('rejouer une étape validée annonce l’invalidation et ne simule aucun é
   ).toBeVisible();
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await finishLaunch(page);
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'runStep',
     featureId: 'command-palette',
@@ -363,4 +401,542 @@ test('augmenter le budget de tentatives exige une sauvegarde explicite et permet
   step.maxAttempts = 4;
   await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
   await expect(page.getByRole('button', { name: 'Reprendre la session' })).toBeEnabled();
+});
+test('lancement manuel : US, MCP explicite et mémoire opt-in passent par un aperçu host', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.settings.mcpServers = [
+    {
+      id: 'ado',
+      name: 'Azure DevOps',
+      transport: 'stdio',
+      command: 'npx',
+      args: [],
+      envKeys: [],
+      headers: {},
+      tools: ['wit_work_item'],
+      enabled: true,
+      autoApproveReadOnly: false,
+    },
+  ];
+  state.memory = [
+    {
+      id: 'mem',
+      title: 'Conventions du projet',
+      content: 'Utiliser des tests comportementaux.',
+      category: 'convention',
+      enabled: true,
+      agentIds: [],
+      updatedAt: '2026-10-13T00:00:00Z',
+    },
+  ];
+  await hosted(page, state);
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await expect(
+    page.getByRole('checkbox', { name: 'Inclure la mémoire du projet' }),
+  ).not.toBeChecked();
+  await page
+    .getByLabel('US, demande ou contexte initial')
+    .fill('En tant que lecteur, je retrouve une commande au clavier.');
+  await page.getByRole('checkbox', { name: 'Azure DevOps' }).check();
+  expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'previewRun',
+    launch: {
+      initialContext: 'En tant que lecteur, je retrouve une commande au clavier.',
+      mcpServerIds: ['ado'],
+      useProjectMemory: false,
+      memoryIds: [],
+    },
+  });
+  await page
+    .getByLabel('US, demande ou contexte initial')
+    .fill('US corrigée : navigation avec Échap.');
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await finishLaunch(page);
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    previewFingerprint: 'a'.repeat(64),
+    launch: {
+      initialContext: 'US corrigée : navigation avec Échap.',
+      mcpServerIds: ['ado'],
+      useProjectMemory: false,
+    },
+  });
+});
+test('MCP : serveur off par défaut, preset explicite, secret password et permissions humaines', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.humanRequests = [
+    {
+      id: 'permission',
+      featureId: 'command-palette',
+      stepId: 'design',
+      kind: 'mcp-permission',
+      question: 'Autoriser wit_work_item ?',
+      details: 'Lecture du work item 42',
+      allowFreeform: false,
+    },
+  ];
+  await hosted(page, state);
+  await page.getByRole('button', { name: 'Ouvrir la demande' }).click();
+  await page.getByRole('button', { name: 'Autoriser cette demande' }).click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'answerHumanRequest',
+    requestId: 'permission',
+    answer: 'allow',
+  });
+  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await page.getByLabel('Organisation Azure DevOps').fill('atelier');
+  await page.getByRole('button', { name: 'Ajouter le preset Azure DevOps' }).click();
+  const server = page.locator('.mcp-server');
+  await expect(server.getByRole('checkbox', { name: 'Désactivé' })).not.toBeChecked();
+  await expect(server.getByLabel('Outils autorisés')).toHaveValue('wit_work_item');
+  await page.getByLabel('Clé du secret').fill('TOKEN');
+  await page.getByLabel('Valeur du secret').fill('secret-only-in-message');
+  await expect(page.getByLabel('Valeur du secret')).toHaveAttribute('type', 'password');
+  await expect(
+    page.getByRole('button', { name: 'Enregistrer dans le coffre VS Code' }),
+  ).toBeDisabled();
+  await server.getByLabel('Clés d’environnement').fill('TOKEN');
+  await page.getByRole('button', { name: 'Enregistrer les réglages' }).click();
+  const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveSettings' }>;
+  expect(saved).toMatchObject({
+    type: 'saveSettings',
+    settings: {
+      mcpServers: [
+        {
+          name: 'Azure DevOps · atelier',
+          enabled: false,
+          tools: ['wit_work_item'],
+          command: 'npx',
+          args: [
+            '-y',
+            '@azure-devops/mcp@2.10.0',
+            'atelier',
+            '-d',
+            'work-items',
+            '--authentication',
+            'interactive',
+          ],
+          envKeys: ['TOKEN'],
+        },
+      ],
+    },
+  });
+  expect(JSON.stringify(saved)).not.toContain('secret-only-in-message');
+  state.settings = saved.settings;
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await page.getByLabel('Clé du secret').fill('TOKEN');
+  await page.getByLabel('Valeur du secret').fill('secret-only-in-message');
+  await page.getByRole('button', { name: 'Enregistrer dans le coffre VS Code' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'setMcpSecret',
+    key: 'TOKEN',
+    value: 'secret-only-in-message',
+  });
+  await expect(page.getByLabel('Valeur du secret')).toHaveValue('');
+});
+test('configuration MCP : identifiant lettre et transports restent exclusifs sans outils vides', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await page.getByRole('button', { name: 'Ajouter un serveur MCP', exact: true }).click();
+  const server = page.locator('.mcp-server');
+  await server.getByLabel('Exécutable MCP').fill('node');
+  await server.getByLabel('Outils autorisés').fill('read_item\n\n');
+  await server.getByLabel('Clés d’environnement').fill('TOKEN\n');
+  await server.getByLabel('Transport de Nouveau serveur').selectOption('http');
+  await server.getByLabel('URL du serveur MCP').fill('https://example.test/mcp');
+  await page.getByRole('button', { name: 'Enregistrer les réglages' }).click();
+  const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveSettings' }>;
+  expect(saved.settings.mcpServers![0]).toMatchObject({
+    id: expect.stringMatching(/^mcp-[a-z0-9-]+$/),
+    transport: 'http',
+    command: undefined,
+    url: 'https://example.test/mcp',
+    tools: ['read_item'],
+    envKeys: ['TOKEN'],
+    enabled: false,
+    autoApproveReadOnly: false,
+  });
+  await server.getByLabel('Transport de Nouveau serveur').selectOption('stdio');
+  await server.getByLabel('Exécutable MCP').fill('node');
+  await page.getByRole('button', { name: 'Enregistrer les réglages' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'saveSettings',
+    settings: { mcpServers: [{ transport: 'stdio', url: undefined, command: 'node' }] },
+  });
+});
+test('mémoire locale désactivée par défaut, opt-in sans sélection n’injecte rien', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.memory = [
+    {
+      id: 'context',
+      title: 'Architecture locale',
+      content: 'Un store pour chaque projet.',
+      category: 'architecture',
+      enabled: true,
+      agentIds: [],
+      updatedAt: '2026-10-13T00:00:00Z',
+    },
+    {
+      id: 'off',
+      title: 'Décision en attente',
+      content: 'À relire.',
+      category: 'decision',
+      enabled: false,
+      agentIds: [],
+      updatedAt: '2026-10-13T00:00:00Z',
+    },
+  ];
+  await hosted(page, state);
+  await page.getByRole('button', { name: 'Mémoire', exact: true }).click();
+  await page.getByRole('button', { name: 'Nouvelle note' }).click();
+  await expect(
+    page.getByRole('checkbox', { name: 'Rendre cette note disponible pour les prompts' }),
+  ).not.toBeChecked();
+  await page.getByLabel('Titre de la note').fill('Conventions CSS');
+  await page.getByLabel('Contenu de la note').fill('Utiliser les variables du thème.');
+  await page.getByRole('button', { name: 'Enregistrer la note' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'saveMemory',
+    entry: {
+      title: 'Conventions CSS',
+      enabled: false,
+      content: 'Utiliser les variables du thème.',
+    },
+  });
+  expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Inclure la mémoire du projet' }).check();
+  await expect(
+    page.getByText('0 note sélectionnée : aucune mémoire ne sera injectée.', { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Décision en attente' })).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'Architecture locale' }).check();
+  await finishLaunch(page);
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    launch: { useProjectMemory: true, memoryIds: ['context'] },
+  });
+});
+test('autopilot : cadre explicite, contextes par étape et pause fournie par le host', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.memory = [
+    {
+      id: 'memo',
+      title: 'Conventions validées',
+      content: 'Clavier prioritaire.',
+      enabled: true,
+      agentIds: [],
+      category: 'convention',
+      updatedAt: '2026-10-13T00:00:00Z',
+    },
+  ];
+  await hosted(page, state);
+  await page.locator('.session-card').first().click();
+  await page.locator('.autopilot-bar').getByRole('button', { name: 'Configurer' }).click();
+  await expect(page.getByLabel('Nombre maximal d’exécutions')).toHaveValue('5');
+  await expect(page.getByLabel('Cycles de correction maximum')).toHaveValue('0');
+  await expect(page.getByLabel('Cycles de correction maximum')).toHaveAttribute('max', '20');
+  await page
+    .getByLabel('Contexte initial de Conception')
+    .fill('Prévoir une palette accessible au clavier.');
+  await page.getByRole('checkbox', { name: 'Sélectionner de la mémoire pour cet agent' }).check();
+  await expect(
+    page.getByText('0 note sélectionnée : aucune mémoire ne sera injectée.', { exact: false }),
+  ).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Conventions validées' }).check();
+  await page.getByRole('button', { name: 'Enregistrer l’autopilot' }).click();
+  const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveAutopilot' }>;
+  expect(saved).toMatchObject({
+    type: 'saveAutopilot',
+    config: {
+      maxRuns: 5,
+      maxCorrectionCycles: 0,
+      checkpoints: ['review'],
+      stepInputs: {
+        design: {
+          initialContext: 'Prévoir une palette accessible au clavier.',
+          useProjectMemory: true,
+          memoryIds: ['memo'],
+        },
+      },
+    },
+  });
+  expect((await messages(page)).some((m) => m.type === 'startAutopilot')).toBe(false);
+  state.features[0].autopilot = {
+    ...saved.config,
+    status: 'idle',
+    runs: 0,
+    correctionCycles: 0,
+    updatedAt: '2026-10-13T00:00:00Z',
+  };
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await page.getByRole('button', { name: 'Activer l’autopilot' }).click();
+  await page.getByRole('button', { name: 'Démarrer l’autopilot' }).click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'startAutopilot',
+    featureId: 'command-palette',
+  });
+  state.features[0].autopilot!.status = 'running';
+  state.features[0].autopilot!.runs = 1;
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await page.getByRole('button', { name: 'Demander la pause' }).click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'pauseAutopilot',
+    featureId: 'command-palette',
+  });
+  await expect(page.locator('.autopilot-bar h3')).toContainText('En cours');
+  state.features[0].autopilot!.status = 'paused';
+  state.features[0].autopilot!.reason = 'Une question humaine reste ouverte.';
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.locator('.autopilot-bar h3')).toContainText('En pause');
+  await expect(page.getByText('Une question humaine reste ouverte.')).toBeVisible();
+});
+test('validation : preuves host, critères et remarques ; approbation liée à la révision', async ({
+  page,
+}) => {
+  const state = fresh();
+  const attempt = state.features[0].steps[1].attempts[0];
+  attempt.revision = 7;
+  attempt.evidence = [
+    {
+      id: 'proof',
+      source: 'host',
+      commandId: 'unit',
+      name: 'Tests unitaires',
+      command: 'npm',
+      args: ['test'],
+      startedAt: '2026-10-13T00:00:00Z',
+      finishedAt: '2026-10-13T00:00:02Z',
+      exitCode: 0,
+      stdout: '4 tests passed',
+      stderr: '',
+      truncated: false,
+      fileHashes: { 'src/palette.ts': 'hash' },
+    },
+  ];
+  await hosted(page, state);
+  await page.getByRole('button', { name: 'Validation', exact: true }).click();
+  await page.locator('.validation-card').filter({ hasText: 'Conception' }).click();
+  await page.getByRole('tab', { name: 'Preuves' }).click();
+  await expect(page.getByText('Exécuté par le host', { exact: false })).toBeVisible();
+  await expect(page.getByText('4 tests passed')).toBeVisible();
+  await page.getByRole('tab', { name: 'Relecture', exact: true }).click();
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await page.getByLabel('Critère 1', { exact: true }).fill('Échap ferme la palette');
+  await page.getByLabel('État du critère 1').selectOption('passed');
+  await page.getByLabel('Preuve du critère 1').fill('Test clavier npm test');
+  await page.getByRole('button', { name: 'Enregistrer les critères' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'saveCriteria',
+    criteria: [
+      { text: 'Échap ferme la palette', status: 'passed', evidence: 'Test clavier npm test' },
+    ],
+  });
+  await page.getByLabel('Un retour sur cette tentative').fill('Préciser le focus après fermeture.');
+  await page.getByRole('checkbox', { name: 'Bloque la validation' }).check();
+  await page.getByRole('button', { name: 'Ajouter le commentaire' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'addReviewComment',
+    comment: {
+      stepId: 'design',
+      attemptId: attempt.id,
+      blocking: true,
+      text: 'Préciser le focus après fermeture.',
+    },
+  });
+  await page.getByRole('button', { name: 'Valider cette étape' }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'approveStep',
+    expectedAttemptId: attempt.id,
+    expectedRevision: 7,
+  });
+});
+test('budgets : montants nano-AIU sans conversion et valeurs absentes ou partielles signalées', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.features[0].steps[0].attempts[0].usage = {
+    source: 'measured',
+    inputTokens: 100,
+    outputTokens: 20,
+    cost: 400,
+    unit: 'nano-AIU',
+    incompleteTokens: true,
+    incompleteCost: true,
+  };
+  await hosted(page, state);
+  await page.locator('.session-card').first().click();
+  await expect(page.locator('.budget-meter')).toContainText('120');
+  await expect(page.locator('.budget-meter')).toContainText('400');
+  await expect(page.locator('.budget-meter')).toContainText('mesure absente ou partielle');
+  await page.locator('.budget-meter').getByRole('button', { name: 'Budget', exact: true }).click();
+  await expect(page.getByLabel('Nombre maximal d’exécutions')).toHaveAttribute('max', '1000');
+  await expect(page.getByLabel('Caractères maximum du prompt')).toHaveAttribute('max', '500000');
+  await page.getByLabel('Seuil de tokens mesurés').fill('5000');
+  await page.getByLabel('Seuil de crédits IA').fill('1000');
+  await page.getByRole('button', { name: 'Enregistrer le budget' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'saveBudget',
+    budget: {
+      maxRuns: 10,
+      maxPromptChars: 60000,
+      maxTokens: 5000,
+      maxNanoAiu: 1000,
+      modelProfile: 'current',
+    },
+  });
+});
+test('éditeur visuel : étapes, dépendances et réorganisation clavier sans YAML', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.getByRole('button', { name: 'Parcours', exact: true }).click();
+  await page.getByRole('button', { name: 'Nouveau parcours' }).click();
+  await page.getByLabel('Nom du parcours').fill('Mon parcours');
+  await page.getByLabel('Nom de l’étape').fill('Explorer');
+  await page.getByRole('button', { name: 'Étape', exact: true }).click();
+  await page.getByLabel('Nom de l’étape').fill('Construire');
+  await page.getByLabel('Permissions de l’étape').selectOption('workspace-write');
+  await page.getByLabel('Nom du fichier livrable').fill('construction.txt');
+  await expect(
+    page.getByText('le livrable doit être un fichier .md.', { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enregistrer le parcours' })).toBeDisabled();
+  await page.getByLabel('Nom du fichier livrable').fill('construction.md');
+  await page.getByRole('button', { name: 'Monter Construire' }).click();
+  await expect(page.locator('.workflow-node').first()).toContainText('Construire');
+  await page.getByRole('button', { name: 'Enregistrer le parcours' }).click();
+  const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveWorkflow' }>;
+  expect(saved.type).toBe('saveWorkflow');
+  expect(saved.workflow.id).toBe('mon-parcours');
+  expect(saved.workflow.steps[0]).toMatchObject({
+    name: 'Construire',
+    policy: 'workspace-write',
+    artifact: 'construction.md',
+    dependsOn: [saved.workflow.steps[1].id],
+  });
+  expect(saved.workflow.steps[1].name).toBe('Explorer');
+});
+async function labelCapture(page: Page) {
+  await page.evaluate(() => {
+    const label = document.createElement('div');
+    label.textContent = 'DÉMONSTRATION · données d’exemple · aucune exécution Copilot';
+    label.style.cssText =
+      'font-size:9px;letter-spacing:.8px;color:#e5c18e;border:1px solid #e5c18e40;background:#e5c18e08;padding:9px 12px;border-radius:6px;margin-bottom:22px';
+    document.querySelector('[role="dialog"] .modal-heading')?.before(label);
+  });
+}
+test('captures documentées : lancement avec US/MCP et éditeur de parcours', async ({ page }) => {
+  const state = fresh();
+  state.settings.mcpServers = [
+    {
+      id: 'mcp-azure',
+      name: 'Azure DevOps · atelier-product',
+      transport: 'stdio',
+      command: 'npx',
+      args: [
+        '-y',
+        '@azure-devops/mcp@2.10.0',
+        'atelier-product',
+        '-d',
+        'work-items',
+        '--authentication',
+        'interactive',
+      ],
+      envKeys: [],
+      headers: {},
+      tools: ['wit_work_item'],
+      enabled: true,
+      autoApproveReadOnly: false,
+    },
+  ];
+  state.mcpCatalogs = {
+    'mcp-azure': {
+      state: 'ready',
+      tools: [{ name: 'wit_work_item', description: 'Lire une user story et ses critères.' }],
+      checkedAt: '2026-10-13T00:00:00Z',
+    },
+  };
+  await hosted(page, state);
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page
+    .getByLabel('US, demande ou contexte initial')
+    .fill(
+      '# US-142 · Une palette de commandes au clavier\n\nEn tant que membre de l’atelier, je veux retrouver une action avec ⌘ K, pour rester dans le fil de mon travail.\n\nCritères d’acceptation\n• Les flèches changent la sélection, Entrée ouvre l’action.\n• Échap ferme la palette et restitue le focus.\n• L’état vide suggère de préciser la recherche.\n\nContrainte : recherche locale, sans dépendance distante.',
+    );
+  await page
+    .getByLabel('Retour pour cette tentative')
+    .fill(
+      'Conserver les conventions d’accessibilité existantes et préciser le contrat du composant.',
+    );
+  await page.getByRole('checkbox', { name: 'Azure DevOps · atelier-product' }).check();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  await labelCapture(page);
+  await page.getByLabel('US, demande ou contexte initial').evaluate((n) => {
+    n.scrollTop = 0;
+  });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'docs/images/launch-context.png', fullPage: false });
+  await page.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await page.getByRole('button', { name: 'Parcours', exact: true }).click();
+  await page
+    .locator('.workflow-library-card')
+    .filter({ hasText: 'Feature complète' })
+    .getByRole('button', { name: 'Ouvrir l’éditeur' })
+    .click();
+  await page.getByRole('button', { name: 'Configurer l’étape Conception' }).click();
+  await page.setViewportSize({ width: 1440, height: 1320 });
+  await labelCapture(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'docs/images/workflow-editor.png', fullPage: false });
+});
+test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await hosted(page);
+  for (const view of ['Validation', 'Mémoire', 'Parcours']) {
+    await page.getByRole('button', { name: view, exact: true }).click();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  }
+  await page.getByRole('button', { name: 'Nouveau parcours' }).click();
+  await page.getByLabel('Nom du parcours').fill('Un petit parcours');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByLabel('US, demande ou contexte initial').fill('US mobile');
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 });
