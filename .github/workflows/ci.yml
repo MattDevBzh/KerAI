@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify delivered VSIX
+        run: sha256sum -c releases/SHA256SUMS
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -20,6 +22,8 @@ jobs:
       - run: xvfb-run -a npm run test:extension
       - run: mkdir -p releases && npm run package
       - uses: actions/upload-artifact@v4
+        if: vars.FEATURE_STUDIO_UPLOAD_ARTIFACTS == 'true'
         with:
           name: feature-studio-vsix
           path: releases/*.vsix
+          retention-days: 7

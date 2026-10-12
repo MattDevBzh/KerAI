@@ -13,12 +13,15 @@
 | Copilot réel | Une demande en lecture seule sur un dossier jetable : lecture par outil hôte d’un marqueur non donné dans le prompt, réponse exacte, événements, usage et approbation |
 | Reprise réelle | Reconnexion à cette conversation sans nouvelle requête modèle ; historique et résultat d’outil retrouvés, catalogue restreint réappliqué |
 | Dépendances | `npm audit` : aucun avis de vulnérabilité signalé au moment de la validation |
+| Linux / GitHub Actions | Tests, interface, vrai hôte VS Code sous affichage virtuel et packaging exécutés avec succès |
 
 Le cycle complet à cinq étapes a été vérifié avec un adaptateur de test et les **vrais outils fichiers/runner local** : écriture, tests locaux explicitement autorisés, approbations, correction et persistance. Cela ne démontre pas la qualité d’une feature arbitraire développée intégralement par un modèle.
 
 La preuve de requête réelle se trouve dans [live-smoke.json](live-smoke.json). GitHub a annoncé le routage effectif **gpt-5-mini** pour le choix `auto`, 5 809 tokens entrants et 376 sortants, 154 185 000 nano-AIU. Il s’agit d’une mesure remontée par le runtime, pas d’une facture en euros. Le diagnostic et les tests automatisés n’envoient aucun prompt.
 
 Versions vérifiées sur macOS arm64 : GitHub Copilot CLI **1.0.63**, protocole **3**, SDK **1.0.20**, VS Code/Insiders **1.141.0**. L’intégration vérifie les capacités du CLI avant le prompt ; elle ne se contente pas du numéro de version.
+
+Le VSIX livré est versionné dans `releases/`, avec son empreinte dans `SHA256SUMS`, vérifiée par la CI. La première exécution Linux a réussi tous les tests et le packaging, puis rencontré le quota de stockage des artefacts GitHub Actions. Cette copie supplémentaire est donc optionnelle : activer la variable de dépôt `FEATURE_STUDIO_UPLOAD_ARTIFACTS=true` si un quota est disponible. Les tests et le packaging restent obligatoires ; leur échec fait échouer la CI.
 
 ## Limites connues
 
@@ -35,7 +38,7 @@ Versions vérifiées sur macOS arm64 : GitHub Copilot CLI **1.0.63**, protocole 
 - Les identifiants de modèle et niveaux de raisonnement sont ceux du compte. Au moment de la recette, la découverte exposait uniquement `auto` ; une longue liste de modèles n’est pas inventée.
 - L’interface ne connaît pas le solde financier mensuel exact, ne convertit pas les nano-AIU en euros et n’offre pas de plafond de dépense garanti. Les limites de tentatives et délais sont appliquées.
 - Les questions structurées reposent sur un bloc Markdown JSON validé. Un bloc mal formé fait échouer la tentative ; aucun succès n’est fabriqué. Le modèle peut aussi poser du texte ordinaire qu’il faut traiter via feedback.
-- Windows et Linux ne sont pas validés sur une machine interactive dans cette livraison. La CI Linux exécute les tests, le build et le packaging. Sous Windows, utiliser des exécutables natifs pour les tests/hooks ; les lanceurs `.cmd` ne sont pas pris en charge par le runner sans shell.
+- Windows n’a pas été testé dans cette livraison. Linux a été validé dans la CI, y compris un hôte VS Code sous affichage virtuel, sans compte Copilot réel. Sous Windows, utiliser des exécutables natifs pour les tests/hooks ; les lanceurs `.cmd` ne sont pas pris en charge par le runner sans shell.
 - Les hooks Copilot, MCP et plugins existants ne sont pas activés implicitement. Les hooks propres à Feature Studio sont configurés explicitement dans son interface.
 - Les modifications directes des fichiers d’agents/skills/workflows sont chargées avec **Actualiser**. Un flow existant conserve sa définition copiée à la création ; les changements YAML servent aux nouvelles sessions.
 - La migration prise en charge est v0 → v1 ; toute version inconnue ou corruption préserve le fichier et affiche une erreur. Il n’existe pas encore d’import de session exportée ou de synchronisation multi-machine.
