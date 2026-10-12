@@ -1,0 +1,25 @@
+name: Validate and package Feature Studio
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
+      - run: xvfb-run -a npm run test:extension
+      - run: mkdir -p releases && npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feature-studio-vsix
+          path: releases/*.vsix

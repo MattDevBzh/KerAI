@@ -1,0 +1,130 @@
+{
+  "name": "feature-studio",
+  "displayName": "Feature Studio",
+  "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
+  "version": "0.1.0",
+  "publisher": "MattDevBzh",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MattDevBzh/KerAI.git"
+  },
+  "engines": {
+    "vscode": "^1.110.0",
+    "node": ">=22.12.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "agents",
+    "workflow",
+    "features"
+  ],
+  "main": "./dist/extension.cjs",
+  "icon": "resources/icon.png",
+  "activationEvents": [
+    "onWebviewPanel:featureStudio"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "La consultation reste disponible. Les agents et les scripts nécessitent un espace de travail approuvé."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "featureStudio.open",
+        "title": "Feature Studio : ouvrir le cockpit",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "featureStudio.newFeature",
+        "title": "Feature Studio : nouvelle session"
+      },
+      {
+        "command": "featureStudio.installKit",
+        "title": "Feature Studio : installer le kit Copilot"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "featureStudio.open",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Feature Studio",
+      "properties": {
+        "featureStudio.cliPath": {
+          "type": "string",
+          "default": "copilot",
+          "scope": "machine",
+          "description": "Chemin de l’exécutable GitHub Copilot CLI."
+        },
+        "featureStudio.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "Identifiant exact du modèle. Vide = modèle par défaut du CLI."
+        },
+        "featureStudio.timeoutMinutes": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 120,
+          "description": "Durée maximale d’une tentative."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs && vite build",
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "playwright test",
+    "test:extension": "node scripts/test-extension.mjs",
+    "check": "npm run format:check && npm run typecheck && npm test && npm run build",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-0.1.0.vsix",
+    "vscode:prepublish": "npm run build",
+    "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.mjs\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.mjs\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\""
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "1.0.20",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/vscode": "^1.110.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "gifenc": "^1.0.3",
+    "prettier": "3.6.2",
+    "sharp": "^0.35.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.0",
+    "vitest": "^5.0.4"
+  }
+}

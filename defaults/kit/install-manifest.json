@@ -1,0 +1,249 @@
+{
+  "version": "2.0.0",
+  "files": [
+    {
+      "source": ".github/agents/ai-cadrage.agent.md",
+      "target": ".github/agents/ai-cadrage.agent.md",
+      "policy": "managed",
+      "sha256": "b7c6255351c825b4e2edfb41b6a6ad0bbbbae911c77254466d18a537bbd75686",
+      "previous_sha256": [
+        "614666ec712e0360c68ff46651dbc509db3c8c310baad15326e82f59aa4c44d5"
+      ]
+    },
+    {
+      "source": ".github/agents/ai-dev.agent.md",
+      "target": ".github/agents/ai-dev.agent.md",
+      "policy": "managed",
+      "sha256": "4d5869b960472135739f8f113116b8850392f865e051ce7d57b6d67940c4b3e5",
+      "previous_sha256": [
+        "dfaf26e66ee10e004e8d1e371c0904ee00f086bce627ffbd01e716c4221b1c5c"
+      ]
+    },
+    {
+      "source": ".github/agents/ai-revue.agent.md",
+      "target": ".github/agents/ai-revue.agent.md",
+      "policy": "managed",
+      "sha256": "3ee9dfcbaeaa48246aece30d618e2b0050331d8772ee1db9ba436bcd63ea9f9f",
+      "previous_sha256": [
+        "c629a3b7fbfef60e8386df9602a4a451ca95aa8af783c9e7232786602f188cb3"
+      ]
+    },
+    {
+      "source": ".github/agents/ai-tests.agent.md",
+      "target": ".github/agents/ai-tests.agent.md",
+      "policy": "managed",
+      "sha256": "41c50ea527b9ec1233481102f2c493ffa114f14b384f7c6a120075d52b5c3701",
+      "previous_sha256": [
+        "dd3264849cf453806214b25b0b63df2ec9b210dc087817be761be47da2a406c1"
+      ]
+    },
+    {
+      "source": ".github/copilot-instructions.md",
+      "target": ".github/copilot-instructions.md",
+      "policy": "managed",
+      "sha256": "a09a6f3d911e52da066c1fabfd67d20e77b6043b84df692c3647e242d87106c8",
+      "previous_sha256": [
+        "a09a6f3d911e52da066c1fabfd67d20e77b6043b84df692c3647e242d87106c8"
+      ]
+    },
+    {
+      "source": ".github/skills/ai-debug/SKILL.md",
+      "target": ".github/skills/ai-debug/SKILL.md",
+      "policy": "managed",
+      "sha256": "45fce002920d5043ac31896f477293a2f8c2bf8ac80d2b645926675b728f0b79",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/ai-implement/SKILL.md",
+      "target": ".github/skills/ai-implement/SKILL.md",
+      "policy": "managed",
+      "sha256": "3654150260ac1f479bb93838813498913e619c07fa1f0c45ac6e9954d96961f6",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/ai-plan/SKILL.md",
+      "target": ".github/skills/ai-plan/SKILL.md",
+      "policy": "managed",
+      "sha256": "12105f7f0a0fa4f3e870b15ce3afc22558ac0c0be09b7e366dd6bd7c4cd39314",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/ai-relecture/SKILL.md",
+      "target": ".github/skills/ai-relecture/SKILL.md",
+      "policy": "managed",
+      "sha256": "5042fd15c5c013b0a7d9e25c214dd5bc0e20c8d7f827909e71e4c1073e5fa2f2",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/ai-tdd/SKILL.md",
+      "target": ".github/skills/ai-tdd/SKILL.md",
+      "policy": "managed",
+      "sha256": "800e69033cf972642db206f67a61a62f02f1a114beabf7bfbcbe1909c9ade591",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/ai-ticket/SKILL.md",
+      "target": ".github/skills/ai-ticket/SKILL.md",
+      "policy": "managed",
+      "sha256": "db18c758334c0259755fee00a834b08641105e08a4f6ef6d8d3b0d78e122332e",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/ai-verifier/SKILL.md",
+      "target": ".github/skills/ai-verifier/SKILL.md",
+      "policy": "managed",
+      "sha256": "b7710f21ac60528acb97d7bf82aec0062fec23419abc7f6ea17462bf98b79485",
+      "previous_sha256": []
+    },
+    {
+      "source": ".ai/project.md",
+      "target": ".ai/project.md",
+      "policy": "preserve",
+      "sha256": "fe7d053da140deef670c59eb181c40e52c4c99c670d893a44f084791653ed2a2",
+      "previous_sha256": [
+        "fe7d053da140deef670c59eb181c40e52c4c99c670d893a44f084791653ed2a2"
+      ]
+    },
+    {
+      "source": ".ai/test-profiles.example.json",
+      "target": ".ai/test-profiles.example.json",
+      "policy": "managed",
+      "sha256": "fc6603a398fc5574eb36173a96125abb094d0029dd7d2e82a004b9a69e89c435",
+      "previous_sha256": [
+        "fc6603a398fc5574eb36173a96125abb094d0029dd7d2e82a004b9a69e89c435"
+      ]
+    },
+    {
+      "source": "scripts/ai_tools.py",
+      "target": "scripts/ai_tools.py",
+      "policy": "managed",
+      "sha256": "98c859a4a93a67445775516fde8898236ad4b388e2a4ddf8b62a62af742cc076",
+      "previous_sha256": [
+        "98c859a4a93a67445775516fde8898236ad4b388e2a4ddf8b62a62af742cc076"
+      ]
+    },
+    {
+      "source": "templates/context.md",
+      "target": "templates/context.md",
+      "policy": "managed",
+      "sha256": "41e413d7b1d93233a481acb4c35875a992dba5019f4a64ff944341c36e1c9eec",
+      "previous_sha256": [
+        "71445a5a22b8b8ce69c5666b26296c25e333542e0edb930d36b47de38ce05336"
+      ]
+    },
+    {
+      "source": "templates/debug.md",
+      "target": "templates/debug.md",
+      "policy": "managed",
+      "sha256": "57c63479f9b02e2ffb7a9d6c388bb115869920805bb83a54f3cf1f5e6874156e",
+      "previous_sha256": []
+    },
+    {
+      "source": "templates/plan.md",
+      "target": "templates/plan.md",
+      "policy": "managed",
+      "sha256": "0776930f8f5606be4045ff1a20549d4cc4963adee7fe5dfd56a79b0726d16889",
+      "previous_sha256": []
+    },
+    {
+      "source": "templates/review.md",
+      "target": "templates/review.md",
+      "policy": "managed",
+      "sha256": "c4c22afb86d2241c1d92a93aa2473cd054f3418a911b49ab73326d0770b4f671",
+      "previous_sha256": [
+        "c4c22afb86d2241c1d92a93aa2473cd054f3418a911b49ab73326d0770b4f671"
+      ]
+    },
+    {
+      "source": "templates/tests.md",
+      "target": "templates/tests.md",
+      "policy": "managed",
+      "sha256": "363e6594d4f1917c14b53e3a962b06952742f10335760feed467baadf98d4fb0",
+      "previous_sha256": []
+    },
+    {
+      "source": "templates/ticket.md",
+      "target": "templates/ticket.md",
+      "policy": "managed",
+      "sha256": "df5a6086cb4e3e6cd566e042a0ffc2df1e0567d08fed39bd7d33f8ecd7ab9975",
+      "previous_sha256": []
+    },
+    {
+      "source": "options/gitignore.append.txt",
+      "target": ".ai/kit/options/gitignore.append.txt",
+      "policy": "managed",
+      "sha256": "a818567e30461804cbb0d96cd1cb420aa40d61b80ae77b3c30629da68b0ad7e0",
+      "previous_sha256": []
+    },
+    {
+      "source": "options/handoffs-local.yaml",
+      "target": ".ai/kit/options/handoffs-local.yaml",
+      "policy": "managed",
+      "sha256": "a9198ea376bf9e1f21f7292fdd165fda2c5f9c685a379b5e96a973dc53de16dd",
+      "previous_sha256": []
+    },
+    {
+      "source": "options/mcp-ado-readonly.example.json",
+      "target": ".ai/kit/options/mcp-ado-readonly.example.json",
+      "policy": "managed",
+      "sha256": "fa7d6924d33951902566dab64d5282f92474ed989a6ee938deb774594990df14",
+      "previous_sha256": []
+    },
+    {
+      "source": "options/settings.recommended.json",
+      "target": ".ai/kit/options/settings.recommended.json",
+      "policy": "managed",
+      "sha256": "aa8a8a824c84d08eb68e75d7e0ca412b758ddcd2fec1be7cb64fb0cbba59f513",
+      "previous_sha256": []
+    },
+    {
+      "source": "options/tasks.example.json",
+      "target": ".ai/kit/options/tasks.example.json",
+      "policy": "managed",
+      "sha256": "9f44137156374d03240cf2818a07d6ab97443a4da24ce40d4811c010db36f779",
+      "previous_sha256": []
+    },
+    {
+      "source": "README.md",
+      "target": ".ai/kit/README.md",
+      "policy": "managed",
+      "sha256": "41feff770a5559ff157c86c06186f6ec7b16ff10012e16074e32189fef5f919e",
+      "previous_sha256": []
+    },
+    {
+      "source": "GUIDE-QUOTIDIEN.md",
+      "target": ".ai/kit/GUIDE-QUOTIDIEN.md",
+      "policy": "managed",
+      "sha256": "6b8fb093d441660391b9aad08bdea6e964f187d26234718a39082cf4976fe184",
+      "previous_sha256": []
+    },
+    {
+      "source": "SOURCES.md",
+      "target": ".ai/kit/SOURCES.md",
+      "policy": "managed",
+      "sha256": "90a9cd942dabf73f833291327e1c2bb980e507940b60b3fa38300bbc4a415cb5",
+      "previous_sha256": []
+    },
+    {
+      "source": "CHANGELOG.md",
+      "target": ".ai/kit/CHANGELOG.md",
+      "policy": "managed",
+      "sha256": "dceadb4806b52e64271505e9866f94bd279521d2f4622660e61d1e386f6b4285",
+      "previous_sha256": []
+    },
+    {
+      "source": "VALIDATION.md",
+      "target": ".ai/kit/VALIDATION.md",
+      "policy": "managed",
+      "sha256": "fecfa4be88b5203635c6965e84ca4686e0bb5367e424270e84e520f555178dfd",
+      "previous_sha256": []
+    },
+    {
+      "source": "VERSION",
+      "target": ".ai/kit/VERSION",
+      "policy": "managed",
+      "sha256": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
+      "previous_sha256": []
+    }
+  ]
+}

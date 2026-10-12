@@ -1,0 +1,7 @@
+# Ajouter au frontmatter de ai-cadrage uniquement si les handoffs sont reconnus.
+# Ne pas supposer que ce bloc change le modèle ou réduit le contexte.
+handoffs:
+  - label: Développer le plan validé
+    agent: ai-dev
+    prompt: Implémente la première tranche du plan validé. Vérifie le modèle sélectionné.
+    send: false

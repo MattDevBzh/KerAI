@@ -1,0 +1,8 @@
+# Ajouter à .gitignore ou .git/info/exclude selon la politique du dépôt.
+.ai/work/
+.ai/runs/
+.ai/review/
+.ai/metrics.local.json
+.ai/kit-backups/
+.ai/kit-conflicts/
+.ai/kit-install/

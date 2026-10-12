@@ -1,0 +1,19 @@
+{
+  "runner": "vstest",
+  "profiles": {
+    "unit-cible": {
+      "project": "__PROJECT__.csproj",
+      "filter": "FullyQualifiedName~__TEST_CLASS__",
+      "configuration": "Debug",
+      "minimum_executed": 1,
+      "timeout_seconds": 300
+    },
+    "unit-module": {
+      "project": "__PROJECT__.csproj",
+      "filter": "",
+      "configuration": "Debug",
+      "minimum_executed": 1,
+      "timeout_seconds": 600
+    }
+  }
+}

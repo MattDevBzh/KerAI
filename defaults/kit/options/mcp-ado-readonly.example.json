@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "ado-remote-mcp": {
+      "url": "https://mcp.dev.azure.com/REMPLACER_ORGANISATION",
+      "type": "http",
+      "headers": {
+        "X-MCP-Readonly": "true",
+        "X-MCP-Toolsets": "wit,wiki"
+      }
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "IA - Snapshot",
+      "type": "process",
+      "command": "python3",
+      "args": [
+        "scripts/ai_tools.py",
+        "snapshot",
+        "--path",
+        "${input:scope}"
+      ],
+      "windows": {
+        "command": "py",
+        "args": [
+          "-3",
+          "scripts/ai_tools.py",
+          "snapshot",
+          "--path",
+          "${input:scope}"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "IA - TU",
+      "type": "process",
+      "command": "python3",
+      "args": [
+        "scripts/ai_tools.py",
+        "test",
+        "--profile",
+        "${input:profile}"
+      ],
+      "windows": {
+        "command": "py",
+        "args": [
+          "-3",
+          "scripts/ai_tools.py",
+          "test",
+          "--profile",
+          "${input:profile}"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "scope",
+      "type": "promptString",
+      "description": "Périmètre relatif du diff (relancer en CLI pour plusieurs --path)",
+      "default": "src"
+    },
+    {
+      "id": "profile",
+      "type": "pickString",
+      "description": "Profil de TU déjà validé",
+      "options": [
+        "unit-cible",
+        "unit-module"
+      ],
+      "default": "unit-cible"
+    }
+  ]
+}

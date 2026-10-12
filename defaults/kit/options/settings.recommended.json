@@ -1,0 +1,6 @@
+{
+  "chat.tools.global.autoApprove": false,
+  "chat.permissions.default": "default",
+  "chat.subagents.allowInvocationsFromSubagents": false,
+  "chat.agent.maxRequests": 15
+}

@@ -1,0 +1,35 @@
+{
+  "checkedAt": "2026-10-12T22:19:20.580Z",
+  "cliVersion": "1.0.63",
+  "sdkVersion": "1.0.20",
+  "status": "passed",
+  "readOnly": true,
+  "toolCallObserved": true,
+  "featureStatus": "completed",
+  "usage": {
+    "source": "measured",
+    "inputTokens": 5809,
+    "outputTokens": 376,
+    "cost": 154185000,
+    "unit": "nano-AIU",
+    "model": "gpt-5-mini"
+  },
+  "model": "gpt-5-mini",
+  "sessionId": "78ca6a39-5dc4-47d9-9218-e8f737ba6d9f",
+  "resume": {
+    "checkedAt": "2026-10-12T22:23:31.390Z",
+    "status": "passed",
+    "promptSent": false,
+    "conversationRecovered": true,
+    "toolResultRecovered": true,
+    "finalAssistantResultRecovered": false,
+    "eventCount": 26,
+    "assistantMessageCount": 1,
+    "tools": [
+      "studio_list_files",
+      "studio_read_file",
+      "studio_git_diff"
+    ],
+    "agent": "feature-studio"
+  }
+}

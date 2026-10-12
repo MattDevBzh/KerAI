@@ -1,0 +1,22 @@
+{
+  "id": "single",
+  "name": "Session libre",
+  "description": "Un seul agent, une conversation, un livrable.",
+  "icon": "sparkles",
+  "steps": [
+    {
+      "id": "session",
+      "name": "Session",
+      "description": "Un seul agent, une conversation, un livrable.",
+      "agentId": "fs-dev",
+      "policy": "workspace-write",
+      "model": "",
+      "skills": [
+        "ai-implement"
+      ],
+      "maxAttempts": 5,
+      "artifact": "session.md",
+      "dependsOn": []
+    }
+  ]
+}

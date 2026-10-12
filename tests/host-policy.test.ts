@@ -1,0 +1,327 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Tool } from '@github/copilot-sdk';
+import type { RunInput } from '../src/shared/types';
+import { PolicyEngine, sha256 } from '../src/host/PolicyEngine';
+import { ToolHost, gitInfo } from '../src/host/ToolHost';
+import { runProcess } from '../src/host/process';
+import { WorkflowEngine } from '../src/core/workflow';
+import { defaultSettings } from '../src/core/store';
+
+const roots: string[] = [];
+async function setup() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'studio-policy-')));
+  roots.push(root);
+  return root;
+}
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+async function git(root: string, ...args: string[]) {
+  const result = await runProcess('git', args, root);
+  if (result.code) throw new Error(result.stderr);
+  return result.stdout;
+}
+async function gitRepo(root: string) {
+  await git(root, 'init');
+  await git(root, 'config', 'user.name', 'Tests');
+  await git(root, 'config', 'user.email', 'tests@example.invalid');
+}
+function input(root: string, profile: 'read-only' | 'workspace-write' | 'tests'): RunInput {
+  const engine = new WorkflowEngine();
+  const feature = engine.createFeature(
+    {
+      id: 'single',
+      name: 'Single',
+      description: '',
+      icon: '',
+      steps: [
+        {
+          id: 'run',
+          name: 'Run',
+          description: '',
+          agentId: 'agent',
+          skills: [],
+          policy: profile,
+          artifact: 'run.md',
+          maxAttempts: 3,
+          dependsOn: [],
+        },
+      ],
+    },
+    { title: 'Title', description: '' },
+  );
+  const attempt = engine.beginRun(feature.id, 'run');
+  return {
+    feature,
+    step: feature.steps[0],
+    attempt,
+    agent: {
+      id: 'agent',
+      name: 'Agent',
+      description: '',
+      instructions: '',
+      tools: ['read', 'search', 'edit', ...(profile === 'tests' ? ['execute'] : [])],
+      skills: [],
+      source: 'bundled',
+      path: '',
+    },
+    skills: [],
+    workspacePath: root,
+    settings: structuredClone(defaultSettings),
+  };
+}
+async function invoke(tools: Tool[], name: string, args: unknown) {
+  const tool = tools.find((tool) => tool.name === name);
+  if (!tool?.handler) throw new Error(`Missing tool ${name}`);
+  return (await tool.handler(args, {
+    sessionId: 'session',
+    toolCallId: 'call',
+    toolName: name,
+    arguments: args,
+  })) as { resultType: string; textResultForLlm: string };
+}
+
+describe('host file and command policy', () => {
+  it('rejects traversal, secrets at every depth, symlinks and physical links for writes', async () => {
+    const root = await setup();
+    const policy = new PolicyEngine(root, 'workspace-write', []);
+    for (const path of [
+      '../escape',
+      '/tmp/escape',
+      'C:/escape',
+      'src/../../escape',
+      '.env',
+      'nested/.npmrc',
+      'nested/credentials.json',
+      'a/private.key',
+      '.git/config',
+      '.feature-studio/state.json',
+    ])
+      await expect(policy.resolve(path)).rejects.toThrow();
+    await symlink(tmpdir(), join(root, 'outside'));
+    await expect(policy.resolve('outside/file')).rejects.toThrow(/symboliques/);
+    await writeFile(join(root, 'original'), 'Original');
+    await link(join(root, 'original'), join(root, 'hardlink'));
+    await expect(policy.resolve('hardlink', true)).rejects.toThrow(/physique/);
+  });
+  it('requires a fresh read, protects dirty files, and accepts a matching owned hash', async () => {
+    const root = await setup();
+    await writeFile(join(root, 'clean.ts'), 'Initial');
+    const policy = new PolicyEngine(root, 'workspace-write', []);
+    await expect(policy.assertWrite('clean.ts')).rejects.toThrow(/Relis/);
+    await policy.recordRead('clean.ts', 'Initial');
+    await expect(policy.assertWrite('clean.ts')).resolves.toBe(join(root, 'clean.ts'));
+    await writeFile(join(root, 'clean.ts'), 'Human edit');
+    await expect(policy.assertWrite('clean.ts')).rejects.toThrow(/Relis/);
+    const dirty = new PolicyEngine(root, 'workspace-write', [], new Set(['clean.ts']));
+    await dirty.recordRead('clean.ts', 'Human edit');
+    await expect(dirty.assertWrite('clean.ts')).rejects.toThrow(/protégée/);
+    const owned = new PolicyEngine(root, 'workspace-write', [], new Set(['clean.ts']), {
+      'clean.ts': sha256('Human edit'),
+    });
+    await owned.recordRead('clean.ts', 'Human edit');
+    await expect(owned.assertWrite('clean.ts')).resolves.toBe(join(root, 'clean.ts'));
+  });
+  it('preserves a user deletion instead of recreating the dirty missing file', async () => {
+    const root = await setup();
+    const policy = new PolicyEngine(root, 'workspace-write', [], new Set(['deleted.ts']));
+    await expect(policy.assertWrite('deleted.ts')).rejects.toThrow(/protég|supprim/i);
+  });
+  it('enforces readonly, test folder boundaries and command allowlisting', async () => {
+    const root = await setup();
+    const readonly = new PolicyEngine(root, 'read-only', ['tests']);
+    await expect(readonly.resolve('tests/a.test.ts', true)).rejects.toThrow(/lecture seule/);
+    const tests = new PolicyEngine(root, 'tests', ['tests']);
+    await expect(tests.resolve('tests/unit/a.test.ts', true)).resolves.toBe(
+      join(root, 'tests/unit/a.test.ts'),
+    );
+    for (const path of [
+      'src/a.ts',
+      'tests-other/a.ts',
+      'tests/../src/a.ts',
+      '.github/agents/hacker.agent.md',
+    ])
+      await expect(tests.resolve(path, true)).rejects.toThrow();
+    const commands = [{ id: 'unit', name: 'Unit', command: 'node', args: ['--test'] }];
+    expect(tests.assertCommand('unit', commands)).toEqual(commands[0]);
+    expect(() => tests.assertCommand('unknown', commands)).toThrow(/autorisé/);
+    expect(() => readonly.assertCommand('unit', commands)).toThrow(/réservées/);
+  });
+});
+
+describe('host tools and Git boundaries', () => {
+  it('does not expose write or command tools to a readonly session', async () => {
+    const root = await setup();
+    const data = input(root, 'read-only');
+    data.settings.testCommands.push({
+      id: 'unit',
+      name: 'Unit',
+      command: 'node',
+      args: ['--test'],
+    });
+    const host = new ToolHost(data, { onEvent() {}, onSession() {} }, new AbortController().signal);
+    const tools = await host.createTools();
+    expect(tools.map((t) => t.name)).not.toContain('studio_write_file');
+    expect(tools.map((t) => t.name)).not.toContain('studio_run_test');
+    expect((await invoke(tools, 'studio_read_file', { path: '.env' })).resultType).toBe('failure');
+  });
+  it('allows repeated writes by the same run and detects a human edit after read', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    const data = input(root, 'workspace-write');
+    await writeFile(join(root, 'created.ts'), 'previous agent result');
+    data.attempt.fileHashes = { 'created.ts': sha256('previous agent result') };
+    const host = new ToolHost(data, { onEvent() {}, onSession() {} }, new AbortController().signal);
+    const tools = await host.createTools();
+    expect((await invoke(tools, 'studio_read_file', { path: 'created.ts' })).resultType).toBe(
+      'success',
+    );
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'created.ts', content: 'first' }))
+        .resultType,
+    ).toBe('success');
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'created.ts', content: 'second' }))
+        .resultType,
+    ).toBe('success');
+    await writeFile(join(root, 'created.ts'), 'Human override');
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'created.ts', content: 'overwrite' }))
+        .resultType,
+    ).toBe('failure');
+    expect(await readFile(join(root, 'created.ts'), 'utf8')).toBe('Human override');
+  });
+  it('preserves pre-existing untracked files and protects dirty deleted tracked files', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    await writeFile(join(root, 'tracked.ts'), 'Tracked');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'Fixture');
+    await rm(join(root, 'tracked.ts'));
+    await writeFile(join(root, 'human.ts'), 'Human work');
+    const host = new ToolHost(
+      input(root, 'workspace-write'),
+      { onEvent() {}, onSession() {} },
+      new AbortController().signal,
+    );
+    const tools = await host.createTools();
+    await invoke(tools, 'studio_read_file', { path: 'human.ts' });
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'human.ts', content: 'agent' })).resultType,
+    ).toBe('failure');
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'tracked.ts', content: 'recreated' }))
+        .resultType,
+    ).toBe('failure');
+  });
+  it('includes staged and unstaged safe diffs while excluding tracked nested secrets', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    await mkdir(join(root, 'config'));
+    await writeFile(join(root, 'safe.ts'), 'Initial\n');
+    await writeFile(join(root, 'config/credentials.json'), 'PRIVATE_BEFORE\n');
+    await writeFile(join(root, '.npmrc'), 'PRIVATE_NPM_BEFORE\n');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'Fixture');
+    await writeFile(join(root, 'safe.ts'), 'Staged\n');
+    await git(root, 'add', 'safe.ts');
+    await writeFile(join(root, 'safe.ts'), 'Final safe code\n');
+    await writeFile(join(root, 'config/credentials.json'), 'PRIVATE_AFTER\n');
+    await writeFile(join(root, '.npmrc'), 'PRIVATE_NPM_AFTER\n');
+    const host = new ToolHost(
+      input(root, 'read-only'),
+      { onEvent() {}, onSession() {} },
+      new AbortController().signal,
+    );
+    const tools = await host.createTools();
+    const response = await invoke(tools, 'studio_git_diff', {});
+    expect(response.resultType).toBe('success');
+    expect(response.textResultForLlm).toContain('Final safe code');
+    expect(response.textResultForLlm).not.toContain('PRIVATE_');
+    expect(
+      (await invoke(tools, 'studio_git_diff', { path: 'config/credentials.json' })).resultType,
+    ).toBe('failure');
+    expect((await gitInfo(root)).dirty).toContain('safe.ts');
+  });
+  it('rejects every tool call after cancellation', async () => {
+    const root = await setup();
+    const controller = new AbortController();
+    const host = new ToolHost(
+      input(root, 'workspace-write'),
+      { onEvent() {}, onSession() {} },
+      controller.signal,
+    );
+    const tools = await host.createTools();
+    controller.abort();
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'new.ts', content: 'never written' }))
+        .resultType,
+    ).toBe('failure');
+    await expect(readFile(join(root, 'new.ts'))).rejects.toThrow();
+  });
+  it('does not execute queued writes when cancellation arrives after tool dispatch', async () => {
+    const root = await setup();
+    const controller = new AbortController();
+    const host = new ToolHost(
+      input(root, 'workspace-write'),
+      { onEvent() {}, onSession() {} },
+      controller.signal,
+    );
+    const tools = await host.createTools();
+    const first = invoke(tools, 'studio_write_file', { path: 'first.ts', content: 'cancelled' });
+    const second = invoke(tools, 'studio_write_file', { path: 'second.ts', content: 'cancelled' });
+    controller.abort();
+    await Promise.all([first, second]);
+    await expect(readFile(join(root, 'second.ts'))).rejects.toThrow();
+  });
+});
+
+describe('local process lifecycle', () => {
+  it('passes shell syntax as literal arguments rather than executing it', async () => {
+    const root = await setup();
+    const literal = '$(touch SHOULD_NOT_EXIST); echo unsafe';
+    const result = await runProcess(
+      process.execPath,
+      ['-e', 'console.log(process.argv[1])', literal],
+      root,
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe(literal);
+    await expect(readFile(join(root, 'SHOULD_NOT_EXIST'))).rejects.toThrow();
+  });
+  it.skipIf(process.platform === 'win32')(
+    'terminates descendants that ignore SIGTERM when the parent closes early',
+    async () => {
+      const root = await setup();
+      const pidPath = join(root, 'descendant.pid');
+      const script = `const {spawn}=require('node:child_process'); const fs=require('node:fs'); const child=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{stdio:'ignore'});fs.writeFileSync(process.argv[1],String(child.pid));setInterval(()=>{},1000);`;
+      let pid = 0;
+      try {
+        await expect(
+          runProcess(process.execPath, ['-e', script, pidPath], root, { timeoutMs: 800 }),
+        ).rejects.toThrow(/Délai/);
+        pid = Number(await readFile(pidPath, 'utf8'));
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        let alive = false;
+        try {
+          process.kill(pid, 0);
+          alive = true;
+        } catch {
+          /* expected: process group terminated */
+        }
+        expect(alive).toBe(false);
+      } finally {
+        if (pid) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            /* already terminated */
+          }
+        }
+      }
+    },
+  );
+});

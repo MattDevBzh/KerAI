@@ -1,0 +1,30 @@
+{
+  "read-only": {
+    "tools": [
+      "read",
+      "search"
+    ],
+    "write": false,
+    "shell": false
+  },
+  "workspace-write": {
+    "tools": [
+      "read",
+      "search",
+      "edit"
+    ],
+    "write": true,
+    "shell": false
+  },
+  "tests": {
+    "tools": [
+      "read",
+      "search",
+      "edit"
+    ],
+    "write": true,
+    "shell": false,
+    "writePaths": "configured-test-paths",
+    "note": "Restriction de chemins contrôlée par le host ; le CLI edit ne fournit pas une ACL de chemins."
+  }
+}

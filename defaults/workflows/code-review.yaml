@@ -1,0 +1,22 @@
+{
+  "id": "code-review",
+  "name": "Code Review",
+  "description": "Une relecture indépendante en lecture seule.",
+  "icon": "scan-eye",
+  "steps": [
+    {
+      "id": "review",
+      "name": "Relecture",
+      "description": "Relire indépendamment les changements et les preuves.",
+      "agentId": "fs-review",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "ai-relecture"
+      ],
+      "maxAttempts": 5,
+      "artifact": "review.md",
+      "dependsOn": []
+    }
+  ]
+}
