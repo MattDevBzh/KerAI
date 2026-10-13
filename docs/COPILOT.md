@@ -33,6 +33,14 @@ Sources : [SDK TypeScript et options actuelles](https://github.com/github/copilo
 
 ## Restriction technique des outils
 
+### Connexion manuelle sur Windows
+
+Si le CLI démarre mais que Feature Studio annonce une authentification absente, ouvrir un terminal PowerShell dédié. Affecter `$env:COPILOT_HOME` au chemin exact affiché par le diagnostic, puis lancer `& "<chemin complet de copilot.bat>" login`. Terminer la connexion GitHub, fermer ce terminal et relancer le diagnostic Feature Studio. Cette variable ne doit pas être rendue permanente : elle ne concerne que la connexion au runtime isolé. Le chemin historique peut contenir deux segments `copilot-runtime` ; utiliser le chemin affiché pour conserver les sessions existantes.
+
+Les chemins complets sans extension sont également résolus sous Windows vers un fichier existant `.exe`, `.cmd` ou `.bat`. Un chemin complet introuvable produit une erreur avant le lancement du SDK et ne bascule pas vers un autre CLI du `PATH`.
+
+### Catalogue et permissions
+
 Les flags classiques `--allow-tool=write` ne confinent pas les écritures par chemin. Les règles `shell(command:*)` autorisent un nom/préfixe de commande, sans garantir que ses arguments ou le code exécuté respectent les limites du workspace. Le `cwd` et les instructions en langage naturel ne suffisent pas pour une restriction de tests.
 
 L'adaptateur injecte les outils `studio_*` fournis par `ToolHost` : liste, lecture, recherche, écriture, diff et commande de test configurée. Chaque handler vérifie les permissions dans `PolicyEngine` et reçoit le signal d'annulation. Il n'existe aucun shell libre accessible au modèle. Les chemins et les commandes sont évalués par l'hôte ; les profils `read-only`, `workspace-write` et `tests` sélectionnent les capacités correspondantes.

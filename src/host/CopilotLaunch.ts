@@ -1,6 +1,6 @@
 import { access, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { delimiter, isAbsolute, join, resolve, win32 } from 'node:path';
+import { delimiter, extname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { spawn } from 'node:child_process';
 import { redact } from './process';
 
@@ -12,24 +12,34 @@ export async function resolveCopilotPath(
   const path = configured.trim().replace(/^"(.*)"$/, '$1');
   if (!path || /[\r\n\0]/.test(path)) throw new Error('Chemin Copilot CLI invalide.');
   const windows = platform === 'win32';
-  const paths = windows ? win32 : { isAbsolute, join, resolve };
-  if (paths.isAbsolute(path) || /[\\/]/.test(path)) return paths.resolve(path);
+  const paths = windows ? win32 : { extname, isAbsolute, join, resolve };
+  const isExplicitPath = paths.isAbsolute(path) || /[\\/]/.test(path);
   const pathValue = Object.entries(env).find(([key]) => key.toLowerCase() === 'path')?.[1] ?? '';
   const extensions =
-    windows && !/\.(exe|cmd|bat)$/i.test(path) ? ['.exe', '.cmd', '.bat', ''] : [''];
-  for (const entry of pathValue.split(windows ? ';' : delimiter).filter(Boolean)) {
+    windows && !paths.extname(path)
+      ? isExplicitPath
+        ? ['', '.exe', '.cmd', '.bat']
+        : ['.exe', '.cmd', '.bat', '']
+      : [''];
+  const entries = isExplicitPath
+    ? ['']
+    : pathValue.split(windows ? ';' : delimiter).filter(Boolean);
+  for (const entry of entries) {
     for (const extension of extensions) {
       const candidate = paths.resolve(entry.replace(/^"(.*)"$/, '$1'), path + extension);
       try {
-        await access(candidate, windows ? constants.F_OK : constants.X_OK);
+        await access(
+          candidate,
+          windows || /\.[cm]?js$/i.test(candidate) ? constants.F_OK : constants.X_OK,
+        );
         if ((await stat(candidate)).isFile()) return candidate;
       } catch {
-        /* Try the next PATH entry. */
+        /* Try the next extension or PATH entry. */
       }
     }
   }
   throw new Error(
-    `Copilot CLI introuvable dans le PATH : ${path}. Renseigne featureStudio.cliPath avec le chemin complet de copilot, copilot.exe, copilot.cmd ou copilot.bat.`,
+    `Copilot CLI introuvable ${isExplicitPath ? 'au chemin configuré' : 'dans le PATH'} : ${path}. Renseigne featureStudio.cliPath avec le chemin complet de copilot, copilot.exe, copilot.cmd ou copilot.bat.`,
   );
 }
 
