@@ -1,5 +1,6 @@
 import { readFile, readdir, mkdir, lstat, writeFile } from 'node:fs/promises';
 import { join, resolve, relative, dirname, basename, isAbsolute } from 'node:path';
+import { homedir } from 'node:os';
 import { parse, stringify } from 'yaml';
 import { z } from 'zod';
 import type { AgentProfile, SkillInfo, Workflow } from '../shared/types';
@@ -33,6 +34,7 @@ export interface RegistryData {
   notices: string[];
 }
 export interface InstallationReport {
+  directory: string;
   installed: string[];
   unchanged: string[];
   conflicts: string[];
@@ -51,6 +53,12 @@ async function safePath(root: string, fragment: string): Promise<string> {
     rel = relative(absoluteRoot, target);
   if (rel.startsWith('..') || isAbsolute(rel)) throw new Error('Chemin hors du dépôt.');
   let current = absoluteRoot;
+  try {
+    if ((await lstat(current)).isSymbolicLink())
+      throw new Error(`Lien symbolique interdit : ${current}`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   for (const part of rel.split(/[\\/]/)) {
     current = join(current, part);
     try {
@@ -82,10 +90,52 @@ async function files(root: string, fragment: string): Promise<string[]> {
   return result;
 }
 
+/** Keep the upstream project kit intact; map its resources into the personal Copilot layout. */
+function userKitTarget(target: string): string {
+  if (target.startsWith('.github/agents/')) return target.slice('.github/'.length);
+  if (target.startsWith('.github/skills/')) return target.slice('.github/'.length);
+  if (target === '.github/copilot-instructions.md') return 'copilot-instructions.md';
+  if (target.startsWith('.ai/kit/'))
+    return join('feature-studio/kit', target.slice('.ai/kit/'.length));
+  if (target.startsWith('.ai/'))
+    return join('feature-studio/kit/examples', target.slice('.ai/'.length));
+  return join('feature-studio/kit', target);
+}
+
+function userKitMarkdown(content: string, target: string): string {
+  // A project's map cannot become a shared user map. Keep the reference relative to the active repo.
+  content = content.replace(
+    /\[carte du dépôt\]\((?:\.\.\/)+\.ai\/project\.md\)/g,
+    'carte du dépôt `.ai/project.md` dans le projet courant, si elle existe',
+  );
+  content = content.replace(
+    /\((?:\.\.\/)+templates\/([^)]+)\)/g,
+    (_match, file: string) =>
+      `(${relative(dirname(target), join('feature-studio/kit/templates', file)).replaceAll('\\', '/')})`,
+  );
+  if (target.replaceAll('\\', '/').startsWith('agents/'))
+    content = content.replace(
+      /(?<![\w/])templates\/review\.md/g,
+      '../feature-studio/kit/templates/review.md',
+    );
+  if (target === 'copilot-instructions.md')
+    content = content
+      .replace(
+        '# Consignes du dépôt - à fusionner avec les consignes existantes',
+        '# Consignes personnelles du kit Copilot',
+      )
+      .replace(
+        'Lire `.ai/project.md` puis',
+        'Lire `.ai/project.md` dans le projet courant si ce fichier existe, puis',
+      );
+  return content;
+}
+
 export class AgentRegistry {
   constructor(
     readonly workspacePath: string,
     readonly defaultsPath: string,
+    readonly userPath: string = resolve(process.env.COPILOT_HOME || join(homedir(), '.copilot')),
   ) {}
 
   async load(): Promise<RegistryData> {
@@ -103,6 +153,7 @@ export class AgentRegistry {
     };
     for (const [root, source, agentFolder, skillFolder, workflowFolder] of [
       [this.defaultsPath, 'bundled', 'agents', 'kit/.github/skills', 'workflows'],
+      [this.userPath, 'user', 'agents', 'skills', 'feature-studio/workflows'],
       [
         this.workspacePath,
         'workspace',
@@ -180,20 +231,28 @@ export class AgentRegistry {
       );
     const entries = manifest.files.map((file) => ({
       source: join('kit', file.source),
-      target: file.target,
+      target: userKitTarget(file.target),
     }));
     for (const file of await files(this.defaultsPath, 'agents'))
       if (file.endsWith('.agent.md'))
-        entries.push({ source: file, target: join('.github/agents', basename(file)) });
+        entries.push({ source: file, target: join('agents', basename(file)) });
     for (const file of await files(this.defaultsPath, 'workflows'))
       if (/\.ya?ml$/.test(file))
-        entries.push({ source: file, target: join('.feature-studio/workflows', basename(file)) });
-    const report: InstallationReport = { installed: [], unchanged: [], conflicts: [] };
+        entries.push({ source: file, target: join('feature-studio/workflows', basename(file)) });
+    const report: InstallationReport = {
+      directory: this.userPath,
+      installed: [],
+      unchanged: [],
+      conflicts: [],
+    };
     for (const entry of entries) {
       const source = await safePath(this.defaultsPath, entry.source);
-      const content = await readFile(source);
+      const original = await readFile(source);
+      const content = entry.target.endsWith('.md')
+        ? Buffer.from(userKitMarkdown(original.toString('utf8'), entry.target))
+        : original;
       try {
-        const target = await safePath(this.workspacePath, entry.target);
+        const target = await safePath(this.userPath, entry.target);
         await mkdir(dirname(target), { recursive: true });
         // Exclusive creation keeps every pre-existing user file intact, even if two install requests overlap.
         try {

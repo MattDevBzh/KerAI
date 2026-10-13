@@ -5,6 +5,17 @@ on:
 permissions:
   contents: read
 jobs:
+  windows-cli:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx vitest run tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts
   validate:
     runs-on: ubuntu-latest
     steps:

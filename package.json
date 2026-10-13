@@ -51,7 +51,7 @@
       },
       {
         "command": "featureStudio.installKit",
-        "title": "Feature Studio : installer le kit Copilot"
+        "title": "Feature Studio : installer le kit Copilot utilisateur"
       }
     ],
     "menus": {
@@ -76,6 +76,12 @@
           "default": "",
           "description": "Identifiant exact du modèle. Vide = modèle par défaut du CLI."
         },
+        "featureStudio.debugCli": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Afficher le diagnostic du processus Copilot (commande, arguments techniques, durée, code retour et stderr filtré) dans la sortie Feature Studio. Aucun prompt ni environnement complet n’est journalisé."
+        },
         "featureStudio.timeoutMinutes": {
           "type": "number",
           "default": 20,
@@ -97,8 +103,8 @@
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
     "package": "vsce package --no-dependencies --out releases/feature-studio-0.3.0.vsix",
     "vscode:prepublish": "npm run build",
-    "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.mjs\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.mjs\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
+    "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "smoke:mcp": "node scripts/run-mcp-smoke.mjs"
   },
   "dependencies": {

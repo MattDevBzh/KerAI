@@ -15,6 +15,14 @@ new CopilotClient({
 });
 ```
 
+Feature Studio résout maintenant `copilot` dans le `PATH` et utilise un petit lanceur Node distribué avec l’extension. Sous Windows, il lance les `.bat` et `.cmd` par `cmd.exe /d /s /v:off /c`, avec le chemin cité et les arguments techniques contrôlés ; les exécutables sont lancés directement. Dans l’hôte Electron de VS Code, le lanceur démarre avec `ELECTRON_RUN_AS_NODE=1`. Ses stdin/stdout sont transmis au CLI sans conversion ni écriture de prompt par le lanceur. Le prompt passe toujours par `session.send()`, selon le contrat officiel du SDK. Remplacer ce transport par `copilot -p` supprimerait les handlers d’outils, les permissions et les événements utilisés par le cockpit.
+
+Le défaut constaté dans le SDK 1.0.20 est l’appel direct à `spawn(path, args)` pour un shim `.bat`/`.cmd`, qui n’est pas un exécutable Windows autonome. Le SDK vérifie aussi `existsSync(path)` sans résoudre une commande courte dans le `PATH`. Une erreur « Cannot call write after a stream was destroyed » indique un transport fermé ; elle ne démontre pas à elle seule pourquoi le CLI a quitté. Le succès d’un appel manuel `-p` ne valide ni le démarrage `--headless --stdio` ni l’authentification dans le `COPILOT_HOME` isolé.
+
+Active `featureStudio.debugCli` pour journaliser la commande, les arguments techniques, la durée, le code de sortie et le stderr filtré dans **Sortie → Feature Studio**. Les prompts et l’environnement complet ne sont pas journalisés. Les valeurs des secrets MCP résolus et des variables d’environnement sensibles sont masquées avant écriture des diagnostics. Les fichiers de diagnostic temporaires sont supprimés à la fermeture ; les sessions natives restent persistées par le SDK. Les erreurs de lancement conservent le code retour et le stderr disponibles, sans retry ni réponse de remplacement.
+
+Les tests du lanceur utilisent de vrais sous-processus locaux sans connexion à Copilot. Un job CI Windows couvre les fichiers `.bat`/`.cmd` et les chemins avec espaces. La validation d’un agent réel dans VS Code Windows nécessite toujours le CLI installé et le compte de l’utilisateur ; elle ne doit pas être déduite de ces fixtures.
+
 Les anciennes options `cliPath` et `cwd` visibles dans certains exemples GitHub ne sont plus les options de ce SDK. Le SDK publié exige le protocole v3. Le CLI fourni avec son package est 1.0.96 ; Feature Studio choisit explicitement le binaire configuré et vérifie ses capacités au lieu de supposer que la version installée est identique.
 
 Le diagnostic appelle uniquement `start`, `getStatus`, `getAuthStatus` et `listModels`. Il ne crée pas de session et n'envoie aucun prompt. La liste des modèles provient du compte réel. Un identifiant ou niveau de raisonnement absent de cette liste est refusé avant création de session. Le raisonnement est configuré seulement parmi `supportedReasoningEfforts` annoncés pour le modèle choisi.

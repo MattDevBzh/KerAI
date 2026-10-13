@@ -415,7 +415,7 @@ export default function App() {
             </button>
           </div>
           <button className="sidebar-link" onClick={() => dispatch({ type: 'installKit' })}>
-            <WandSparkles size={14} /> Installer le kit du projet <ArrowUpRight size={13} />
+            <WandSparkles size={14} /> Installer le kit utilisateur <ArrowUpRight size={13} />
           </button>
           <div className="sidebar-footnote">
             Votre intention. Vos agents.
@@ -559,7 +559,11 @@ export default function App() {
                   <button className="library-card" key={a.id} onClick={() => setAgentEditor(a)}>
                     <Avatar agent={a} />
                     <span className="library-meta">
-                      {a.source === 'workspace' ? 'PROJET' : 'KIT FOURNI'}
+                      {a.source === 'workspace'
+                        ? 'PROJET'
+                        : a.source === 'user'
+                          ? 'UTILISATEUR'
+                          : 'KIT FOURNI'}
                       <ArrowUpRight size={16} />
                     </span>
                     <h3>{a.nickname || a.name}</h3>
@@ -610,7 +614,11 @@ export default function App() {
                       <BookOpen size={24} />
                     </span>
                     <span className="library-meta">
-                      {s.source === 'workspace' ? 'PROJET' : 'KIT FOURNI'}
+                      {s.source === 'workspace'
+                        ? 'PROJET'
+                        : s.source === 'user'
+                          ? 'UTILISATEUR'
+                          : 'KIT FOURNI'}
                       <ArrowUpRight size={16} />
                     </span>
                     <h3>{s.name}</h3>
@@ -2336,7 +2344,7 @@ function AgentEditor({
         </fieldset>
         <div className="modal-actions">
           <span className="muted">
-            {source?.source === 'bundled'
+            {source?.source === 'bundled' || source?.source === 'user'
               ? 'Une version propre au projet sera enregistrée.'
               : 'Profil enregistré dans .github/agents.'}
           </span>
@@ -2424,7 +2432,7 @@ function SkillEditor({
         )}
         <div className="modal-actions">
           <span className="muted">
-            {source?.source === 'bundled'
+            {source?.source === 'bundled' || source?.source === 'user'
               ? 'Une version propre au projet sera enregistrée.'
               : '.github/skills/' + (id || 'identifiant') + '/SKILL.md'}
           </span>

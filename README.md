@@ -144,7 +144,20 @@ Les capacités reconnues sont `read`, `search`, `edit`/`write` et `execute`, ain
 
 Le **kit Copilot 2.0.0 fourni par Matt** est embarqué avec ses quatre agents, sept skills, six templates et ses scripts. Cinq profils Feature Studio adaptent ce kit aux étapes du cockpit. Les skills sont disponibles immédiatement dans le catalogue.
 
-Clique **Installer le kit du projet** pour matérialiser les agents, skills, templates et scripts dans le dépôt. Les fichiers identiques sont conservés, les fichiers personnalisés ne sont jamais écrasés. Un bilan indique les conflits ; leur détail apparaît dans la sortie **Feature Studio**. Aucun script d’installation, MCP, outil externe ou tâche n’est lancé par cette copie.
+Clique **Installer le kit utilisateur** pour rendre le kit disponible dans tous tes projets. La destination est `~/.copilot` (`%USERPROFILE%\.copilot` sous Windows), ou le répertoire `COPILOT_HOME` s’il est configuré dans l’environnement de VS Code.
+
+| Ressource | Destination relative à ce dossier utilisateur |
+| --- | --- |
+| Agents | `agents/*.agent.md` |
+| Skills | `skills/*/SKILL.md` |
+| Consignes générales | `copilot-instructions.md` |
+| Workflows Feature Studio | `feature-studio/workflows/*.yaml` |
+| Templates, scripts et documentation du kit | `feature-studio/kit/` |
+| Exemples propres aux projets | `feature-studio/kit/examples/` |
+
+L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies présentes dans les projets ne sont pas supprimées. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. Une modification depuis l’éditeur du cockpit continue à créer une surcharge propre au projet.
+
+Les liens des agents et skills installés pointent vers les templates utilisateur. La carte `.ai/project.md`, lorsqu’elle existe, reste celle du projet courant. Les exemples de configuration et le runner .NET restent optionnels : depuis le projet concerné, le runner utilisateur peut être appelé explicitement avec `python "$HOME/.copilot/feature-studio/kit/scripts/ai_tools.py" --help` (adapter le chemin si `COPILOT_HOME` est défini). La documentation originale du kit décrit aussi son ancien mode d’installation dans un dépôt. Aucun script, MCP ou outil externe n’est exécuté pendant la copie.
 
 Dans **Skills**, tu peux consulter une méthode, éditer son Markdown ou en créer une. Associe-la ensuite au profil d’agent ou à une étape. Feature Studio injecte explicitement les skills sélectionnées dans le contexte. Les instructions générales du dépôt ne sont pas découvertes automatiquement par le runtime isolé : ajoute les règles pertinentes à un agent/skill ; l’agent peut lire `.ai/project.md` et les fichiers qu’on lui indique.
 

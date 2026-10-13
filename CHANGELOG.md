@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Corrige la résolution du CLI dans le PATH et le lancement des shims Windows `.bat`/`.cmd`, tout en conservant le SDK JSON-RPC, les outils hôtes et la reprise des sessions.
+- Ajoute `featureStudio.debugCli`, les diagnostics de sortie filtrés, le nettoyage des processus et les tests de transport réels sans appels Copilot.
+- Installe le kit au niveau utilisateur dans `~/.copilot`, avec lecture des profils personnels et priorité aux surcharges du projet. Préserve les fichiers existants et ne modifie aucun fichier du projet pendant l’installation.
+
 ## 0.3.0 — 2026-10-13
 
 - Espace Git par feature : branche et worktree frère créés localement depuis HEAD commité, sans copier les modifications source ni installer les dépendances.

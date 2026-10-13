@@ -84,6 +84,11 @@ export async function activate(context: vscode.ExtensionContext) {
           cliPath: () =>
             vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot'),
           storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
+          launcherPath: path.join(context.extensionPath, 'dist', 'copilot-launcher.js'),
+          debugLog: (message) => {
+            if (vscode.workspace.getConfiguration('featureStudio').get('debugCli', false))
+              output.appendLine(message);
+          },
           getTools: (input, callbacks, signal) => next.getTools(input, callbacks, signal),
           resolveMcpSecret: (serverId, key) =>
             context.secrets.get(`studio-mcp:${sha256(root)}:${serverId}:${key}`),
@@ -373,7 +378,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const result = await current.registry.installKit();
         await current.refresh();
         notice(
-          `Kit prêt : ${result.installed.length} fichiers ajoutés, ${result.unchanged.length} identiques, ${result.conflicts.length} fichiers existants préservés.`,
+          `Kit utilisateur prêt dans ${result.directory} : ${result.installed.length} fichiers ajoutés, ${result.unchanged.length} identiques, ${result.conflicts.length} fichiers existants préservés.`,
         );
         if (result.conflicts.length) {
           output.appendLine(`Fichiers préservés :\n${result.conflicts.join('\n')}`);

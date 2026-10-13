@@ -55,6 +55,7 @@ await runTests({
     process.env.FEATURE_STUDIO_EXTENSION_PATH || process.cwd(),
   ),
   extensionTestsPath: path.resolve('.vscode-test/extension-smoke.cjs'),
+  extensionTestsEnv: { COPILOT_HOME: path.join(testRoot, 'copilot-user') },
   launchArgs: [
     workspace,
     '--new-window',
