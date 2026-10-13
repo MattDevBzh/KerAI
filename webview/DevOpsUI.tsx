@@ -5,6 +5,7 @@ import type {
   DevOpsState,
   DevOpsLink,
   DevOpsPullRequest,
+  DevOpsTicket,
 } from '../src/shared/devops';
 import './devops.css';
 import { devOpsPlainText } from '../src/shared/devopsText';
@@ -14,8 +15,9 @@ export interface DevOpsUIProps {
   dispatch: (message: DevOpsClientMessage) => void;
   onOpenFeature: (id: string) => void;
   mode: 'dashboard' | 'delivery';
+  visible?: boolean;
 }
-function PullRequestCard({
+export function PullRequestCard({
   pr,
   links,
   tickets,
@@ -23,7 +25,9 @@ function PullRequestCard({
   busy,
   dispatch,
   onOpenFeature,
+  expanded = false,
 }: {
+  expanded?: boolean;
   pr: DevOpsPullRequest;
   links: DevOpsLink[];
   tickets: DevOpsState['tickets'];
@@ -48,9 +52,63 @@ function PullRequestCard({
         </a>
       </h3>
       <p>
-        <span className="devops-tag">{pr.isDraft ? 'Brouillon' : pr.status}</span>{' '}
+        <span className="devops-tag">
+          {pr.isDraft ? 'Brouillon' : expanded ? devOpsPrStatus(pr.status) : pr.status}
+        </span>{' '}
         {pr.sourceBranch.replace('refs/heads/', '')} → {pr.targetBranch.replace('refs/heads/', '')}
       </p>
+      {expanded && (
+        <>
+          <dl className="devops-metadata">
+            <div>
+              <dt>Auteur</dt>
+              <dd>{pr.createdBy || 'Non renseigné'}</dd>
+            </div>
+            <div>
+              <dt>Créée</dt>
+              <dd>{devOpsDate(pr.creationDate)}</dd>
+            </div>
+            {pr.closedDate && (
+              <div>
+                <dt>Clôturée</dt>
+                <dd>{devOpsDate(pr.closedDate)}</dd>
+              </div>
+            )}
+            <div>
+              <dt>Calcul de fusion Azure</dt>
+              <dd>{pr.mergeStatus ? devOpsMergeStatus(pr.mergeStatus) : 'Non renseigné'}</dd>
+            </div>
+          </dl>
+          <details>
+            <summary>Aperçu de la description</summary>
+            <pre className="devops-text">
+              {devOpsPlainText(pr.description ?? '') || 'Aucune description.'}
+            </pre>
+          </details>
+          <details>
+            <summary>Relecteurs ({pr.reviewers?.length ?? 'non renseignés'})</summary>
+            {pr.reviewers?.length ? (
+              <ul className="devops-reviewers">
+                {pr.reviewers.map((reviewer) => (
+                  <li key={reviewer.id}>
+                    <strong>{reviewer.displayName}</strong>
+                    <span>
+                      {reviewer.isRequired ? 'Obligatoire · ' : ''}
+                      {reviewVote(reviewer.vote)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Aucun relecteur renseigné.</p>
+            )}
+            <p className="devops-muted">
+              Les votes sont indicatifs. Les politiques de validation sont à vérifier dans Azure
+              DevOps.
+            </p>
+          </details>
+        </>
+      )}
       {links.map((link) => (
         <div className="devops-actions" key={link.featureId + String(link.ticketId)}>
           <button onClick={() => onOpenFeature(link.featureId)}>
@@ -147,7 +205,210 @@ function PullRequestCard({
     </article>
   );
 }
-export function DevOpsUI({ state, features, dispatch, onOpenFeature, mode }: DevOpsUIProps) {
+
+export function devOpsPrStatus(status: string) {
+  return (
+    (
+      { active: 'En cours', completed: 'Terminée', abandoned: 'Abandonnée' } as Record<
+        string,
+        string
+      >
+    )[status] ?? status
+  );
+}
+function devOpsMergeStatus(status: string) {
+  return (
+    (
+      {
+        conflicts: 'Conflits détectés',
+        succeeded: 'Aucun conflit détecté',
+        queued: 'Calcul en attente',
+        notSet: 'Non calculé',
+        failure: 'Échec du calcul',
+        rejected: 'Calcul rejeté',
+      } as Record<string, string>
+    )[status] ?? status
+  );
+}
+export function devOpsDate(value?: string) {
+  if (!value || !Number.isFinite(Date.parse(value))) return 'Non renseignée';
+  return new Date(value).toLocaleString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+function reviewVote(vote: number) {
+  return (
+    (
+      {
+        10: 'Approuvé',
+        5: 'Approuvé avec réserves',
+        0: 'Sans vote',
+        [-5]: 'En attente de l’auteur',
+        [-10]: 'Refusé',
+      } as Record<number, string>
+    )[vote] ?? `Vote inconnu (${vote})`
+  );
+}
+export function TicketCard({
+  ticket,
+  links,
+  features,
+  busy,
+  dispatch,
+  onOpenFeature,
+  expanded = false,
+}: {
+  ticket: DevOpsTicket;
+  links: DevOpsLink[];
+  features: DevOpsUIProps['features'];
+  busy: boolean;
+  dispatch: DevOpsUIProps['dispatch'];
+  onOpenFeature: DevOpsUIProps['onOpenFeature'];
+  expanded?: boolean;
+}) {
+  return (
+    <article className="devops-card" aria-label={`Ticket ${ticket.id}`}>
+      <h3>
+        <a href={ticket.url} target="_blank" rel="noreferrer">
+          #{ticket.id} · {ticket.title}
+        </a>
+      </h3>
+      <span className="devops-tag">{ticket.state}</span>
+      {expanded && (
+        <>
+          <dl className="devops-metadata">
+            <div>
+              <dt>Type</dt>
+              <dd>{ticket.workItemType || 'Non renseigné'}</dd>
+            </div>
+            <div>
+              <dt>Assigné à</dt>
+              <dd>{ticket.assignedTo || 'Non renseigné'}</dd>
+            </div>
+            <div>
+              <dt>Modifié</dt>
+              <dd>{devOpsDate(ticket.changedDate)}</dd>
+            </div>
+            {ticket.createdDate && (
+              <div>
+                <dt>Créé</dt>
+                <dd>{devOpsDate(ticket.createdDate)}</dd>
+              </div>
+            )}
+            {ticket.iterationPath && (
+              <div>
+                <dt>Itération</dt>
+                <dd>{ticket.iterationPath}</dd>
+              </div>
+            )}
+            {ticket.areaPath && (
+              <div>
+                <dt>Zone</dt>
+                <dd>{ticket.areaPath}</dd>
+              </div>
+            )}
+          </dl>
+          {ticket.tags?.length ? (
+            <div className="devops-tags" aria-label="Tags">
+              {ticket.tags.map((tag, i) => (
+                <span className="devops-tag" key={i}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="devops-muted">Aucun tag renseigné.</p>
+          )}
+        </>
+      )}
+      <details>
+        <summary>Description et critères d’acceptation</summary>
+        <h4>Description</h4>
+        <pre className="devops-text">
+          {devOpsPlainText(ticket.description) || 'Aucune description.'}
+        </pre>
+        <h4>Critères d’acceptation</h4>
+        <pre className="devops-text">
+          {devOpsPlainText(ticket.acceptanceCriteria) || 'Non renseignés.'}
+        </pre>
+      </details>
+      <details>
+        <summary
+          onClick={() => {
+            if (!ticket.commentsLoaded && !busy)
+              dispatch({ type: 'devopsLoadTicket', ticketId: ticket.id });
+          }}
+        >
+          Commentaires ({ticket.commentsLoaded ? ticket.comments.length : 'charger'})
+        </summary>
+        {!ticket.commentsLoaded && (
+          <button
+            disabled={busy}
+            onClick={() => dispatch({ type: 'devopsLoadTicket', ticketId: ticket.id })}
+          >
+            Charger les commentaires
+          </button>
+        )}
+        {ticket.comments.map((c) => (
+          <blockquote key={c.id}>
+            <strong>{c.author}</strong>
+            <pre className="devops-text">{devOpsPlainText(c.text)}</pre>
+          </blockquote>
+        ))}
+        {ticket.commentsLoaded && !ticket.comments.length && <p>Aucun commentaire.</p>}
+        {ticket.commentsTruncated && (
+          <p>200 commentaires affichés. Consulte le ticket pour la suite.</p>
+        )}
+      </details>
+      <div className="devops-actions">
+        {links.map((l) => (
+          <button key={l.featureId} onClick={() => onOpenFeature(l.featureId)}>
+            Ouvrir la feature {features.find((f) => f.id === l.featureId)?.title ?? l.featureId}
+          </button>
+        ))}
+        <button
+          disabled={busy}
+          onClick={() => dispatch({ type: 'devopsCreateFeature', ticketId: ticket.id })}
+        >
+          Créer une feature
+        </button>
+        <select
+          aria-label={`Lier le ticket ${ticket.id} à une feature`}
+          value=""
+          disabled={busy || !features.length}
+          onChange={(e) => {
+            if (e.target.value)
+              dispatch({
+                type: 'devopsLinkFeature',
+                ticketId: ticket.id,
+                featureId: e.target.value,
+              });
+          }}
+        >
+          <option value="">Lier à une feature…</option>
+          {features.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.title}
+            </option>
+          ))}
+        </select>
+      </div>
+    </article>
+  );
+}
+
+export function DevOpsUI({
+  state,
+  features,
+  dispatch,
+  onOpenFeature,
+  mode,
+  visible = true,
+}: DevOpsUIProps) {
   const [config, setConfig] = useState<DevOpsConfig>({
       organization: '',
       project: '',
@@ -182,6 +443,7 @@ export function DevOpsUI({ state, features, dispatch, onOpenFeature, mode }: Dev
   useEffect(() => {
     if (state?.preview?.kind === 'commit') setTitle(state.preview.title);
   }, [state?.preview]);
+  if (!visible) return null;
   if (!state)
     return (
       <div className="devops-panel">
@@ -351,89 +613,17 @@ export function DevOpsUI({ state, features, dispatch, onOpenFeature, mode }: Dev
             <section>
               <h2>Mes tickets assignés ({state.tickets.length})</h2>
               {state.tickets.map((ticket) => (
-                <article className="devops-card" key={ticket.id}>
-                  <h3>
-                    <a href={ticket.url} target="_blank" rel="noreferrer">
-                      #{ticket.id} · {ticket.title}
-                    </a>
-                  </h3>
-                  <span className="devops-tag">{ticket.state}</span>
-                  <details>
-                    <summary>Description et critères d’acceptation</summary>
-                    <h4>Description</h4>
-                    <pre className="devops-text">
-                      {devOpsPlainText(ticket.description) || 'Aucune description.'}
-                    </pre>
-                    <h4>Critères d’acceptation</h4>
-                    <pre className="devops-text">
-                      {devOpsPlainText(ticket.acceptanceCriteria) || 'Non renseignés.'}
-                    </pre>
-                  </details>
-                  <details>
-                    <summary
-                      onClick={() => {
-                        if (!ticket.commentsLoaded && !busy)
-                          send({ type: 'devopsLoadTicket', ticketId: ticket.id });
-                      }}
-                    >
-                      Commentaires ({ticket.commentsLoaded ? ticket.comments.length : 'charger'})
-                    </summary>
-                    {!ticket.commentsLoaded && (
-                      <button
-                        disabled={busy}
-                        onClick={() => send({ type: 'devopsLoadTicket', ticketId: ticket.id })}
-                      >
-                        Charger les commentaires
-                      </button>
-                    )}
-                    {ticket.comments.map((c) => (
-                      <blockquote key={c.id}>
-                        <strong>{c.author}</strong>
-                        <pre className="devops-text">{devOpsPlainText(c.text)}</pre>
-                      </blockquote>
-                    ))}
-                    {ticket.commentsLoaded && !ticket.comments.length && <p>Aucun commentaire.</p>}
-                    {ticket.commentsTruncated && (
-                      <p>200 commentaires affichés. Consulte le ticket pour la suite.</p>
-                    )}
-                  </details>
-                  <div className="devops-actions">
-                    {state.links
-                      .filter((l) => l.ticketId === ticket.id && l.projectKey === scopeKey)
-                      .map((l) => (
-                        <button key={l.featureId} onClick={() => onOpenFeature(l.featureId)}>
-                          Ouvrir la feature{' '}
-                          {features.find((f) => f.id === l.featureId)?.title ?? l.featureId}
-                        </button>
-                      ))}
-                    <button
-                      disabled={busy}
-                      onClick={() => send({ type: 'devopsCreateFeature', ticketId: ticket.id })}
-                    >
-                      Créer une feature
-                    </button>
-                    <select
-                      aria-label={`Lier le ticket ${ticket.id} à une feature`}
-                      value=""
-                      disabled={busy || !features.length}
-                      onChange={(e) => {
-                        if (e.target.value)
-                          send({
-                            type: 'devopsLinkFeature',
-                            ticketId: ticket.id,
-                            featureId: e.target.value,
-                          });
-                      }}
-                    >
-                      <option value="">Lier à une feature…</option>
-                      {features.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </article>
+                <TicketCard
+                  key={scopeKey + ':' + ticket.id}
+                  ticket={ticket}
+                  links={state.links.filter(
+                    (l) => l.ticketId === ticket.id && l.projectKey === scopeKey,
+                  )}
+                  features={features}
+                  busy={busy}
+                  dispatch={send}
+                  onOpenFeature={onOpenFeature}
+                />
               ))}
             </section>
             <section>

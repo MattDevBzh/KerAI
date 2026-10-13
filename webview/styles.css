@@ -3321,3 +3321,33 @@ body.vscode-high-contrast-light .badge {
 .journey-step {
   min-width: 140px;
 }
+
+.nav-item.nav-child {
+  padding-left: 26px;
+  font-size: 10px;
+  margin-bottom: 3px;
+  border-left: 1px solid var(--border);
+  margin-left: 17px;
+  width: calc(100% - 17px);
+}
+.nav-item.nav-child svg {
+  width: 15px;
+  height: 15px;
+}
+.nav-item.nav-child.active:before {
+  left: -1px;
+  top: 8px;
+  bottom: 8px;
+}
+@media (max-width: 890px) {
+  .nav-item.nav-child {
+    padding: 10px 0;
+    margin-left: 5px;
+    width: calc(100% - 5px);
+    border-left: 1px solid var(--border);
+  }
+  .nav-item.nav-child svg {
+    width: 15px;
+    height: 15px;
+  }
+}

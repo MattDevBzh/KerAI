@@ -6,13 +6,13 @@
 
 Une feature devient un parcours : spécifications, plan, développement, tests, relecture. Chaque étape possède son agent, ses skills, ses MCP, son contexte et ses tentatives. Tu vois ce qui avance, tu fournis une US, tu réponds en direct et tu choisis les validations humaines du parcours.
 
-[Télécharger le VSIX](releases/feature-studio-0.4.0.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Livraison et Azure DevOps](docs/devops-delivery.md) · [Recette Playwright](defaults/quality/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
+[Télécharger le VSIX](releases/feature-studio-0.4.1.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Livraison et Azure DevOps](docs/devops-delivery.md) · [Recette Playwright](defaults/quality/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
 
 ![Le cockpit Feature Studio — données de démonstration](docs/images/dashboard.png)
 
 ## Installation
 
-1. Télécharge **[feature-studio-0.4.0.vsix](releases/feature-studio-0.4.0.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
+1. Télécharge **[feature-studio-0.4.1.vsix](releases/feature-studio-0.4.1.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Lance **Feature Studio : ouvrir le cockpit** dans la palette de commandes. Le bouton **Feature Studio** de la barre d’état ouvre aussi le cockpit.
@@ -36,7 +36,7 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 
 ### Les menus du cockpit
 
-**Dashboard** regroupe les sessions. **Azure DevOps** affiche tes tickets et PR ; **Livraison** prépare les opérations Git du dépôt ouvert. Ces deux menus fonctionnent sans session active. **Consommation** regroupe les mesures SDK par session, parcours et modèle, avec filtres et couverture inconnue/partielle, sans estimation. [Consommation et validations](docs/consumption.md). **Validation** rassemble questions, livrables et preuves ; **Parcours**, **Agents**, **Skills**, **Mémoire**, **Automatisations** et **Réglages** permettent de configurer le travail.
+**Dashboard** regroupe les sessions. **Azure DevOps** conserve l’aperçu et la configuration ; ses sous-menus **PR** et **Tickets**, toujours visibles, ouvrent deux tableaux dédiés ; **Livraison** prépare les opérations Git du dépôt ouvert. Ces deux menus fonctionnent sans session active. **Consommation** regroupe les mesures SDK par session, parcours et modèle, avec filtres et couverture inconnue/partielle, sans estimation. [Consommation et validations](docs/consumption.md). **Validation** rassemble questions, livrables et preuves ; **Parcours**, **Agents**, **Skills**, **Mémoire**, **Automatisations** et **Réglages** permettent de configurer le travail.
 
 ### Développer une feature
 
@@ -67,7 +67,9 @@ Les preuves affichent cas, attendu/observé, reproduction, captures et traces co
 
 ## Azure DevOps et livraison confirmée
 
-Ouvre **Azure DevOps** pour renseigner organisation, projet, dépôt et remote. Le PAT se saisit dans une fenêtre VS Code masquée et reste dans **SecretStorage**. Le push utilise tes identifiants Git locaux. Le tableau charge les tickets et PR du compte et permet de créer/retrouver une feature liée à un ticket. La configuration et les liens persistent localement.
+Ouvre **Azure DevOps** pour renseigner organisation, projet, dépôt et remote. Le PAT se saisit dans une fenêtre VS Code masquée et reste dans **SecretStorage**. Le push utilise tes identifiants Git locaux. L’aperçu charge les tickets assignés et les PR créées du compte et permet de créer/retrouver une feature liée à un ticket. La configuration et les liens persistent localement.
+
+Les sous-menus **PR** et **Tickets** restent visibles, même sans connexion ou session active. Chaque tableau propose des compteurs sur les éléments reçus, une recherche, des filtres par état et lien avec une feature, et un tri par date, numéro ou titre. Les cartes affichent les branches, l’auteur et les relecteurs pour les PR ; le type, les dates, les tags, la description, les critères et les commentaires chargeables pour les tickets, selon les données disponibles. Tu peux ouvrir Azure DevOps et retrouver les features liées depuis les cartes. Les votes des relecteurs sont indicatifs : les politiques de validation se vérifient dans Azure DevOps. Les listes partielles sont signalées ; les filtres et compteurs portent uniquement sur les éléments reçus.
 
 Dans **Livraison**, inspecte le dépôt ouvert, sélectionne les fichiers complets concernés, saisis l’intention et relis le titre proposé. **Commit**, **Push** et **PR brouillon** exigent chacun un aperçu actualisé et une confirmation VS Code. Le staging des fichiers non sélectionnés est conservé. Le push est sans force ; la PR n’active aucune fusion ni auto-complétion.
 
@@ -166,14 +168,14 @@ Le **kit Copilot 2.0.0 fourni par Matt** est embarqué avec ses quatre agents, s
 
 Clique **Installer le kit utilisateur** pour rendre le kit disponible dans tous tes projets. La destination est `~/.copilot` (`%USERPROFILE%\.copilot` sous Windows), ou le répertoire `COPILOT_HOME` s’il est configuré dans l’environnement de VS Code.
 
-| Ressource | Destination relative à ce dossier utilisateur |
-| --- | --- |
-| Agents | `agents/*.agent.md` |
-| Skills | `skills/*/SKILL.md` |
-| Consignes générales | `copilot-instructions.md` |
-| Workflows Feature Studio | `feature-studio/workflows/*.yaml` |
-| Templates, scripts et documentation du kit | `feature-studio/kit/` |
-| Exemples propres aux projets | `feature-studio/kit/examples/` |
+| Ressource                                  | Destination relative à ce dossier utilisateur |
+| ------------------------------------------ | --------------------------------------------- |
+| Agents                                     | `agents/*.agent.md`                           |
+| Skills                                     | `skills/*/SKILL.md`                           |
+| Consignes générales                        | `copilot-instructions.md`                     |
+| Workflows Feature Studio                   | `feature-studio/workflows/*.yaml`             |
+| Templates, scripts et documentation du kit | `feature-studio/kit/`                         |
+| Exemples propres aux projets               | `feature-studio/kit/examples/`                |
 
 L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies du projet sont conservées tant que tu ne demandes pas leur migration. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. L’éditeur montre les versions existantes et leur priorité. Changer de portée charge la version correspondante et conserve un brouillon par portée ; si cette portée est absente, il annonce la copie des instructions affichées. Modifier la version personnelle pendant qu’une version projet existe affiche qu’elle restera masquée dans ce projet. La migration reste une action distincte et facultative.
 
@@ -224,7 +226,7 @@ npx playwright install chromium
 npm run test:ui        # Parcours webview, sans requêtes IA
 npm run test:extension # Vrai hôte VS Code isolé, sans prompt IA
 npm run smoke:mcp     # Diagnostic MCP local explicite, sans prompt IA
-npm run package       # Produit releases/feature-studio-0.4.0.vsix
+npm run package       # Produit releases/feature-studio-0.4.1.vsix
 ```
 
 Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développement. `npm run dev` ouvre le frontend de développement ; `http://127.0.0.1:5173/?demo=1` affiche des données d’exemple avec un bandeau explicite. Sans ce paramètre et hors VS Code, aucune exécution n’est simulée.
@@ -232,7 +234,6 @@ Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développe
 Le test réel facultatif est séparé dans `scripts/smoke-copilot.ts` et exige `FEATURE_STUDIO_LIVE_TEST=1`. Il consomme du quota Copilot. Il ne fait partie ni de `npm test` ni de la CI. Les sources des avatars et leurs prompts sont dans [design/avatars](design/avatars/PROMPTS.md) ; `node scripts/pack-avatars.mjs` reconstruit leurs PNG/GIF.
 
 Voir [la validation livrée et les limites connues](docs/VALIDATION.md) pour distinguer tests automatiques, test du CLI réel, versions testées et plateformes non vérifiées.
-
 
 ### Déplacer les anciennes personnalisations vers ton compte
 

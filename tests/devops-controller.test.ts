@@ -123,10 +123,131 @@ async function externalPullRequests(
       : http(url, init);
   await controller.handle({ type: 'devopsRefresh' });
 }
+async function connectedDashboard() {
+  const result = await fixture();
+  const { controller, options } = result;
+  const http = options.http!;
+  options.http = async (url, init) => {
+    if (String(url).includes('wiql'))
+      return response({ workItems: Array.from({ length: 201 }, (_, i) => ({ id: i + 1 })) });
+    if (String(url).includes('/pullrequests?'))
+      return response({ value: [{ pullRequestId: 7, title: 'Matt PR', status: 'active' }] });
+    return http(url, init);
+  };
+  await controller.handle({ type: 'devopsAuthenticate' });
+  await controller.handle({
+    type: 'devopsLinkPullRequest',
+    pullRequestId: 7,
+    featureId: 'feature-1',
+    ticketId: 42,
+  });
+  await controller.handle({ type: 'deliveryChat', text: 'Conserver cette conversation' });
+  const before = controller.getState();
+  expect(before.tickets).toHaveLength(1);
+  expect(before.pullRequests).toHaveLength(1);
+  expect(before.account).toBe('Matt');
+  expect(before.refreshedAt).toBeDefined();
+  expect(before.truncated).toBe(true);
+  expect(before.error).toBeUndefined();
+  return { ...result, before };
+}
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 describe('controller safety and persistence', () => {
+  it.each(['configure', 'disconnect'] as const)(
+    'clears the complete dashboard on %s while retaining persistent links and conversation',
+    async (action) => {
+      const { controller, options, before } = await connectedDashboard();
+      const http = vi.fn(options.http!);
+      options.http = http;
+      if (action === 'configure')
+        await controller.handle({
+          type: 'devopsConfigure',
+          config: { ...config, organization: 'another-org' },
+        });
+      else await controller.handle({ type: 'devopsDisconnect' });
+      const after = controller.getState();
+      expect(after.tickets).toEqual([]);
+      expect(after.pullRequests).toEqual([]);
+      expect(after.account).toBeUndefined();
+      expect(after.refreshedAt).toBeUndefined();
+      expect(after.truncated).toBeUndefined();
+      expect(after.authenticated).toBe(false);
+      expect(after.links).toEqual(before.links);
+      expect(after.history.slice(0, before.history.length)).toEqual(before.history);
+      expect(after.snapshot).toEqual(before.snapshot);
+      expect(after.error).toBeUndefined();
+      expect(http).not.toHaveBeenCalled();
+    },
+  );
+  it('publishes a cleared dashboard after changing the credential and before a failing refresh', async () => {
+    const { controller, options, before } = await connectedDashboard();
+    options.requestToken = vi.fn(async () => 'new-account-token');
+    const pending = deferred<Response>();
+    const started = deferred<void>();
+    options.http = vi.fn(async () => {
+      started.resolve();
+      return pending.promise;
+    });
+    const handling = controller.handle({ type: 'devopsAuthenticate' });
+    await started.promise;
+    const during = controller.getState();
+    expect(during.busy).toBe(true);
+    expect(during.tickets).toEqual([]);
+    expect(during.pullRequests).toEqual([]);
+    expect(during.account).toBeUndefined();
+    expect(during.refreshedAt).toBeUndefined();
+    expect(during.truncated).toBeUndefined();
+    expect(vi.mocked(options.publish).mock.calls.at(-1)?.[0]).toEqual(during);
+    pending.resolve(new Response('{}', { status: 403 }));
+    await handling;
+    const after = controller.getState();
+    expect(after.busy).toBe(false);
+    expect(after.authenticated).toBe(true);
+    expect(after.tickets).toEqual([]);
+    expect(after.pullRequests).toEqual([]);
+    expect(after.account).toBeUndefined();
+    expect(after.refreshedAt).toBeUndefined();
+    expect(after.truncated).toBeUndefined();
+    expect(after.error).toContain('refuse');
+    expect(after.links).toEqual(before.links);
+    expect(after.history).toEqual(before.history);
+  });
+  it('retains the same-account dashboard and its timestamp when a manual refresh fails', async () => {
+    const { controller, options, before } = await connectedDashboard();
+    options.http = vi.fn(async () => new Response('{}', { status: 503 }));
+    await controller.handle({ type: 'devopsRefresh' });
+    const after = controller.getState();
+    expect(after.error).toContain('503');
+    expect(after.authenticated).toBe(before.authenticated);
+    expect(after.tickets).toEqual(before.tickets);
+    expect(after.pullRequests).toEqual(before.pullRequests);
+    expect(after.account).toBe(before.account);
+    expect(after.refreshedAt).toBe(before.refreshedAt);
+    expect(after.truncated).toBe(before.truncated);
+    expect(after.links).toEqual(before.links);
+    expect(after.history).toEqual(before.history);
+  });
+  it.each([undefined, 'invalid\ncredential'])(
+    'retains the snapshot if credential input is cancelled or rejected before replacement',
+    async (token) => {
+      const { controller, options, before } = await connectedDashboard();
+      options.requestToken = vi.fn(async () => token);
+      const http = vi.fn(options.http!);
+      options.http = http;
+      await controller.handle({ type: 'devopsAuthenticate' });
+      const after = controller.getState();
+      expect(after.tickets).toEqual(before.tickets);
+      expect(after.pullRequests).toEqual(before.pullRequests);
+      expect(after.account).toBe(before.account);
+      expect(after.refreshedAt).toBe(before.refreshedAt);
+      expect(after.truncated).toBe(before.truncated);
+      expect(after.links).toEqual(before.links);
+      expect(after.history).toEqual(before.history);
+      expect(http).not.toHaveBeenCalled();
+    },
+  );
   it('dispose drains deferred HTTP and prevents writes after a panel can reopen', async () => {
     const { controller, options, storageDirectory } = await fixture();
     await controller.handle({ type: 'devopsAuthenticate' });

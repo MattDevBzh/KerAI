@@ -242,6 +242,13 @@ export class DevOpsController {
     this.state.truncated = data.truncated;
     this.state.refreshedAt = new Date().toISOString();
   }
+  private clearDashboard() {
+    this.state.tickets = [];
+    this.state.pullRequests = [];
+    this.state.account = undefined;
+    this.state.refreshedAt = undefined;
+    this.state.truncated = undefined;
+  }
   async handle(input: DevOpsClientMessage): Promise<void> {
     if (this.disposed) throw new Error('Le menu de livraison est fermé.');
     const message = devOpsMessageSchema.parse(input);
@@ -259,10 +266,7 @@ export class DevOpsController {
         case 'devopsConfigure':
           this.state.config = message.config;
           this.state.preview = undefined;
-          this.state.tickets = [];
-          this.state.pullRequests = [];
-          this.state.account = undefined;
-          this.state.refreshedAt = undefined;
+          this.clearDashboard();
           this.state.authenticated = await this.api().hasCredential();
           await this.save();
           this.chat(
@@ -275,6 +279,8 @@ export class DevOpsController {
           if (token) {
             await this.api().authenticate(token);
             this.state.authenticated = true;
+            this.clearDashboard();
+            this.publish();
             await this.refresh();
           }
           break;
@@ -282,9 +288,7 @@ export class DevOpsController {
         case 'devopsDisconnect':
           await this.api().disconnect();
           this.state.authenticated = false;
-          this.state.account = undefined;
-          this.state.tickets = [];
-          this.state.pullRequests = [];
+          this.clearDashboard();
           this.state.preview = undefined;
           break;
         case 'devopsRefresh':

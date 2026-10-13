@@ -8,6 +8,13 @@ export interface DevOpsTicket {
   id: number;
   title: string;
   state: string;
+  workItemType?: string;
+  assignedTo?: string;
+  iterationPath?: string;
+  areaPath?: string;
+  tags?: string[];
+  createdDate?: string;
+  changedDate?: string;
   url: string;
   description: string;
   acceptanceCriteria: string;
@@ -23,6 +30,12 @@ export interface DevOpsPullRequest {
   url: string;
   sourceBranch: string;
   targetBranch: string;
+  description?: string;
+  creationDate?: string;
+  closedDate?: string;
+  createdBy?: string;
+  reviewers?: { id: string; displayName: string; vote: number; isRequired?: boolean }[];
+  mergeStatus?: string;
 }
 export interface DevOpsLink {
   featureId: string;

@@ -8,6 +8,12 @@ Renseigner organisation, projet, dépôt et remote Git. Un remote `origin` Azure
 
 L’API charge les tickets assignés au compte authentifié via `@Me`, puis leurs champs par lots. Les commentaires sont chargés à la demande. Les PR sont filtrées sur l’identité authentifiée. Le tableau affiche ses limites : 200 tickets, 200 PR, 200 commentaires par ticket. Délai par requête : 20 secondes ; réponse bornée à 8 Mo ; redirections HTTP refusées. Le texte HTML Azure Boards est converti en texte et rendu par React sans HTML exécutable. Les échecs d’accès/configuration peuvent être corrigés depuis le même menu.
 
+Les détails utilisent ces mêmes réponses : type de ticket, responsable, chemins d’itération/zone, tags et dates ; aperçu de description PR, auteur, dates, état de fusion et avis des reviewers. Les métadonnées absentes ou malformées restent inconnues, sans inventer de date ni interrompre un tableau valide. Les identités exposent seulement leur nom et, pour les reviewers, leur identifiant/vote/caractère obligatoire ; aucune adresse email ni URL d’avatar n’est transmise. Les tags sont dédupliqués et bornés à 50 de 200 caractères ; les reviewers à 100 entrées et les noms/chemins à 1 000 caractères. Aucun appel supplémentaire n’est effectué.
+
+Les sous-menus **PR** et **Tickets** restent toujours affichés sous **Azure DevOps**. Le parent conserve l’aperçu et la configuration. Les tableaux dédiés ajoutent recherche, filtres par état et lien feature, tri et cartes détaillées. Les filtres restent en place pendant la navigation et sont réinitialisés quand le périmètre change ; un état sélectionné disparu après actualisation reste explicitement indiqué. Les compteurs portent sur les éléments reçus et affichent une valeur inconnue avant le premier chargement. Une déconnexion ou un remplacement de jeton efface l’ancien tableau et sa date ; un échec de simple actualisation garde les données précédentes avec leur date et l’erreur.
+
+La liste PR Azure DevOps tronque la description à 400 caractères : le tableau montre un aperçu. Les votes documentés sont `10` (approuvé), `5` (avec suggestions), `0` (aucun vote), `-5` (attente de l’auteur), `-10` (rejeté) ; les valeurs inconnues restent inconnues. Ces avis et l’état de fusion ne prouvent pas que toutes les politiques de branche permettent la fusion. Le tableau ne vote, ne fusionne et n’active aucune auto-complétion.
+
 ## Un commit explicitement sélectionné
 
 1. Inspecter les changements indexés, non indexés et nouveaux.
@@ -50,6 +56,7 @@ Une PR peut être liée à une feature avec ou sans ticket. Depuis chaque carte 
 
 - [WIQL — Query by WIQL, API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/wiql/query-by-wiql?view=azure-devops-rest-7.1)
 - [Work Items — Get Work Items Batch, API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-items-batch?view=azure-devops-rest-7.1)
+- [Fields — List, API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/fields/list?view=azure-devops-rest-7.1)
 - [Comments — Get Comments, API 7.1-preview.4](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments/get-comments?view=azure-devops-rest-7.1)
 - [Pull Requests — Get Pull Requests, API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests/get-pull-requests?view=azure-devops-rest-7.1)
 - [Pull Requests — Create, API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests/create?view=azure-devops-rest-7.1)

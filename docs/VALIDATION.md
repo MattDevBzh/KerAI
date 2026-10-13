@@ -1,5 +1,21 @@
 # Validation et limites — v0.4, 13 octobre 2026
 
+## Vérifications locales de v0.4.1
+
+La version 0.4.1 ajoute les sous-menus permanents **PR** et **Tickets** à Azure DevOps, leurs tableaux dédiés et les métadonnées facultatives récupérées dans les appels existants. La recette locale du 13 octobre 2026 donne les résultats suivants :
+
+| Périmètre | Résultat observé |
+| --- | --- |
+| Format, TypeScript et build | `npm run check` réussi |
+| Métier et intégration | **336 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
+| Interface | **63 scénarios Playwright réussis** lors de la campagne complète, dont 8 nouveaux scénarios dédiés aux dashboards ; les 5 anciens parcours Azure DevOps restent inchangés |
+| Rendu visuel | PR et Tickets inspectés dans Chromium à 1440 et 390 px ; thèmes clair et contrastés, mouvement réduit, absence de débordement et navigation clavier à 800×600 couverts par les tests |
+| Vrai hôte VS Code Insiders | Activation React sous CSP, configuration Azure DevOps hors ligne et réouverture, inspection Git, profils, reporter et protections des worktrees vérifiés sur les sources compilées |
+
+Les scénarios couvrent la navigation persistante, les brouillons conservés, la recherche et le tri, les liens vers les features, les commentaires chargés à la demande, les métadonnées inconnues et les listes partielles. Les compteurs distinguent un tableau non chargé d’un tableau vide. Un filtre dont l’état disparaît après actualisation reste explicite. Les transitions de configuration, de déconnexion et de remplacement de jeton effacent les données de l’ancien compte ; une actualisation ordinaire échouée conserve le dernier tableau reçu.
+
+Les fixtures Azure DevOps sont déterministes : aucun compte réel n’a été contacté et aucun prompt Copilot payant n’a été envoyé pour cette recette. Elle ne confirme ni les droits du PAT, ni les politiques de fusion, ni une publication distante. Les dépendances n’ont pas changé. Les preuves v0.4.0 ci-dessous restent historiques.
+
 ## Vérifications locales de v0.4.0
 
 La recette a été exécutée sur macOS le 13 octobre 2026. Les résultats ci-dessous concernent le lot 0.4.0 ; les preuves historiques v0.3 restent séparées.

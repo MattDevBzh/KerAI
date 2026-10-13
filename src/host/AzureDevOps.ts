@@ -8,6 +8,58 @@ export interface SecretStore {
 }
 const object = z.record(z.string(), z.unknown());
 const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 100000) : '');
+const optionalStr = (value: unknown, maxLength = 1000): string | undefined =>
+  typeof value === 'string' ? value.slice(0, maxLength).trim() || undefined : undefined;
+const dateTime = z.iso.datetime({ offset: true });
+const optionalDate = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.length <= 40 && dateTime.safeParse(value).success
+    ? value
+    : undefined;
+const identityName = (value: unknown): string | undefined => {
+  const identity = object.safeParse(value);
+  return identity.success ? optionalStr(identity.data.displayName) : undefined;
+};
+const ticketTags = (value: unknown): string[] | undefined => {
+  if (typeof value !== 'string') return;
+  return [
+    ...new Set(
+      value
+        .slice(0, 100000)
+        .split(';')
+        .map((tag) => optionalStr(tag, 200)),
+    ),
+  ]
+    .filter((tag): tag is string => tag !== undefined)
+    .slice(0, 50);
+};
+const prReviewers = (value: unknown): DevOpsPullRequest['reviewers'] => {
+  if (!Array.isArray(value)) return;
+  const reviewers: NonNullable<DevOpsPullRequest['reviewers']> = [];
+  for (const raw of value.slice(0, 100)) {
+    const parsed = object.safeParse(raw);
+    if (!parsed.success) continue;
+    const { data } = parsed;
+    const id = optionalStr(data.id, 256);
+    const displayName = optionalStr(data.displayName);
+    const vote = data.vote;
+    if (
+      !id ||
+      !displayName ||
+      typeof vote !== 'number' ||
+      !Number.isInteger(vote) ||
+      vote < -32768 ||
+      vote > 32767
+    )
+      continue;
+    reviewers.push({
+      id,
+      displayName,
+      vote,
+      ...(typeof data.isRequired === 'boolean' ? { isRequired: data.isRequired } : {}),
+    });
+  }
+  return reviewers;
+};
 export function detectAzureRemote(remote: string): Omit<DevOpsConfig, 'remote'> | undefined {
   try {
     let parts: string[];
@@ -156,6 +208,13 @@ export class AzureDevOps {
           'System.Id',
           'System.Title',
           'System.State',
+          'System.WorkItemType',
+          'System.AssignedTo',
+          'System.IterationPath',
+          'System.AreaPath',
+          'System.Tags',
+          'System.CreatedDate',
+          'System.ChangedDate',
           'System.Description',
           'Microsoft.VSTS.Common.AcceptanceCriteria',
         ],
@@ -168,6 +227,14 @@ export class AzureDevOps {
           id,
           title: str(fields['System.Title']),
           state: str(fields['System.State']),
+          workItemType: optionalStr(fields['System.WorkItemType']),
+          assignedTo:
+            identityName(fields['System.AssignedTo']) || optionalStr(fields['System.AssignedTo']),
+          iterationPath: optionalStr(fields['System.IterationPath']),
+          areaPath: optionalStr(fields['System.AreaPath']),
+          tags: ticketTags(fields['System.Tags']),
+          createdDate: optionalDate(fields['System.CreatedDate']),
+          changedDate: optionalDate(fields['System.ChangedDate']),
           description: str(fields['System.Description']),
           acceptanceCriteria: str(fields['Microsoft.VSTS.Common.AcceptanceCriteria']),
           url: `${this.base()}/_workitems/edit/${id}`,
@@ -225,6 +292,12 @@ export class AzureDevOps {
       isDraft: item.isDraft === true,
       sourceBranch: str(item.sourceRefName),
       targetBranch: str(item.targetRefName),
+      description: optionalStr(item.description, 100000),
+      creationDate: optionalDate(item.creationDate),
+      closedDate: optionalDate(item.closedDate),
+      createdBy: identityName(item.createdBy),
+      reviewers: prReviewers(item.reviewers),
+      mergeStatus: optionalStr(item.mergeStatus),
       url: `${this.base()}/_git/${encodeURIComponent(this.config.repository)}/pullrequest/${id}`,
     };
   }

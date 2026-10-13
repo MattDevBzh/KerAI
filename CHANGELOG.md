@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 — 2026-10-13
+
+- Ajoute les sous-menus Azure DevOps **PR** et **Tickets**, toujours visibles et utilisables sans session active, avec accès à la configuration même sans connexion. Le menu parent conserve son aperçu.
+- Ajoute deux tableaux dédiés avec compteurs, recherche, filtres par état et lien feature, tri par date, numéro ou titre, et états de chargement, d’erreur et de liste partielle explicites.
+- Enrichit les cartes PR avec auteur, dates, description et relecteurs lorsqu’ils sont disponibles ; les cartes tickets présentent type, dates, tags, itération, zone, description, critères et commentaires chargeables. Les cartes conservent les liens Azure DevOps et les actions sur les features liées. Les votes restent indicatifs et ne remplacent pas les politiques de validation Azure DevOps.
+- Conserve les filtres pendant la navigation, signale un état filtré disparu après actualisation et les réinitialise au changement de périmètre. Efface les données, dates et limites de l’ancien compte après déconnexion ou remplacement du jeton ; une simple actualisation échouée conserve les dernières données reçues.
+
 ## 0.4.0 — 2026-10-13
 
 - Ajoute les menus Azure DevOps et Livraison utilisables sans session active : configuration organisation/projet/dépôt, PAT dans SecretStorage, tickets et PR du compte, liens persistés vers les features.
@@ -11,7 +18,6 @@
 - Protège les fichiers humains et sensibles face aux alias de casse/Unicode tout en conservant les chemins Git et physiques macOS. Les diffs HEAD refusent les blobs tronqués et résolvent les chemins depuis la racine Git lorsque le workspace est un sous-dossier.
 - Conserve le texte, les choix, la réponse et la provenance des questions lors d’une continuation ; une nouvelle question portant le même identifiant ne réutilise pas une ancienne réponse différente.
 - Invalide les critères et preuves devenus obsolètes après replay, édition de livrable ou changement de configuration. Le stockage reste compatible avec le schéma v3.
-
 
 ## 0.3.6 — 2026-10-13
 

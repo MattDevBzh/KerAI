@@ -20,8 +20,11 @@ test('navigation à 800×600 : atteindre Réglages au clavier sans faire défile
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
   await nav.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
-  for (let i = 0; i < 10; i++) await page.keyboard.press('Tab');
   const settings = nav.getByRole('button', { name: 'Réglages', exact: true });
+  for (let i = 0; i < (await nav.getByRole('button').count()); i++) {
+    if (await settings.evaluate((element) => element === document.activeElement)) break;
+    await page.keyboard.press('Tab');
+  }
   await expect(settings).toBeFocused();
   const position = await settings.boundingBox();
   expect(position!.y).toBeGreaterThanOrEqual(0);

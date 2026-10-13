@@ -2,6 +2,7 @@ import { UsageDashboard } from './UsageDashboard';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
 import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
 import { DevOpsUI, DevOpsFeatureLinks } from './DevOpsUI';
+import { DevOpsDashboard } from './DevOpsDashboard';
 import type { DevOpsState } from '../src/shared/devops';
 import { approvalBlockers, featureCompletionBlockers } from '../src/core/validation';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -29,6 +30,8 @@ import {
   FileText,
   FolderGit2,
   GitBranch,
+  GitPullRequest,
+  Tickets,
   LayoutDashboard,
   ListFilter,
   LoaderCircle,
@@ -87,6 +90,8 @@ import {
 type View =
   | 'usage'
   | 'devops'
+  | 'devops-prs'
+  | 'devops-tickets'
   | 'delivery'
   | 'dashboard'
   | 'validation'
@@ -127,6 +132,8 @@ const date = (value: string) =>
   }).format(new Date(value));
 const nav = [
   { id: 'devops', label: 'Azure DevOps', icon: FolderGit2 },
+  { id: 'devops-prs', label: 'PR', icon: GitPullRequest },
+  { id: 'devops-tickets', label: 'Tickets', icon: Tickets },
   { id: 'delivery', label: 'Livraison', icon: GitBranch },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'usage', label: 'Consommation', icon: BarChart3 },
@@ -401,7 +408,8 @@ export default function App() {
           {nav.map((n) => (
             <button
               key={n.id}
-              className={`nav-item ${view === n.id ? 'active' : ''}`}
+              className={`nav-item ${n.id === 'devops-prs' || n.id === 'devops-tickets' ? 'nav-child' : ''} ${view === n.id ? 'active' : ''}`}
+              title={n.label}
               onClick={() => chooseView(n.id)}
               aria-label={n.label}
               aria-current={view === n.id ? 'page' : undefined}
@@ -563,19 +571,37 @@ export default function App() {
                 }}
               />
             ))}
-          {(view === 'devops' || view === 'delivery') && (
+          <div hidden={view !== 'devops' && view !== 'delivery'}>
             <DevOpsUI
               state={devops}
+              visible={view === 'devops' || view === 'delivery'}
               features={state.features}
               dispatch={dispatch}
-              mode={view === 'devops' ? 'dashboard' : 'delivery'}
+              mode={view === 'delivery' ? 'delivery' : 'dashboard'}
               onOpenFeature={(id) => {
                 setView('dashboard');
                 setFeatureId(id);
                 setStepId('');
               }}
             />
-          )}
+          </div>
+          {(['devops-prs', 'devops-tickets'] as View[]).map((dashboardView) => (
+            <div hidden={view !== dashboardView} key={dashboardView}>
+              <DevOpsDashboard
+                active={view === dashboardView}
+                kind={dashboardView === 'devops-prs' ? 'prs' : 'tickets'}
+                state={devops}
+                features={state.features}
+                dispatch={dispatch}
+                onConfigure={() => chooseView('devops')}
+                onOpenFeature={(id) => {
+                  setView('dashboard');
+                  setFeatureId(id);
+                  setStepId('');
+                }}
+              />
+            </div>
+          ))}
           {view === 'usage' && (
             <UsageDashboard
               features={state.features}
