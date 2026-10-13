@@ -10,6 +10,7 @@ interface Api {
   getState(): StudioState | undefined;
   getUiReady(): boolean;
   getLauncherVisible(): boolean;
+  getLauncherReady(): boolean;
   getTheme(): ThemeId;
   getDevOpsState(): DevOpsState | undefined;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
@@ -26,33 +27,26 @@ export async function run(): Promise<void> {
   assert.ok(await readFile(join(extension.extensionPath, container.icon)));
   assert.ok(
     contributions.views.featureStudio.some(
-      (entry: { id: string; name: string }) =>
-        entry.id === 'featureStudio.launcher' && entry.name === 'Cockpit',
+      (entry: { id: string; name: string; type: string }) =>
+        entry.id === 'featureStudio.launcher' &&
+        entry.name === 'Cockpit' &&
+        entry.type === 'webview',
     ),
-    'The package contributes the native cockpit launcher',
+    'The package contributes the local cockpit welcome webview',
   );
-  const welcomes = contributions.viewsWelcome.filter(
+  const welcomes = (contributions.viewsWelcome ?? []).filter(
     (entry: { view: string }) => entry.view === 'featureStudio.launcher',
   );
-  assert.ok(
-    welcomes.some(
-      (entry: { when: string; contents: string }) =>
-        entry.when === 'workspaceFolderCount != 0' &&
-        entry.contents.includes('[Ouvrir le cockpit](command:featureStudio.open)'),
-    ),
-  );
-  assert.ok(
-    welcomes.some(
-      (entry: { when: string; contents: string }) =>
-        entry.when === 'workspaceFolderCount == 0' &&
-        entry.contents.includes('[Ouvrir un dossier](command:vscode.openFolder)'),
-    ),
-  );
+  assert.equal(welcomes.length, 0, 'The obsolete native welcome content is removed');
   await vscode.commands.executeCommand('featureStudio.launcher.focus');
   const api = await extension.activate();
-  for (let retry = 0; retry < 50 && !api.getLauncherVisible(); retry++)
+  for (let retry = 0; retry < 100 && !api.getLauncherReady(); retry++)
     await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.ok(api.getLauncherVisible(), 'The native launcher is rendered in the sidebar');
+  assert.ok(api.getLauncherVisible(), 'The local launcher is rendered in the sidebar');
+  assert.ok(
+    api.getLauncherReady(),
+    'The launcher script and local avatar actually loaded and sent ready through its nonce CSP',
+  );
   assert.ok((await vscode.commands.getCommands(true)).includes('featureStudio.launcher.focus'));
   assert.equal(api.getState(), undefined, 'Showing the launcher never initializes the store');
   assert.equal(api.getDevOpsState(), undefined, 'Showing the launcher never initializes DevOps');
@@ -479,6 +473,6 @@ export async function run(): Promise<void> {
     'Smoke extension host',
   );
   console.log(
-    'PASS: activity-bar contribution/native launcher visibility without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
+    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
   );
 }

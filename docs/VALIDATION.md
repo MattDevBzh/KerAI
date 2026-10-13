@@ -1,5 +1,21 @@
 # Validation et limites — v0.4, 13 octobre 2026
 
+## Vérifications locales de v0.4.4
+
+La version 0.4.4 remplace l’avatar frontal par un geek de trois quarts devant un ultrabook. L’illustration en couleur apparaît dans un petit volet local ; sa déclinaison SVG monochrome reste dans la barre d’activité.
+
+| Périmètre | Résultat observé |
+| --- | --- |
+| Format, TypeScript et build | `npm run check` réussi |
+| Métier et intégration | **345 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
+| Volet d’accueil | **16 cas Chromium réussis** sur le HTML réel du provider, avec pont VS Code simulé : 200/320 px, clair/sombre et classes de contraste élevé, avec/sans projet ; image locale chargée sous CSP, absence de débordement, focus et activation clavier/clic |
+| Vrai hôte VS Code Insiders | Vue ouverte, image et script réellement chargés sous CSP nonce, état métier et DevOps non initialisés avant l’ouverture du cockpit ; double ouverture dédupliquée et parcours hôtes existants vérifiés |
+| Assets | Illustration PNG transparente inspectée dans le volet ; icône SVG de trois quarts inspectée à 24, 48 et 192 px sur fonds clair et sombre |
+
+Le pont du volet accepte seulement `ready` et `open`, sans commande, URL ni arguments injectables. Le choix entre ouverture du cockpit et ouverture d’un dossier dépend du workspace courant côté hôte. Les tests couvrent les changements de dossier, la fermeture et la résolution répétée d’une vue, ainsi que l’inactivité des anciens callbacks après remplacement ou destruction. Les ressources sont limitées au dossier local `resources`, avec scripts/styles autorisés uniquement par nonce et connexions réseau interdites.
+
+La source imagegen, son prompt et la provenance de l’adaptation SVG sont conservés dans `design/cockpit-avatar` et `design/cockpit-icon.md`. Le PNG livré est un export de 448 px avec transparence conservée. Aucun prompt Copilot payant ni appel au compte Azure DevOps réel n’a été effectué pendant la recette ; l’illustration a été créée séparément avec imagegen. Cette validation est locale, sans nouvelle CI ni essai Windows. Les fichiers du cockpit React et ses dépendances n’ont pas changé ; sa dernière campagne complète reste celle de v0.4.2.
+
 ## Vérifications locales de v0.4.3
 
 La version 0.4.3 ajoute le raccourci **Feature Studio** à la barre d’activité, son icône de geek au portable en pixel art et le volet natif **Cockpit**. La recette locale du 13 octobre 2026 donne les résultats suivants :

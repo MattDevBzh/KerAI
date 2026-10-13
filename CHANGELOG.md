@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4 — 2026-10-13
+
+- Remplace le geek frontal par un avatar en pixel art plus soigné, vu de trois quarts devant un ultrabook, avec une déclinaison monochrome assortie pour la barre d’activité.
+- Affiche l’avatar en couleur dans le volet d’accueil et conserve l’ouverture du cockpit existant ou d’un dossier. Le volet reste indépendant des sessions et des appels modèle.
+
 ## 0.4.3 — 2026-10-13
 
 - Ajoute une entrée Feature Studio à la barre d’activité de VS Code, avec un geek au portable en pixel art et un volet natif pour ouvrir le cockpit existant. Sans projet, le volet propose d’ouvrir un dossier.

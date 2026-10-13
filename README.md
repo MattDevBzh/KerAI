@@ -6,13 +6,13 @@
 
 Une feature devient un parcours : spécifications, plan, développement, tests, relecture. Chaque étape possède son agent, ses skills, ses MCP, son contexte et ses tentatives. Tu vois ce qui avance, tu fournis une US, tu réponds en direct et tu choisis les validations humaines du parcours.
 
-[Télécharger le VSIX](releases/feature-studio-0.4.3.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Livraison et Azure DevOps](docs/devops-delivery.md) · [Recette Playwright](defaults/quality/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
+[Télécharger le VSIX](releases/feature-studio-0.4.4.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Livraison et Azure DevOps](docs/devops-delivery.md) · [Recette Playwright](defaults/quality/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
 
 ![Le cockpit Feature Studio — données de démonstration](docs/images/dashboard.png)
 
 ## Installation
 
-1. Télécharge **[feature-studio-0.4.3.vsix](releases/feature-studio-0.4.3.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
+1. Télécharge **[feature-studio-0.4.4.vsix](releases/feature-studio-0.4.4.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur le **petit geek au portable** dans la barre latérale de VS Code, puis sur **Ouvrir le cockpit**. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -26,9 +26,9 @@ Si `copilot` n’est pas trouvé, renseigne le chemin complet dans **Réglages �
 
 ## Accéder au cockpit depuis la barre latérale
 
-L’entrée **Feature Studio**, reconnaissable à son geek au portable en pixel art, ouvre un volet natif avec le bouton **Ouvrir le cockpit**. Ce bouton ramène à l’onglet existant ; plusieurs clics pendant son ouverture ne créent pas de doublon. Sans projet ouvert, le volet propose **Ouvrir un dossier**.
+L’entrée **Feature Studio**, reconnaissable à son geek de trois quarts devant un ultrabook, ouvre un volet d’accueil avec son avatar en pixel art et le bouton **Ouvrir le cockpit**. Ce bouton ramène à l’onglet existant ; plusieurs clics pendant son ouverture ne créent pas de doublon. Sans projet ouvert, le volet propose **Ouvrir un dossier**.
 
-Afficher le volet seul ne démarre aucune session et n’appelle aucun modèle. Son icône monochrome suit les couleurs de VS Code. Si tu l’as masquée, fais un clic droit sur la barre d’activité pour réafficher **Feature Studio**.
+Afficher le volet seul ne démarre aucune session et n’appelle aucun modèle. L’avatar en couleur apparaît dans le volet ; sa déclinaison monochrome dans la barre d’activité suit les couleurs de VS Code. Si tu l’as masquée, fais un clic droit sur la barre d’activité pour réafficher **Feature Studio**.
 
 ## Choisir l’apparence du cockpit
 
@@ -238,7 +238,7 @@ npx playwright install chromium
 npm run test:ui        # Parcours webview, sans requêtes IA
 npm run test:extension # Vrai hôte VS Code isolé, sans prompt IA
 npm run smoke:mcp     # Diagnostic MCP local explicite, sans prompt IA
-npm run package       # Produit releases/feature-studio-0.4.3.vsix
+npm run package       # Produit releases/feature-studio-0.4.4.vsix
 ```
 
 Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développement. `npm run dev` ouvre le frontend de développement ; `http://127.0.0.1:5173/?demo=1` affiche des données d’exemple avec un bandeau explicite. Sans ce paramètre et hors VS Code, aucune exécution n’est simulée.

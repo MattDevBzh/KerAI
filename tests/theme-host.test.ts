@@ -64,10 +64,11 @@ vi.mock('vscode', () => ({
       return host.disposable;
     },
     onDidGrantWorkspaceTrust: () => host.disposable,
+    onDidChangeWorkspaceFolders: () => host.disposable,
   },
   window: {
     createOutputChannel: () => ({ ...host.disposable, appendLine() {} }),
-    createTreeView: () => ({ ...host.disposable, visible: false }),
+    registerWebviewViewProvider: () => host.disposable,
     createStatusBarItem: () => ({ ...host.disposable, show() {} }),
     registerWebviewPanelSerializer: () => host.disposable,
     createWebviewPanel: () => host.panel,

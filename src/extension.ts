@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises';
 import { stringify } from 'yaml';
 import { Store } from './core/store';
 import { CopilotCliAdapter } from './host/CopilotCliAdapter';
+import { CockpitLauncher } from './host/CockpitLauncher';
 import { RegistryMigration } from './core/registryMigration';
 import { StudioService } from './host/StudioService';
 import { WorkspaceLease } from './host/WorkspaceLease';
@@ -29,13 +30,7 @@ const diffContents = new Map<string, string>();
 
 export async function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Feature Studio');
-  // An empty native view displays the welcome buttons without initializing a project.
-  const launcher = vscode.window.createTreeView<vscode.TreeItem>('featureStudio.launcher', {
-    treeDataProvider: {
-      getChildren: () => [],
-      getTreeItem: (item) => item,
-    },
-  });
+  const launcher = new CockpitLauncher(context.extensionUri);
   const send = (message: HostMessage) => {
     if (panel) void panel.webview.postMessage(message);
   };
@@ -53,6 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     output,
     launcher,
+    vscode.window.registerWebviewViewProvider('featureStudio.launcher', launcher),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
     }),
@@ -903,6 +899,7 @@ export async function activate(context: vscode.ExtensionContext) {
     getState: () => service?.snapshot(),
     getUiReady: () => webviewReady,
     getLauncherVisible: () => launcher.visible,
+    getLauncherReady: () => launcher.isReady,
     getTheme,
     getDevOpsState: () => devops?.getState(),
     dispatch: (message: ClientMessage) => dispatch(message),
