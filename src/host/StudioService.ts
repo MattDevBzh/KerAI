@@ -22,8 +22,10 @@ import type {
   CheckpointComparison,
 } from '../shared/types';
 import { AgentRegistry } from '../core/registry';
+import { installQualityKit, resolveQualityAttachment } from './QualityRunner';
 import { Store, settingsSchema } from '../core/store';
 import { WorkflowEngine } from '../core/workflow';
+import { boundAnswers } from '../core/questions';
 import { gitInfo, ToolHost } from './ToolHost';
 import { runProcess, redact } from './process';
 import { emptyLaunch, previewContext, selectMemory } from '../core/context';
@@ -72,7 +74,7 @@ export class StudioService extends EventEmitter {
   >();
   constructor(
     readonly workspacePath: string,
-    defaultsPath: string,
+    private readonly defaultsPath: string,
     readonly store: Store,
     private isTrusted: () => boolean,
   ) {
@@ -87,6 +89,7 @@ export class StudioService extends EventEmitter {
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
       schemaVersion: 3,
+      profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
         path: this.workspacePath,
@@ -148,6 +151,10 @@ export class StudioService extends EventEmitter {
   }
   async refresh(): Promise<void> {
     const data = await this.registry.load();
+    this.state.profileDirectories = {
+      user: this.registry.userPath,
+      workspace: this.registry.workspacePath,
+    };
     Object.assign(this.state, data);
     this.state.workspace.branch = (await gitInfo(this.workspacePath)).branch;
     await this.refreshIsolationSupport();
@@ -200,6 +207,10 @@ export class StudioService extends EventEmitter {
       return feature;
     });
   }
+  /** Dedicated delivery uses the same reservation, trust checks and source workspace lease. */
+  withWorkspaceMutation<T>(label: string, action: () => Promise<T>): Promise<T> {
+    return this.workspaceAction(undefined, label, action);
+  }
   /** Reserve before the first await; another window also must acquire the target lease. */
   private async workspaceAction<T>(
     featureId: string | undefined,
@@ -246,6 +257,34 @@ export class StudioService extends EventEmitter {
     return featureId
       ? this.workspaces.validate(this.engine.getFeature(featureId))
       : this.workspacePath;
+  }
+  async installQualityKit(featureId?: string) {
+    return this.workspaceAction(featureId, 'Installation du reporter qualité', async () =>
+      installQualityKit(await this.featurePath(featureId), join(this.defaultsPath, 'quality')),
+    );
+  }
+  async qualityAttachment(featureId: string, evidenceId: string, attachmentId: string) {
+    this.assertTrusted();
+    const feature = this.engine.getFeature(featureId);
+    const evidence = feature.steps
+      .flatMap((step) => step.attempts)
+      .flatMap((attempt) => attempt.evidence ?? [])
+      .find((proof) => proof.id === evidenceId);
+    if (
+      evidence?.source !== 'host' ||
+      !evidence.quality ||
+      evidence.quality.featureId !== featureId ||
+      evidence.quality.evidenceId !== evidence.id
+    )
+      throw new Error('Preuve qualité inconnue pour cette session.');
+    const attachment = evidence.quality.attachments.find((item) => item.id === attachmentId);
+    if (!attachment) throw new Error('Pièce jointe inconnue.');
+    const file = await resolveQualityAttachment(
+      join(this.store.rootPath, 'quality'),
+      evidence.quality,
+      attachmentId,
+    );
+    return { file, attachment };
   }
   private rememberCheckpoint(feature: Feature, checkpoint: FeatureCheckpoint): void {
     feature.checkpoints ??= [];
@@ -464,12 +503,17 @@ export class StudioService extends EventEmitter {
     for (const candidate of feature.steps)
       if (candidate.id !== step.id && invalid.has(candidate.id) && candidate.status !== 'pending')
         candidate.status = 'stale';
+    for (const criterion of feature.criteria ?? []) {
+      criterion.status = 'pending';
+      criterion.evidence = '';
+    }
     for (const entry of memory)
       if (entry.source?.featureId === featureId && invalid.has(entry.source.stepId))
         throw new Error(
           `La mémoire « ${entry.title} » provient d’une étape que cette tentative va invalider. Désélectionne-la avant de continuer.`,
         );
     const previous = originalStep.attempts.at(-1);
+    const answerBindings = boundAnswers(previous, step.id);
     const attempt = {
       id: 'preview',
       startedAt: '',
@@ -477,7 +521,10 @@ export class StudioService extends EventEmitter {
       feedback,
       logs: [],
       questions: [],
-      answers: { ...previous?.answers },
+      answers: Object.fromEntries(
+        Object.entries(answerBindings).map(([id, binding]) => [id, binding.answer]),
+      ),
+      answerBindings,
       changedFiles: [],
       ...(previous?.artifact ? { artifact: structuredClone(previous.artifact) } : {}),
       launch: selected,
@@ -489,6 +536,7 @@ export class StudioService extends EventEmitter {
       agent: structuredClone(agent),
       skills: this.state.skills.filter((skill) => skillIds.includes(skill.id)),
       workspacePath: this.workspaces.executionPath(feature),
+      qualityStoragePath: join(this.store.rootPath, 'quality'),
       settings: structuredClone(this.state.settings),
       // A resumed transcript could reintroduce blocks removed from the new prompt.
       resumeSessionId:

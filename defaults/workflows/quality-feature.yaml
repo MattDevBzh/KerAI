@@ -1,0 +1,121 @@
+{
+  "id": "quality-feature",
+  "name": "Feature avec recette et contre-exemples",
+  "description": "Développement, tests, vrais parcours Playwright, contre-exemples indépendants et relecture humaine.",
+  "icon": "layers",
+  "steps": [
+    {
+      "id": "specs",
+      "name": "Spécifications",
+      "description": "Clarifier le besoin et ses critères avant développement.",
+      "agentId": "fs-specs",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "ai-ticket"
+      ],
+      "maxAttempts": 5,
+      "artifact": "specs.md",
+      "dependsOn": []
+    },
+    {
+      "id": "plan",
+      "name": "Plan technique",
+      "description": "Préparer une tranche cohérente et vérifiable.",
+      "agentId": "fs-plan",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "ai-plan"
+      ],
+      "maxAttempts": 5,
+      "artifact": "plan.md",
+      "dependsOn": [
+        "specs"
+      ]
+    },
+    {
+      "id": "dev",
+      "name": "Développement",
+      "description": "Implémenter la tranche définie dans le plan validé.",
+      "agentId": "fs-dev",
+      "policy": "workspace-write",
+      "model": "",
+      "skills": [
+        "ai-implement"
+      ],
+      "maxAttempts": 5,
+      "artifact": "dev.md",
+      "dependsOn": [
+        "plan"
+      ]
+    },
+    {
+      "id": "tests",
+      "name": "Tests",
+      "description": "Écrire les tests de comportement et interpréter les preuves.",
+      "agentId": "fs-tests",
+      "policy": "tests",
+      "model": "",
+      "skills": [
+        "ai-tdd",
+        "ai-verifier"
+      ],
+      "maxAttempts": 5,
+      "artifact": "tests.md",
+      "dependsOn": [
+        "dev"
+      ]
+    },
+    {
+      "id": "visual",
+      "name": "Recette visuelle",
+      "description": "Vrais parcours Playwright et captures liés aux critères.",
+      "agentId": "fs-visual-tests",
+      "requiredQuality": "visual",
+      "policy": "tests",
+      "skills": [
+        "ai-tdd",
+        "ai-verifier"
+      ],
+      "maxAttempts": 3,
+      "artifact": "visual.md",
+      "dependsOn": [
+        "tests"
+      ]
+    },
+    {
+      "id": "counterexamples",
+      "name": "Contre-exemples",
+      "description": "Recherche indépendante de cas reproductibles après implémentation.",
+      "agentId": "fs-counterexamples",
+      "requiredQuality": "counterexample",
+      "policy": "tests",
+      "skills": [
+        "ai-tdd",
+        "ai-verifier"
+      ],
+      "maxAttempts": 3,
+      "artifact": "counterexamples.md",
+      "dependsOn": [
+        "visual"
+      ]
+    },
+    {
+      "id": "review",
+      "name": "Relecture",
+      "description": "Relire indépendamment les changements et les preuves.",
+      "agentId": "fs-review",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "ai-relecture"
+      ],
+      "maxAttempts": 5,
+      "artifact": "review.md",
+      "dependsOn": [
+        "counterexamples"
+      ]
+    }
+  ]
+}

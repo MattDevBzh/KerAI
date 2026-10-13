@@ -42,6 +42,28 @@ function feature() {
   return { engine, item };
 }
 describe('durable versioned store', () => {
+  it('persists exact question provenance across a replay and reload', async () => {
+    const { store } = await setup();
+    const { engine, item } = feature();
+    const first = engine.beginRun(item.id, 'run');
+    const question = { id: 'audience', text: 'Qui utilise ceci ?', choices: ['Matt', 'Équipe'] };
+    engine.finishRun(item.id, 'run', {
+      content: 'Partial',
+      questions: [question],
+      changedFiles: [],
+    });
+    engine.answerQuestions(item.id, 'run', { audience: 'Matt' });
+    const next = engine.beginRun(item.id, 'run');
+    await store.save(engine.features, defaultSettings);
+    const restored = (await store.load()).features[0].steps[0].attempts.at(-1)!;
+    expect(restored.answerBindings?.audience).toEqual({
+      question,
+      answer: 'Matt',
+      origin: { stepId: 'run', attemptId: first.id },
+    });
+    expect(restored.id).toBe(next.id);
+    expect(restored.questions).toEqual([]);
+  });
   it('migrates v2 without inventing an execution root, retaining contexts and budgets', async () => {
     const { store } = await setup(),
       { engine, item } = feature();

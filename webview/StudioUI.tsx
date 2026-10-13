@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { QualityPanel } from './QualityUI';
 import type {
   AcceptanceCriterion,
   Attempt,
@@ -705,10 +706,34 @@ export function ModelBudgetSettings({
     </section>
   );
 }
-export function EvidencePanel({ attempt }: { attempt?: Attempt }) {
+export function EvidencePanel({
+  attempt,
+  featureId,
+  dispatch,
+}: {
+  attempt?: Attempt;
+  featureId?: string;
+  dispatch?: (message: ClientMessage) => void;
+}) {
   const evidence = attempt?.evidence ?? [];
   return (
     <div className="evidence-panel">
+      <QualityPanel
+        evidence={evidence}
+        onOpenAttachment={(evidenceId, attachmentId) => {
+          if (featureId)
+            dispatch?.({ type: 'openQualityAttachment', featureId, evidenceId, attachmentId });
+        }}
+      />
+      {featureId && dispatch && (
+        <button
+          type="button"
+          className="button secondary small"
+          onClick={() => dispatch({ type: 'installQualityKit', featureId })}
+        >
+          Installer le reporter dans cette session
+        </button>
+      )}
       <div className="evidence-intro">
         <ShieldCheck size={21} />
         <div>
@@ -722,13 +747,13 @@ export function EvidencePanel({ attempt }: { attempt?: Attempt }) {
       {evidence.length ? (
         evidence.map((e) => (
           <details
-            className={`evidence-entry ${e.exitCode === 0 && !e.error ? 'passed' : 'failed'}`}
+            className={`evidence-entry ${e.exitCode === 0 && !e.error && (!e.quality || e.quality.status === 'passed') ? 'passed' : 'failed'}`}
             key={e.id}
             open
           >
             <summary>
               <span className="evidence-status">
-                {e.exitCode === 0 && !e.error ? (
+                {e.exitCode === 0 && !e.error && (!e.quality || e.quality.status === 'passed') ? (
                   <CheckCircle2 size={16} />
                 ) : (
                   <TriangleAlert size={16} />
@@ -742,11 +767,13 @@ export function EvidencePanel({ attempt }: { attempt?: Attempt }) {
                 </small>
               </span>
               <span className="evidence-result">
-                {e.exitCode === 0 && !e.error
+                {e.exitCode === 0 && !e.error && (!e.quality || e.quality.status === 'passed')
                   ? 'Code 0'
-                  : e.exitCode === null
-                    ? 'Pas de code de sortie'
-                    : `Code ${e.exitCode}`}
+                  : e.quality && e.quality.status !== 'passed'
+                    ? 'Preuve qualité bloquante'
+                    : e.exitCode === null
+                      ? 'Pas de code de sortie'
+                      : `Code ${e.exitCode}`}
               </span>
             </summary>
             <div className="evidence-body">
@@ -1892,6 +1919,29 @@ function WorkflowEditor({
                     </select>
                   </label>
                 </div>
+                <label className="field">
+                  <span>Rapport qualité requis</span>
+                  <select
+                    aria-label="Rapport qualité requis"
+                    value={step.requiredQuality ?? ''}
+                    onChange={(event) =>
+                      update({
+                        requiredQuality: (event.target.value ||
+                          undefined) as WorkflowStep['requiredQuality'],
+                      })
+                    }
+                  >
+                    <option value="">Selon l’agent sélectionné</option>
+                    <option value="visual">Recette visuelle</option>
+                    <option value="counterexample">Contre-exemples</option>
+                  </select>
+                  <small>
+                    Un rapport hôte réussi, courant et lié aux critères est obligatoire pour la
+                    validation humaine et automatique. Les agents de recette visuelle et
+                    contre-exemples conservent leur exigence ; un choix différent exige les deux
+                    rapports.
+                  </small>
+                </label>
                 <div className="field-row">
                   <label className="field">
                     <span>Modèle de l’étape</span>

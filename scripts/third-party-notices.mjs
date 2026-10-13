@@ -18,7 +18,7 @@ async function visit(node) {
         if (error.code === 'ENOENT') return []; // Optional packages for other platforms.
         throw error;
       });
-      const files = entries.filter((f) => /^(license|licence|copying|notice)(\.|$)/i.test(f));
+      const files = entries.filter((f) => /^(license|licence|copying|notice)([._-]|$)/i.test(f));
       for (const file of files)
         sections.push(
           `## ${key} — ${file}\n\n\`\`\`text\n${(await readFile(path.join(dependency.path, file), 'utf8')).replace(/\r\n/g, '\n')}\n\`\`\`\n`,
@@ -28,8 +28,11 @@ async function visit(node) {
   }
 }
 await visit(tree);
+sections.push(await readFile('resources/licenses/unicode.md', 'utf8'));
 await writeFile(
   'THIRD_PARTY_NOTICES.md',
-  '# Third-party notices\n\nProduction dependencies used by the bundled extension and interface. Copilot CLI is installed separately by the user.\n\n' +
-    sections.join('\n'),
+  (
+    '# Third-party notices\n\nProduction dependencies used by the bundled extension and interface. Copilot CLI is installed separately by the user.\n\n' +
+    sections.join('\n')
+  ).trimEnd() + '\n',
 );

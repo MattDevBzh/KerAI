@@ -314,6 +314,9 @@ svg {
   position: sticky;
   top: 0;
   height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 .brand {
   display: flex;

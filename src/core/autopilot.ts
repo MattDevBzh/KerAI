@@ -1,6 +1,11 @@
 import type { Feature } from '../shared/types';
 import { budgetBlockReason } from './budgets';
-import { approvalBlockers, currentTestEvidence, featureCompletionBlockers } from './validation';
+import {
+  approvalBlockers,
+  currentTestEvidence,
+  evidenceIsCurrent,
+  featureCompletionBlockers,
+} from './validation';
 
 export type AutopilotAction =
   | { kind: 'run'; stepId: string; feedback?: string; resume?: boolean }
@@ -56,7 +61,13 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
       return pause(`Validation humaine requise : ${step.name}.`);
     const failedTests = attempt
       ? currentTestEvidence(attempt).filter(
-          (proof) => proof.exitCode !== null && proof.exitCode !== 0 && !proof.error,
+          (proof) =>
+            !proof.error &&
+            evidenceIsCurrent(attempt, proof) &&
+            (proof.quality
+              ? proof.quality.status === 'failed' &&
+                proof.quality.cases.some((c) => c.status === 'failed')
+              : proof.exitCode !== null && proof.exitCode !== 0),
         )
       : [];
     const requestedChanges =
@@ -97,7 +108,15 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
         ? failedTests
             .map(
               (proof) =>
-                `Test ${proof.name} (${proof.commandId}) : code ${proof.exitCode}\n${proof.stderr || proof.stdout}`,
+                `Test ${proof.name} (${proof.commandId}) : code ${proof.exitCode}\n${proof.stderr || proof.stdout}\n${
+                  proof.quality?.cases
+                    .filter((c) => c.status === 'failed')
+                    .map(
+                      (c) =>
+                        `${c.title} [${c.criterionIds.join(', ')}]\nAttendu : ${c.expected ?? ''}\nObservé : ${c.actual ?? c.errors.join('; ')}\nReproduction : ${(c.reproduction ?? c.steps).join(' → ')}\nPreuve : ${proof.id}`,
+                    )
+                    .join('\n\n') ?? ''
+                }`,
             )
             .join('\n\n')
         : `${attempt!.review!.summary}\n${attempt!.review!.findings.map((f) => `[${f.severity}] ${f.message}`).join('\n')}`;

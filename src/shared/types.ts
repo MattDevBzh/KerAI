@@ -1,3 +1,5 @@
+import type { DevOpsClientMessage, DevOpsState } from './devops';
+export * from './devops';
 import type {
   McpServerConfig,
   McpCatalog,
@@ -30,6 +32,7 @@ export type StepStatus =
   | 'interrupted';
 export type FeatureStatus = 'draft' | 'running' | 'attention' | 'completed';
 export interface WorkflowStep {
+  requiredQuality?: import('./quality').QualityKind;
   id: string;
   name: string;
   description: string;
@@ -57,6 +60,11 @@ export interface Question {
   id: string;
   text: string;
   choices?: string[];
+}
+export interface AnsweredQuestion {
+  question: Question;
+  answer: string;
+  origin: { stepId: string; attemptId: string };
 }
 export interface RunEvent {
   id: string;
@@ -91,6 +99,8 @@ export interface Attempt {
   artifact?: Artifact;
   questions: Question[];
   answers: Record<string, string>;
+  /** Answers remain bound to the exact question and the attempt that asked it. */
+  answerBindings?: Record<string, AnsweredQuestion>;
   changedFiles: string[];
   usage?: Usage;
   error?: string;
@@ -135,6 +145,9 @@ export interface Feature {
   workspaceFileHashes?: Record<string, string>;
 }
 export interface AgentProfile {
+  revision?: string;
+  targets?: Record<import('./profiles').ProfileScope, import('./profiles').ProfileTarget>;
+  versions?: Omit<AgentProfile, 'versions' | 'targets'>[];
   id: string;
   name: string;
   description: string;
@@ -149,6 +162,9 @@ export interface AgentProfile {
   emptyContextByDefault?: boolean;
 }
 export interface SkillInfo {
+  revision?: string;
+  targets?: Record<import('./profiles').ProfileScope, import('./profiles').ProfileTarget>;
+  versions?: Omit<SkillInfo, 'versions' | 'targets'>[];
   id: string;
   name: string;
   description: string;
@@ -161,6 +177,7 @@ export interface TestCommand {
   name: string;
   command: string;
   args: string[];
+  quality?: import('./quality').QualityCommandConfig;
 }
 export interface HookDefinition {
   id: string;
@@ -197,6 +214,7 @@ export interface RuntimeStatus {
   error?: string;
 }
 export interface StudioState {
+  profileDirectories?: { user: string; workspace: string };
   schemaVersion: 1 | 2 | 3;
   workspace: {
     name: string;
@@ -219,6 +237,9 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | DevOpsClientMessage
+  | { type: 'installQualityKit'; featureId?: string }
+  | { type: 'openQualityAttachment'; featureId: string; evidenceId: string; attachmentId: string }
   | {
       type: 'ready' | 'refresh' | 'checkRuntime' | 'installKit' | 'migrateUserKit' | 'openSettings';
     }
@@ -304,6 +325,8 @@ export type ClientMessage =
   | { type: 'exportFeature'; featureId: string }
   | {
       type: 'saveAgent';
+      requestId: string;
+      options: import('./profiles').ProfileSaveOptions;
       agent: {
         id: string;
         name: string;
@@ -317,7 +340,13 @@ export type ClientMessage =
         emptyContextByDefault?: boolean;
       };
     }
-  | { type: 'saveSkill'; id: string; content: string }
+  | {
+      type: 'saveSkill';
+      id: string;
+      content: string;
+      requestId: string;
+      options: import('./profiles').ProfileSaveOptions;
+    }
   | { type: 'saveSettings'; settings: StudioSettings }
   | { type: 'createWorkflow' }
   | { type: 'saveWorkflow'; workflow: Workflow }
@@ -334,6 +363,10 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | ({ type: 'profileSaveResult'; requestId: string; error?: string } & Partial<
+      import('./profiles').ProfileSaveResult
+    >)
+  | { type: 'devopsState'; state: DevOpsState }
   | { type: 'state'; state: StudioState }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
@@ -354,6 +387,7 @@ export interface RunInput {
   agent: AgentProfile;
   skills: SkillInfo[];
   workspacePath: string;
+  qualityStoragePath?: string;
   settings: StudioSettings;
   resumeSessionId?: string;
   launch?: RunLaunchOptions;

@@ -1,14 +1,16 @@
 import type { Tool } from '@github/copilot-sdk';
 import { randomUUID } from 'node:crypto';
-import { readdir, readFile, mkdir, writeFile, lstat, rename, rm, open } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, lstat, rename, rm, open } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import type { RunInput, RunCallbacks, RunEvent, TestEvidence } from '../shared/types';
-import { PolicyEngine, isSensitivePath, sha256 } from './PolicyEngine';
+import { PolicyEngine, sha256 } from './PolicyEngine';
 import { runProcess, redact } from './process';
 import { gitRead } from './gitRead';
+import { prepareQualityRun, collectQualityEvidence, type QualityRunContext } from './QualityRunner';
 import { GitReview, gitPageSchema, gitChangesSchema, gitDiffSchema } from './GitReview';
-import { MAX_TEXT_BYTES, lineOffsets, readTextFile, textPage } from './textFiles';
+import { MAX_TEXT_BYTES, readTextFile, textPage } from './textFiles';
+import { WorkspaceExplorer, listFilesSchema, searchFilesSchema } from './WorkspaceExplorer';
 
 export async function gitInfo(root: string): Promise<{ branch: string; dirty: Set<string> }> {
   const branch = await gitRead(root, ['symbolic-ref', '--short', 'HEAD'], {
@@ -52,12 +54,17 @@ export class ToolHost {
   private policy!: PolicyEngine;
   private writes: Promise<unknown> = Promise.resolve();
   private observedFiles = new Set<string>();
+  private readonly qualityCriterionIds: readonly string[];
   private readViews = new Map<string, { hash: string; spans: [number, number][]; full: boolean }>();
   constructor(
     private input: RunInput,
     private callbacks: RunCallbacks,
     private signal: AbortSignal,
-  ) {}
+  ) {
+    this.qualityCriterionIds = Object.freeze(
+      (input.feature.criteria ?? []).map((criterion) => criterion.id),
+    );
+  }
   private emit(kind: RunEvent['kind'], message: string): void {
     this.callbacks.onEvent({
       id: randomUUID(),
@@ -112,12 +119,13 @@ export class ToolHost {
       },
     });
     const gitReview = new GitReview(this.input.workspacePath, this.policy, this.signal);
+    const explorer = new WorkspaceExplorer(this.input.workspacePath, this.policy, this.signal);
     const tools: Tool[] = [
       tool(
         'studio_list_files',
-        'List workspace files, excluding secrets and build/dependency directories. Relative directory, max 1500 files.',
-        z.object({ path: z.string().default('.') }),
-        async ({ path: dir }) => ({ files: await this.list(dir) }),
+        'List workspace files deterministically. Git includes tracked files even if ignored and untracked files respecting Git ignore rules. Excludes secrets, links and build/dependency directories. Defaults to 200 files; limit 1-500. Follow next with the same path and opaque cursor until truncated:false. Reports total count and inventory limits; oversized inventories fail explicitly. Outside Git, honors hierarchical .gitignore rules (without Git index/global excludes).',
+        listFilesSchema,
+        (args) => explorer.list(args),
       ),
       tool(
         'studio_read_file',
@@ -131,7 +139,7 @@ export class ToolHost {
           const target = await this.policy.resolve(relative);
           const { bytes, text } = await readTextFile(target, this.signal);
           const { from, to, ...page } = textPage(text, startLine, endLine);
-          const normalized = path.posix.normalize(relative);
+          const normalized = await this.policy.contextPath(relative);
           const hash = sha256(bytes);
           const previous = this.readViews.get(normalized);
           const view = previous?.hash === hash ? previous : { hash, spans: [], full: false };
@@ -153,90 +161,9 @@ export class ToolHost {
       ),
       tool(
         'studio_search',
-        'Search a literal string in UTF-8 workspace files up to 4 MiB, at most 100 matching lines. path may be a file or directory. For one file, startLine resumes search. Results are excerpts, not permission to edit: read matching lines first. Reports truncation and skipped files.',
-        z.object({
-          query: z.string().min(1).max(200),
-          path: z.string().default('.'),
-          startLine: z.number().int().positive().default(1),
-        }),
-        async ({ query, path: dir, startLine }) => {
-          const matches: {
-            path: string;
-            line: number;
-            text: string;
-            column: number;
-            excerptStartColumn: number;
-          }[] = [];
-          const skipped: { path: string; reason: string }[] = [];
-          let skippedCount = 0;
-          const target = await this.policy.resolve(dir);
-          const single = (await lstat(target)).isFile();
-          if (!single && startLine !== 1)
-            throw new Error('startLine nécessite un chemin de fichier.');
-          const files = single ? [path.posix.normalize(dir)] : await this.list(dir);
-          let scannedBytes = 0;
-          for (const file of files) {
-            this.signal.throwIfAborted();
-            const absolute = await this.policy.resolve(file);
-            let content;
-            try {
-              content = await readTextFile(absolute, this.signal);
-            } catch (error) {
-              this.signal.throwIfAborted();
-              if (single) throw error;
-              skippedCount++;
-              if (skipped.length < 20)
-                skipped.push({ path: file, reason: (error as Error).message });
-              continue;
-            }
-            scannedBytes += content.bytes.length;
-            if (scannedBytes > 64 * 1024 * 1024)
-              return {
-                matches,
-                limit: 100,
-                truncated: true,
-                skipped,
-                skippedCount,
-                next: { path: file, startLine: 1 },
-                note: 'Budget de recherche atteint ; poursuivre dans des fichiers ou dossiers ciblés.',
-              };
-            const offsets = lineOffsets(content.text);
-            for (let i = single ? startLine - 1 : 0; i < offsets.length; i++) {
-              const line = content.text
-                .slice(offsets[i], offsets[i + 1] ?? content.text.length)
-                .replace(/\r?\n$/, '');
-              const column = line.indexOf(query);
-              if (column < 0) continue;
-              if (matches.length === 100)
-                return {
-                  matches,
-                  limit: 100,
-                  truncated: true,
-                  skipped,
-                  skippedCount,
-                  next: { path: file, startLine: i + 1 },
-                  note: single
-                    ? undefined
-                    : 'Suite indiquée pour ce fichier ; cibler les autres fichiers pour poursuivre la recherche.',
-                };
-              const excerptStart = Math.max(0, column - 100);
-              matches.push({
-                path: file,
-                line: i + 1,
-                column: column + 1,
-                excerptStartColumn: excerptStart + 1,
-                text: line.slice(excerptStart, excerptStart + 400),
-              });
-            }
-          }
-          return {
-            matches,
-            limit: 100,
-            truncated: !single && files.length >= 1500,
-            skipped,
-            skippedCount,
-          };
-        },
+        'Search a literal string in UTF-8 files up to 4 MiB using the same safe Git inventory as studio_list_files. At most 100 matching lines, 400 files and 16 MiB scanned per page; 64000 output bytes. Follow next with unchanged query/path and opaque cursor, which resumes within files and across the entire directory. Changed snapshots invalidate cursors. Excerpts do not permit edits: read the exact lines first. Reports skipped files, budgets and completion. startLine is only for an initial single-file search.',
+        searchFilesSchema,
+        (args) => explorer.search(args),
       ),
       tool(
         'studio_git_branches',
@@ -271,7 +198,7 @@ export class ToolHost {
               .catch(() => undefined)
               .then(async () => {
                 if (this.signal.aborted) throw new Error('Exécution annulée.');
-                const normalized = path.posix.normalize(relative);
+                const normalized = await this.policy.contextPath(relative, true);
                 const target = await this.policy.assertWrite(normalized);
                 const view = this.readViews.get(normalized);
                 if (view && !view.full)
@@ -286,15 +213,16 @@ export class ToolHost {
                   flag: 'w',
                   signal: this.signal,
                 });
-                this.changedFiles.add(normalized);
-                this.fileHashes[normalized] = sha256(content);
-                this.policy.recordWrite(normalized, content);
-                this.readViews.set(normalized, {
-                  hash: this.fileHashes[normalized],
+                const written = await this.policy.contextPath(normalized, true);
+                this.changedFiles.add(written);
+                this.fileHashes[written] = sha256(content);
+                this.policy.recordWrite(written, content);
+                this.readViews.set(written, {
+                  hash: this.fileHashes[written],
                   spans: [[0, content.length]],
                   full: true,
                 });
-                return { written: normalized, sha256: this.fileHashes[normalized] };
+                return { written, sha256: this.fileHashes[written] };
               });
             this.writes = write;
             return await write;
@@ -314,7 +242,7 @@ export class ToolHost {
               .catch(() => undefined)
               .then(async () => {
                 this.signal.throwIfAborted();
-                const normalized = path.posix.normalize(relative);
+                const normalized = await this.policy.contextPath(relative, true);
                 const target = await this.policy.resolve(normalized, true);
                 const current = await readTextFile(target, this.signal);
                 const hash = sha256(current.bytes);
@@ -418,7 +346,21 @@ export class ToolHost {
                   truncated: false,
                   fileHashes,
                 };
+                let qualityContext: QualityRunContext | undefined;
                 try {
+                  if (command.quality) {
+                    if (!this.input.qualityStoragePath)
+                      throw new Error('Stockage privé des preuves visuelles indisponible.');
+                    qualityContext = await prepareQualityRun({
+                      workspacePath: this.input.workspacePath,
+                      storagePath: this.input.qualityStoragePath,
+                      featureId: this.input.feature.id,
+                      attemptId: this.input.attempt.id,
+                      commandId: command.id,
+                      criterionIds: this.qualityCriterionIds,
+                      config: command.quality,
+                    });
+                  }
                   const result = await runProcess(
                     command.command,
                     command.args,
@@ -426,6 +368,7 @@ export class ToolHost {
                     {
                       signal: this.signal,
                       timeoutMs: 300_000,
+                      env: qualityContext?.env,
                       onLine: (line) => this.emit('info', line),
                     },
                   );
@@ -440,16 +383,28 @@ export class ToolHost {
                   if (Object.entries(fileHashes).some(([file, hash]) => after[file] !== hash))
                     evidence.error =
                       'Des fichiers observés ont changé pendant les tests. Relance les tests sur leur version finale.';
+                  evidence.finishedAt = new Date().toISOString();
+                  if (qualityContext) {
+                    evidence.quality = await collectQualityEvidence(qualityContext, evidence);
+                    if (['invalid', 'unavailable', 'incomplete'].includes(evidence.quality.status))
+                      evidence.error = `Preuve qualité ${evidence.quality.status} : ${evidence.quality.error ?? 'Parcours incomplet.'}`;
+                  }
                   this.emit(
                     result.code === 0 && !evidence.error ? 'info' : 'error',
                     `Test ${command.name} terminé : code ${result.code}.`,
                   );
-                  return { ...result, ...(evidence.error ? { warning: evidence.error } : {}) };
+                  return {
+                    ...result,
+                    quality: evidence.quality,
+                    ...(evidence.error ? { warning: evidence.error } : {}),
+                  };
                 } catch (error) {
                   evidence.error = redact(error instanceof Error ? error.message : String(error));
                   throw error;
                 } finally {
                   evidence.finishedAt = new Date().toISOString();
+                  if (qualityContext && !evidence.quality)
+                    evidence.quality = await collectQualityEvidence(qualityContext, evidence);
                   this.callbacks.onEvidence?.(evidence);
                 }
               });
@@ -487,27 +442,5 @@ export class ToolHost {
       }
     }
     return hashes;
-  }
-  private async list(relative: string): Promise<string[]> {
-    const absolute = await this.policy.resolve(relative);
-    const result: string[] = [];
-    const visit = async (dir: string, depth: number): Promise<void> => {
-      if (depth > 15 || result.length >= 1500 || this.signal.aborted) return;
-      for (const entry of await readdir(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        const rel = path.relative(this.input.workspacePath, full).split(path.sep).join('/');
-        if (
-          entry.isSymbolicLink() ||
-          isSensitivePath(rel) ||
-          ['dist', 'build', 'coverage', '.next', '.vscode-test'].includes(entry.name)
-        )
-          continue;
-        if (entry.isDirectory()) await visit(full, depth + 1);
-        else if (entry.isFile()) result.push(rel);
-        if (result.length >= 1500) break;
-      }
-    };
-    await visit(absolute, 0);
-    return result;
   }
 }

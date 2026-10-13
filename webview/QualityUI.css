@@ -1,0 +1,117 @@
+.quality-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.quality-panel h3,
+.quality-panel p {
+  margin: 0 0 9px;
+}
+.quality-panel header p,
+.quality-provenance,
+.quality-human-note,
+.quality-proof-ref,
+.quality-command-fields small {
+  opacity: 0.78;
+  font-size: 12px;
+}
+.quality-report,
+.quality-empty {
+  border: 1px solid var(--vscode-panel-border, #444);
+  border-radius: 10px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.quality-report-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.quality-verdict {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  background: var(--vscode-badge-background, #393e49);
+  color: var(--vscode-badge-foreground, #fff);
+}
+.quality-verdict.passed {
+  background: #174b35;
+  color: #d5ffe5;
+}
+.quality-verdict.failed,
+.quality-verdict.invalid {
+  background: #65272a;
+  color: #ffe2e4;
+}
+.quality-case {
+  border-top: 1px solid var(--vscode-panel-border, #444);
+  margin: 14px 0;
+  padding-top: 12px;
+}
+.quality-case summary,
+.quality-report > details > summary {
+  cursor: pointer;
+  padding: 4px 0 10px;
+}
+.quality-case li {
+  margin: 4px 0;
+}
+.quality-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--vscode-errorForeground, #ff9b9b);
+}
+.quality-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.quality-media figure {
+  margin: 0;
+  min-width: 0;
+}
+.quality-media img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+.quality-media button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.quality-media figcaption {
+  margin-top: 5px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.quality-command-fields {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+.quality-command-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.quality-command-fields input,
+.quality-command-fields select {
+  width: 100%;
+  min-width: 0;
+}
+.quality-command-fields small {
+  grid-column: 1 / -1;
+}
+@media (max-width: 550px) {
+  .quality-command-fields {
+    grid-template-columns: 1fr;
+  }
+  .quality-report {
+    padding: 12px;
+  }
+}

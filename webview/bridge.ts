@@ -30,12 +30,14 @@ export function subscribe(callback: (message: HostMessage) => void) {
       event.data &&
       [
         'state',
+        'devopsState',
         'error',
         'notice',
         'navigate',
         'runPreview',
         'checkpointComparison',
         'stepApprovalResult',
+        'profileSaveResult',
       ].includes(event.data.type)
     )
       callback(event.data);

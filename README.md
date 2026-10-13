@@ -6,13 +6,13 @@
 
 Une feature devient un parcours : spécifications, plan, développement, tests, relecture. Chaque étape possède son agent, ses skills, ses MCP, son contexte et ses tentatives. Tu vois ce qui avance, tu fournis une US, tu réponds en direct et tu choisis les validations humaines du parcours.
 
-[Télécharger le VSIX](releases/feature-studio-0.3.0.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
+[Télécharger le VSIX](releases/feature-studio-0.4.0.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Livraison et Azure DevOps](docs/devops-delivery.md) · [Recette Playwright](defaults/quality/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
 
 ![Le cockpit Feature Studio — données de démonstration](docs/images/dashboard.png)
 
 ## Installation
 
-1. Télécharge **[feature-studio-0.3.0.vsix](releases/feature-studio-0.3.0.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
+1. Télécharge **[feature-studio-0.4.0.vsix](releases/feature-studio-0.4.0.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Lance **Feature Studio : ouvrir le cockpit** dans la palette de commandes. Le bouton **Feature Studio** de la barre d’état ouvre aussi le cockpit.
@@ -34,6 +34,10 @@ Si `copilot` n’est pas trouvé, renseigne le chemin complet dans **Réglages �
 
 Le tableau de bord affiche les sessions, leur état, leur branche et leur progression. Recherche, filtres et archives permettent de retrouver les anciens travaux. Aucune session d’exemple n’est ajoutée à ton projet.
 
+### Les menus du cockpit
+
+**Dashboard** regroupe les sessions. **Azure DevOps** affiche tes tickets et PR ; **Livraison** prépare les opérations Git du dépôt ouvert. Ces deux menus fonctionnent sans session active. **Consommation** regroupe les mesures SDK par session, parcours et modèle, avec filtres et couverture inconnue/partielle, sans estimation. [Consommation et validations](docs/consumption.md). **Validation** rassemble questions, livrables et preuves ; **Parcours**, **Agents**, **Skills**, **Mémoire**, **Automatisations** et **Réglages** permettent de configurer le travail.
+
 ### Développer une feature
 
 1. Clique **Nouvelle session**, choisis le parcours, donne un titre et décris le résultat attendu. **L’espace de cette session** propose un **Worktree isolé** pour une feature ou une session libre, et le **Dossier courant** pour une relecture. Tu peux changer ce choix avant la création.
@@ -52,6 +56,22 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 **Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Une reprise consomme elle aussi une tentative. Si la limite est atteinte, **Configurer → Limite de tentatives** permet de la relever explicitement.
 
 Les sessions restent liées à leur branche et à leur dossier d’exécution. À la création d’une session isolée, Feature Studio crée une branche et un worktree local depuis le dernier commit **HEAD**. Il ne crée aucun commit, push, PR ni déploiement automatiquement.
+
+## Recette Playwright et contre-exemples
+
+Le parcours **Feature avec recette et contre-exemples** (`quality-feature`) ajoute une **Recette visuelle**, puis une recherche de **Contre-exemples** par un agent indépendant, avant la relecture. Il cible d’abord les applications web disposant de tests Playwright locaux. Une description de test dans un livrable ne suffit pas : les scénarios et leurs pièces sont recueillis depuis une commande réellement exécutée par l’hôte.
+
+Dans **Réglages → Commandes de test autorisées**, installe explicitement le reporter qualité et configure une commande Playwright avec la collecte **Recette visuelle** ou **Contre-exemples** et le chemin de rapport. Dans une session isolée, **Preuves → Installer le reporter dans cette session** copie le kit dans son worktree. Installe toi-même les dépendances, le navigateur et l’environnement local nécessaires ; Feature Studio ne le fait pas automatiquement. Le reporter doit aussi être déclaré dans la configuration Playwright.
+
+Les preuves affichent cas, attendu/observé, reproduction, captures et traces conservées localement. Lorsqu’une collecte qualité est configurée, un rapport manquant, ancien, invalide, vide, incomplet ou échoué est une preuve bloquante pour la validation. Les critères restent à approuver humainement ; les corrections du pilote exigent une route et des limites déjà configurées. [Configuration complète](defaults/quality/README.md).
+
+## Azure DevOps et livraison confirmée
+
+Ouvre **Azure DevOps** pour renseigner organisation, projet, dépôt et remote. Le PAT se saisit dans une fenêtre VS Code masquée et reste dans **SecretStorage**. Le push utilise tes identifiants Git locaux. Le tableau charge les tickets et PR du compte et permet de créer/retrouver une feature liée à un ticket. La configuration et les liens persistent localement.
+
+Dans **Livraison**, inspecte le dépôt ouvert, sélectionne les fichiers complets concernés, saisis l’intention et relis le titre proposé. **Commit**, **Push** et **PR brouillon** exigent chacun un aperçu actualisé et une confirmation VS Code. Le staging des fichiers non sélectionnés est conservé. Le push est sans force ; la PR n’active aucune fusion ni auto-complétion.
+
+Le profil **Livraison** (`fs-delivery.agent.md`) se modifie dans **Agents**. Son bloc fenced `delivery-rules` définit les types conventionnels et le titre de repli selon des règles déterministes. La conversation de livraison reste locale et ne déclenche aucune opération Git ; la livraison ne fait aucun appel modèle. Les hooks, filtres et signatures Git ne sont pas exécutés dans ce mode. [Fonctionnement, limites et récupération](docs/devops-delivery.md).
 
 ## Un espace Git et des points de restauration par feature
 
@@ -134,15 +154,15 @@ Dans **Agents**, ouvre un profil et change **Son petit nom**. Choisis l’un des
 <img src="webview/public/avatars/captain/approved.png" width="82" alt="Capitaine satisfait">
 </p>
 
-Chaque avatar possède une image de repos, un **vrai GIF de travail à quatre images**, puis une pose de validation. Les animations respectent la préférence système de réduction des mouvements. Le pseudo et le personnage sont sauvegardés dans le profil du projet ; le rôle technique reste indépendant du petit nom.
+Chaque avatar possède une image de repos, un **vrai GIF de travail à quatre images**, puis une pose de validation. Les animations respectent la préférence système de réduction des mouvements. Le pseudo et le personnage sont sauvegardés dans la portée choisie du profil ; le rôle technique reste indépendant du petit nom.
 
-Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. Les créations et modifications sont enregistrées dans `~/.copilot/agents/` et `~/.copilot/skills/` (ou dans `COPILOT_HOME` si défini), pour être disponibles dans tous tes projets. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
+Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. L’éditeur propose **PERSONNEL**, dans `~/.copilot/agents/` et `~/.copilot/skills/` (ou `COPILOT_HOME`), ou **PROJET**, dans `.github/agents/` et `.github/skills/`. Un profil du kit fourni commence en portée personnelle ; un profil personnalisé commence dans sa portée active. Le chemin et la révision attendue sont affichés avant sauvegarde. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
 
 Les capacités reconnues sont `read`, `search`, `edit`/`write` et `execute`, ainsi que les noms précis des outils `studio_*`. `execute` donne accès uniquement aux commandes de tests déjà autorisées, et seulement dans une étape de profil Tests. Il n’ouvre aucun terminal libre. La permission effective est toujours l’intersection du profil d’étape et des outils de l’agent.
 
 ## Skills et kit Copilot
 
-Le **kit Copilot 2.0.0 fourni par Matt** est embarqué avec ses quatre agents, sept skills, six templates et ses scripts. Cinq profils Feature Studio adaptent ce kit aux étapes du cockpit. Les skills sont disponibles immédiatement dans le catalogue.
+Le **kit Copilot 2.0.0 fourni par Matt** est embarqué avec ses quatre agents, sept skills, six templates et ses scripts. Huit profils Feature Studio adaptent ce kit aux étapes du cockpit et à la livraison. Les skills sont disponibles immédiatement dans le catalogue.
 
 Clique **Installer le kit utilisateur** pour rendre le kit disponible dans tous tes projets. La destination est `~/.copilot` (`%USERPROFILE%\.copilot` sous Windows), ou le répertoire `COPILOT_HOME` s’il est configuré dans l’environnement de VS Code.
 
@@ -155,7 +175,9 @@ Clique **Installer le kit utilisateur** pour rendre le kit disponible dans tous 
 | Templates, scripts et documentation du kit | `feature-studio/kit/` |
 | Exemples propres aux projets | `feature-studio/kit/examples/` |
 
-L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies du projet sont conservées tant que tu ne demandes pas leur migration. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. L’éditeur enregistre désormais au niveau utilisateur. Si une copie du projet existe, migre-la d’abord afin qu’elle ne masque pas tes modifications personnelles.
+L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies du projet sont conservées tant que tu ne demandes pas leur migration. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. L’éditeur montre les versions existantes et leur priorité. Changer de portée charge la version correspondante et conserve un brouillon par portée ; si cette portée est absente, il annonce la copie des instructions affichées. Modifier la version personnelle pendant qu’une version projet existe affiche qu’elle restera masquée dans ce projet. La migration reste une action distincte et facultative.
+
+Les sauvegardes de profils passent par l’hôte dans un espace approuvé : empreinte SHA256 attendue (ou cible explicitement absente), verrou exclusif par fichier et remplacement atomique. Si une autre fenêtre ou un éditeur externe a modifié le fichier, la sauvegarde est refusée et le brouillon reste ouvert. Les identifiants déjà existants ne sont pas écrasés lors d’une création ; ouvre la version à modifier ou choisis un nouvel identifiant. Les métadonnées YAML supplémentaires des agents, leurs commentaires et les fichiers SKILL.md complets sont conservés.
 
 Les liens des agents et skills installés pointent vers les templates utilisateur. La carte `.ai/project.md`, lorsqu’elle existe, reste celle du projet courant. Les exemples de configuration et le runner .NET restent optionnels : depuis le projet concerné, le runner utilisateur peut être appelé explicitement avec `python "$HOME/.copilot/feature-studio/kit/scripts/ai_tools.py" --help` (adapter le chemin si `COPILOT_HOME` est défini). La documentation originale du kit décrit aussi son ancien mode d’installation dans un dépôt. Aucun script, MCP ou outil externe n’est exécuté pendant la copie.
 
@@ -189,6 +211,8 @@ Dans **Automatisations**, les hooks `beforeRun` et `afterRun` exécutent des com
 - L’agent dispose des outils hôtes et des seuls outils MCP explicitement choisis. Il ne dispose d’aucun shell générique, accès de navigation natif ou commande Git d’écriture. Le catalogue réel et la provenance des outils MCP sont vérifiés avant l’envoi du prompt.
 - L’interface affiche les tokens, le modèle effectif et les nano-AIU uniquement si le CLI les fournit. Elle cumule également les tentatives échouées/annulées et signale les données inconnues. Les plafonds sont contrôlés avant chaque nouveau run ; un run en cours peut dépasser un seuil de tokens ou de nano-AIU. Ce ne sont pas des euros ni un plafond financier garanti.
 
+Les listes et recherches des outils agents sont paginées avec des curseurs vérifiés. Les exclusions Git et les `.gitignore` imbriqués hors Git sont respectés ; une modification pendant le parcours impose de recommencer. [Contrat d’exploration et limites](docs/explorer.md).
+
 ## Développer l’extension
 
 Node.js **22.12+** et npm sont nécessaires pour travailler sur les sources.
@@ -200,7 +224,7 @@ npx playwright install chromium
 npm run test:ui        # Parcours webview, sans requêtes IA
 npm run test:extension # Vrai hôte VS Code isolé, sans prompt IA
 npm run smoke:mcp     # Diagnostic MCP local explicite, sans prompt IA
-npm run package       # Produit releases/feature-studio-0.3.0.vsix
+npm run package       # Produit releases/feature-studio-0.4.0.vsix
 ```
 
 Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développement. `npm run dev` ouvre le frontend de développement ; `http://127.0.0.1:5173/?demo=1` affiche des données d’exemple avec un bandeau explicite. Sans ce paramètre et hors VS Code, aucune exécution n’est simulée.

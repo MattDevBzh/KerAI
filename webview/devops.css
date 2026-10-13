@@ -1,0 +1,183 @@
+.devops-panel {
+  max-width: 1280px;
+  margin: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-wrap: anywhere;
+}
+.devops-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+.devops-panel h1 {
+  margin: 0;
+}
+.devops-panel h2 {
+  font-size: 18px;
+}
+.devops-panel h3 {
+  font-size: 15px;
+  margin-top: 0;
+}
+.devops-panel p {
+  line-height: 1.6;
+}
+.devops-card {
+  border: 1px solid var(--vscode-panel-border, #393b46);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--vscode-editor-background, #191a22);
+}
+.devops-card summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}
+.devops-fields,
+.devops-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.devops-columns > section {
+  min-width: 0;
+}
+.devops-columns article {
+  margin-bottom: 14px;
+}
+.devops-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.devops-panel input:not([type='checkbox']),
+.devops-panel textarea,
+.devops-panel select {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--vscode-input-background, #242631);
+  color: inherit;
+  border: 1px solid var(--vscode-input-border, #444654);
+  border-radius: 6px;
+  padding: 9px;
+  font: inherit;
+}
+.devops-panel textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+.devops-panel button {
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-button-border, #565967);
+  color: inherit;
+  background: var(--vscode-button-secondaryBackground, #313443);
+}
+.devops-panel button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.devops-actions {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.devops-actions input,
+.devops-actions select {
+  flex: 1;
+  min-width: 160px;
+}
+.devops-error {
+  border: 1px solid #bd6060;
+  background: #a030301f;
+  border-radius: 8px;
+  padding: 16px;
+}
+.devops-notice {
+  border-left: 3px solid #dbad53;
+  padding-left: 12px;
+}
+.devops-tag {
+  font-size: 11px;
+  border: 1px solid var(--vscode-panel-border, #454856);
+  border-radius: 12px;
+  padding: 2px 7px;
+  display: inline-block;
+}
+.devops-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.5;
+  max-height: 400px;
+  overflow: auto;
+}
+.delivery-files {
+  max-height: 400px;
+  overflow: auto;
+}
+.delivery-files label {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.delivery-files code {
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+.delivery-diff {
+  max-height: 400px;
+  overflow: auto;
+  padding: 12px;
+  background: #0002;
+  font-size: 12px;
+}
+.delivery-conversation {
+  max-height: 320px;
+  overflow: auto;
+}
+.delivery-conversation article {
+  border-left: 3px solid #648ecc;
+  padding: 8px 14px;
+  margin: 10px 0;
+}
+.delivery-conversation .user {
+  border-color: #85858e;
+  background: #ffffff04;
+}
+.delivery-conversation p {
+  white-space: pre-wrap;
+  margin: 5px 0;
+}
+.delivery-preview {
+  border-color: #648ecc;
+  background: #648ecc0c;
+}
+.devops-panel a {
+  color: var(--vscode-textLink-foreground, #86b7ff);
+}
+.devops-pr-link {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vscode-panel-border, #393b46);
+}
+@media (max-width: 850px) {
+  .devops-columns,
+  .devops-fields {
+    grid-template-columns: 1fr;
+  }
+  .devops-panel {
+    padding: 16px;
+  }
+  .devops-panel header {
+    flex-direction: column;
+  }
+}

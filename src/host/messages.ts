@@ -1,3 +1,4 @@
+import { devOpsMessageVariants } from '../core/devopsSchemas';
 import { z } from 'zod';
 import { settingsSchema } from '../core/store';
 import { avatarSchema } from '../core/registry';
@@ -17,6 +18,16 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  ...devOpsMessageVariants,
+  z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),
+  z
+    .object({
+      type: z.literal('openQualityAttachment'),
+      featureId: id,
+      evidenceId: id,
+      attachmentId: id,
+    })
+    .strict(),
   z
     .object({
       type: z.enum([
@@ -151,6 +162,21 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('saveAgent'),
+      requestId: z.string().min(1).max(100),
+      options: z
+        .object({
+          scope: z.enum(['user', 'workspace']),
+          expectedRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .nullable(),
+          sourceScope: z.enum(['bundled', 'user', 'workspace']).optional(),
+          sourceRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        })
+        .strict(),
       agent: z
         .object({
           id,
@@ -167,7 +193,28 @@ export const messageSchema = z.discriminatedUnion('type', [
         .strict(),
     })
     .strict(),
-  z.object({ type: z.literal('saveSkill'), id, content: text }).strict(),
+  z
+    .object({
+      type: z.literal('saveSkill'),
+      id,
+      content: text,
+      requestId: z.string().min(1).max(100),
+      options: z
+        .object({
+          scope: z.enum(['user', 'workspace']),
+          expectedRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .nullable(),
+          sourceScope: z.enum(['bundled', 'user', 'workspace']).optional(),
+          sourceRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        })
+        .strict(),
+    })
+    .strict(),
   z.object({ type: z.literal('saveSettings'), settings: settingsSchema }).strict(),
   z.object({ type: z.literal('saveWorkflow'), workflow: workflowSchema }).strict(),
   z

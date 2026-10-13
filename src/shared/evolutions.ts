@@ -93,6 +93,7 @@ export interface AutopilotState extends AutopilotConfig {
   updatedAt: string;
 }
 export interface TestEvidence {
+  quality?: import('./quality').QualityEvidence;
   id: string;
   source: 'host';
   commandId: string;

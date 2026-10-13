@@ -61,6 +61,26 @@ const entry: MemoryEntry = {
 };
 
 describe('deterministic context compiler', () => {
+  it('compiles full question, choices, answer and original provenance without depending on a resumed session', () => {
+    const data = input();
+    data.attempt.questions = [];
+    data.attempt.answers = { q1: 'Privé', orphan: 'Question perdue' };
+    data.attempt.answerBindings = {
+      q1: {
+        question: { id: 'q1', text: 'Qui peut accéder au rapport ?', choices: ['Public', 'Privé'] },
+        answer: 'Privé',
+        origin: { stepId: data.step.id, attemptId: 'original-attempt' },
+      },
+    };
+    const fresh = buildPrompt(data);
+    expect(fresh).toContain('Qui peut accéder au rapport ?');
+    expect(fresh).toContain('["Public","Privé"]');
+    expect(fresh).toContain('Réponse humaine : Privé');
+    expect(fresh).toContain('étape dev, tentative original-attempt');
+    expect(fresh).not.toContain('Question perdue');
+    data.resumeSessionId = 'existing-session';
+    expect(buildPrompt(data)).toBe(fresh);
+  });
   it('can exclude a spec, edit a plan for one run and retain execution rules without altering sources', () => {
     const data = input();
     for (const [id, content] of [

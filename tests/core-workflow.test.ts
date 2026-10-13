@@ -33,6 +33,83 @@ function complete(engine: WorkflowEngine, id: string, stepId: string) {
 }
 
 describe('workflow transitions', () => {
+  it.each([
+    { id: 'q1', text: 'Publier ?', choices: ['Oui', 'Non'] },
+    { id: 'q1', text: 'Public ?', choices: ['Autre', 'Privé'] },
+  ])('reasks a reused ID when its question or choices change: $text', (changed) => {
+    const { engine, id } = setup();
+    const first = engine.beginRun(id, 'specs');
+    engine.setSession(id, 'specs', 'session');
+    engine.finishRun(id, 'specs', {
+      ...result(),
+      questions: [{ id: 'q1', text: 'Public ?', choices: ['Oui', 'Non'] }],
+    });
+    engine.answerQuestions(id, 'specs', { q1: 'Oui' });
+    engine.answerQuestions(id, 'specs', { q1: 'Non' });
+    const next = engine.beginRun(id, 'specs', '', true);
+    expect(next.answerBindings?.q1.origin.attemptId).toBe(first.id);
+    expect(next.answerBindings?.q1.answer).toBe('Non');
+    engine.finishRun(id, 'specs', { ...result(), questions: [changed] });
+    expect(next.answers.q1).toBeUndefined();
+    expect(next.answerBindings?.q1).toBeUndefined();
+    expect(next.status).toBe('waiting_input');
+    expect(() => engine.approveStep(id, 'specs')).toThrow(/questions|résultat/);
+    expect(first.answers.q1).toBe('Non');
+  });
+  it('retains the exact answered question across a continuation and drops orphan legacy answers', () => {
+    const { engine, id } = setup();
+    const first = engine.beginRun(id, 'specs');
+    engine.setSession(id, 'specs', 'session');
+    const question = { id: 'q1', text: 'Public ?', choices: ['Oui', 'Non'] };
+    engine.finishRun(id, 'specs', { ...result(), questions: [question] });
+    engine.answerQuestions(id, 'specs', { q1: 'Oui' });
+    delete first.answerBindings; // Existing saved attempt before provenance was introduced.
+    first.answers.unknown = 'Ne jamais deviner la question';
+    const next = engine.beginRun(id, 'specs', '', true);
+    expect(next.answers).toEqual({ q1: 'Oui' });
+    engine.finishRun(id, 'specs', { ...result(), questions: [question] });
+    expect(next.status).toBe('awaiting_review');
+    expect(next.answerBindings?.q1).toMatchObject({
+      question,
+      answer: 'Oui',
+      origin: { attemptId: first.id, stepId: 'specs' },
+    });
+  });
+  it.each(['replay', 'artifact', 'configuration'] as const)(
+    'clears acceptance proofs after %s changes',
+    (action) => {
+      const { engine, id, feature } = setup();
+      complete(engine, id, 'specs');
+      feature.criteria = [
+        { id: 'accept', text: 'Observed behavior', status: 'passed', evidence: 'Old proof' },
+      ];
+      if (action === 'replay') engine.beginRun(id, 'specs');
+      if (action === 'artifact') engine.saveArtifact(id, 'specs', 'Changed');
+      if (action === 'configuration')
+        engine.configureStep(id, 'specs', { agentId: 'changed', skills: [] });
+      expect(feature.criteria).toEqual([
+        { id: 'accept', text: 'Observed behavior', status: 'pending', evidence: '' },
+      ]);
+      expect(feature.status).not.toBe('completed');
+    },
+  );
+  it('clears criteria on editing an unapproved artifact, but keeps proof after administrative settings changes', () => {
+    const { engine, id, feature } = setup();
+    engine.beginRun(id, 'specs');
+    engine.finishRun(id, 'specs', result());
+    feature.criteria = [
+      { id: 'accept', text: 'Behavior', status: 'passed', evidence: 'Current proof' },
+    ];
+    engine.configureStep(id, 'specs', {
+      agentId: 'agent',
+      skills: [],
+      maxAttempts: 4,
+      askBeforeRun: true,
+    });
+    expect(feature.criteria[0].evidence).toBe('Current proof');
+    engine.saveArtifact(id, 'specs', 'Edited before approval');
+    expect(feature.criteria[0]).toMatchObject({ status: 'pending', evidence: '' });
+  });
   it('requires approvals between dependencies, and only completes after every step', () => {
     const { engine, id, feature } = setup();
     expect(() => engine.beginRun(id, 'plan')).toThrow(/préalables/);

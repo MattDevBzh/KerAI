@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 — 2026-10-13
+
+- Ajoute les menus Azure DevOps et Livraison utilisables sans session active : configuration organisation/projet/dépôt, PAT dans SecretStorage, tickets et PR du compte, liens persistés vers les features.
+- Prépare des commits sur une sélection explicite de fichiers complets en préservant le staging des autres fichiers. Commit, push sans force et PR brouillon ont chacun leur aperçu et leur confirmation hôte. Le profil Markdown de livraison expose des règles `delivery-rules` déterministes ; ces opérations et la conversation locale ne font aucun appel modèle.
+- Ajoute le parcours `quality-feature` : recette Playwright, contre-exemples indépendants puis relecture. Les étapes et agents de qualité exigent un rapport réussi du bon type, lié à la tentative et aux critères existants, avec scénarios, captures et traces locales. Les rapports absents, invalides, périmés ou échoués bloquent les validations humaine et automatique. Le reporter exige une installation explicite dans la racine d’exécution et une commande Playwright approuvée, sans installation automatique de dépendances ou navigateurs.
+- Rend les profils Agents et Skills éditables dans les portées personnel/projet avec versions, chemins, priorité visible, brouillons séparés et refus des sauvegardes concurrentes ou obsolètes.
+- Pagine les listes et recherches de fichiers avec curseurs vérifiés ; applique les exclusions Git et les `.gitignore` imbriqués hors Git, sans limite arbitraire de profondeur ni résultats partiels silencieux.
+- Ajoute un menu Consommation pour explorer les mesures par session, parcours et modèle ; affiche les mesures disponibles pendant les tentatives et conserve les valeurs inconnues comme telles.
+- Protège les fichiers humains et sensibles face aux alias de casse/Unicode tout en conservant les chemins Git et physiques macOS. Les diffs HEAD refusent les blobs tronqués et résolvent les chemins depuis la racine Git lorsque le workspace est un sous-dossier.
+- Conserve le texte, les choix, la réponse et la provenance des questions lors d’une continuation ; une nouvelle question portant le même identifiant ne réutilise pas une ancienne réponse différente.
+- Invalide les critères et preuves devenus obsolètes après replay, édition de livrable ou changement de configuration. Le stockage reste compatible avec le schéma v3.
+
+
 ## 0.3.6 — 2026-10-13
 
 - Ajoute une sélection explicite des fichiers déjà modifiés que l’agent peut reprendre, dans l’aperçu avant lancement. Une autorisation conversationnelle seule n’ouvre plus une fausse piste : le refus indique directement ce contrôle.

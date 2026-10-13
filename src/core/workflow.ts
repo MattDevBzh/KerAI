@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Attempt, Feature, FeatureStep, RunEvent, RunResult, Workflow } from '../shared/types';
+import { qualityKindSchema } from './qualitySchemas';
 import { launchSchema, reviewSchema } from './evolutionSchemas';
 import { approvalBlockers, featureCompletionBlockers } from './validation';
 import { defaultBudget } from './budgets';
+import { boundAnswers, sameQuestion } from './questions';
 
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
 export const workflowSchema = z
@@ -22,6 +24,7 @@ export const workflowSchema = z
             description: z.string(),
             agentId: id,
             policy: z.enum(['read-only', 'workspace-write', 'tests']),
+            requiredQuality: qualityKindSchema.optional(),
             model: z.string().optional(),
             reasoning: z.string().optional(),
             skills: z.array(id),
@@ -172,6 +175,11 @@ export class WorkflowEngine {
     this.touch(feature);
   }
   private invalidate(feature: Feature, stepId: string) {
+    // Acceptance proofs apply to the feature state as a whole, not an old run.
+    for (const criterion of feature.criteria ?? []) {
+      criterion.status = 'pending';
+      criterion.evidence = '';
+    }
     const invalid = new Set([stepId]);
     let changed = true;
     while (changed) {
@@ -209,6 +217,7 @@ export class WorkflowEngine {
     if (resume && previous!.questions.some((q) => !previous!.answers[q.id]?.trim()))
       throw new Error('Répondre aux questions avant de reprendre.');
     this.invalidate(feature, step.id);
+    const answerBindings = boundAnswers(previous, step.id);
     const attempt: Attempt = {
       id: randomUUID(),
       startedAt: new Date().toISOString(),
@@ -217,7 +226,10 @@ export class WorkflowEngine {
       feedback,
       logs: [],
       questions: [],
-      answers: previous ? { ...previous.answers } : {},
+      answers: Object.fromEntries(
+        Object.entries(answerBindings).map(([id, binding]) => [id, binding.answer]),
+      ),
+      answerBindings,
       changedFiles: [],
       revision: 0,
       ...(previous?.artifact ? { artifact: structuredClone(previous.artifact) } : {}),
@@ -244,6 +256,20 @@ export class WorkflowEngine {
       )
     )
       throw new Error('Questions invalides.');
+    const answerBindings = boundAnswers(attempt, step.id);
+    for (const question of result.questions) {
+      if (
+        !answerBindings[question.id] ||
+        !sameQuestion(answerBindings[question.id].question, question)
+      ) {
+        delete attempt.answers[question.id];
+        delete answerBindings[question.id];
+      }
+    }
+    attempt.answerBindings = answerBindings;
+    attempt.answers = Object.fromEntries(
+      Object.entries(answerBindings).map(([id, binding]) => [id, binding.answer]),
+    );
     const questions = [
       ...new Map(
         [...attempt.questions, ...result.questions].map((question) => [
@@ -330,8 +356,8 @@ export class WorkflowEngine {
       throw new Error('Ce livrable ne peut pas être modifié dans cet état.');
     attempt.artifact = { name: step.artifact, content, updatedAt: new Date().toISOString() };
     attempt.revision = (attempt.revision ?? 0) + 1;
+    this.invalidate(feature, step.id);
     if (step.status === 'approved') {
-      this.invalidate(feature, step.id);
       step.status = attempt.status = 'awaiting_review';
       delete attempt.approvedAt;
       delete attempt.approvedBy;
@@ -347,6 +373,7 @@ export class WorkflowEngine {
         throw new Error('Réponse à une question inconnue.');
     }
     Object.assign(attempt.answers, answers);
+    attempt.answerBindings = boundAnswers(attempt, step.id);
     attempt.revision = (attempt.revision ?? 0) + 1;
     this.touch(feature);
     // Les réponses sont fournies au prochain run : elles ne valident pas un livrable que l'agent n'a pas encore complété.

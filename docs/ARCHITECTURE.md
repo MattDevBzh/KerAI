@@ -1,6 +1,6 @@
-# Architecture — évolution v0.3
+# Architecture — évolution v0.4
 
-Feature Studio est une extension locale VS Code : un webview React transmet des intentions validées à un hôte Node. Le moteur métier ne dépend ni de VS Code ni du CLI. Les contrats sont définis dans `src/shared/types.ts`, `src/shared/evolutions.ts` et `src/shared/workspaces.ts` ; le host conserve l'autorité sur les exécutions, permissions et écritures.
+Feature Studio est une extension locale VS Code : un webview React transmet des intentions validées à un hôte Node. Le moteur métier ne dépend ni de VS Code ni du CLI. Les contrats sont définis dans `src/shared/types.ts`, `src/shared/evolutions.ts` et `src/shared/workspaces.ts`, `src/shared/profiles.ts`, `src/shared/quality.ts` et `src/shared/devops.ts` ; le host conserve l'autorité sur les exécutions, permissions et écritures.
 
 ```mermaid
 flowchart LR
@@ -12,6 +12,11 @@ flowchart LR
     GitSpace --> Git[Git local / worktree frère]
     GitSpace --> Points[Objets SHA-256 et manifestes privés]
     Service --> Registry[AgentRegistry]
+    Service --> Quality[QualityRunner / preuves et médias locaux]
+    VS --> DevOps[DevOpsController]
+    DevOps --> Delivery[DeliveryService / Git confirmé]
+    DevOps --> Boards[AzureDevOps / API authentifiée]
+    DevOps --> Secrets[SecretStorage VS Code]
     Service --> Adapter[CopilotCliAdapter]
     Adapter -->|SDK / JSON-RPC| CLI[Copilot CLI local]
     CLI --> Tools[ToolHost]
@@ -34,7 +39,7 @@ flowchart LR
 | `src/core/budgets.ts`           | Agrégats de consommation mesurée et blocage entre tentatives                                                                                       |
 | `src/core/validation.ts`        | Critères, commentaires et preuves nécessaires à une approbation                                                                                    |
 | `src/core/store.ts`             | État v3 validé, migrations v0/v1/v2, sauvegarde atomique et récupération                                                                           |
-| `src/core/registry.ts`          | Catalogue embarqué/workspace, YAML strict, installation additive du kit                                                                            |
+| `src/core/registry.ts`          | Catalogue embarqué/utilisateur/projet, priorités, versions, sauvegardes avec révision attendue, YAML strict, installation additive du kit                                                                            |
 | `src/core/evolutionSchemas.ts`  | Schémas des contextes, MCP, budgets, pilote, preuves, relectures et mémoire                                                                        |
 | `src/core/workspaceSchemas.ts`  | Schémas des liaisons worktree et métadonnées des points de restauration                                                                            |
 | `src/host/CopilotCliAdapter.ts` | Diagnostic CLI, sessions, catalogue effectif, événements et résultats structurés                                                                   |
@@ -43,6 +48,13 @@ flowchart LR
 | `src/host/PolicyEngine.ts`      | Chemins, profils, protection des changements humains et contrôle avant écriture                                                                    |
 | `src/host/WorkspaceLease.ts`    | Un cockpit par racine entre fenêtres/processus et réservation du worktree pendant son utilisation                                                  |
 | `webview/`                      | Présentation, édition et intentions ; aucun accès direct aux fichiers, secrets ou processus                                                        |
+
+## Modules ajoutés en v0.4
+
+- `DevOpsController` conserve configuration, liens et conversation dans `devops.json`, garde le PAT hors du webview et partage les réservations de mutation de `StudioService`. `AzureDevOps` expose des lectures bornées et la création de PR brouillon ; `DeliveryService` prépare et vérifie les aperçus Git avant toute confirmation. Les règles fenced du profil de livraison sont déterministes ; cette voie ne passe pas par le runtime Copilot. [Contrat de livraison](devops-delivery.md).
+- `QualityRunner` atteste les rapports et médias issus des commandes autorisées avec une identité de tentative ; `src/core/qualitySchemas.ts` borne les données et `QualityUI` expose les preuves. Le kit Playwright se copie uniquement sur action humaine dans la racine voulue. Le parcours `quality-feature` sépare recette, contre-exemples et relecture. [Configuration du reporter](../defaults/quality/README.md).
+- `WorkspaceExplorer` fournit inventaires/recherches paginés, respecte Git ou les règles `ignore` hors Git et invalide les curseurs obsolètes. `GitFileContent` lit les blobs HEAD bornés sans transformer une erreur en baseline vide. `FilesystemPathIdentity` et `UnicodeCaseFold` contrôlent les alias physiques de chemins. [Exploration](explorer.md).
+- `src/core/questions.ts` relie chaque réponse au texte, aux choix et à l’origine de sa question. `src/core/analytics.ts` agrège les mesures disponibles ; les données inconnues ne deviennent pas zéro. [Consommation](consumption.md).
 
 ## Du lancement au résultat
 
@@ -60,7 +72,7 @@ Une question peut suspendre l'agent en cours via une demande humaine. Le pilote 
 
 `state.json` utilise le schéma **3**. Il conserve features, historiques, contextes de lancement, empreintes, mesures, preuves, relectures, critères, commentaires, réglages, mémoire locale, liaisons de worktree et métadonnées des points. Les versions 0, 1 et 2 migrent vers 3 en conservant leurs données connues et en ajoutant les valeurs manquantes. Une ancienne feature sans configuration d’autopilote reste manuelle et, sans métadonnée de worktree, conserve le dossier source. La v0.2 refuse le schéma 3 : aucune migration inverse ne permet de rouvrir ces données en perdant silencieusement l’isolation. Une version inconnue ou un JSON invalide est rejeté en préservant le fichier original.
 
-Le fichier se trouve sous `ExtensionContext.storageUri`, dans un sous-dossier dérivé de l'empreinte du chemin réel du workspace. Les sauvegardes capturent leur instantané à l'appel, sont sérialisées par chemin dans le processus, écrivent un temporaire privé synchronisé puis le renomment atomiquement. Le verrou `WorkspaceLease` complète cette protection entre fenêtres/processus. Les agents et skills du catalogue sont enregistrés dans le dossier utilisateur (`~/.copilot` ou `COPILOT_HOME`). Les anciennes surcharges `.github/agents` et `.github/skills` restent lisibles en priorité jusqu’à leur migration explicite avec sauvegarde. Les workflows personnalisés restent dans `.feature-studio/workflows`.
+Le fichier se trouve sous `ExtensionContext.storageUri`, dans un sous-dossier dérivé de l'empreinte du chemin réel du workspace. Les sauvegardes capturent leur instantané à l'appel, sont sérialisées par chemin dans le processus, écrivent un temporaire privé synchronisé puis le renomment atomiquement. Le verrou `WorkspaceLease` complète cette protection entre fenêtres/processus. Les agents et skills du catalogue se sauvegardent explicitement dans la portée utilisateur (`~/.copilot` ou `COPILOT_HOME`) ou projet (`.github/agents` et `.github/skills`). La priorité est projet, utilisateur, puis profils embarqués. Une révision attendue et un verrou par fichier protègent la sauvegarde ; la migration vers le compte utilisateur demeure explicite avec sauvegarde. Les workflows personnalisés restent dans `.feature-studio/workflows`.
 
 Le CLI utilise un espace `COPILOT_HOME` isolé sous `globalStorageUri`. Les secrets MCP passent par `SecretStorage` ou des variables d'environnement référencées ; leurs valeurs ne sont pas des champs de configuration du webview. Le diagnostic CLI et la découverte MCP ne demandent aucun prompt modèle, mais une connexion MCP peut démarrer un processus ou contacter son serveur.
 

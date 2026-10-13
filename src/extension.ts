@@ -1,3 +1,6 @@
+import { DevOpsController } from './host/DevOpsController';
+import { devOpsMessageSchema } from './core/devopsSchemas';
+import { devOpsPlainText } from './shared/devopsText';
 import * as vscode from 'vscode';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -10,12 +13,13 @@ import { StudioService } from './host/StudioService';
 import { WorkspaceLease } from './host/WorkspaceLease';
 import { PolicyEngine, sha256 } from './host/PolicyEngine';
 import { parseMessage } from './host/messages';
-import { gitRead } from './host/gitRead';
+import { readHeadFile } from './host/GitFileContent';
 import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 
 let panel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
+let devops: DevOpsController | undefined;
 let lease: WorkspaceLease | undefined;
 let initializing: Promise<StudioService> | undefined;
 let shuttingDown: Promise<void> | undefined;
@@ -99,6 +103,86 @@ export async function activate(context: vscode.ExtensionContext) {
         next.on('errorNotice', (message) => report(new Error(message)));
         service = next;
         lease = newLease;
+        const controller = new DevOpsController({
+          root,
+          storageDirectory: path.join(
+            context.storageUri!.fsPath,
+            'studio',
+            sha256(root).slice(0, 24),
+            'devops',
+          ),
+          secrets: context.secrets,
+          publish: (state) => send({ type: 'devopsState', state }),
+          guard: () => next.assertConfigurable(),
+          withMutation: (label, work) =>
+            next.withWorkspaceMutation(label, async () => {
+              const result = await work();
+              await next.refresh();
+              return result;
+            }),
+          confirm: async (title, detail) => {
+            next.assertTrusted();
+            if (
+              vscode.workspace.textDocuments.some(
+                (document) =>
+                  document.isDirty &&
+                  document.uri.scheme === 'file' &&
+                  (document.uri.fsPath === root || document.uri.fsPath.startsWith(root + path.sep)),
+              )
+            )
+              throw new Error(
+                'Enregistre ou ferme les fichiers modifiés dans l’éditeur avant la livraison.',
+              );
+            const result = await vscode.window.showWarningMessage(
+              title,
+              { modal: true, detail },
+              'Confirmer',
+            );
+            next.assertTrusted();
+            return result === 'Confirmer';
+          },
+          requestToken: async () => {
+            const token = await vscode.window.showInputBox({
+              title: 'Connexion Azure DevOps',
+              prompt:
+                'Jeton personnel : Work Items (lecture), Code (lecture et écriture). Stocké uniquement dans SecretStorage.',
+              password: true,
+              ignoreFocusOut: true,
+            });
+            next.assertTrusted();
+            return token;
+          },
+          getAgentInstructions: async () => {
+            const registry = await next.registry.load();
+            const profile = registry.agents.find((agent) => agent.id === 'fs-delivery');
+            if (!profile)
+              throw new Error(
+                'Profil fs-delivery absent. Restaure le profil depuis le catalogue Agents.',
+              );
+            return profile.instructions;
+          },
+          features: () => next.state.features,
+          createFeature: async (ticket) => {
+            const workflow =
+              next.state.workflows.find((entry) => entry.id === 'feature') ??
+              next.state.workflows[0];
+            if (!workflow) throw new Error('Aucun parcours disponible pour créer la feature.');
+            const feature = await next.createFeature({
+              title: `#${ticket.id} — ${ticket.title}`,
+              description: [
+                devOpsPlainText(ticket.description),
+                'Critères d’acceptation :',
+                devOpsPlainText(ticket.acceptanceCriteria) || 'Non renseignés.',
+                `Source Azure DevOps : ${ticket.url}`,
+              ].join('\n\n'),
+              workflowId: workflow.id,
+              isolated: false,
+            });
+            return feature.id;
+          },
+        });
+        devops = controller;
+        await controller.initialize();
         return next;
       } catch (error) {
         await newLease.release();
@@ -116,10 +200,53 @@ export async function activate(context: vscode.ExtensionContext) {
   const dispatch = async (raw: unknown): Promise<void | CheckpointComparison> => {
     const message = parseMessage(raw),
       current = await ensure();
+    const deliveryMessage = devOpsMessageSchema.safeParse(message);
+    if (deliveryMessage.success) {
+      await devops!.handle(deliveryMessage.data);
+      return;
+    }
     switch (message.type) {
+      case 'installQualityKit': {
+        const result = await current.installQualityKit(message.featureId);
+        notice(
+          `Reporter qualité : ${result.installed.length} fichiers installés, ${result.unchanged.length} identiques, ${result.conflicts.length} personnalisations préservées. Guide : .feature-studio/quality-kit/README.md.`,
+        );
+        return;
+      }
+      case 'openQualityAttachment': {
+        const { file, attachment } = await current.qualityAttachment(
+          message.featureId,
+          message.evidenceId,
+          message.attachmentId,
+        );
+        if (attachment.kind === 'screenshot') {
+          await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file), {
+            preview: true,
+          });
+        } else {
+          const destination = await vscode.window.showSaveDialog({
+            title: 'Enregistrer la trace Playwright pour consultation locale',
+            defaultUri: vscode.Uri.file(
+              path.join(current.workspacePath, `trace-${attachment.sha256.slice(0, 12)}.zip`),
+            ),
+            filters: { 'Trace Playwright': ['zip'] },
+          });
+          if (destination) {
+            const verified = await current.qualityAttachment(
+              message.featureId,
+              message.evidenceId,
+              message.attachmentId,
+            );
+            await vscode.workspace.fs.writeFile(destination, await readFile(verified.file));
+            notice('Trace enregistrée. Aucun visualiseur en ligne ouvert.');
+          }
+        }
+        return;
+      }
       case 'ready':
         webviewReady = true;
         current.publish();
+        if (devops) send({ type: 'devopsState', state: devops.getState() });
         return;
       case 'refresh':
         await current.refresh();
@@ -341,17 +468,25 @@ export async function activate(context: vscode.ExtensionContext) {
         await current.persist();
         return;
       case 'saveAgent':
-        current.assertConfigurable();
-        await current.registry.saveAgent(message.agent);
-        await current.refresh();
-        notice(`Agent enregistré au niveau utilisateur dans ${current.registry.userPath}.`);
+      case 'saveSkill': {
+        try {
+          current.assertConfigurable();
+          const result =
+            message.type === 'saveAgent'
+              ? await current.registry.saveAgent(message.agent, message.options)
+              : await current.registry.saveSkill(message.id, message.content, message.options);
+          await current.refresh();
+          send({ type: 'profileSaveResult', requestId: message.requestId, ...result });
+          notice(`Profil enregistré dans ${result.path}.`);
+        } catch (error) {
+          send({
+            type: 'profileSaveResult',
+            requestId: message.requestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         return;
-      case 'saveSkill':
-        current.assertConfigurable();
-        await current.registry.saveSkill(message.id, message.content);
-        await current.refresh();
-        notice(`Skill enregistrée au niveau utilisateur dans ${current.registry.userPath}.`);
-        return;
+      }
       case 'saveSettings': {
         current.assertTrusted();
         const previous = current.state.settings;
@@ -480,16 +615,13 @@ export async function activate(context: vscode.ExtensionContext) {
         const root = await current.featurePath(message.featureId);
         const absolute = await new PolicyEngine(root, 'read-only', []).resolve(message.path);
         const relative = path.relative(root, absolute).split(path.sep).join('/');
-        const old = await gitRead(root, ['show', `HEAD:${relative}`], {
-          timeoutMs: 10000,
-          rawOutput: true,
-        });
+        const old = await readHeadFile(root, absolute);
         const left = vscode.Uri.from({
           scheme: 'feature-studio-diff',
           path: `/${relative}`,
           query: randomBytes(8).toString('hex'),
         });
-        diffContents.set(left.toString(), old.code === 0 ? old.stdout : '');
+        diffContents.set(left.toString(), old ?? '');
         await vscode.commands.executeCommand(
           'vscode.diff',
           left,
@@ -655,12 +787,15 @@ export async function activate(context: vscode.ExtensionContext) {
     target.onDidDispose(
       () => {
         if (panel === target) panel = undefined;
+        const previousDevOps = devops;
+        devops = undefined;
         const previous = service,
           oldLease = lease;
         service = undefined;
         lease = undefined;
         shuttingDown = (async () => {
           try {
+            await previousDevOps?.dispose();
             await previous?.dispose();
           } finally {
             await oldLease?.release();
@@ -674,6 +809,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     await ensure();
     service!.publish();
+    if (devops) send({ type: 'devopsState', state: devops.getState() });
   };
   const open = async () => {
     try {
@@ -724,10 +860,13 @@ export async function activate(context: vscode.ExtensionContext) {
   return {
     getState: () => service?.snapshot(),
     getUiReady: () => webviewReady,
+    getDevOpsState: () => devops?.getState(),
     dispatch: (message: ClientMessage) => dispatch(message),
   };
 }
 export async function deactivate(): Promise<void> {
+  await devops?.dispose();
+  devops = undefined;
   await service?.dispose();
   await lease?.release();
   if (shuttingDown) await shuttingDown;

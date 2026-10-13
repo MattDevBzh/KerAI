@@ -1,6 +1,12 @@
+import { UsageDashboard } from './UsageDashboard';
+import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
+import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
+import { DevOpsUI, DevOpsFeatureLinks } from './DevOpsUI';
+import type { DevOpsState } from '../src/shared/devops';
 import { approvalBlockers, featureCompletionBlockers } from '../src/core/validation';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
+  BarChart3,
   ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
@@ -57,6 +63,7 @@ import type {
 } from '../src/shared/types';
 import { initialView, isDemo, isHosted, persistView, send, subscribe } from './bridge';
 import { demoState } from './demo';
+import { QualityCommandFields, QualitySetup } from './QualityUI';
 import { LaunchDialog, HumanRequests, McpSettings, McpPicker } from './ExecutionUI';
 import './evolution.css';
 import {
@@ -78,6 +85,9 @@ import {
 } from './StudioUI';
 
 type View =
+  | 'usage'
+  | 'devops'
+  | 'delivery'
   | 'dashboard'
   | 'validation'
   | 'workflows'
@@ -116,7 +126,10 @@ const date = (value: string) =>
     minute: '2-digit',
   }).format(new Date(value));
 const nav = [
+  { id: 'devops', label: 'Azure DevOps', icon: FolderGit2 },
+  { id: 'delivery', label: 'Livraison', icon: GitBranch },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'usage', label: 'Consommation', icon: BarChart3 },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
   { id: 'workflows', label: 'Parcours', icon: Workflow },
   { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
@@ -242,6 +255,15 @@ function Modal({
   );
 }
 export default function App() {
+  const [devops, setDevops] = useState<DevOpsState>({
+    authenticated: false,
+    busy: false,
+    notices: [],
+    tickets: [],
+    pullRequests: [],
+    links: [],
+    history: [],
+  });
   const [state, setState] = useState<StudioState | null>(
     isDemo ? structuredClone(demoState) : null,
   );
@@ -263,6 +285,7 @@ export default function App() {
   useEffect(() => {
     const cleanup = subscribe((message) => {
       if (message.type === 'state') setState(message.state);
+      else if (message.type === 'devopsState') setDevops(message.state);
       else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
       else if (message.type === 'navigate') {
@@ -288,6 +311,8 @@ export default function App() {
         'saveArtifact',
         'approveStep',
         'archiveFeature',
+        'deliveryExecute',
+        'devopsCreateFeature',
       ].includes(message.type)
     ) {
       setNotice({
@@ -520,6 +545,8 @@ export default function App() {
                 key={selected.id}
                 feature={selected}
                 state={state}
+                devops={devops}
+                openDevOps={() => chooseView('devops')}
                 stepId={stepId}
                 selectStep={setStepId}
                 dispatch={dispatch}
@@ -536,6 +563,29 @@ export default function App() {
                 }}
               />
             ))}
+          {(view === 'devops' || view === 'delivery') && (
+            <DevOpsUI
+              state={devops}
+              features={state.features}
+              dispatch={dispatch}
+              mode={view === 'devops' ? 'dashboard' : 'delivery'}
+              onOpenFeature={(id) => {
+                setView('dashboard');
+                setFeatureId(id);
+                setStepId('');
+              }}
+            />
+          )}
+          {view === 'usage' && (
+            <UsageDashboard
+              features={state.features}
+              onOpenFeature={(id) => {
+                setView('dashboard');
+                setFeatureId(id);
+                setStepId('');
+              }}
+            />
+          )}
           {view === 'validation' && (
             <ValidationCenter
               state={state}
@@ -685,23 +735,22 @@ export default function App() {
             setAgentEditor(null);
             dispatch({ type: 'migrateUserKit' });
           }}
-          save={(a) => {
-            dispatch({ type: 'saveAgent', agent: a });
-            setAgentEditor(null);
+          save={(a, options, requestId) => {
+            dispatch({ type: 'saveAgent', agent: a, options, requestId });
           }}
         />
       )}
       {skillEditor && (
         <SkillEditor
           skill={skillEditor}
+          state={state}
           onClose={() => setSkillEditor(null)}
           onMigrate={() => {
             setSkillEditor(null);
             dispatch({ type: 'migrateUserKit' });
           }}
-          save={(id, content) => {
-            dispatch({ type: 'saveSkill', id, content });
-            setSkillEditor(null);
+          save={(id, content, options, requestId) => {
+            dispatch({ type: 'saveSkill', id, content, options, requestId });
           }}
         />
       )}
@@ -1193,6 +1242,8 @@ function CreateModal({
 function FeatureDetail({
   feature,
   state,
+  devops,
+  openDevOps,
   stepId,
   selectStep,
   dispatch,
@@ -1201,6 +1252,8 @@ function FeatureDetail({
 }: {
   feature: Feature;
   state: StudioState;
+  devops: DevOpsState;
+  openDevOps: () => void;
   stepId: string;
   selectStep: (id: string) => void;
   dispatch: (m: ClientMessage) => void;
@@ -1266,6 +1319,7 @@ function FeatureDetail({
           </button>
         </div>
       </div>
+      <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
       <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <div className="feature-control-band">
         <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
@@ -1553,7 +1607,9 @@ function StepPanel({
           aria-labelledby={`tab-${tab}`}
           className="workbench-content"
         >
-          {tab === 'evidence' && <EvidencePanel attempt={attempt} />}
+          {tab === 'evidence' && (
+            <EvidencePanel attempt={attempt} featureId={feature.id} dispatch={dispatch} />
+          )}
           {tab === 'review' && (
             <ReviewWorkspace
               key={`${attempt?.id}-${JSON.stringify(feature.criteria)}`}
@@ -2252,7 +2308,11 @@ function AgentEditor({
   state: StudioState;
   onClose: () => void;
   onMigrate: () => void;
-  save: (a: Extract<ClientMessage, { type: 'saveAgent' }>['agent']) => void;
+  save: (
+    a: Extract<ClientMessage, { type: 'saveAgent' }>['agent'],
+    options: ProfileSaveOptions,
+    requestId: string,
+  ) => void;
 }) {
   const blank = agent === 'new';
   const source = blank ? null : agent;
@@ -2270,6 +2330,84 @@ function AgentEditor({
   const [emptyContextByDefault, setEmptyContextByDefault] = useState(
     source?.emptyContextByDefault ?? false,
   );
+  const [scope, setScope] = useState<ProfileScope>(
+    source?.source === 'workspace' ? 'workspace' : 'user',
+  );
+  const [origin, setOrigin] = useState(source);
+  const drafts = useRef<
+    Partial<
+      Record<
+        ProfileScope,
+        {
+          fields: {
+            id: string;
+            name: string;
+            nickname: string;
+            avatar: string;
+            description: string;
+            instructions: string;
+            tools: string;
+            model: string;
+            skills: string[];
+            emptyContextByDefault: boolean;
+          };
+          origin: typeof source;
+        }
+      >
+    >
+  >({});
+  const saving = useProfileSave(onClose);
+  const version = source?.versions?.find((version) => version.source === scope);
+  const target =
+    source?.targets?.[scope] ??
+    (state.profileDirectories && {
+      path: `${state.profileDirectories[scope]}/${scope === 'workspace' ? '.github/' : ''}agents/${id}.agent.md`,
+      revision: null,
+    });
+  const collision = blank && state.agents.some((entry) => entry.id === id);
+  const changeScope = (next: ProfileScope) => {
+    drafts.current[scope] = {
+      fields: {
+        id,
+        name,
+        nickname,
+        avatar,
+        description,
+        instructions,
+        tools,
+        model,
+        skills,
+        emptyContextByDefault,
+      },
+      origin,
+    };
+    const cached = drafts.current[next];
+    const existing = source?.versions?.find((version) => version.source === next);
+    const chosen =
+      cached?.fields ??
+      (existing && {
+        ...existing,
+        nickname: existing.nickname ?? '',
+        avatar: existing.avatar ?? 'robot',
+        tools: existing.tools.join(', '),
+        model: existing.model ?? '',
+        emptyContextByDefault: existing.emptyContextByDefault ?? false,
+      });
+    if (chosen) {
+      setId(chosen.id);
+      setName(chosen.name);
+      setNickname(chosen.nickname);
+      setAvatar(chosen.avatar);
+      setDescription(chosen.description);
+      setInstructions(chosen.instructions);
+      setTools(chosen.tools);
+      setModel(chosen.model);
+      setSkills(chosen.skills);
+      setEmptyContextByDefault(chosen.emptyContextByDefault);
+    }
+    setOrigin(cached ? cached.origin : (existing ?? origin));
+    setScope(next);
+  };
   const slug = (v: string) =>
     v
       .normalize('NFD')
@@ -2291,183 +2429,211 @@ function AgentEditor({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          save({
-            id,
-            name,
-            description,
-            instructions,
-            tools: tools
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean),
-            model: model || undefined,
-            skills,
-            nickname: nickname.trim() || undefined,
-            avatar,
-            emptyContextByDefault,
-          });
+          saving.start((requestId) =>
+            save(
+              {
+                id,
+                name,
+                description,
+                instructions,
+                tools: tools
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+                model: model || undefined,
+                skills,
+                nickname: nickname.trim() || undefined,
+                avatar,
+                emptyContextByDefault,
+              },
+              profileOptions(scope, target, origin ?? undefined),
+              requestId,
+            ),
+          );
         }}
       >
-        <div className="agent-identity">
-          <Avatar agent={{ ...source, id, name, avatar } as AgentProfile} />
-          <label className="field">
-            <span>
-              Son petit nom <small>facultatif</small>
-            </span>
-            <input
-              maxLength={60}
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Ex. Merlin, Ada, Capitaine Patch…"
-            />
-          </label>
-        </div>
-        <fieldset className="avatar-picker">
-          <legend>Choisissez son personnage</legend>
-          {avatarOptions.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              className={avatar === a.id ? 'chosen' : ''}
-              aria-label={a.name}
-              aria-pressed={avatar === a.id}
-              onClick={() => setAvatar(a.id)}
-            >
-              <img src={`${import.meta.env.BASE_URL}avatars/${a.id}/idle.png`} alt="" />
-              <span>{a.name}</span>
-              {avatar === a.id && <Check size={12} />}
-            </button>
-          ))}
-        </fieldset>
-        <div className="field-row">
-          <label className="field">
-            <span>
-              Nom du profil <em>*</em>
-            </span>
-            <input
-              required
-              maxLength={100}
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                if (blank) setId(slug(e.target.value));
-              }}
-            />
-          </label>
-          <label className="field">
-            <span>Identifiant</span>
-            <input
-              required
-              pattern="[a-z0-9][a-z0-9-]*"
-              value={id}
-              disabled={!blank}
-              onChange={(e) => setId(e.target.value)}
-            />
-          </label>
-        </div>
-        <label className="field">
-          <span>Rôle et description</span>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>
-            Instructions <em>*</em>
-          </span>
-          <textarea
-            required
-            className="code-input"
-            rows={7}
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            placeholder="Décrivez sa mission, ses méthodes et les critères d’un travail réussi."
+        <fieldset disabled={saving.pending} style={{ display: 'contents' }}>
+          <ProfileScopeSelector
+            scope={scope}
+            onChange={changeScope}
+            target={target || undefined}
+            active={source?.source}
+            origin={origin?.source}
+            versions={source?.versions ?? (source ? [source] : [])}
+            pending={saving.pending}
+            error={saving.error}
           />
-        </label>
-        <div className="field-row">
-          <label className="field">
-            <span>Outils demandés</span>
-            <input
-              value={tools}
-              onChange={(e) => setTools(e.target.value)}
-              placeholder="read, search, edit, execute"
-            />
-            <small>
-              Noms pris en charge : read, search, edit, execute. execute permet uniquement les
-              commandes de test préautorisées, sans accès shell. Les autres alias ne sont pas pris
-              en charge. Les permissions de l’étape restent applicables.
-            </small>
-          </label>
-          <ModelSelect state={state} value={model} onChange={setModel} />
-        </div>
-        <label className="context-default-option">
-          <input
-            type="checkbox"
-            checked={emptyContextByDefault}
-            onChange={(e) => setEmptyContextByDefault(e.target.checked)}
-          />
-          <span>
-            <strong>Contexte vide par défaut</strong>
-            <small>
-              Tous les blocs optionnels commencent décochés à chaque nouvelle tentative.
-              Sélectionnez ensuite la spec, le plan ou les autres informations utiles. Le cadre
-              d’exécution reste actif.
-            </small>
-          </span>
-        </label>
-        <fieldset className="skill-options">
-          <legend>Skills associées</legend>
-          {state.skills.map((s) => (
-            <label key={s.id}>
+          {collision && (
+            <p role="alert">
+              Cet identifiant existe déjà. Ouvrez le profil existant ou choisissez un nouvel
+              identifiant pour créer une copie.
+            </p>
+          )}
+          <div className="agent-identity">
+            <Avatar agent={{ ...source, id, name, avatar } as AgentProfile} />
+            <label className="field">
+              <span>
+                Son petit nom <small>facultatif</small>
+              </span>
               <input
-                type="checkbox"
-                checked={skills.includes(s.id)}
-                onChange={(e) =>
-                  setSkills(
-                    e.target.checked ? [...skills, s.id] : skills.filter((id) => id !== s.id),
-                  )
-                }
+                maxLength={60}
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="Ex. Merlin, Ada, Capitaine Patch…"
               />
-              {s.name}
             </label>
-          ))}
-          {!state.skills.length && (
-            <span className="muted">Créez votre première skill depuis la bibliothèque.</span>
-          )}
-        </fieldset>
-        <div className="modal-actions">
-          <span className="muted">
-            {source?.source === 'workspace'
-              ? 'Migrer ce profil avant de le modifier au niveau utilisateur.'
-              : 'Enregistré au niveau utilisateur, disponible dans tous les projets.'}
-          </span>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Annuler
-          </button>
-          {source?.source === 'workspace' && (
-            <button type="button" className="button secondary" onClick={onMigrate}>
-              Migrer vers le compte utilisateur
+          </div>
+          <fieldset className="avatar-picker">
+            <legend>Choisissez son personnage</legend>
+            {avatarOptions.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className={avatar === a.id ? 'chosen' : ''}
+                aria-label={a.name}
+                aria-pressed={avatar === a.id}
+                onClick={() => setAvatar(a.id)}
+              >
+                <img src={`${import.meta.env.BASE_URL}avatars/${a.id}/idle.png`} alt="" />
+                <span>{a.name}</span>
+                {avatar === a.id && <Check size={12} />}
+              </button>
+            ))}
+          </fieldset>
+          <div className="field-row">
+            <label className="field">
+              <span>
+                Nom du profil <em>*</em>
+              </span>
+              <input
+                required
+                maxLength={100}
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (blank) setId(slug(e.target.value));
+                }}
+              />
+            </label>
+            <label className="field">
+              <span>Identifiant</span>
+              <input
+                required
+                pattern="[a-z0-9][a-z0-9-]*"
+                value={id}
+                disabled={!blank}
+                onChange={(e) => setId(e.target.value)}
+              />
+            </label>
+          </div>
+          <label className="field">
+            <span>Rôle et description</span>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>
+              Instructions <em>*</em>
+            </span>
+            <textarea
+              required
+              className="code-input"
+              rows={7}
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="Décrivez sa mission, ses méthodes et les critères d’un travail réussi."
+            />
+          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Outils demandés</span>
+              <input
+                value={tools}
+                onChange={(e) => setTools(e.target.value)}
+                placeholder="read, search, edit, execute"
+              />
+              <small>
+                Noms pris en charge : read, search, edit, execute. execute permet uniquement les
+                commandes de test préautorisées, sans accès shell. Les autres alias ne sont pas pris
+                en charge. Les permissions de l’étape restent applicables.
+              </small>
+            </label>
+            <ModelSelect state={state} value={model} onChange={setModel} />
+          </div>
+          <label className="context-default-option">
+            <input
+              type="checkbox"
+              checked={emptyContextByDefault}
+              onChange={(e) => setEmptyContextByDefault(e.target.checked)}
+            />
+            <span>
+              <strong>Contexte vide par défaut</strong>
+              <small>
+                Tous les blocs optionnels commencent décochés à chaque nouvelle tentative.
+                Sélectionnez ensuite la spec, le plan ou les autres informations utiles. Le cadre
+                d’exécution reste actif.
+              </small>
+            </span>
+          </label>
+          <fieldset className="skill-options">
+            <legend>Skills associées</legend>
+            {state.skills.map((s) => (
+              <label key={s.id}>
+                <input
+                  type="checkbox"
+                  checked={skills.includes(s.id)}
+                  onChange={(e) =>
+                    setSkills(
+                      e.target.checked ? [...skills, s.id] : skills.filter((id) => id !== s.id),
+                    )
+                  }
+                />
+                {s.name}
+              </label>
+            ))}
+            {!state.skills.length && (
+              <span className="muted">Créez votre première skill depuis la bibliothèque.</span>
+            )}
+          </fieldset>
+          <div className="modal-actions">
+            <span className="muted">
+              {saving.pending
+                ? 'Sauvegarde en cours…'
+                : version
+                  ? 'Modification de la version choisie.'
+                  : 'Création d’une version dans la portée choisie.'}
+            </span>
+            <button type="button" className="button secondary" onClick={onClose}>
+              Annuler
             </button>
-          )}
-          <button
-            className="button primary"
-            disabled={source?.source === 'workspace' || !id || !name.trim() || !instructions.trim()}
-          >
-            Enregistrer le profil <Check size={15} />
-          </button>
-        </div>
+            {source?.source === 'workspace' && (
+              <button type="button" className="button secondary" onClick={onMigrate}>
+                Migrer vers le compte utilisateur
+              </button>
+            )}
+            <button
+              className="button primary"
+              disabled={saving.pending || collision || !id || !name.trim() || !instructions.trim()}
+            >
+              Enregistrer le profil <Check size={15} />
+            </button>
+          </div>
+        </fieldset>
       </form>
     </Modal>
   );
 }
 function SkillEditor({
   skill,
+  state,
   onClose,
   onMigrate,
   save,
 }: {
   skill: SkillInfo | 'new';
+  state: StudioState;
   onClose: () => void;
   onMigrate: () => void;
-  save: (id: string, content: string) => void;
+  save: (id: string, content: string, options: ProfileSaveOptions, requestId: string) => void;
 }) {
   const blank = skill === 'new';
   const source = blank ? null : skill;
@@ -2477,6 +2643,29 @@ function SkillEditor({
       '---\nname: Ma nouvelle skill\ndescription: Décrivez la méthode et quand l’utiliser.\n---\n\n# Ma nouvelle skill\n\n## Méthode\n\n1. Comprendre le contexte.\n2. Appliquer les conventions du projet.\n3. Vérifier le résultat.\n',
   );
   const [preview, setPreview] = useState(false);
+  const [scope, setScope] = useState<ProfileScope>(
+    source?.source === 'workspace' ? 'workspace' : 'user',
+  );
+  const [origin, setOrigin] = useState(source);
+  const drafts = useRef<Partial<Record<ProfileScope, { content: string; origin: typeof source }>>>(
+    {},
+  );
+  const saving = useProfileSave(onClose);
+  const target =
+    source?.targets?.[scope] ??
+    (state.profileDirectories && {
+      path: `${state.profileDirectories[scope]}/${scope === 'workspace' ? '.github/' : ''}skills/${id}/SKILL.md`,
+      revision: null,
+    });
+  const collision = blank && state.skills.some((entry) => entry.id === id);
+  const changeScope = (next: ProfileScope) => {
+    drafts.current[scope] = { content, origin };
+    const cached = drafts.current[next];
+    const existing = source?.versions?.find((version) => version.source === next);
+    setContent(cached?.content ?? existing?.content ?? content);
+    setOrigin(cached ? cached.origin : (existing ?? origin));
+    setScope(next);
+  };
   return (
     <Modal
       title={blank ? 'Une méthode qui se transmet.' : (source?.name ?? 'Skill')}
@@ -2490,68 +2679,93 @@ function SkillEditor({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          save(id, content);
+          saving.start((requestId) =>
+            save(
+              id,
+              content,
+              profileOptions(scope, target || undefined, origin ?? undefined),
+              requestId,
+            ),
+          );
         }}
       >
-        <label className="field">
-          <span>
-            Identifiant de la skill <em>*</em>
-          </span>
-          <input
-            required
-            pattern="[a-z0-9][a-z0-9-]*"
-            disabled={!blank}
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder="ex. revue-accessibilite"
+        <fieldset disabled={saving.pending} style={{ display: 'contents' }}>
+          <ProfileScopeSelector
+            scope={scope}
+            onChange={changeScope}
+            target={target || undefined}
+            active={source?.source}
+            origin={origin?.source}
+            versions={source?.versions ?? (source ? [source] : [])}
+            pending={saving.pending}
+            error={saving.error}
           />
-          <small>Lettres minuscules, chiffres et tirets.</small>
-        </label>
-        <div className="section-heading">
-          <h3>SKILL.md</h3>
-          <button type="button" className="text-button" onClick={() => setPreview(!preview)}>
-            <FileText size={14} />
-            {preview ? 'Éditer' : 'Aperçu'}
-          </button>
-        </div>
-        {preview ? (
-          <div className="skill-preview markdown">
-            <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
-          </div>
-        ) : (
-          <label className="field">
-            <span className="sr-only">Contenu de la skill</span>
-            <textarea
-              required
-              className="code-input"
-              rows={16}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              spellCheck={false}
-            />
-          </label>
-        )}
-        <div className="modal-actions">
-          <span className="muted">
-            {source?.source === 'workspace'
-              ? 'Migrer cette skill avant de la modifier au niveau utilisateur.'
-              : 'Enregistrée au niveau utilisateur, disponible dans tous les projets.'}
-          </span>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Annuler
-          </button>
-          {source?.source === 'workspace' && (
-            <button type="button" className="button secondary" onClick={onMigrate}>
-              Migrer vers le compte utilisateur
-            </button>
+          {collision && (
+            <p role="alert">
+              Cet identifiant existe déjà. Ouvrez la skill existante ou choisissez un nouvel
+              identifiant pour créer une copie.
+            </p>
           )}
-          <button
-            className="button primary"
-            disabled={source?.source === 'workspace' || !id || !content.trim()}
-          >
-            Enregistrer la skill <Check size={15} />
-          </button>
-        </div>
+          <label className="field">
+            <span>
+              Identifiant de la skill <em>*</em>
+            </span>
+            <input
+              required
+              pattern="[a-z0-9][a-z0-9-]*"
+              disabled={!blank}
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              placeholder="ex. revue-accessibilite"
+            />
+            <small>Lettres minuscules, chiffres et tirets.</small>
+          </label>
+          <div className="section-heading">
+            <h3>SKILL.md</h3>
+            <button type="button" className="text-button" onClick={() => setPreview(!preview)}>
+              <FileText size={14} />
+              {preview ? 'Éditer' : 'Aperçu'}
+            </button>
+          </div>
+          {preview ? (
+            <div className="skill-preview markdown">
+              <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
+            </div>
+          ) : (
+            <label className="field">
+              <span className="sr-only">Contenu de la skill</span>
+              <textarea
+                required
+                className="code-input"
+                rows={16}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                spellCheck={false}
+              />
+            </label>
+          )}
+          <div className="modal-actions">
+            <span className="muted">
+              {saving.pending
+                ? 'Sauvegarde en cours…'
+                : 'Le fichier SKILL.md complet est conservé.'}
+            </span>
+            <button type="button" className="button secondary" onClick={onClose}>
+              Annuler
+            </button>
+            {source?.source === 'workspace' && (
+              <button type="button" className="button secondary" onClick={onMigrate}>
+                Migrer vers le compte utilisateur
+              </button>
+            )}
+            <button
+              className="button primary"
+              disabled={saving.pending || collision || !id || !content.trim()}
+            >
+              Enregistrer la skill <Check size={15} />
+            </button>
+          </div>
+        </fieldset>
       </form>
     </Modal>
   );
@@ -2735,6 +2949,14 @@ function SettingsView({
                 </div>
               </div>
               <div className="command-list">
+                <QualitySetup
+                  disabled={
+                    !state.workspace.trusted ||
+                    Boolean(state.workspaceOperation) ||
+                    hasActiveRun(state)
+                  }
+                  onInstall={() => dispatch({ type: 'installQualityKit' })}
+                />
                 {draft.testCommands.map((command, i) => (
                   <div className="command-editor" key={command.id}>
                     <div className="command-heading">
@@ -2802,6 +3024,16 @@ function SettingsView({
                         placeholder={'run\ntest'}
                       />
                     </label>
+                    <QualityCommandFields
+                      config={command.quality}
+                      onChange={(quality) =>
+                        set({
+                          testCommands: draft.testCommands.map((c) =>
+                            c.id === command.id ? { ...c, quality } : c,
+                          ),
+                        })
+                      }
+                    />
                   </div>
                 ))}
               </div>

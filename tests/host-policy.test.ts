@@ -9,6 +9,7 @@ import {
   link,
   realpath,
   readdir,
+  lstat,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +21,7 @@ import { runProcess } from '../src/host/process';
 import { WorkflowEngine } from '../src/core/workflow';
 import { defaultSettings } from '../src/core/store';
 import { inspectExistingChanges } from '../src/host/ExistingChanges';
+import { canonicalCaseless } from '../src/host/UnicodeCaseFold';
 
 const roots: string[] = [];
 async function setup() {
@@ -96,6 +98,81 @@ async function invoke(tools: Tool[], name: string, args: unknown) {
 }
 
 describe('host file and command policy', () => {
+  it('uses complete Unicode default case folding, including expansions and non-lowercase folds', () => {
+    expect(canonicalCaseless('σ.ts')).toBe(canonicalCaseless('ς.ts'));
+    expect(canonicalCaseless('ß.ts')).toBe(canonicalCaseless('SS.ts'));
+    expect(canonicalCaseless('Ꭰ.ts')).toBe(canonicalCaseless('ꭰ.ts'));
+    expect(canonicalCaseless('CAFÉ.ts')).toBe(canonicalCaseless('cafe\u0301.ts'));
+    expect(canonicalCaseless('İ.ts')).not.toBe(canonicalCaseless('i.ts'));
+  });
+  it.each([
+    ['σ.ts', 'ς.ts'],
+    ['ß.ts', 'SS.ts'],
+  ])('protects deleted Unicode filesystem aliases %s / %s', async (original, alias) => {
+    const root = await setup();
+    await writeFile(join(root, original), 'Human edit');
+    const originalStat = await lstat(join(root, original));
+    const aliasStat = await lstat(join(root, alias)).catch(() => undefined);
+    const equivalent = aliasStat?.ino === originalStat.ino && aliasStat?.dev === originalStat.dev;
+    const policy = new PolicyEngine(root, 'workspace-write', [], new Set([original]));
+    await policy.initialize();
+    if (equivalent) await expect(policy.resolve(alias, true)).rejects.toThrow(/Alias/);
+    await rm(join(root, original));
+    if (equivalent) {
+      await expect(policy.assertWrite(alias)).rejects.toThrow(/protég|supprim/i);
+      await expect(lstat(join(root, alias))).rejects.toThrow();
+    } else {
+      // This spelling is an independent legitimate new file on a sensitive filesystem.
+      await writeFile(join(root, alias), 'Distinct legitimate file');
+      await policy.recordRead(alias, 'Distinct legitimate file');
+      await expect(policy.assertWrite(alias)).resolves.toBe(join(root, alias));
+    }
+    await expect(policy.assertWrite('無関係.ts')).resolves.toBe(join(root, '無関係.ts'));
+  });
+  it('blocks reserved-directory case aliases, including nonexistent write targets', async () => {
+    const root = await setup();
+    const policy = new PolicyEngine(root, 'workspace-write', []);
+    for (const file of ['.Git/config', 'nested/Node_Modules/a.js', '.Feature-Studio/state.json'])
+      await expect(policy.resolve(file)).rejects.toThrow(/sensible/);
+    for (const file of ['.GitHub/workflows/ci.yml', '.VsCode/settings.json'])
+      await expect(policy.resolve(file, true)).rejects.toThrow(/catalogue/);
+    await mkdir(join(root, 'Source'), { recursive: true });
+    await writeFile(join(root, 'Source/Code.ts'), 'Legitimate mixed case');
+    await expect(policy.resolve('Source/Code.ts')).resolves.toBe(join(root, 'Source/Code.ts'));
+    const tests = new PolicyEngine(root, 'tests', ['Tests']);
+    await expect(tests.resolve('Tests/unit/New.test.ts', true)).resolves.toBe(
+      join(root, 'Tests/unit/New.test.ts'),
+    );
+    await expect(tests.resolve('tests/unit/New.test.ts', true)).rejects.toThrow(/Tests/);
+  });
+  it('protects dirty existing and deleted aliases while distinguishing real case-sensitive files', async () => {
+    const root = await setup();
+    await writeFile(join(root, 'code.ts'), 'Human edit');
+    const sensitive = await lstat(join(root, 'CODE.ts')).then(
+      () => false,
+      () => true,
+    );
+    const policy = new PolicyEngine(
+      root,
+      'workspace-write',
+      [],
+      new Set(['code.ts', 'deleted.ts']),
+    );
+    if (!sensitive) {
+      await expect(policy.resolve('CODE.ts')).rejects.toThrow(/Alias/);
+      await expect(policy.recordRead('CODE.ts', 'Human edit')).rejects.toThrow(/Alias/);
+      await expect(policy.assertWrite('CODE.ts')).rejects.toThrow(/Alias|protégée/);
+      await expect(policy.assertWrite('DELETED.ts')).rejects.toThrow(/protég|supprim/i);
+    } else {
+      await writeFile(join(root, 'CODE.ts'), 'Distinct legitimate file');
+      await policy.recordRead('CODE.ts', 'Distinct legitimate file');
+      await expect(policy.assertWrite('CODE.ts')).resolves.toBe(join(root, 'CODE.ts'));
+      await expect(policy.assertWrite('DELETED.ts')).resolves.toBe(join(root, 'DELETED.ts'));
+    }
+    await policy.recordRead('code.ts', 'Human edit');
+    await expect(policy.assertWrite('code.ts')).rejects.toThrow(/protégée/);
+    expect(await readFile(join(root, 'code.ts'), 'utf8')).toBe('Human edit');
+  });
   it('rejects traversal, secrets at every depth, symlinks and physical links for writes', async () => {
     const root = await setup();
     const policy = new PolicyEngine(root, 'workspace-write', []);
@@ -164,6 +241,115 @@ describe('host file and command policy', () => {
 });
 
 describe('host tools and Git boundaries', () => {
+  it('accepts Git precomposed names for decomposed filesystem entries, with grants and safe read spans', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    await git(root, 'config', 'core.precomposeUnicode', 'true');
+    const physical = 'cafe\u0301.ts';
+    const composed = 'café.ts';
+    const source = 'first line\nsecond line\n';
+    await writeFile(join(root, physical), 'Committed\n');
+    const physicalStat = await lstat(join(root, physical));
+    const composedStat = await lstat(join(root, composed)).catch(() => undefined);
+    const equivalent =
+      composedStat?.ino === physicalStat.ino && composedStat?.dev === physicalStat.dev;
+    await git(root, 'add', '--', physical);
+    await git(root, 'commit', '-m', 'Accented source');
+    await writeFile(join(root, physical), source);
+    const dirty = (await gitInfo(root)).dirty;
+    const selected = [...dirty].find((name) => name.normalize('NFD') === physical)!;
+    if (equivalent) expect(selected).toBe(composed);
+    const data = input(root, 'workspace-write');
+    data.launch = {
+      initialContext: '',
+      memoryIds: [],
+      useProjectMemory: false,
+      mcpServerIds: [],
+      editableExistingFiles: [selected],
+    };
+    await inspectExistingChanges(data, dirty);
+    expect(data.existingChangeGrants?.[selected]).toBe(sha256(source));
+    const host = new ToolHost(data, { onEvent() {}, onSession() {} }, new AbortController().signal);
+    const tools = await host.createTools();
+    const read = await invoke(tools, 'studio_read_file', {
+      path: selected,
+      startLine: 1,
+      endLine: 1,
+    });
+    expect(read.resultType).toBe('success');
+    expect(JSON.parse(read.textResultForLlm).truncated).toBe(true);
+    const alternate = selected === composed ? physical : composed;
+    if (equivalent) {
+      expect(
+        (
+          await invoke(tools, 'studio_write_file', {
+            path: alternate,
+            content: 'Lost unread content',
+          })
+        ).resultType,
+      ).toBe('failure');
+      expect(await readFile(join(root, physical), 'utf8')).toBe(source);
+      expect(
+        (
+          await invoke(tools, 'studio_replace_text', {
+            path: alternate,
+            oldText: 'second line\n',
+            newText: 'Unread line overwritten\n',
+            expectedSha256: sha256(source),
+          })
+        ).resultType,
+      ).toBe('failure');
+    }
+    expect((await invoke(tools, 'studio_read_file', { path: selected })).resultType).toBe(
+      'success',
+    );
+    expect(
+      (
+        await invoke(tools, 'studio_write_file', {
+          path: selected,
+          content: 'Human edit preserved\nAgent addition\n',
+        })
+      ).resultType,
+    ).toBe('success');
+    expect(await readFile(join(root, physical), 'utf8')).toBe(
+      'Human edit preserved\nAgent addition\n',
+    );
+    if (equivalent) {
+      expect((await invoke(tools, 'studio_read_file', { path: alternate })).resultType).toBe(
+        'success',
+      );
+      expect(
+        (
+          await invoke(tools, 'studio_write_file', {
+            path: alternate,
+            content: 'Human edit preserved\nSecond agent addition\n',
+          })
+        ).resultType,
+      ).toBe('success');
+      expect(Object.keys(host.fileHashes)).toEqual([composed]);
+      data.attempt.fileHashes = { ...host.fileHashes };
+      delete data.existingChangeGrants;
+      const nextTools = await new ToolHost(
+        data,
+        { onEvent() {}, onSession() {} },
+        new AbortController().signal,
+      ).createTools();
+      expect((await invoke(nextTools, 'studio_read_file', { path: composed })).resultType).toBe(
+        'success',
+      );
+      expect(
+        (
+          await invoke(nextTools, 'studio_write_file', {
+            path: physical,
+            content: 'Human edit preserved\nNext attempt addition\n',
+          })
+        ).resultType,
+      ).toBe('success');
+      expect(await readFile(join(root, physical), 'utf8')).toBe(
+        'Human edit preserved\nNext attempt addition\n',
+      );
+    }
+  });
   it('requires a host grant, still requires reading and rejects later human edits to adopted files', async () => {
     const root = await setup();
     await gitRepo(root);
@@ -737,7 +923,7 @@ describe('large source files and exact partial edits', () => {
       (await invoke(tools, 'studio_search', { path: 'Job.cs', query: 'match' })).textResultForLlm,
     );
     expect(first.matches).toHaveLength(100);
-    expect(first.next).toEqual({ path: 'Job.cs', startLine: 101 });
+    expect(first.next).toMatchObject({ path: 'Job.cs', startLine: 101 });
     const next = JSON.parse(
       (await invoke(tools, 'studio_search', { ...first.next, query: 'match' })).textResultForLlm,
     );

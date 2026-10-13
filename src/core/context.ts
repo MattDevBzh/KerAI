@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { boundAnswers } from './questions';
 import type {
   MemoryEntry,
   PromptSection,
@@ -93,8 +94,13 @@ export function promptSections(input: RunInput): PromptSection[] {
     'human',
     input.attempt.feedback ? `Retour humain :\n${input.attempt.feedback}` : '',
   );
-  const answers = Object.entries(input.attempt.answers)
-    .map(([id, answer]) => `${id}: ${answer}`)
+  const answers = Object.values(boundAnswers(input.attempt, input.step.id))
+    .map(
+      ({ question, answer, origin }) =>
+        `Question ${question.id} (étape ${origin.stepId}, tentative ${origin.attemptId}) : ${question.text}` +
+        (question.choices ? `\nChoix : ${JSON.stringify(question.choices)}` : '') +
+        `\nRéponse humaine : ${answer}`,
+    )
     .join('\n');
   add(
     'answers',

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { qualityEvidenceSchema } from './qualitySchemas';
 
 export const boundedId = z
   .string()
@@ -213,6 +214,7 @@ export const reviewSchema = z
   });
 export const evidenceSchema = z
   .object({
+    quality: qualityEvidenceSchema.optional(),
     id: boundedId,
     source: z.literal('host'),
     commandId: boundedId,

@@ -49,7 +49,14 @@ describe('webview protocol boundary', () => {
       nickname: 'Capitaine Patch',
       avatar: 'captain',
     };
-    expect(parseMessage({ type: 'saveAgent', agent })).toEqual({ type: 'saveAgent', agent });
+    const request = {
+      type: 'saveAgent',
+      agent,
+      requestId: 'save-profile',
+      options: { scope: 'workspace', expectedRevision: null },
+    };
+    expect(parseMessage(request)).toEqual(request);
+    expect(() => parseMessage({ type: 'saveAgent', agent })).toThrow();
     expect(() =>
       parseMessage({
         type: 'saveAgent',

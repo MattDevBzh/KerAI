@@ -1,6 +1,27 @@
-# Validation et limites — v0.3, 13 octobre 2026
+# Validation et limites — v0.4, 13 octobre 2026
 
-## Vérifications de cette itération
+## Vérifications locales de v0.4.0
+
+La recette a été exécutée sur macOS le 13 octobre 2026. Les résultats ci-dessous concernent le lot 0.4.0 ; les preuves historiques v0.3 restent séparées.
+
+| Périmètre | Résultat observé |
+| --- | --- |
+| Format, TypeScript et build | `npm run check` réussi ; vérification de format et reconstruction après les dernières corrections d’interface |
+| Métier et intégration | **312 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
+| Interface | **55 scénarios Playwright vérifiés** : 54 lors de la campagne complète, puis le scénario de navigation à 800×600 après correction de son assertion ; recette visuelle des trois nouveaux menus à 1440, 800 et 390 px |
+| Vrai hôte VS Code Insiders | Activation React sous CSP, configuration ADO hors ligne conservée après réouverture, inspection Git et index humain intact, priorité personnel/projet et copies conservées, installation explicite du reporter, worktrees et restauration ciblée |
+| Recette Playwright du produit | Parcours réel Chromium avec formulaire local, capture et trace ZIP ; collecte hôte liée aux critères et refus des rapports inconnus, périmés, incomplets ou du mauvais type |
+| Dépendances de production | `npm audit --omit=dev --audit-level=low` : aucune vulnérabilité signalée à la date du contrôle |
+
+Les tests portent notamment sur les alias physiques de chemins (y compris Unicode sur le disque macOS), les réponses liées à leur question exacte, les critères devenus obsolètes, les diffs depuis un sous-dossier Git, la pagination/exclusion, les scopes de profils, les mesures et les preuves qualité. Les tests Azure DevOps utilisent une API simulée et les tests de livraison des dépôts Git temporaires ; ils ne confirment ni droits PAT ni push/PR sur le compte réel. Aucun prompt payant n’a été envoyé. L’organisation et le projet restent à configurer depuis le menu. Aucune nouvelle exécution CI ou Windows ni publication distante n’est attestée par cette recette locale.
+
+Le package local cible `releases/feature-studio-0.4.0.vsix`. Son empreinte est enregistrée dans `releases/SHA256SUMS` ; la recette de livraison inclut l’inspection de ses ressources et le chargement de son contenu extrait dans le vrai hôte VS Code.
+
+La recette qualité cible d’abord les applications web locales disposant de Playwright. L’installation explicite du reporter, une commande approuvée et les dépendances/navigateurs préparés par l’utilisateur sont nécessaires. Les contre-exemples possèdent une étape indépendante dans `quality-feature`. Une preuve hôte vérifie l’exécution et les rapports fournis ; elle ne garantit pas la qualité de toute application. [Reporter et limites](../defaults/quality/README.md).
+
+Les opérations de Livraison ne font aucun appel modèle. Chaque commit, push et création de PR demande sa propre confirmation hôte après aperçu. Les tests déterministes ne constituent pas une autorisation ni une preuve de publication. [Contrat Git et ADO](devops-delivery.md).
+
+## Vérifications historiques de v0.3
 
 | Périmètre                        | Preuve observée                                                                                                                                                                                                                               |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -41,7 +62,7 @@ Le VSIX livré est vérifié par `releases/SHA256SUMS`. Le stockage des artefact
 - Le pilote ne repart pas tout seul après une question, un redémarrage ou une erreur. Une tentative échouée/interrompue se reprend manuellement. Les corrections sont désactivées par défaut et leurs cycles se configurent explicitement.
 - Une preuve de test porte sur la commande exécutée et les fichiers connus du host : fichiers lus pendant la tentative et fichiers modifiés par la feature. Ce n’est pas une empreinte exhaustive et immuable de tout le dépôt. Le diff de fichiers affiche **HEAD ↔ dossier de la feature** ; le panneau des points compare aussi **point ↔ dossier actuel** et **point ↔ point**. Les critères et commentaires restent des validations humaines ; les constats du modèle ne prouvent pas l’exécution d’un test.
 - Les agents n’ont aucun shell générique, commande Git d’écriture ou outil de publication fourni par l’hôte. Ils peuvent créer/modifier des fichiers et utiliser les tests/MCP explicitement autorisés. Les scripts, hooks et serveurs MCP approuvés sont des processus/services ordinaires, sans sandbox système ; leurs effets dépassent potentiellement les outils fichiers hôtes.
-- Les écritures préexistantes, suppressions humaines, chemins sensibles et liens sont protégés. Le contrôle par empreinte détecte les modifications concurrentes ordinaires ; il ne protège pas contre tout programme local malveillant. Les outils d’édition de l’agent ne prennent pas en charge les fichiers de plus de 256 Ko et les binaires ; les points de restauration ont leur propre limite de 4 MiB et peuvent conserver des binaires. Liste, recherche, journaux et sorties sont bornés.
+- Les écritures préexistantes, suppressions humaines, chemins sensibles et liens sont protégés. Le contrôle par empreinte détecte les modifications concurrentes ordinaires ; il ne protège pas contre tout programme local malveillant. Les outils de lecture paginée et de remplacement exact sont bornés à 4 MiB par fichier UTF-8 ; le remplacement intégral reste borné à 256 Ko et les binaires ne sont pas éditables par ces outils ; les points de restauration ont leur propre limite de 4 MiB et peuvent conserver des binaires. Liste, recherche, journaux et sorties sont bornés.
 - L’arrêt conserve les changements déjà effectués. Le CLI 1.0.63 ne supporte pas `session.detach` ; le nettoyage se termine avec `forceStop` si nécessaire. Son transcript peut manquer le dernier message assistant : Feature Studio conserve le livrable dans son état et le réinjecte lors d’une reprise.
 - Les modèles et niveaux de raisonnement sont ceux annoncés par le compte. La machine testée expose `auto` ; aucune liste fictive ni réduction de prix supposée n’est ajoutée. Les noms économie/équilibré/qualité sont des profils à configurer.
 - Windows n’a pas été testé. Les tests/hooks emploient des exécutables natifs, pas les lanceurs `.cmd` avec le runner sans shell. Les connexions MCP dépendent aussi de leur serveur et de sa disponibilité sur la plateforme.

@@ -17,6 +17,7 @@ import {
 } from './evolutionSchemas';
 import { defaultBudget } from './budgets';
 import { checkpointSchema, worktreeSchema } from './workspaceSchemas';
+import { qualityCommandSchema } from './qualitySchemas';
 
 export const defaultSettings: StudioSettings = {
   defaultModel: '',
@@ -61,6 +62,20 @@ const attempt = z.object({
     z.object({ id: z.string(), text: z.string(), choices: z.array(z.string()).optional() }),
   ),
   answers: z.record(z.string(), z.string()),
+  answerBindings: z
+    .record(
+      z.string(),
+      z.object({
+        question: z.object({
+          id: z.string(),
+          text: z.string(),
+          choices: z.array(z.string()).optional(),
+        }),
+        answer: z.string(),
+        origin: z.object({ stepId: z.string(), attemptId: z.string() }),
+      }),
+    )
+    .optional(),
   changedFiles: z.array(z.string()),
   error: z.string().optional(),
   approvedAt: z.string().optional(),
@@ -172,6 +187,7 @@ export const settingsSchema = z
         name: z.string(),
         command: z.string().min(1),
         args: z.array(z.string()),
+        quality: qualityCommandSchema.optional(),
       }),
     ),
     testPaths: z.array(z.string()),

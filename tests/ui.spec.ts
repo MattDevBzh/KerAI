@@ -25,6 +25,21 @@ async function hosted(page: Page, state = fresh()) {
         setState: (v: object) => (saved = v),
         postMessage: (m: ClientMessage) => {
           messages.push(m);
+          if (m.type === 'saveAgent' || m.type === 'saveSkill')
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'profileSaveResult',
+                    requestId: m.requestId,
+                    scope: m.options.scope,
+                    path: '/mock/saved.md',
+                    revision: 'a'.repeat(64),
+                  },
+                  '*',
+                ),
+              0,
+            );
           if (m.type === 'ready')
             setTimeout(() => window.postMessage({ type: 'state', state: data }, '*'), 0);
           if (m.type === 'compareCheckpoint' && Reflect.get(window, 'autoComparison')) {
@@ -1427,7 +1442,7 @@ test('une comparaison tardive ou invalidée par une mutation ne réactive jamais
   expect((await messages(page)).some((m) => m.type === 'restoreCheckpoint')).toBe(false);
 });
 
-test('migration accessible et édition locale orientée vers la migration', async ({ page }) => {
+test('migration accessible et édition projet sans migration obligatoire', async ({ page }) => {
   const state = fresh();
   state.agents[0].source = 'workspace';
   state.agents[0].nickname = 'Agent projet à migrer';
@@ -1437,7 +1452,8 @@ test('migration accessible et édition locale orientée vers la migration', asyn
   expect((await messages(page)).at(-1)).toEqual({ type: 'migrateUserKit' });
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByRole('button').filter({ hasText: 'Agent projet à migrer' }).click();
-  await expect(page.getByRole('button', { name: 'Enregistrer le profil' })).toBeDisabled();
+  await expect(page.getByLabel('Portée du profil')).toHaveValue('workspace');
+  await expect(page.getByRole('button', { name: 'Enregistrer le profil' })).toBeEnabled();
   await page.getByRole('button', { name: 'Migrer vers le compte utilisateur' }).click();
   expect((await messages(page)).at(-1)).toEqual({ type: 'migrateUserKit' });
 });

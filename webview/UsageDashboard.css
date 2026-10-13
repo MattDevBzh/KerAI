@@ -1,0 +1,214 @@
+.usage-dashboard {
+  display: grid;
+  gap: 20px;
+  max-width: 1450px;
+  min-width: 0;
+  margin: 0 auto;
+}
+.usage-heading h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 10px;
+  font-size: 28px;
+}
+.usage-heading p,
+.usage-definition {
+  color: var(--muted);
+  line-height: 1.65;
+}
+.usage-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.usage-filters label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.usage-filters .usage-archive-toggle {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.usage-archive-toggle input {
+  width: auto;
+}
+.usage-filters button {
+  grid-column: span 2;
+  justify-self: end;
+}
+.usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.usage-metric-card,
+.usage-group-panel,
+.usage-efficiency,
+.usage-empty,
+.usage-coverage,
+.usage-attempt-details {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  min-width: 0;
+}
+.usage-metric-card {
+  display: grid;
+  gap: 10px;
+}
+.usage-metric-card > strong {
+  color: var(--apricot);
+  font-size: 27px;
+  overflow-wrap: anywhere;
+}
+.usage-metric-card strong small {
+  font-size: 13px;
+  font-weight: normal;
+}
+.usage-metric-card > small,
+.usage-efficiency > small,
+.usage-table small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.usage-coverage {
+  border-left: 3px solid var(--lavender);
+  display: grid;
+  gap: 8px;
+  line-height: 1.5;
+}
+.usage-efficiency {
+  display: grid;
+  gap: 16px;
+}
+.usage-outcomes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.usage-outcomes div {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.usage-outcomes dt {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.usage-outcomes dd {
+  margin: 7px 0 0;
+  font-size: 23px;
+}
+.usage-group-panel h2 {
+  margin-bottom: 14px;
+}
+.usage-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.usage-table caption {
+  text-align: left;
+  color: var(--muted);
+  padding-bottom: 10px;
+  line-height: 1.6;
+}
+.usage-table th,
+.usage-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border);
+  min-width: 100px;
+}
+.usage-table th {
+  overflow-wrap: anywhere;
+  max-width: 220px;
+}
+.usage-table small {
+  display: block;
+  min-width: 115px;
+  font-size: 11px;
+  margin-top: 5px;
+}
+.usage-table .text-button {
+  white-space: normal;
+  text-align: left;
+}
+.usage-table meter {
+  display: block;
+  margin-top: 7px;
+  width: 100%;
+  height: 8px;
+  accent-color: var(--lavender);
+}
+.usage-empty {
+  display: grid;
+  gap: 12px;
+  padding: 36px;
+  text-align: center;
+}
+.usage-attempt-details summary {
+  cursor: pointer;
+}
+.usage-attempt-details ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.usage-attempt-details li {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.usage-attempt-details span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+@media (max-width: 760px) {
+  .usage-metrics {
+    grid-template-columns: 1fr;
+  }
+  .usage-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .usage-outcomes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .usage-group-panel,
+  .usage-efficiency,
+  .usage-coverage {
+    padding: 14px;
+  }
+}
+@media (max-width: 420px) {
+  .usage-filters {
+    grid-template-columns: 1fr;
+  }
+  .usage-filters .usage-archive-toggle,
+  .usage-filters button {
+    grid-column: auto;
+  }
+  .usage-filters button {
+    justify-self: stretch;
+  }
+  .usage-outcomes {
+    grid-template-columns: 1fr;
+  }
+}

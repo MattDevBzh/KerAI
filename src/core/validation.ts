@@ -1,3 +1,4 @@
+import type { QualityKind } from '../shared/quality';
 import type { Attempt, Feature, FeatureStep, TestEvidence } from '../shared/types';
 
 export function currentTestEvidence(attempt: Attempt): TestEvidence[] {
@@ -6,6 +7,52 @@ export function currentTestEvidence(attempt: Attempt): TestEvidence[] {
 export function evidenceIsCurrent(attempt: Attempt, proof: TestEvidence): boolean {
   return Object.entries(attempt.fileHashes ?? {}).every(
     ([path, hash]) => proof.fileHashes[path] === hash,
+  );
+}
+/** Standard quality agents retain their contract even in a customized step. */
+export function requiredQualityKinds(step: FeatureStep): QualityKind[] {
+  const agentKind =
+    step.agentId === 'fs-visual-tests'
+      ? 'visual'
+      : step.agentId === 'fs-counterexamples'
+        ? 'counterexample'
+        : undefined;
+  return [
+    ...new Set(
+      [step.requiredQuality, agentKind].filter((kind): kind is QualityKind => kind !== undefined),
+    ),
+  ];
+}
+function qualityIsCurrent(
+  feature: Feature,
+  attempt: Attempt,
+  proof: TestEvidence,
+  kind: QualityKind,
+): boolean {
+  const quality = proof.quality;
+  const criteria = new Set((feature.criteria ?? []).map((criterion) => criterion.id));
+  return (
+    proof.source === 'host' &&
+    proof.exitCode === 0 &&
+    !proof.error &&
+    Boolean(proof.finishedAt) &&
+    evidenceIsCurrent(attempt, proof) &&
+    quality?.status === 'passed' &&
+    quality.kind === kind &&
+    quality.featureId === feature.id &&
+    quality.attemptId === attempt.id &&
+    quality.evidenceId === proof.id &&
+    quality.commandId === proof.commandId &&
+    Boolean(quality.reportSha256) &&
+    quality.cases.length > 0 &&
+    quality.cases.every(
+      (testCase) =>
+        testCase.status === 'passed' &&
+        !testCase.errors.length &&
+        testCase.steps.length > 0 &&
+        testCase.criterionIds.length > 0 &&
+        testCase.criterionIds.every((id) => criteria.has(id)),
+    )
   );
 }
 export function featureCompletionBlockers(feature: Feature): string[] {
@@ -44,7 +91,7 @@ export function approvalBlockers(
     blockers.push('La relecture demande des corrections.');
   const requiresReview =
     feature.autopilot?.reviewStepId === step.id ||
-    (feature.workflowId === 'feature' && step.id === 'review') ||
+    (['feature', 'quality-feature'].includes(feature.workflowId) && step.id === 'review') ||
     feature.workflowId === 'code-review';
   if (actor === 'autopilot' && requiresReview && !attempt.review)
     blockers.push('La relecture structurée attendue est absente.');
@@ -55,14 +102,31 @@ export function approvalBlockers(
   )
     blockers.push('Des commentaires bloquants restent ouverts pour cette étape.');
   const evidence = currentTestEvidence(attempt);
-  if (evidence.some((proof) => proof.error || proof.exitCode !== 0))
+  for (const kind of requiredQualityKinds(step)) {
+    if (!evidence.some((proof) => qualityIsCurrent(feature, attempt, proof, kind)))
+      blockers.push(
+        `Rapport qualité ${kind === 'visual' ? 'visuel' : 'contre-exemples'} réussi, courant et lié à cette tentative requis. Une commande ordinaire ne suffit pas.`,
+      );
+  }
+  if (
+    evidence.some(
+      (proof) =>
+        proof.error || proof.exitCode !== 0 || (proof.quality && proof.quality.status !== 'passed'),
+    )
+  )
     blockers.push('Une preuve de tests hôte est en échec ou incomplète.');
   if (evidence.some((proof) => !evidenceIsCurrent(attempt, proof)))
     blockers.push('Une preuve de tests est obsolète après modification des fichiers.');
   if (
     actor === 'autopilot' &&
     step.policy === 'tests' &&
-    !evidence.some((proof) => proof.source === 'host' && proof.exitCode === 0 && !proof.error)
+    !evidence.some(
+      (proof) =>
+        proof.source === 'host' &&
+        proof.exitCode === 0 &&
+        !proof.error &&
+        (!proof.quality || proof.quality.status === 'passed'),
+    )
   )
     blockers.push('Aucune preuve de tests réellement exécutés par le host.');
   const final = feature.steps.every((other) => other.id === step.id || other.status === 'approved');

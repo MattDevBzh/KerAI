@@ -27,8 +27,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run check
       - run: npx playwright install --with-deps chromium
+      - run: npm run check
       - run: npm run test:ui
       - run: xvfb-run -a npm run test:extension
       - run: mkdir -p releases && npm run package
