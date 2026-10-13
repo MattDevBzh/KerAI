@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.4 — 2026-10-13
+
+- Ajoute aux agents les comparaisons contre une branche locale ou distante déjà connue (`develop`, `origin/develop`), depuis l’ancêtre commun ou directement entre les deux versions.
+- Sépare la comparaison des commits de l’inclusion explicite des changements locaux ; conserve le diff local contre HEAD quand aucune branche n’est fournie.
+- Ajoute la liste paginée des branches et fichiers modifiés, les SHA de comparaison et la pagination des diffs avec détection des changements entre pages.
+- Refuse les références absentes, ambiguës et les résultats Git tronqués. Préserve les exclusions de fichiers sensibles et le fonctionnement en lecture seule.
+
 ## 0.3.3 — 2026-10-13
 
 - Enregistre les créations et éditions d’agents et skills au niveau utilisateur et corrige les libellés de l’éditeur.

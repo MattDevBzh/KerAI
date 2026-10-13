@@ -7,6 +7,7 @@ import type { RunInput, RunCallbacks, RunEvent, TestEvidence } from '../shared/t
 import { PolicyEngine, isSensitivePath, sha256 } from './PolicyEngine';
 import { runProcess, redact } from './process';
 import { gitRead } from './gitRead';
+import { GitReview, gitPageSchema, gitChangesSchema, gitDiffSchema } from './GitReview';
 import { MAX_TEXT_BYTES, lineOffsets, readTextFile, textPage } from './textFiles';
 
 export async function gitInfo(root: string): Promise<{ branch: string; dirty: Set<string> }> {
@@ -109,6 +110,7 @@ export class ToolHost {
         }
       },
     });
+    const gitReview = new GitReview(this.input.workspacePath, this.policy, this.signal);
     const tools: Tool[] = [
       tool(
         'studio_list_files',
@@ -236,64 +238,22 @@ export class ToolHost {
         },
       ),
       tool(
+        'studio_git_branches',
+        'List local and locally known remote branches (e.g. develop, origin/develop), with current branch and HEAD SHA. Read-only: no fetch or checkout. Follow nextOffset with expectedSha256.',
+        gitPageSchema,
+        (args) => gitReview.branches(args),
+      ),
+      tool(
+        'studio_git_changes',
+        'List changed files before reviewing a diff. baseRef selects an existing local or remote branch. comparison: merge-base (default, changes introduced on current branch) or direct (compare branch tips). With baseRef, committed changes only by default; includeLocal:true adds staged/unstaged changes and lists untracked files. Without baseRef: local changes vs HEAD. Reports SHA identities and exclusions. Follow nextOffset with expectedSha256.',
+        gitChangesSchema,
+        (args) => gitReview.changes(args),
+      ),
+      tool(
         'studio_git_diff',
-        'Read Git diff including staged and unstaged changes (no external diff or text conversion). Optional single relative file.',
-        z.object({ path: z.string().optional() }),
-        async ({ path: relative }) => {
-          if (relative) await this.policy.resolve(relative);
-          const names = relative
-            ? [relative]
-            : (
-                await gitRead(
-                  this.input.workspacePath,
-                  [
-                    'diff',
-                    '--no-ext-diff',
-                    '--no-textconv',
-                    '--relative',
-                    '--name-only',
-                    '-z',
-                    'HEAD',
-                    '--',
-                  ],
-                  { signal: this.signal, timeoutMs: 10000, rawOutput: true },
-                )
-              ).stdout
-                .split('\0')
-                .filter(Boolean);
-          const safeNames = names.filter((name) => !isSensitivePath(name)).slice(0, 250);
-          if (!safeNames.length)
-            return {
-              diff: '',
-              note: 'Aucun diff suivi accessible. Les nouveaux fichiers se lisent avec studio_read_file.',
-            };
-          const args = [
-            '-c',
-            'core.pager=cat',
-            'diff',
-            '--no-ext-diff',
-            '--no-textconv',
-            '--relative',
-            'HEAD',
-            '--',
-            ...safeNames.map((name) => `:(literal)${name}`),
-          ];
-          const result = await gitRead(this.input.workspacePath, args, {
-            signal: this.signal,
-            timeoutMs: 10000,
-          });
-          if (result.code !== 0)
-            return {
-              diff: '',
-              unavailable: result.stderr,
-              note: 'Untracked files and repositories without HEAD require studio_read_file.',
-            };
-          return {
-            diff: result.stdout,
-            truncated: result.truncated,
-            note: 'Untracked files are not in the Git diff; list/read them separately.',
-          };
-        },
+        'Read a paginated Git diff. baseRef: local branch (develop) or remote reference (origin/develop). comparison: merge-base (default) or direct. With baseRef, committed changes only unless includeLocal:true; without baseRef, staged/unstaged changes vs HEAD. Optional single workspace-relative path with /. List files first with studio_git_changes. startLine/endLine are DIFF lines (not source lines); follow nextStartLine with expectedSha256 and the same comparison/path. No tests, fetch, checkout, external diff or text conversion.',
+        gitDiffSchema,
+        (args) => gitReview.diff(args),
       ),
     ];
     const canEdit = this.input.agent.tools.some((name) =>
@@ -502,6 +462,8 @@ export class ToolHost {
       studio_list_files: ['read', 'search', 'studio_list_files'],
       studio_read_file: ['read', 'studio_read_file'],
       studio_search: ['search', 'studio_search'],
+      studio_git_branches: ['read', 'studio_git_branches', 'studio_git_diff'],
+      studio_git_changes: ['read', 'studio_git_changes', 'studio_git_diff'],
       studio_git_diff: ['read', 'studio_git_diff'],
       studio_write_file: ['edit', 'write', 'studio_write_file'],
       studio_replace_text: ['edit', 'write', 'studio_write_file', 'studio_replace_text'],
