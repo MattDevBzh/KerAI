@@ -74,6 +74,7 @@ export class ToolHost {
       .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
     for (const attempt of attempts) Object.assign(owned, attempt.fileHashes ?? {});
     Object.assign(owned, this.input.feature.workspaceFileHashes ?? {});
+    Object.assign(owned, this.input.existingChangeGrants ?? {});
     this.policy = new PolicyEngine(
       this.input.workspacePath,
       this.input.step.policy,

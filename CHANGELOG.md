@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6 — 2026-10-13
+
+- Ajoute une sélection explicite des fichiers déjà modifiés que l’agent peut reprendre, dans l’aperçu avant lancement. Une autorisation conversationnelle seule n’ouvre plus une fausse piste : le refus indique directement ce contrôle.
+- Lie cette autorisation aux octets vérifiés par l’aperçu et sauvegarde les fichiers sélectionnés avant l’exécution. Les changements externes ultérieurs, fichiers non sélectionnés et restrictions du profil restent protégés.
+- Affiche les motifs de blocage près du bouton de validation, un état de validation en cours, les refus hôtes et une confirmation explicite de fin de session. Le parcours n’est annoncé entièrement validé que lorsque la feature est réellement terminée.
+
 ## 0.3.5 — 2026-10-13
 
 - Ajoute des cases à cocher et une édition par bloc dans l’aperçu de lancement : livrables, instructions d’agent, skills, mémoire, besoin et retours humains.

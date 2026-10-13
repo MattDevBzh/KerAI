@@ -97,6 +97,7 @@ export interface Attempt {
   approvedAt?: string;
   fileHashes?: Record<string, string>;
   launch?: RunLaunchOptions;
+  existingChangesBackup?: string;
   promptFingerprint?: string;
   promptCharacters?: number;
   memorySnapshot?: MemoryEntry[];
@@ -337,6 +338,13 @@ export type HostMessage =
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
   | { type: 'runPreview'; requestId: string; preview: RunPreview }
+  | {
+      type: 'stepApprovalResult';
+      featureId: string;
+      stepId: string;
+      attemptId?: string;
+      error?: string;
+    }
   | { type: 'checkpointComparison'; requestId: string; comparison: CheckpointComparison }
   | { type: 'navigate'; view: 'create' | 'dashboard'; featureId?: string };
 export interface RunInput {
@@ -351,6 +359,8 @@ export interface RunInput {
   launch?: RunLaunchOptions;
   memory?: MemoryEntry[];
   preparedPrompt?: string;
+  /** Verified by the host against the human-approved preview. Never supplied by model tools. */
+  existingChangeGrants?: Record<string, string>;
   mcpServers?: McpServerConfig[];
   automation?: { reviewStepId?: string; correctionStepId?: string };
 }

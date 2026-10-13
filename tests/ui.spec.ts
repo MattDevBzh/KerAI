@@ -112,6 +112,7 @@ async function hosted(page: Page, state = fresh()) {
                       estimatedTokens: Math.ceil(prompt.length / 4),
                       maxCharacters: 60000,
                       errors: [],
+                      existingChanges: Reflect.get(window, 'existingChanges'),
                     },
                   },
                   '*',
@@ -1536,4 +1537,94 @@ test('contexte vide par défaut : sélectionner seulement la spec, tout cocher e
     type: 'runStep',
     launch: { contextMode: 'empty', contextBlocks: { 'artifact:specs': { enabled: true } } },
   });
+});
+
+test('autoriser un fichier existant exige une sélection explicite et un nouvel aperçu', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.evaluate(() =>
+    Reflect.set(window, 'existingChanges', {
+      files: [
+        { path: 'SyfadisProvider.cs' },
+        { path: 'Other.cs' },
+        { path: 'deleted.cs', reason: 'Fichier supprimé' },
+      ],
+      omittedCount: 0,
+    }),
+  );
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByRole('checkbox', { name: 'SyfadisProvider.cs' })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /deleted.cs/ })).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'SyfadisProvider.cs' }).check();
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await finishLaunch(page);
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    launch: { editableExistingFiles: ['SyfadisProvider.cs'] },
+  });
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByRole('checkbox', { name: 'SyfadisProvider.cs' })).not.toBeChecked();
+});
+
+test('dernière étape : afficher les blocages, un refus hôte et la confirmation de fin', async ({
+  page,
+}) => {
+  const state = fresh();
+  const feature = state.features[0];
+  const step = feature.steps[1];
+  step.dependsOn = [];
+  feature.steps = [step];
+  feature.activeStepId = step.id;
+  feature.criteria = [{ id: 'ac', text: 'Nettoyage ciblé', status: 'pending', evidence: '' }];
+  await hosted(page, state);
+  await page.locator('.session-card').first().click();
+  await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeDisabled();
+  await expect(page.getByText('Validation bloquée', { exact: true })).toBeVisible();
+  await expect(page.locator('.approval-blockers')).toContainText('critères d’acceptation');
+  feature.criteria[0] = {
+    ...feature.criteria[0],
+    status: 'passed',
+    evidence: 'Relecture effectuée',
+  };
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await page.getByRole('button', { name: 'Valider cette étape' }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Validation en cours…' })).toBeDisabled();
+  await page.evaluate(
+    ({ featureId, stepId, attemptId }) =>
+      window.postMessage(
+        {
+          type: 'stepApprovalResult',
+          featureId,
+          stepId,
+          attemptId,
+          error: 'La preuve de test est obsolète : source modifiée.',
+        },
+        '*',
+      ),
+    { featureId: feature.id, stepId: step.id, attemptId: step.attempts[0].id },
+  );
+  await expect(
+    page.getByText('La validation n’a pas été enregistrée', { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.approval-blockers[role="alert"]')).toContainText(
+    'preuve de test est obsolète',
+  );
+  await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Valider cette étape' }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  step.status = 'approved';
+  step.attempts[0].status = 'approved';
+  feature.status = 'completed';
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(
+    page.getByText('Parcours entièrement validé — session terminée', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Valider cette étape' })).toHaveCount(0);
 });

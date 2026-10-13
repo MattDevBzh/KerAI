@@ -41,6 +41,7 @@ import {
 import { PolicyEngine, sha256 } from './PolicyEngine';
 import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
 import { WorkspaceLease } from './WorkspaceLease';
+import { inspectExistingChanges, backupExistingChanges } from './ExistingChanges';
 
 export class StudioService extends EventEmitter {
   engine = new WorkflowEngine();
@@ -508,17 +509,23 @@ export class StudioService extends EventEmitter {
         : undefined,
     };
   }
-  previewRun(
+  async previewRun(
     featureId: string,
     stepId: string,
     feedback = '',
     resume = false,
     launch?: RunLaunchOptions,
-  ): RunPreview {
+  ): Promise<RunPreview> {
     this.assertTrusted();
+    await this.featurePath(featureId);
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     const blocked = budgetBlockReason(input.feature);
-    return previewContext(input, blocked ? [blocked] : []);
+    const existingChanges = await inspectExistingChanges(
+      input,
+      (await gitInfo(input.workspacePath)).dirty,
+    );
+    this.assertTrusted();
+    return { ...previewContext(input, blocked ? [blocked] : []), existingChanges };
   }
   async runStep(
     featureId: string,
@@ -570,6 +577,11 @@ export class StudioService extends EventEmitter {
         `Cette session est liée à la branche ${feature.branch}. Reviens sur cette branche avant de la lancer.`,
       );
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
+    if (input.launch?.editableExistingFiles?.length && !previewFingerprint)
+      throw new Error(
+        'L’autorisation de reprendre des fichiers existants exige un aperçu confirmé au lancement manuel.',
+      );
+    await inspectExistingChanges(input, info.dirty);
     const preview = previewContext(input);
     if (preview.errors.length) throw new Error(preview.errors.join(' '));
     if (previewFingerprint && previewFingerprint !== preview.fingerprint)
@@ -677,6 +689,20 @@ export class StudioService extends EventEmitter {
         });
         this.rememberCheckpoint(feature, before);
         attempt.checkpointBeforeId = before.id;
+        await this.persist();
+      }
+      attempt.existingChangesBackup = await backupExistingChanges(
+        input,
+        this.store.rootPath,
+        controller.signal,
+      );
+      if (attempt.existingChangesBackup) {
+        callbacks.onEvent({
+          id: randomUUID(),
+          at: new Date().toISOString(),
+          kind: 'info',
+          message: `Sauvegarde des modifications existantes : ${attempt.existingChangesBackup}`,
+        });
         await this.persist();
       }
       await this.hooks('beforeRun', input, controller.signal, callbacks);

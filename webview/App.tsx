@@ -1,3 +1,4 @@
+import { approvalBlockers, featureCompletionBlockers } from '../src/core/validation';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowDownToLine,
@@ -1352,6 +1353,29 @@ function StepPanel({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [config, setConfig] = useState(false);
   const [launchResume, setLaunchResume] = useState<boolean | null>(null);
+  const [approvalPending, setApprovalPending] = useState(false);
+  const [approvalError, setApprovalError] = useState('');
+  const approvalReasons =
+    step.status === 'awaiting_review' ? approvalBlockers(feature, step, 'human') : [];
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (
+          message.type === 'stepApprovalResult' &&
+          message.featureId === feature.id &&
+          message.stepId === step.id &&
+          message.attemptId === latest?.id
+        ) {
+          setApprovalPending(false);
+          setApprovalError(message.error ?? '');
+        }
+      }),
+    [feature.id, step.id, latest?.id],
+  );
+  useEffect(() => {
+    setApprovalError('');
+    setApprovalPending(false);
+  }, [latest?.id, latest?.revision]);
   useEffect(() => {
     const received = latest?.artifact?.content ?? '';
     if (received === content) setSavedContent(received);
@@ -1819,7 +1843,10 @@ function StepPanel({
                   </button>
                 ) : (
                   <div className="completion-note">
-                    <CheckCircle2 size={18} /> Parcours entièrement validé
+                    <CheckCircle2 size={18} />{' '}
+                    {feature.status === 'completed'
+                      ? 'Parcours entièrement validé — session terminée'
+                      : `Étape validée. ${featureCompletionBlockers(feature).join(' ') || 'D’autres étapes restent à valider.'}`}
                   </div>
                 )}
                 <button
@@ -1833,31 +1860,63 @@ function StepPanel({
             ) : (
               <>
                 {step.status === 'awaiting_review' && (
-                  <button
-                    className="button primary"
-                    disabled={
-                      dirty ||
-                      Boolean(feature.archived) ||
-                      !state.workspace.trusted ||
-                      Boolean(state.workspaceOperation)
-                    }
-                    onClick={() =>
-                      confirm(
-                        'Valider cette étape ?',
-                        'Cette décision approuve le livrable actuel et débloque les étapes qui en dépendent.',
-                        () =>
-                          dispatch({
-                            type: 'approveStep',
-                            featureId: feature.id,
-                            stepId: step.id,
-                            expectedAttemptId: latest?.id,
-                            expectedRevision: latest?.revision ?? 0,
-                          }),
-                      )
-                    }
-                  >
-                    <Check size={16} /> Valider cette étape
-                  </button>
+                  <>
+                    {approvalReasons.length > 0 && (
+                      <div className="approval-blockers" role="status">
+                        <strong>Validation bloquée</strong>
+                        <ul>
+                          {approvalReasons.map((reason) => (
+                            <li key={reason}>{reason}</li>
+                          ))}
+                        </ul>
+                        <button className="button secondary" onClick={() => setTab('review')}>
+                          Voir les critères et commentaires
+                        </button>
+                      </div>
+                    )}
+                    {approvalError && (
+                      <div className="approval-blockers" role="alert">
+                        <strong>La validation n’a pas été enregistrée</strong>
+                        <p>{approvalError}</p>
+                      </div>
+                    )}
+                    <button
+                      className="button primary"
+                      disabled={
+                        approvalPending ||
+                        approvalReasons.length > 0 ||
+                        running ||
+                        dirty ||
+                        Boolean(feature.archived) ||
+                        !state.workspace.trusted ||
+                        Boolean(state.workspaceOperation)
+                      }
+                      onClick={() =>
+                        confirm(
+                          'Valider cette étape ?',
+                          'Cette décision approuve le livrable actuel et débloque les étapes qui en dépendent.',
+                          () => {
+                            setApprovalError('');
+                            setApprovalPending(true);
+                            dispatch({
+                              type: 'approveStep',
+                              featureId: feature.id,
+                              stepId: step.id,
+                              expectedAttemptId: latest?.id,
+                              expectedRevision: latest?.revision ?? 0,
+                            });
+                          },
+                        )
+                      }
+                    >
+                      {approvalPending ? (
+                        <LoaderCircle size={16} className="spin" />
+                      ) : (
+                        <Check size={16} />
+                      )}{' '}
+                      {approvalPending ? 'Validation en cours…' : 'Valider cette étape'}
+                    </button>
+                  </>
                 )}
                 {latest?.sessionId &&
                   ['failed', 'cancelled', 'interrupted', 'waiting_input'].includes(step.status) && (

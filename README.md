@@ -244,3 +244,23 @@ Depuis la version 0.3.5, ouvre une tentative puis **Préparer l’aperçu**. Cha
 Dans l’éditeur d’un agent, active **Contexte vide par défaut** : chaque nouveau lancement manuel commence avec tous les blocs optionnels décochés. Pour un testeur, il suffit ensuite de cocher la spec. Les champs humains que tu saisis explicitement sont inclus ; tu peux les décocher dans l’aperçu. La mémoire du projet demeure opt-in. Ce réglage est enregistré dans le profil utilisateur sous `emptyContextByDefault: true` et s’applique également aux lancements automatisés qui n’ont pas de sélection explicite.
 
 Après une modification, prépare à nouveau l’aperçu pour valider le prompt final et son compteur de caractères/tokens. Les choix et les textes personnalisés sont conservés avec la tentative exécutée, sans modifier les choix par défaut des lancements suivants. Une personnalisation démarre une nouvelle session Copilot, même depuis une demande de reprise : cela évite de transmettre involontairement l’ancien historique. Cette sélection concerne le contexte transmis au lancement ; elle ne retire pas à l’agent son accès autorisé aux fichiers ou outils.
+
+### Reprendre du code déjà modifié
+
+Depuis la version 0.3.6, le développeur peut continuer une fonctionnalité dont les fichiers contiennent déjà des changements locaux, sans devoir les commiter ou les supprimer au préalable :
+
+1. Ouvre une nouvelle tentative dans le dossier contenant tes changements, puis **Préparer l’aperçu**.
+2. Dans **Reprendre des modifications existantes**, coche uniquement les fichiers concernés, par exemple `SyfadisProvider.cs`.
+3. Prépare à nouveau l’aperçu, puis lance la tentative.
+
+Le host lie l’autorisation à la version exacte des fichiers sélectionnés. Un changement intervenu après l’aperçu impose un nouvel aperçu ; après lancement, une nouvelle édition humaine reste protégée même si l’agent relit le fichier. Les permissions de l’agent et du profil restent applicables : un relecteur ne gagne pas l’écriture, et un testeur reste limité à ses dossiers. Les fichiers supprimés, sensibles, liés symboliquement ou physiquement, non UTF-8 ou de plus de 4 Mio ne peuvent pas être repris par cette autorisation. La sélection est limitée à 100 fichiers et 32 Mio ; l’aperçu liste au plus 250 chemins non sensibles et signale les omissions.
+
+Une sauvegarde vérifiée des octets de chaque fichier sélectionné est enregistrée avant les hooks et l’agent. Son dossier est indiqué dans l’activité de la tentative : `existing-changes/<attemptId>` sous le stockage de Feature Studio. `manifest.json` associe chaque chemin source à sa copie `.bin`, son empreinte et son mode d’origine. Pour une restauration manuelle, arrête d’abord l’agent, consulte ce manifeste puis recopie uniquement la sauvegarde voulue vers son chemin source, après avoir conservé toute modification plus récente. La sauvegarde couvre le contenu de travail, pas l’index Git ; aucun stage, reset ou stash automatique n’est effectué.
+
+Les cases ne sont pas reprises automatiquement au lancement suivant. Le pilote automatique ne peut pas réutiliser une telle sélection sans aperçu confirmé : reprends ces fichiers lors d’une tentative manuelle. Les fichiers effectivement modifiés par l’agent continuent ensuite à suivre le mécanisme habituel d’empreintes de la feature.
+
+### Comprendre une validation refusée
+
+Le bouton **Valider cette étape** affiche les blocages connus avant confirmation : livrable absent, questions, corrections demandées, tests ou critères incomplets, commentaires bloquants. Le lien **Voir les critères et commentaires** mène aux contrôles correspondants. La dernière étape exige aussi que les critères globaux soient validés avec leur preuve et que les commentaires bloquants soient résolus.
+
+Les vérifications physiques (par exemple un fichier modifié depuis les tests) restent effectuées au clic côté host ; leur motif de refus est alors affiché durablement près du bouton. Une validation réussie actualise le statut et confirme **session terminée** si toutes les conditions de fin sont satisfaites. Ces messages ne contournent pas les règles de validation.

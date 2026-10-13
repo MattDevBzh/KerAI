@@ -19,6 +19,7 @@ import { ToolHost, gitInfo } from '../src/host/ToolHost';
 import { runProcess } from '../src/host/process';
 import { WorkflowEngine } from '../src/core/workflow';
 import { defaultSettings } from '../src/core/store';
+import { inspectExistingChanges } from '../src/host/ExistingChanges';
 
 const roots: string[] = [];
 async function setup() {
@@ -163,6 +164,59 @@ describe('host file and command policy', () => {
 });
 
 describe('host tools and Git boundaries', () => {
+  it('requires a host grant, still requires reading and rejects later human edits to adopted files', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    await writeFile(join(root, 'existing.ts'), 'human code\n');
+    const data = input(root, 'workspace-write');
+    data.launch = {
+      initialContext: '',
+      memoryIds: [],
+      useProjectMemory: false,
+      mcpServerIds: [],
+      editableExistingFiles: ['existing.ts'],
+    };
+    const unapproved = await new ToolHost(
+      data,
+      { onEvent() {}, onSession() {} },
+      new AbortController().signal,
+    ).createTools();
+    await invoke(unapproved, 'studio_read_file', { path: 'existing.ts' });
+    expect(
+      (await invoke(unapproved, 'studio_write_file', { path: 'existing.ts', content: 'changed' }))
+        .resultType,
+    ).toBe('failure');
+    await inspectExistingChanges(data, (await gitInfo(root)).dirty);
+    const tools = await new ToolHost(
+      data,
+      { onEvent() {}, onSession() {} },
+      new AbortController().signal,
+    ).createTools();
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'existing.ts', content: 'changed' }))
+        .resultType,
+    ).toBe('failure');
+    await writeFile(join(root, 'existing.ts'), 'later human edit\n');
+    await invoke(tools, 'studio_read_file', { path: 'existing.ts' });
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'existing.ts', content: 'changed' }))
+        .resultType,
+    ).toBe('failure');
+    expect(await readFile(join(root, 'existing.ts'), 'utf8')).toBe('later human edit\n');
+    data.step.policy = 'read-only';
+    await expect(inspectExistingChanges(data, (await gitInfo(root)).dirty)).rejects.toThrow(
+      /édition non autorisée/,
+    );
+    data.step.policy = 'tests';
+    await expect(inspectExistingChanges(data, (await gitInfo(root)).dirty)).rejects.toThrow(
+      /dossiers de tests/,
+    );
+    data.step.policy = 'workspace-write';
+    for (const path of ['../outside', '.env', 'C:/outside', 'missing.ts']) {
+      data.launch.editableExistingFiles = [path];
+      await expect(inspectExistingChanges(data, new Set([path]))).rejects.toThrow();
+    }
+  });
   it('serializes host writes behind running tests so proof observes a stable host version', async () => {
     const root = await setup();
     const data = input(root, 'tests');

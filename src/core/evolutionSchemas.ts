@@ -27,6 +27,11 @@ export const launchSchema = z
     mcpServerIds: uniqueIds,
     memoryIds: uniqueIds,
     useProjectMemory: z.boolean(),
+    editableExistingFiles: z
+      .array(path)
+      .max(100)
+      .refine((files) => new Set(files).size === files.length, 'Fichiers dupliqués.')
+      .optional(),
     contextMode: z.enum(['all', 'empty']).optional(),
     contextBlocks: z
       .record(

@@ -330,6 +330,70 @@ export function LaunchDialog({
               placeholder="Précisez la direction, les corrections ou les détails à conserver…"
             />
           </label>
+          {preview?.existingChanges &&
+            (preview.existingChanges.files.length > 0 ||
+              (launch.editableExistingFiles?.length ?? 0) > 0) && (
+              <fieldset className="existing-changes-picker">
+                <legend>Reprendre des modifications existantes</legend>
+                <p className="field-help">
+                  Cochez uniquement les fichiers que cet agent peut continuer à modifier. Leur
+                  version sera vérifiée et sauvegardée avant le lancement. Les autres modifications
+                  restent protégées.
+                </p>
+                {preview.existingChanges.files.map((file) => (
+                  <label key={file.path}>
+                    <input
+                      type="checkbox"
+                      checked={launch.editableExistingFiles?.includes(file.path) ?? false}
+                      disabled={Boolean(file.reason)}
+                      onChange={(e) =>
+                        update({
+                          editableExistingFiles: e.target.checked
+                            ? [...(launch.editableExistingFiles ?? []), file.path]
+                            : (launch.editableExistingFiles ?? []).filter(
+                                (path) => path !== file.path,
+                              ),
+                        })
+                      }
+                    />
+                    <span>
+                      <strong>{file.path}</strong>
+                      {file.reason && <small>{file.reason}</small>}
+                    </span>
+                  </label>
+                ))}
+                {(launch.editableExistingFiles ?? [])
+                  .filter(
+                    (path) => !preview.existingChanges!.files.some((file) => file.path === path),
+                  )
+                  .map((path) => (
+                    <label key={path}>
+                      <input
+                        type="checkbox"
+                        checked
+                        onChange={() =>
+                          update({
+                            editableExistingFiles: launch.editableExistingFiles!.filter(
+                              (file) => file !== path,
+                            ),
+                          })
+                        }
+                      />
+                      <span>{path} — plus disponible, décocher pour continuer</span>
+                    </label>
+                  ))}
+                {preview.existingChanges.omittedCount > 0 && (
+                  <p className="field-help">
+                    {preview.existingChanges.omittedCount} fichier(s) exclus du périmètre ou de la
+                    limite de 250 fichiers affichés.
+                  </p>
+                )}
+                <p className="field-help">
+                  Autorisation pour cette tentative uniquement. Préparez à nouveau l’aperçu après
+                  avoir changé la sélection.
+                </p>
+              </fieldset>
+            )}
           <McpPicker
             state={state}
             selected={launch.mcpServerIds}

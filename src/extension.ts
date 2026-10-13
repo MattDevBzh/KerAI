@@ -11,6 +11,7 @@ import { WorkspaceLease } from './host/WorkspaceLease';
 import { PolicyEngine, sha256 } from './host/PolicyEngine';
 import { parseMessage } from './host/messages';
 import { gitRead } from './host/gitRead';
+import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 
 let panel: vscode.WebviewPanel | undefined;
@@ -236,7 +237,7 @@ export async function activate(context: vscode.ExtensionContext) {
         send({
           type: 'runPreview',
           requestId: message.requestId,
-          preview: current.previewRun(
+          preview: await current.previewRun(
             message.featureId,
             message.stepId,
             message.feedback,
@@ -272,14 +273,36 @@ export async function activate(context: vscode.ExtensionContext) {
         current.cancel(message.featureId);
         return;
       case 'approveStep':
-        if (!message.expectedAttemptId || message.expectedRevision === undefined)
-          throw new Error('Recharge le livrable avant de le valider.');
-        await current.approveStep(
-          message.featureId,
-          message.stepId,
-          message.expectedAttemptId,
-          message.expectedRevision,
-        );
+        try {
+          if (!message.expectedAttemptId || message.expectedRevision === undefined)
+            throw new Error('Recharge le livrable avant de le valider.');
+          await current.approveStep(
+            message.featureId,
+            message.stepId,
+            message.expectedAttemptId,
+            message.expectedRevision,
+          );
+          send({
+            type: 'stepApprovalResult',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            attemptId: message.expectedAttemptId,
+          });
+          notice(
+            current.engine.getFeature(message.featureId).status === 'completed'
+              ? 'Dernière étape validée : session terminée.'
+              : 'Étape validée.',
+          );
+        } catch (error) {
+          send({
+            type: 'stepApprovalResult',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            attemptId: message.expectedAttemptId,
+            error: redact((error as Error).message),
+          });
+          throw error;
+        }
         return;
       case 'answerQuestions':
         current.assertTrusted();

@@ -27,6 +27,7 @@ export interface RunLaunchOptions {
   /** Omitted: follow the agent's default. Only optional context blocks are affected. */
   contextMode?: 'all' | 'empty';
   contextBlocks?: Record<string, { enabled?: boolean; content?: string }>;
+  editableExistingFiles?: string[];
 }
 export interface PromptSection {
   id: string;
@@ -48,6 +49,7 @@ export interface RunPreview {
   maxCharacters: number;
   errors: string[];
   resumesSession?: boolean;
+  existingChanges?: { files: { path: string; reason?: string }[]; omittedCount: number };
 }
 export interface HumanRequest {
   id: string;
