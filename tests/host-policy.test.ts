@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, link, realpath } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+  symlink,
+  link,
+  realpath,
+  readdir,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Tool } from '@github/copilot-sdk';
@@ -278,6 +288,7 @@ describe('host tools and Git boundaries', () => {
     const host = new ToolHost(data, { onEvent() {}, onSession() {} }, new AbortController().signal);
     const tools = await host.createTools();
     expect(tools.map((t) => t.name)).not.toContain('studio_write_file');
+    expect(tools.map((t) => t.name)).not.toContain('studio_replace_text');
     expect(tools.map((t) => t.name)).not.toContain('studio_run_test');
     expect((await invoke(tools, 'studio_read_file', { path: '.env' })).resultType).toBe('failure');
   });
@@ -437,4 +448,270 @@ describe('local process lifecycle', () => {
       }
     },
   );
+});
+
+describe('large source files and exact partial edits', () => {
+  const largeSource =
+    '\uFEFF' +
+    Array.from({ length: 6000 }, (_, i) =>
+      i === 3200
+        ? 'public void SyncUsers() { ImportUsers(); }\r\n'
+        : `// Ligne ${i + 1} : données à conserver éè 🧪 ${'x'.repeat(40)}\r\n`,
+    ).join('');
+  async function fixture(
+    content = largeSource,
+    profile: 'workspace-write' | 'tests' | 'read-only' = 'workspace-write',
+  ) {
+    const root = await setup();
+    await writeFile(join(root, 'Job.cs'), content);
+    const data = input(root, profile);
+    const controller = new AbortController();
+    const host = new ToolHost(data, { onEvent() {}, onSession() {} }, controller.signal);
+    const tools = await host.createTools();
+    return { root, host, tools, controller };
+  }
+  async function page(tools: Tool[], args: Record<string, unknown>) {
+    const result = await invoke(tools, 'studio_read_file', { path: 'Job.cs', ...args });
+    expect(result.resultType).toBe('success');
+    return JSON.parse(result.textResultForLlm);
+  }
+  const patch = (hash: string, oldText = 'ImportUsers();', newText = 'ImportUsers(userIds);') => ({
+    path: 'Job.cs',
+    oldText,
+    newText,
+    expectedSha256: hash,
+  });
+
+  it('finds a method beyond 256KB, reads its lines, patches it and preserves every other byte', async () => {
+    const { root, host, tools } = await fixture();
+    expect(Buffer.byteLength(largeSource)).toBeGreaterThan(256_000);
+    const found = await invoke(tools, 'studio_search', { path: 'Job.cs', query: 'SyncUsers' });
+    expect(found.resultType).toBe('success');
+    expect(JSON.parse(found.textResultForLlm).matches[0]).toMatchObject({
+      path: 'Job.cs',
+      line: 3201,
+    });
+    const read = await page(tools, { startLine: 3200, endLine: 3202 });
+    expect(read).toMatchObject({
+      startLine: 3200,
+      endLine: 3202,
+      totalLines: 6000,
+      truncated: true,
+      sha256: sha256(largeSource),
+    });
+    expect(read.content).toContain('SyncUsers');
+    expect(read.content.split('\r\n')).toHaveLength(4);
+    expect((await invoke(tools, 'studio_replace_text', patch(read.sha256))).resultType).toBe(
+      'success',
+    );
+    const expected = largeSource.replace('ImportUsers();', 'ImportUsers(userIds);');
+    expect(await readFile(join(root, 'Job.cs'))).toEqual(Buffer.from(expected));
+    expect(host.changedFiles.has('Job.cs')).toBe(true);
+    expect(host.fileHashes['Job.cs']).toBe(sha256(expected));
+    expect(await readdir(root)).toEqual(['Job.cs']);
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'Job.cs', content: 'truncated' }))
+        .resultType,
+    ).toBe('failure');
+    expect(
+      (
+        await invoke(
+          tools,
+          'studio_replace_text',
+          patch(sha256(expected), 'ImportUsers(userIds);', 'Again();'),
+        )
+      ).resultType,
+    ).toBe('failure');
+    const updated = await page(tools, { startLine: 3201, endLine: 3201 });
+    expect(
+      (
+        await invoke(
+          tools,
+          'studio_replace_text',
+          patch(updated.sha256, 'ImportUsers(userIds);', 'Again();'),
+        )
+      ).resultType,
+    ).toBe('success');
+  });
+
+  it('paginates within a bounded response and never allows a partial read to replace the entire file', async () => {
+    const { root, tools } = await fixture();
+    const first = await page(tools, {});
+    expect(first).toMatchObject({
+      startLine: 1,
+      endLine: 200,
+      nextStartLine: 201,
+      truncated: true,
+    });
+    expect(Buffer.byteLength(first.content)).toBeLessThanOrEqual(64_000);
+    const next = await page(tools, { startLine: first.nextStartLine });
+    expect(next.startLine).toBe(201);
+    expect(next.sha256).toBe(first.sha256);
+    expect(
+      (await invoke(tools, 'studio_write_file', { path: 'Job.cs', content: first.content }))
+        .resultType,
+    ).toBe('failure');
+    expect((await invoke(tools, 'studio_replace_text', patch(first.sha256))).resultType).toBe(
+      'failure',
+    );
+    expect(await readFile(join(root, 'Job.cs'), 'utf8')).toBe(largeSource);
+  });
+
+  it('rejects stale hashes, missing reads, absent and ambiguous blocks, without modifying bytes', async () => {
+    const source = 'same\nsame\nunique\n';
+    const { root, tools } = await fixture(source);
+    expect(
+      (await invoke(tools, 'studio_replace_text', patch(sha256(source), 'unique', 'changed')))
+        .resultType,
+    ).toBe('failure');
+    const read = await page(tools, {});
+    for (const request of [
+      patch('0'.repeat(64), 'unique', 'changed'),
+      patch(read.sha256, 'same', 'changed'),
+      patch(read.sha256, 'absent', 'changed'),
+    ])
+      expect((await invoke(tools, 'studio_replace_text', request)).resultType).toBe('failure');
+    await writeFile(join(root, 'Job.cs'), 'Human edit\n' + source);
+    expect(
+      (await invoke(tools, 'studio_replace_text', patch(read.sha256, 'unique', 'changed')))
+        .resultType,
+    ).toBe('failure');
+    expect(await readFile(join(root, 'Job.cs'), 'utf8')).toBe('Human edit\n' + source);
+  });
+
+  it('preserves literal replacement text, including dollar substitution syntax, and a missing final newline', async () => {
+    const { root, tools } = await fixture('prefix\r\ntarget\r\nsuffix');
+    const read = await page(tools, { startLine: 2, endLine: 2 });
+    expect(
+      (await invoke(tools, 'studio_replace_text', patch(read.sha256, 'target', '$& $1 $$ é🧪')))
+        .resultType,
+    ).toBe('success');
+    expect(await readFile(join(root, 'Job.cs'), 'utf8')).toBe('prefix\r\n$& $1 $$ é🧪\r\nsuffix');
+  });
+
+  it('serializes two concurrent patches and refuses the second stale version', async () => {
+    const { root, tools } = await fixture('unique');
+    const read = await page(tools, {});
+    const results = await Promise.all([
+      invoke(tools, 'studio_replace_text', patch(read.sha256, 'unique', 'first')),
+      invoke(tools, 'studio_replace_text', patch(read.sha256, 'unique', 'second')),
+    ]);
+    expect(results.map((r) => r.resultType)).toEqual(['success', 'failure']);
+    expect(await readFile(join(root, 'Job.cs'), 'utf8')).toBe('first');
+    expect(await readdir(root)).toEqual(['Job.cs']);
+  });
+
+  it('caps multibyte output by bytes and reads adjacent pages without gaps', async () => {
+    const source = ('🧪é'.repeat(2000) + '\r\n').repeat(10);
+    const { tools } = await fixture(source);
+    const first = await page(tools, { startLine: 1, endLine: 10 });
+    expect(Buffer.byteLength(first.content)).toBeLessThanOrEqual(64_000);
+    expect(first.nextStartLine).toBe(6);
+    const next = await page(tools, { startLine: first.nextStartLine, endLine: 10 });
+    expect(first.content + next.content).toBe(source);
+    expect(next.nextStartLine).toBeUndefined();
+    expect(
+      (
+        await invoke(tools, 'studio_write_file', {
+          path: 'Job.cs',
+          content: 'replacement after complete paged read',
+        })
+      ).resultType,
+    ).toBe('success');
+  });
+
+  it('retains dirty file protection and test-only scope for partial edits', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    await writeFile(join(root, 'Job.cs'), 'human work');
+    const host = new ToolHost(
+      input(root, 'workspace-write'),
+      { onEvent() {}, onSession() {} },
+      new AbortController().signal,
+    );
+    const tools = await host.createTools();
+    const read = await page(tools, {});
+    expect(
+      (await invoke(tools, 'studio_replace_text', patch(read.sha256, 'human', 'agent'))).resultType,
+    ).toBe('failure');
+    const test = await fixture('production', 'tests');
+    const production = await page(test.tools, {});
+    expect(
+      (
+        await invoke(
+          test.tools,
+          'studio_replace_text',
+          patch(production.sha256, 'production', 'modified'),
+        )
+      ).resultType,
+    ).toBe('failure');
+    expect(await readFile(join(root, 'Job.cs'), 'utf8')).toBe('human work');
+    expect(await readFile(join(test.root, 'Job.cs'), 'utf8')).toBe('production');
+  });
+
+  it('rejects binary, invalid UTF-8, oversized files and overlong lines explicitly', async () => {
+    const { root, tools } = await fixture();
+    for (const bytes of [
+      Buffer.from([0]),
+      Buffer.from([0xc3, 0x28]),
+      Buffer.alloc(4 * 1024 * 1024 + 1, 65),
+      Buffer.alloc(64_001, 65),
+    ]) {
+      await writeFile(join(root, 'Job.cs'), bytes);
+      expect((await invoke(tools, 'studio_read_file', { path: 'Job.cs' })).resultType).toBe(
+        'failure',
+      );
+    }
+    for (const range of [
+      { startLine: 0 },
+      { startLine: 3, endLine: 1 },
+      { startLine: 1, endLine: 2001 },
+      { startLine: 99999 },
+    ])
+      expect(
+        (await invoke(tools, 'studio_read_file', { path: 'Job.cs', ...range })).resultType,
+      ).toBe('failure');
+    const search = await invoke(tools, 'studio_search', { path: '.', query: 'AAA' });
+    expect(search.resultType).toBe('success');
+    expect(JSON.parse(search.textResultForLlm).matches[0].text.length).toBeLessThanOrEqual(400);
+  });
+
+  it('searches directories, reports skipped files and supports continuation inside a single file', async () => {
+    const { root, tools } = await fixture('match\n'.repeat(102));
+    await writeFile(join(root, 'binary.bin'), Buffer.from([0, 1]));
+    const first = JSON.parse(
+      (await invoke(tools, 'studio_search', { path: 'Job.cs', query: 'match' })).textResultForLlm,
+    );
+    expect(first.matches).toHaveLength(100);
+    expect(first.next).toEqual({ path: 'Job.cs', startLine: 101 });
+    const next = JSON.parse(
+      (await invoke(tools, 'studio_search', { ...first.next, query: 'match' })).textResultForLlm,
+    );
+    expect(next.matches.map((m: { line: number }) => m.line)).toEqual([101, 102]);
+    expect(next.truncated).toBe(false);
+    const absent = JSON.parse(
+      (await invoke(tools, 'studio_search', { path: '.', query: 'absent' })).textResultForLlm,
+    );
+    expect(absent.skipped).toEqual([expect.objectContaining({ path: 'binary.bin' })]);
+    expect((await invoke(tools, 'studio_read_file', { path: '.env' })).resultType).toBe('failure');
+  });
+
+  it('does not write after cancellation and exposes patching only to agents with edit capability', async () => {
+    const { root, tools, controller } = await fixture('unique');
+    const read = await page(tools, {});
+    controller.abort();
+    expect(
+      (await invoke(tools, 'studio_replace_text', patch(read.sha256, 'unique', 'changed')))
+        .resultType,
+    ).toBe('failure');
+    expect(await readFile(join(root, 'Job.cs'), 'utf8')).toBe('unique');
+    const data = input(root, 'workspace-write');
+    data.agent.tools = ['read', 'search'];
+    const limited = await new ToolHost(
+      data,
+      { onEvent() {}, onSession() {} },
+      new AbortController().signal,
+    ).createTools();
+    expect(limited.map((t) => t.name)).not.toContain('studio_replace_text');
+  });
 });

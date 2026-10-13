@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 — 2026-10-13
+
+- Lit les fichiers UTF-8 jusqu’à 4 Mio par plages de lignes, avec réponses bornées, pagination explicite et empreinte du fichier entier.
+- Recherche également dans les gros fichiers et dans un fichier précis, avec indication des résultats tronqués et fichiers ignorés.
+- Ajoute `studio_replace_text` pour modifier un bloc unique effectivement lu, sans réécrire le fichier entier dans le contexte du modèle. Vérifie l’empreinte, préserve les fins de ligne et conserve les restrictions de permissions et de changements préexistants.
+- Interdit le remplacement intégral après une lecture partielle et conserve la compatibilité avec les points de restauration.
+
 ## 0.3.1 — 2026-10-13
 
 - Résout les chemins Windows complets sans extension vers le fichier `.exe`, `.cmd` ou `.bat` existant. Signale les chemins introuvables avant de démarrer le transport SDK.

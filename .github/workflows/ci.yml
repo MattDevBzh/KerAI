@@ -15,7 +15,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npx vitest run tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts
+      - run: npx vitest run tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts tests/host-policy.test.ts
   validate:
     runs-on: ubuntu-latest
     steps:
