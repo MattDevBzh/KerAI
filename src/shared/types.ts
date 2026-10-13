@@ -145,6 +145,7 @@ export interface AgentProfile {
   skills: string[];
   nickname?: string;
   avatar?: string;
+  emptyContextByDefault?: boolean;
 }
 export interface SkillInfo {
   id: string;
@@ -312,6 +313,7 @@ export type ClientMessage =
         skills: string[];
         nickname?: string;
         avatar?: string;
+        emptyContextByDefault?: boolean;
       };
     }
   | { type: 'saveSkill'; id: string; content: string }

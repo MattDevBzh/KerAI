@@ -25,6 +25,7 @@ const agentMetadata = z.object({
   skills: z.array(identifier).default([]),
   nickname: z.string().max(80).optional(),
   avatar: avatarSchema.optional(),
+  emptyContextByDefault: z.boolean().optional(),
 });
 const skillMetadata = z.object({ name: z.string().min(1), description: z.string() });
 export interface RegistryData {
@@ -282,6 +283,7 @@ export class AgentRegistry {
       | 'skills'
       | 'nickname'
       | 'avatar'
+      | 'emptyContextByDefault'
     >,
   ): Promise<void> {
     const id = identifier.parse(input.id),

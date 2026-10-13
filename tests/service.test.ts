@@ -339,6 +339,41 @@ describe('manual context, human questions and MCP sessions', () => {
     memoryIds: [] as string[],
     useProjectMemory: false,
   };
+  it('persists block choices, sends exactly the preview and avoids resuming excluded context', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Context controls',
+      description: 'SOURCE_A_EXCLURE',
+      workflowId: 'single',
+    });
+    await f.service.runStep(feature.id, 'session');
+    const selected = {
+      ...launch,
+      contextMode: 'empty' as const,
+      contextBlocks: { 'initial-context': { enabled: true, content: 'CONTEXTE_MODIFIÉ' } },
+    };
+    const preview = f.service.previewRun(feature.id, 'session', '', true, selected);
+    expect(preview.resumesSession).toBe(false);
+    expect(preview.prompt).not.toContain('SOURCE_A_EXCLURE');
+    expect(preview.prompt).toContain('CONTEXTE_MODIFIÉ');
+    await expect(
+      f.service.runStep(
+        feature.id,
+        'session',
+        '',
+        true,
+        { ...selected, contextMode: 'all' },
+        preview.fingerprint,
+      ),
+    ).rejects.toThrow(/aperçu/);
+    await f.service.runStep(feature.id, 'session', '', true, selected, preview.fingerprint);
+    expect(f.inputs.at(-1)?.resumeSessionId).toBeUndefined();
+    expect(f.inputs.at(-1)?.preparedPrompt).toBe(preview.prompt);
+    const stored = (await f.service.store.load()).features[0].steps[0].attempts.at(-1)!;
+    expect(stored.launch).toEqual(selected);
+    expect(f.service.engine.getFeature(feature.id).description).toBe('SOURCE_A_EXCLURE');
+  });
   it('binds a run to its preview, persists the user story and selects only explicit MCPs', async () => {
     const f = await fixture();
     await f.service.checkRuntime();

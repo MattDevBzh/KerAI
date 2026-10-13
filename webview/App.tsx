@@ -2208,6 +2208,9 @@ function AgentEditor({
   const [tools, setTools] = useState(source?.tools.join(', ') ?? '');
   const [model, setModel] = useState(source?.model ?? '');
   const [skills, setSkills] = useState(source?.skills ?? []);
+  const [emptyContextByDefault, setEmptyContextByDefault] = useState(
+    source?.emptyContextByDefault ?? false,
+  );
   const slug = (v: string) =>
     v
       .normalize('NFD')
@@ -2242,6 +2245,7 @@ function AgentEditor({
             skills,
             nickname: nickname.trim() || undefined,
             avatar,
+            emptyContextByDefault,
           });
         }}
       >
@@ -2335,6 +2339,21 @@ function AgentEditor({
           </label>
           <ModelSelect state={state} value={model} onChange={setModel} />
         </div>
+        <label className="context-default-option">
+          <input
+            type="checkbox"
+            checked={emptyContextByDefault}
+            onChange={(e) => setEmptyContextByDefault(e.target.checked)}
+          />
+          <span>
+            <strong>Contexte vide par défaut</strong>
+            <small>
+              Tous les blocs optionnels commencent décochés à chaque nouvelle tentative.
+              Sélectionnez ensuite la spec, le plan ou les autres informations utiles. Le cadre
+              d’exécution reste actif.
+            </small>
+          </span>
+        </label>
         <fieldset className="skill-options">
           <legend>Skills associées</legend>
           {state.skills.map((s) => (

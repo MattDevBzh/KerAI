@@ -162,6 +162,7 @@ export const messageSchema = z.discriminatedUnion('type', [
           skills: z.array(id).max(50),
           nickname: z.string().max(80).optional(),
           avatar: avatarSchema.optional(),
+          emptyContextByDefault: z.boolean().optional(),
         })
         .strict(),
     })

@@ -413,10 +413,15 @@ export class StudioService extends EventEmitter {
         throw new Error(`Le MCP ${id} doit être activé avec des outils autorisés avant lancement.`);
       return structuredClone(server);
     });
-    const memory = selectMemory(this.state.memory ?? [], selected, agent.id);
+    const selectedMemory = selectMemory(this.state.memory ?? [], selected, agent.id);
+    const memory = selectedMemory.filter(
+      (entry) =>
+        selected.contextBlocks?.[`memory:${entry.id}`]?.enabled ??
+        (selected.contextMode ?? (agent.emptyContextByDefault ? 'empty' : 'all')) === 'all',
+    );
     if (
       selected.useProjectMemory &&
-      selected.memoryIds.some((id) => !memory.some((entry) => entry.id === id))
+      selected.memoryIds.some((id) => !selectedMemory.some((entry) => entry.id === id))
     )
       throw new Error(
         'Une mémoire sélectionnée est absente, désactivée ou ne concerne pas cet agent.',
@@ -484,9 +489,16 @@ export class StudioService extends EventEmitter {
       skills: this.state.skills.filter((skill) => skillIds.includes(skill.id)),
       workspacePath: this.workspaces.executionPath(feature),
       settings: structuredClone(this.state.settings),
-      resumeSessionId: resume ? previous?.sessionId : undefined,
+      // A resumed transcript could reintroduce blocks removed from the new prompt.
+      resumeSessionId:
+        resume &&
+        !agent.emptyContextByDefault &&
+        selected.contextMode === undefined &&
+        !Object.keys(selected.contextBlocks ?? {}).length
+          ? previous?.sessionId
+          : undefined,
       launch: selected,
-      memory: structuredClone(memory),
+      memory: structuredClone(selectedMemory),
       mcpServers,
       automation: feature.autopilot
         ? {
@@ -567,6 +579,7 @@ export class StudioService extends EventEmitter {
     const blocked = budgetBlockReason(feature);
     if (blocked) throw new Error(blocked);
     const attempt = this.engine.beginRun(featureId, stepId, feedback, resume);
+    if (!input.resumeSessionId) delete attempt.sessionId;
     attempt.launch = structuredClone(input.launch!);
     attempt.memorySnapshot = structuredClone(input.memory ?? []);
     attempt.promptFingerprint = preview.fingerprint;

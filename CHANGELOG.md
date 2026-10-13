@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5 — 2026-10-13
+
+- Ajoute des cases à cocher et une édition par bloc dans l’aperçu de lancement : livrables, instructions d’agent, skills, mémoire, besoin et retours humains.
+- Ajoute le réglage personnel « Contexte vide par défaut » aux agents, ainsi que Tout cocher / Tout décocher et la restauration du contenu original pour une tentative.
+- Calcule le prompt et son budget uniquement à partir des blocs inclus. Conserve le cadre d’exécution, vérifie l’aperçu avant lancement et enregistre les choix dans l’historique de la tentative sans modifier les sources.
+- Utilise une nouvelle session Copilot lorsque le contexte est personnalisé, pour ne pas réintroduire les blocs exclus via l’ancien historique.
+
 ## 0.3.4 — 2026-10-13
 
 - Ajoute aux agents les comparaisons contre une branche locale ou distante déjà connue (`develop`, `origin/develop`), depuis l’ancêtre commun ou directement entre les deux versions.

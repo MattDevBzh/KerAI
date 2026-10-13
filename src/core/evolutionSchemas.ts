@@ -27,6 +27,27 @@ export const launchSchema = z
     mcpServerIds: uniqueIds,
     memoryIds: uniqueIds,
     useProjectMemory: z.boolean(),
+    contextMode: z.enum(['all', 'empty']).optional(),
+    contextBlocks: z
+      .record(
+        z
+          .string()
+          .max(160)
+          .regex(
+            /^(?:feature|agent|initial-context|feedback|answers|previous|criteria|review-comments|(?:skill|memory|artifact):[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/,
+          ),
+        z
+          .object({ enabled: z.boolean().optional(), content: z.string().max(60000).optional() })
+          .strict(),
+      )
+      .refine(
+        (blocks) =>
+          Object.keys(blocks).length <= 256 &&
+          Object.values(blocks).reduce((sum, block) => sum + (block.content?.length ?? 0), 0) <=
+            500000,
+        'Trop de contexte personnalisé.',
+      )
+      .optional(),
   })
   .strict();
 export const mcpServerSchema = z

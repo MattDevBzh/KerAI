@@ -49,6 +49,7 @@ describe('agent, skill and workflow registry', () => {
       name: 'Mon agent',
       nickname: 'Gandalf',
       avatar: 'wizard',
+      emptyContextByDefault: true,
     });
     await mkdir(join(root, '.feature-studio/workflows'), { recursive: true });
     await writeFile(join(root, '.feature-studio/workflows/bad.yaml'), 'id: broken\nsteps: []\n');
@@ -59,6 +60,7 @@ describe('agent, skill and workflow registry', () => {
     );
     expect(data.agents.find((a) => a.id === original.id)?.nickname).toBe('Gandalf');
     expect(data.agents.find((a) => a.id === original.id)?.avatar).toBe('wizard');
+    expect(data.agents.find((a) => a.id === original.id)?.emptyContextByDefault).toBe(true);
     await expect(registry.saveAgent({ ...original, avatar: 'invalid' })).rejects.toThrow();
     expect(data.notices.some((n) => n.includes('bad.yaml'))).toBe(true);
     expect(data.workflows).toHaveLength(3);

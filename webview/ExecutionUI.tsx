@@ -170,6 +170,7 @@ export function LaunchDialog({
   dispatch: Dispatch;
   onClose: () => void;
 }) {
+  const agent = state.agents.find((item) => item.id === step.agentId);
   const previous = step.attempts.at(-1)?.launch;
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
@@ -186,6 +187,7 @@ export function LaunchDialog({
   });
   const [feedback, setFeedback] = useState(initialFeedback);
   const [preview, setPreview] = useState<RunPreview | null>(null);
+  const [previewFresh, setPreviewFresh] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const request = useRef('');
@@ -201,7 +203,7 @@ export function LaunchDialog({
   const priorRevision = useRef(revision);
   const invalidate = () => {
     request.current = '';
-    setPreview(null);
+    setPreviewFresh(false);
     setPending(false);
     setError('');
   };
@@ -209,6 +211,7 @@ export function LaunchDialog({
     if (priorRevision.current !== revision) {
       priorRevision.current = revision;
       invalidate();
+      setPreview(null);
     }
   }, [revision]);
   useEffect(
@@ -216,12 +219,13 @@ export function LaunchDialog({
       subscribe((message) => {
         if (message.type === 'runPreview' && message.requestId === request.current) {
           setPreview(message.preview);
+          setPreviewFresh(true);
           setPending(false);
         }
         if (message.type === 'error' && request.current) {
           setError(message.message);
           setPending(false);
-          setPreview(null);
+          setPreviewFresh(false);
         }
       }),
     [],
@@ -239,7 +243,7 @@ export function LaunchDialog({
         ? 'Démonstration : cet aperçu nécessite le host VS Code. Aucune instruction n’a été exécutée.'
         : '',
     );
-    setPreview(null);
+    setPreviewFresh(false);
     dispatch({
       type: 'previewRun',
       requestId: id,
@@ -249,6 +253,25 @@ export function LaunchDialog({
       resume,
       launch,
     });
+  };
+  const contextMode = launch.contextMode ?? (agent?.emptyContextByDefault ? 'empty' : 'all');
+  const changeBlock = (id: string, patch: { enabled?: boolean; content?: string }) =>
+    update({
+      contextBlocks: { ...launch.contextBlocks, [id]: { ...launch.contextBlocks?.[id], ...patch } },
+    });
+  const selectAll = (mode: 'all' | 'empty') =>
+    update({
+      contextMode: mode,
+      contextBlocks: Object.fromEntries(
+        Object.entries(launch.contextBlocks ?? {}).map(([id, block]) => [
+          id,
+          { content: block.content },
+        ]),
+      ),
+    });
+  const resetBlock = (id: string) => {
+    const block = launch.contextBlocks?.[id];
+    changeBlock(id, { content: undefined, enabled: block?.enabled ?? contextMode === 'all' });
   };
   const eligible =
     state.workspace.trusted &&
@@ -260,6 +283,7 @@ export function LaunchDialog({
   const canStart =
     eligible &&
     preview !== null &&
+    previewFresh &&
     preview.errors.length === 0 &&
     preview.featureId === feature.id &&
     preview.stepId === step.id &&
@@ -281,12 +305,17 @@ export function LaunchDialog({
             <textarea
               rows={7}
               value={launch.initialContext}
-              onChange={(e) => update({ initialContext: e.target.value })}
+              onChange={(e) =>
+                update({
+                  initialContext: e.target.value,
+                  contextBlocks: { ...launch.contextBlocks, 'initial-context': { enabled: true } },
+                })
+              }
               placeholder="Collez votre user story, vos critères d’acceptation, les contraintes et les informations utiles à cette exécution."
             />
             <small>
-              Ce texte accompagne cette tentative. Les instructions de l’agent et les livrables
-              précédents sont ajoutés par le host.
+              Ce texte accompagne cette tentative. Dans l’aperçu, choisissez les autres blocs à
+              transmettre et adaptez leur contenu.
             </small>
           </label>
           <label className="field">
@@ -296,7 +325,7 @@ export function LaunchDialog({
               value={feedback}
               onChange={(e) => {
                 setFeedback(e.target.value);
-                invalidate();
+                changeBlock('feedback', { enabled: true, content: undefined });
               }}
               placeholder="Précisez la direction, les corrections ou les détails à conserver…"
             />
@@ -333,9 +362,9 @@ export function LaunchDialog({
         <section className="prompt-preview" aria-live="polite">
           <div className="section-heading">
             <h3>
-              <FileText size={15} /> Les instructions réelles
+              <FileText size={15} /> Le contexte à transmettre
             </h3>
-            {preview && (
+            {preview && previewFresh && (
               <span className="preview-verified">
                 <Fingerprint size={13} /> Aperçu host
               </span>
@@ -359,19 +388,97 @@ export function LaunchDialog({
                   {e}
                 </div>
               ))}
+              <div className="context-selection-actions">
+                <button className="button secondary" onClick={() => selectAll('all')}>
+                  Tout cocher
+                </button>
+                <button className="button secondary" onClick={() => selectAll('empty')}>
+                  Tout décocher
+                </button>
+              </div>
+              <p className="field-help">
+                {agent?.emptyContextByDefault
+                  ? 'Cet agent commence avec un contexte optionnel vide. '
+                  : ''}
+                Les modifications ci-dessous concernent cette tentative uniquement. Les documents
+                d’origine restent inchangés.
+              </p>
+              {!previewFresh && (
+                <p className="context-pending" role="status">
+                  Contexte modifié : actualisez l’aperçu avant de lancer.
+                </p>
+              )}
               <div className="preview-sections">
-                {preview.sections.map((s) => (
-                  <details key={s.id} open={s.source === 'human'}>
-                    <summary>
-                      {s.label}
-                      <span>{s.source}</span>
-                    </summary>
-                    <pre>{s.content}</pre>
-                  </details>
-                ))}
+                {preview.sections
+                  .filter((s) => s.source !== 'system')
+                  .map((s) => {
+                    const block = launch.contextBlocks?.[s.id];
+                    const enabled = block?.enabled ?? contextMode === 'all';
+                    const original = s.originalContent ?? s.content;
+                    const content = block?.content ?? original;
+                    return (
+                      <div
+                        key={s.id}
+                        className={`context-block ${enabled ? '' : 'context-block-excluded'}`}
+                      >
+                        <label className="context-block-toggle">
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={(e) => changeBlock(s.id, { enabled: e.target.checked })}
+                          />
+                          <span>{s.label}</span>
+                          <small>{enabled ? 'Inclus' : 'Exclu'}</small>
+                        </label>
+                        <details>
+                          <summary>
+                            Lire ou modifier{' '}
+                            <span>
+                              {s.source}
+                              {block?.content !== undefined ? ' · modifié' : ''}
+                            </span>
+                          </summary>
+                          <label className="field context-block-editor">
+                            <span>Contenu · {s.label}</span>
+                            <textarea
+                              className="code-input"
+                              rows={8}
+                              maxLength={60000}
+                              value={content}
+                              onChange={(e) => changeBlock(s.id, { content: e.target.value })}
+                            />
+                          </label>
+                          {block?.content !== undefined && (
+                            <button className="button text" onClick={() => resetBlock(s.id)}>
+                              Rétablir le contenu d’origine
+                            </button>
+                          )}
+                        </details>
+                      </div>
+                    );
+                  })}
               </div>
               <details className="assembled-prompt">
-                <summary>Lire le prompt assemblé complet</summary>
+                <summary>Cadre d’exécution toujours inclus</summary>
+                <p className="field-help">
+                  Mission de l’étape, permissions des outils et format de sortie. Ces règles restent
+                  actives même avec un contexte vide.
+                </p>
+                {preview.sections
+                  .filter((s) => s.source === 'system')
+                  .map((s) => (
+                    <details key={s.id}>
+                      <summary>{s.label}</summary>
+                      <pre>{s.content}</pre>
+                    </details>
+                  ))}
+              </details>
+              <details className="assembled-prompt">
+                <summary>
+                  {previewFresh
+                    ? 'Lire le prompt assemblé complet'
+                    : 'Dernier aperçu — à actualiser'}
+                </summary>
                 <pre>{preview.prompt}</pre>
               </details>
               <p className="field-help">
@@ -406,7 +513,7 @@ export function LaunchDialog({
           )}
           <button className="button secondary" disabled={pending} onClick={prepare}>
             {pending ? <LoaderCircle size={15} className="spin" /> : <Search size={15} />}{' '}
-            {preview ? 'Actualiser l’aperçu' : 'Préparer l’aperçu'}
+            {preview && previewFresh ? 'Actualiser l’aperçu' : 'Préparer l’aperçu'}
           </button>
         </section>
       </div>
@@ -414,7 +521,11 @@ export function LaunchDialog({
         <span className="muted">
           <ShieldCheck size={14} />
           {resume
-            ? 'Reprise de la session existante.'
+            ? agent?.emptyContextByDefault ||
+              launch.contextMode !== undefined ||
+              Object.keys(launch.contextBlocks ?? {}).length
+              ? 'Nouvelle session : le contexte choisi remplace l’historique précédent.'
+              : 'Reprise de la session existante.'
             : 'Une tentative consommera votre quota Copilot.'}
         </span>
         <button className="button secondary" onClick={onClose}>
