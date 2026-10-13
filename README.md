@@ -136,7 +136,7 @@ Dans **Agents**, ouvre un profil et change **Son petit nom**. Choisis l’un des
 
 Chaque avatar possède une image de repos, un **vrai GIF de travail à quatre images**, puis une pose de validation. Les animations respectent la préférence système de réduction des mouvements. Le pseudo et le personnage sont sauvegardés dans le profil du projet ; le rôle technique reste indépendant du petit nom.
 
-Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. Une personnalisation d’un profil fourni crée sa version dans `.github/agents/`. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
+Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. Les créations et modifications sont enregistrées dans `~/.copilot/agents/` et `~/.copilot/skills/` (ou dans `COPILOT_HOME` si défini), pour être disponibles dans tous tes projets. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
 
 Les capacités reconnues sont `read`, `search`, `edit`/`write` et `execute`, ainsi que les noms précis des outils `studio_*`. `execute` donne accès uniquement aux commandes de tests déjà autorisées, et seulement dans une étape de profil Tests. Il n’ouvre aucun terminal libre. La permission effective est toujours l’intersection du profil d’étape et des outils de l’agent.
 
@@ -155,7 +155,7 @@ Clique **Installer le kit utilisateur** pour rendre le kit disponible dans tous 
 | Templates, scripts et documentation du kit | `feature-studio/kit/` |
 | Exemples propres aux projets | `feature-studio/kit/examples/` |
 
-L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies présentes dans les projets ne sont pas supprimées. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. Une modification depuis l’éditeur du cockpit continue à créer une surcharge propre au projet.
+L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies du projet sont conservées tant que tu ne demandes pas leur migration. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. L’éditeur enregistre désormais au niveau utilisateur. Si une copie du projet existe, migre-la d’abord afin qu’elle ne masque pas tes modifications personnelles.
 
 Les liens des agents et skills installés pointent vers les templates utilisateur. La carte `.ai/project.md`, lorsqu’elle existe, reste celle du projet courant. Les exemples de configuration et le runner .NET restent optionnels : depuis le projet concerné, le runner utilisateur peut être appelé explicitement avec `python "$HOME/.copilot/feature-studio/kit/scripts/ai_tools.py" --help` (adapter le chemin si `COPILOT_HOME` est défini). La documentation originale du kit décrit aussi son ancien mode d’installation dans un dépôt. Aucun script, MCP ou outil externe n’est exécuté pendant la copie.
 
@@ -208,3 +208,16 @@ Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développe
 Le test réel facultatif est séparé dans `scripts/smoke-copilot.ts` et exige `FEATURE_STUDIO_LIVE_TEST=1`. Il consomme du quota Copilot. Il ne fait partie ni de `npm test` ni de la CI. Les sources des avatars et leurs prompts sont dans [design/avatars](design/avatars/PROMPTS.md) ; `node scripts/pack-avatars.mjs` reconstruit leurs PNG/GIF.
 
 Voir [la validation livrée et les limites connues](docs/VALIDATION.md) pour distinguer tests automatiques, test du CLI réel, versions testées et plateformes non vérifiées.
+
+
+### Déplacer les anciennes personnalisations vers ton compte
+
+Dans le projet concerné, utilise **Migrer les profils du projet** dans la barre latérale, ou la commande **Feature Studio : migrer les agents et skills vers le compte utilisateur**. Sélectionne les profils à migrer dans la liste. L’action prépare les ressources du kit utilisateur, puis sauvegarde et déplace uniquement ta sélection.
+
+- Les agents sont placés dans `~/.copilot/agents/` ; chaque skill est copiée avec tout son dossier, y compris scripts et ressources.
+- Une copie identique ou une version standard non personnalisée du kit peut être remplacée. Une version utilisateur personnalisée différemment reste intacte : le conflit est détaillé dans **Sortie → Feature Studio** et le profil du projet est conservé.
+- Les liens des templates du kit sont adaptés. Un lien Markdown relatif vers une ressource absente à la nouvelle destination bloque la migration du profil concerné.
+- Les fichiers source sont sauvegardés sous `~/.copilot/feature-studio/migrations/<identifiant>/project/`. Les versions utilisateur remplacées sont sauvegardées sous `user/`. `manifest.json` indique le projet et les destinations ; `result.json` contient le bilan. Pour restaurer manuellement, reprends la version voulue depuis ces sauvegardes après avoir vérifié les fichiers actuels.
+- Le retrait du fichier du projet n’arrive qu’après vérification des sauvegardes, copies et sources. Les profils non sélectionnés, configurations du projet et workflows restent en place. Si un fichier retiré était versionné, Git affichera une suppression à relire avant commit.
+
+La migration s’exécute sur le poste où l’extension est installée ; installer le VSIX seul ne déplace aucun fichier. Les autres fenêtres déjà ouvertes doivent actualiser leur catalogue pour voir les changements partagés.

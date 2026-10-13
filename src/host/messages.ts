@@ -24,6 +24,7 @@ export const messageSchema = z.discriminatedUnion('type', [
         'refresh',
         'checkRuntime',
         'installKit',
+        'migrateUserKit',
         'openSettings',
         'createWorkflow',
       ]),

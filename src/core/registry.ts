@@ -46,7 +46,7 @@ function markdown(source: string): { metadata: unknown; body: string } {
   return { metadata: parse(match[1], { uniqueKeys: true }), body: match[2].trim() };
 }
 /** Reject symlinks as well as traversal, including parent directory symlinks. */
-async function safePath(root: string, fragment: string): Promise<string> {
+export async function safePath(root: string, fragment: string): Promise<string> {
   if (!fragment || isAbsolute(fragment)) throw new Error('Chemin relatif requis.');
   const absoluteRoot = resolve(root),
     target = resolve(absoluteRoot, fragment),
@@ -70,7 +70,7 @@ async function safePath(root: string, fragment: string): Promise<string> {
   }
   return target;
 }
-async function files(root: string, fragment: string): Promise<string[]> {
+export async function files(root: string, fragment: string): Promise<string[]> {
   const directory = await safePath(root, fragment);
   let entries;
   try {
@@ -102,7 +102,7 @@ function userKitTarget(target: string): string {
   return join('feature-studio/kit', target);
 }
 
-function userKitMarkdown(content: string, target: string): string {
+export function userKitMarkdown(content: string, target: string): string {
   // A project's map cannot become a shared user map. Keep the reference relative to the active repo.
   content = content.replace(
     /\[carte du dépôt\]\((?:\.\.\/)+\.ai\/project\.md\)/g,
@@ -287,18 +287,62 @@ export class AgentRegistry {
     const id = identifier.parse(input.id),
       meta = agentMetadata.parse(input);
     if (!input.instructions.trim()) throw new Error('Instructions obligatoires.');
-    const path = await safePath(this.workspacePath, `.github/agents/${id}.agent.md`);
+    const bundled = await this.assertPersonalSave('agent', id);
+    if (bundled) await this.installKit();
+    const path = await safePath(this.userPath, `agents/${id}.agent.md`);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `---\n${stringify(meta)}---\n\n${input.instructions.trim()}\n`, 'utf8');
+    let extra: Record<string, unknown> = {};
+    try {
+      const previous = z
+        .record(z.string(), z.unknown())
+        .parse(markdown(await readFile(path, 'utf8')).metadata);
+      extra = Object.fromEntries(
+        Object.entries(previous).filter(([key]) => !(key in agentMetadata.shape)),
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    const content = `---\n${stringify({ ...extra, ...meta })}---\n\n${input.instructions.trim()}\n`;
+    await writeFile(
+      path,
+      bundled ? userKitMarkdown(content, `agents/${id}.agent.md`) : content,
+      'utf8',
+    );
   }
   async saveSkill(id: string, content: string): Promise<void> {
     identifier.parse(id);
     const { metadata, body } = markdown(content);
     skillMetadata.parse(metadata);
     if (!body) throw new Error('Skill vide.');
-    const path = await safePath(this.workspacePath, `.github/skills/${id}/SKILL.md`);
+    const bundled = await this.assertPersonalSave('skill', id);
+    if (bundled) await this.installKit();
+    const path = await safePath(this.userPath, `skills/${id}/SKILL.md`);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content, 'utf8');
+    await writeFile(
+      path,
+      bundled ? userKitMarkdown(content, `skills/${id}/SKILL.md`) : content,
+      'utf8',
+    );
+  }
+  private async assertPersonalSave(kind: 'agent' | 'skill', id: string): Promise<boolean> {
+    const data = await this.load();
+    const entries = kind === 'agent' ? data.agents : data.skills;
+    if (entries.some((entry) => entry.id === id && entry.source === 'workspace'))
+      throw new Error(
+        'Une version de ce profil existe dans le projet. Utilise « Migrer les agents et skills vers le compte utilisateur » avant de le modifier, ou choisis un nouvel identifiant.',
+      );
+    const target = await safePath(
+      this.userPath,
+      kind === 'agent' ? `agents/${id}.agent.md` : `skills/${id}/SKILL.md`,
+    );
+    try {
+      const info = await lstat(target);
+      if (!info.isFile() || info.nlink > 1)
+        throw new Error('Destination non régulière ou lien physique : enregistrement refusé.');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    return entries.some((entry) => entry.id === id && entry.source === 'bundled');
   }
   async saveWorkflow(input: Workflow): Promise<void> {
     const { source: _source, ...definition } = input;

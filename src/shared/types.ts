@@ -217,7 +217,9 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
-  | { type: 'ready' | 'refresh' | 'checkRuntime' | 'installKit' | 'openSettings' }
+  | {
+      type: 'ready' | 'refresh' | 'checkRuntime' | 'installKit' | 'migrateUserKit' | 'openSettings';
+    }
   | {
       type: 'createFeature';
       title: string;

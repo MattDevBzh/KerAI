@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 — 2026-10-13
+
+- Enregistre les créations et éditions d’agents et skills au niveau utilisateur et corrige les libellés de l’éditeur.
+- Ajoute une migration sélectionnable des anciens profils du projet, avec scripts et ressources de skills, sauvegardes, adaptation des liens du kit et vérification avant retrait des doublons.
+- Conserve les deux versions en cas de personnalisations différentes et refuse les sources ou destinations modifiées depuis l’aperçu.
+
 ## 0.3.2 — 2026-10-13
 
 - Lit les fichiers UTF-8 jusqu’à 4 Mio par plages de lignes, avec réponses bornées, pagination explicite et empreinte du fichier entier.

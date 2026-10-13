@@ -218,6 +218,9 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
   await hosted(page);
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
+  await expect(
+    page.getByText('Enregistré au niveau utilisateur, disponible dans tous les projets.'),
+  ).toBeVisible();
   await page.getByLabel('Son petit nom').fill('Capitaine Bug');
   await page.getByRole('button', { name: 'La capitaine' }).click();
   await page.getByLabel('Nom du profil').fill('Quality companion');
@@ -1393,4 +1396,19 @@ test('une comparaison tardive ou invalidée par une mutation ne réactive jamais
   );
   await expect(page.locator('.checkpoint-change')).toHaveCount(0);
   expect((await messages(page)).some((m) => m.type === 'restoreCheckpoint')).toBe(false);
+});
+
+test('migration accessible et édition locale orientée vers la migration', async ({ page }) => {
+  const state = fresh();
+  state.agents[0].source = 'workspace';
+  state.agents[0].nickname = 'Agent projet à migrer';
+  state.agents[0].path = '.github/agents/project.agent.md';
+  await hosted(page, state);
+  await page.getByRole('button', { name: 'Migrer les profils du projet' }).click();
+  expect((await messages(page)).at(-1)).toEqual({ type: 'migrateUserKit' });
+  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await page.getByRole('button').filter({ hasText: 'Agent projet à migrer' }).click();
+  await expect(page.getByRole('button', { name: 'Enregistrer le profil' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Migrer vers le compte utilisateur' }).click();
+  expect((await messages(page)).at(-1)).toEqual({ type: 'migrateUserKit' });
 });

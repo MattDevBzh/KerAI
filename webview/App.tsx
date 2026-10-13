@@ -417,6 +417,9 @@ export default function App() {
           <button className="sidebar-link" onClick={() => dispatch({ type: 'installKit' })}>
             <WandSparkles size={14} /> Installer le kit utilisateur <ArrowUpRight size={13} />
           </button>
+          <button className="sidebar-link" onClick={() => dispatch({ type: 'migrateUserKit' })}>
+            <ArrowUpRight size={14} /> Migrer les profils du projet
+          </button>
           <div className="sidebar-footnote">
             Votre intention. Vos agents.
             <br />
@@ -677,6 +680,10 @@ export default function App() {
           agent={agentEditor}
           state={state}
           onClose={() => setAgentEditor(null)}
+          onMigrate={() => {
+            setAgentEditor(null);
+            dispatch({ type: 'migrateUserKit' });
+          }}
           save={(a) => {
             dispatch({ type: 'saveAgent', agent: a });
             setAgentEditor(null);
@@ -687,6 +694,10 @@ export default function App() {
         <SkillEditor
           skill={skillEditor}
           onClose={() => setSkillEditor(null)}
+          onMigrate={() => {
+            setSkillEditor(null);
+            dispatch({ type: 'migrateUserKit' });
+          }}
           save={(id, content) => {
             dispatch({ type: 'saveSkill', id, content });
             setSkillEditor(null);
@@ -2175,11 +2186,13 @@ function AgentEditor({
   agent,
   state,
   onClose,
+  onMigrate,
   save,
 }: {
   agent: AgentProfile | 'new';
   state: StudioState;
   onClose: () => void;
+  onMigrate: () => void;
   save: (a: Extract<ClientMessage, { type: 'saveAgent' }>['agent']) => void;
 }) {
   const blank = agent === 'new';
@@ -2344,14 +2357,22 @@ function AgentEditor({
         </fieldset>
         <div className="modal-actions">
           <span className="muted">
-            {source?.source === 'bundled' || source?.source === 'user'
-              ? 'Une version propre au projet sera enregistrée.'
-              : 'Profil enregistré dans .github/agents.'}
+            {source?.source === 'workspace'
+              ? 'Migrer ce profil avant de le modifier au niveau utilisateur.'
+              : 'Enregistré au niveau utilisateur, disponible dans tous les projets.'}
           </span>
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
-          <button className="button primary" disabled={!id || !name.trim() || !instructions.trim()}>
+          {source?.source === 'workspace' && (
+            <button type="button" className="button secondary" onClick={onMigrate}>
+              Migrer vers le compte utilisateur
+            </button>
+          )}
+          <button
+            className="button primary"
+            disabled={source?.source === 'workspace' || !id || !name.trim() || !instructions.trim()}
+          >
             Enregistrer le profil <Check size={15} />
           </button>
         </div>
@@ -2362,10 +2383,12 @@ function AgentEditor({
 function SkillEditor({
   skill,
   onClose,
+  onMigrate,
   save,
 }: {
   skill: SkillInfo | 'new';
   onClose: () => void;
+  onMigrate: () => void;
   save: (id: string, content: string) => void;
 }) {
   const blank = skill === 'new';
@@ -2432,14 +2455,22 @@ function SkillEditor({
         )}
         <div className="modal-actions">
           <span className="muted">
-            {source?.source === 'bundled' || source?.source === 'user'
-              ? 'Une version propre au projet sera enregistrée.'
-              : '.github/skills/' + (id || 'identifiant') + '/SKILL.md'}
+            {source?.source === 'workspace'
+              ? 'Migrer cette skill avant de la modifier au niveau utilisateur.'
+              : 'Enregistrée au niveau utilisateur, disponible dans tous les projets.'}
           </span>
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
-          <button className="button primary" disabled={!id || !content.trim()}>
+          {source?.source === 'workspace' && (
+            <button type="button" className="button secondary" onClick={onMigrate}>
+              Migrer vers le compte utilisateur
+            </button>
+          )}
+          <button
+            className="button primary"
+            disabled={source?.source === 'workspace' || !id || !content.trim()}
+          >
             Enregistrer la skill <Check size={15} />
           </button>
         </div>

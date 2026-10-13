@@ -138,6 +138,7 @@ export async function run(): Promise<void> {
   });
   state = api.getState()!;
   assert.equal(state.agents.find((a) => a.id === 'smoke-agent')?.nickname, 'Capitaine Test');
+  assert.equal(state.agents.find((a) => a.id === 'smoke-agent')?.source, 'user');
   await api.dispatch({ type: 'installKit' });
   assert.ok(api.getState()!.agents.length >= 9);
   const source = vscode.workspace.workspaceFolders![0].uri.fsPath;

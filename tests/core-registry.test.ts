@@ -40,7 +40,7 @@ describe('agent, skill and workflow registry', () => {
     ]);
     expect(data.skills.some((s) => s.id === 'ai-tdd')).toBe(true);
   });
-  it('overrides bundled agents only with explicit workspace edits and reports malformed workflows', async () => {
+  it('saves user agents and reports malformed workspace workflows', async () => {
     const { root, registry } = await setup();
     const original = (await registry.load()).agents[0];
     await registry.saveAgent({
@@ -53,7 +53,7 @@ describe('agent, skill and workflow registry', () => {
     await mkdir(join(root, '.feature-studio/workflows'), { recursive: true });
     await writeFile(join(root, '.feature-studio/workflows/bad.yaml'), 'id: broken\nsteps: []\n');
     const data = await registry.load();
-    expect(data.agents.find((a) => a.id === original.id)?.source).toBe('workspace');
+    expect(data.agents.find((a) => a.id === original.id)?.source).toBe('user');
     expect(data.agents.find((a) => a.id === original.id)?.instructions).toBe(
       'Workspace instructions',
     );
@@ -105,13 +105,13 @@ describe('agent, skill and workflow registry', () => {
     const other = await mkdtemp(join(tmpdir(), 'studio-outside-'));
     roots.push(other);
     await symlink(other, join(root, '.github'));
-    await expect(registry.saveAgent(agent)).rejects.toThrow(/symbolique/);
     await symlink(other, join(userPath, 'agents'), 'junction');
+    await expect(registry.saveAgent(agent)).rejects.toThrow(/symbolique/);
     const report = await registry.installKit();
     expect(report.conflicts.some((c) => c.includes('symbolique'))).toBe(true);
   });
   it('loads workspace overrides before personal overrides before bundled defaults', async () => {
-    const { registry, userPath } = await setup();
+    const { registry, userPath, root } = await setup();
     await registry.installKit();
     const personal = (await registry.load()).agents.find((a) => a.id === 'fs-plan')!;
     await writeFile(
@@ -122,7 +122,14 @@ describe('agent, skill and workflow registry', () => {
       source: 'user',
       instructions: 'Personal instructions',
     });
-    await registry.saveAgent({ ...personal, instructions: 'Workspace instructions' });
+    await mkdir(join(root, '.github/agents'), { recursive: true });
+    await writeFile(
+      join(root, '.github/agents/fs-plan.agent.md'),
+      '---\nname: Project plan\ndescription: Project\n---\nWorkspace instructions\n',
+    );
+    await expect(
+      registry.saveAgent({ ...personal, instructions: 'Hidden personal override' }),
+    ).rejects.toThrow(/Migrer|migration|migrer/);
     expect((await registry.load()).agents.find((a) => a.id === 'fs-plan')).toMatchObject({
       source: 'workspace',
       instructions: 'Workspace instructions',
@@ -194,5 +201,45 @@ describe('agent, skill and workflow registry', () => {
     await expect(registry.saveWorkflow({ ...original, id: 'linked' })).rejects.toThrow(
       /symbolique/,
     );
+  });
+});
+
+describe('personal profile editing', () => {
+  it('preserves additional agent metadata and relocates bundled skill links', async () => {
+    const { registry, userPath } = await setup();
+    const bundled = (await registry.load()).agents[0];
+    await registry.saveAgent({ ...bundled, instructions: 'Edited' });
+    expect(await readFile(join(userPath, 'agents', `${bundled.id}.agent.md`), 'utf8')).toContain(
+      'disable-model-invocation: true',
+    );
+    const original = (await registry.load()).skills.find((skill) => skill.id === 'ai-debug')!;
+    await registry.saveSkill(original.id, original.content);
+    expect(await readFile(join(userPath, 'skills/ai-debug/SKILL.md'), 'utf8')).toContain(
+      '../../feature-studio/kit/templates/debug.md',
+    );
+  });
+
+  it('shares new and edited agents and skills between projects without writing to either project', async () => {
+    const { root, userPath, registry } = await setup();
+    const agent = (await registry.load()).agents[0];
+    await registry.saveAgent({ ...agent, instructions: 'My global custom instructions' });
+    await registry.saveSkill(
+      'personal',
+      '---\nname: Personal\ndescription: Method\n---\nMy method',
+    );
+    expect(await readdir(root)).toEqual([]);
+    const other = new AgentRegistry(join(root, 'another-project'), resolve('defaults'), userPath);
+    expect((await other.load()).agents.find((item) => item.id === agent.id)).toMatchObject({
+      source: 'user',
+      instructions: 'My global custom instructions',
+    });
+    expect((await other.load()).skills.find((item) => item.id === 'personal')).toMatchObject({
+      source: 'user',
+    });
+    await other.saveAgent({ ...agent, instructions: 'Updated in another project' });
+    expect((await registry.load()).agents.find((item) => item.id === agent.id)?.instructions).toBe(
+      'Updated in another project',
+    );
+    expect(await readdir(root)).toEqual([]);
   });
 });
