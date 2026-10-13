@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3 — 2026-10-13
+
+- Ajoute une entrée Feature Studio à la barre d’activité de VS Code, avec un geek au portable en pixel art et un volet natif pour ouvrir le cockpit existant. Sans projet, le volet propose d’ouvrir un dossier.
+- Garde le volet indépendant des sessions et des appels modèle ; les commandes et le bouton de barre d’état restent disponibles.
+- Évite la création de plusieurs onglets si le cockpit est demandé plusieurs fois pendant son ouverture.
+
 ## 0.4.2 — 2026-10-13
 
 - Ajoute trois thèmes clairs — Aube (crème et corail), Brume (bleu et ardoise), Sauge (vert et lin) — et deux thèmes sombres — Minuit (bleu et indigo), Forêt (vert et cuivre) — en plus du mode automatique Suivre VS Code.

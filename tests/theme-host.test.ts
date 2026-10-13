@@ -67,6 +67,7 @@ vi.mock('vscode', () => ({
   },
   window: {
     createOutputChannel: () => ({ ...host.disposable, appendLine() {} }),
+    createTreeView: () => ({ ...host.disposable, visible: false }),
     createStatusBarItem: () => ({ ...host.disposable, show() {} }),
     registerWebviewPanelSerializer: () => host.disposable,
     createWebviewPanel: () => host.panel,

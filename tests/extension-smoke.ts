@@ -9,6 +9,7 @@ import { THEME_IDS, type ThemeId } from '../src/shared/themes';
 interface Api {
   getState(): StudioState | undefined;
   getUiReady(): boolean;
+  getLauncherVisible(): boolean;
   getTheme(): ThemeId;
   getDevOpsState(): DevOpsState | undefined;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
@@ -16,8 +17,46 @@ interface Api {
 export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension<Api>('MattDevBzh.feature-studio');
   assert.ok(extension, 'Extension found in the real VS Code extension host');
+  const contributions = extension.packageJSON.contributes;
+  const container = contributions.viewsContainers.activitybar.find(
+    (entry: { id: string }) => entry.id === 'featureStudio',
+  );
+  assert.equal(container?.title, 'Feature Studio');
+  assert.equal(container?.icon, 'resources/cockpit-geek.svg');
+  assert.ok(await readFile(join(extension.extensionPath, container.icon)));
+  assert.ok(
+    contributions.views.featureStudio.some(
+      (entry: { id: string; name: string }) =>
+        entry.id === 'featureStudio.launcher' && entry.name === 'Cockpit',
+    ),
+    'The package contributes the native cockpit launcher',
+  );
+  const welcomes = contributions.viewsWelcome.filter(
+    (entry: { view: string }) => entry.view === 'featureStudio.launcher',
+  );
+  assert.ok(
+    welcomes.some(
+      (entry: { when: string; contents: string }) =>
+        entry.when === 'workspaceFolderCount != 0' &&
+        entry.contents.includes('[Ouvrir le cockpit](command:featureStudio.open)'),
+    ),
+  );
+  assert.ok(
+    welcomes.some(
+      (entry: { when: string; contents: string }) =>
+        entry.when === 'workspaceFolderCount == 0' &&
+        entry.contents.includes('[Ouvrir un dossier](command:vscode.openFolder)'),
+    ),
+  );
+  await vscode.commands.executeCommand('featureStudio.launcher.focus');
   const api = await extension.activate();
-  assert.equal(api.getState(), undefined, 'Opening the cockpit is independent of theme changes');
+  for (let retry = 0; retry < 50 && !api.getLauncherVisible(); retry++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(api.getLauncherVisible(), 'The native launcher is rendered in the sidebar');
+  assert.ok((await vscode.commands.getCommands(true)).includes('featureStudio.launcher.focus'));
+  assert.equal(api.getState(), undefined, 'Showing the launcher never initializes the store');
+  assert.equal(api.getDevOpsState(), undefined, 'Showing the launcher never initializes DevOps');
+  assert.equal(api.getUiReady(), false, 'Showing the launcher never opens the cockpit webview');
   assert.equal(api.getTheme(), 'auto', 'The isolated user profile starts in automatic mode');
   for (const theme of THEME_IDS) {
     await api.dispatch({ type: 'setTheme', theme, requestId: `smoke-theme-${theme}` });
@@ -50,7 +89,10 @@ export async function run(): Promise<void> {
     } as unknown as ClientMessage),
   );
   assert.equal(api.getTheme(), 'foret', 'Invalid requests preserve the recorded choice');
-  await vscode.commands.executeCommand('featureStudio.open');
+  await Promise.all([
+    vscode.commands.executeCommand('featureStudio.open'),
+    vscode.commands.executeCommand('featureStudio.open'),
+  ]);
   for (let retry = 0; retry < 100 && !api.getUiReady(); retry++)
     await new Promise((resolve) => setTimeout(resolve, 100));
   assert.ok(
@@ -60,6 +102,15 @@ export async function run(): Promise<void> {
   assert.ok(api.getState()?.workflows.some((workflow) => workflow.id === 'quality-feature'));
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-visual-tests'));
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-counterexamples'));
+  const cockpitTabs = () =>
+    vscode.window.tabGroups.all.flatMap((group) =>
+      group.tabs.filter(
+        (tab) => tab.label === 'Feature Studio' && tab.input instanceof vscode.TabInputWebview,
+      ),
+    );
+  assert.equal(cockpitTabs().length, 1, 'Concurrent launcher clicks create only one cockpit');
+  await vscode.commands.executeCommand('featureStudio.open');
+  assert.equal(cockpitTabs().length, 1, 'The launcher command reuses the existing cockpit panel');
   // macOS exposes /var via workspace URIs while the host stores canonical /private/var paths.
   const source = await realpath(vscode.workspace.workspaceFolders![0].uri.fsPath);
   const devopsConfig: DevOpsConfig = {
@@ -428,6 +479,6 @@ export async function run(): Promise<void> {
     'Smoke extension host',
   );
   console.log(
-    'PASS: activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
+    'PASS: activity-bar contribution/native launcher visibility without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
   );
 }

@@ -29,6 +29,13 @@ const diffContents = new Map<string, string>();
 
 export async function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Feature Studio');
+  // An empty native view displays the welcome buttons without initializing a project.
+  const launcher = vscode.window.createTreeView<vscode.TreeItem>('featureStudio.launcher', {
+    treeDataProvider: {
+      getChildren: () => [],
+      getTreeItem: (item) => item,
+    },
+  });
   const send = (message: HostMessage) => {
     if (panel) void panel.webview.postMessage(message);
   };
@@ -45,6 +52,7 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   context.subscriptions.push(
     output,
+    launcher,
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
     }),
@@ -841,13 +849,17 @@ export async function activate(context: vscode.ExtensionContext) {
     service!.publish();
     if (devops) send({ type: 'devopsState', state: devops.getState() });
   };
+  const revealPanel = () => {
+    if (!panel) return false;
+    panel.reveal();
+    return true;
+  };
   const open = async () => {
     try {
-      if (panel) {
-        panel.reveal();
-        return;
-      }
+      if (revealPanel()) return;
       await ensure();
+      // Another click may have mounted the panel while project initialization was pending.
+      if (revealPanel()) return;
       await mount(
         vscode.window.createWebviewPanel('featureStudio', 'Feature Studio', vscode.ViewColumn.One, {
           enableScripts: true,
@@ -890,6 +902,7 @@ export async function activate(context: vscode.ExtensionContext) {
   return {
     getState: () => service?.snapshot(),
     getUiReady: () => webviewReady,
+    getLauncherVisible: () => launcher.visible,
     getTheme,
     getDevOpsState: () => devops?.getState(),
     dispatch: (message: ClientMessage) => dispatch(message),

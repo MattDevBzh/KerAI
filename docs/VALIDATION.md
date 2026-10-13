@@ -1,5 +1,21 @@
 # Validation et limites — v0.4, 13 octobre 2026
 
+## Vérifications locales de v0.4.3
+
+La version 0.4.3 ajoute le raccourci **Feature Studio** à la barre d’activité, son icône de geek au portable en pixel art et le volet natif **Cockpit**. La recette locale du 13 octobre 2026 donne les résultats suivants :
+
+| Périmètre | Résultat observé |
+| --- | --- |
+| Format, TypeScript et build | `npm run check` réussi |
+| Métier et intégration | **341 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
+| Vrai hôte VS Code Insiders | Activation par `featureStudio.launcher.focus`, vue native visible, magasin et DevOps non initialisés, cockpit non ouvert à la simple consultation du volet |
+| Ouverture du cockpit | Deux commandes simultanées créent un seul onglet ; une ouverture ultérieure réutilise cet onglet ; les parcours hôtes existants restent vérifiés |
+| Icône | SVG original sur grille 24 × 24, transparent et monochrome ; rendus inspectés sur fonds clair et sombre à 24, 48 et 192 px |
+
+Le smoke vérifie les contributions et la ressource réellement chargées par l’extension, ainsi que les deux accueils déclarés : **Ouvrir le cockpit** avec un dossier et **Ouvrir un dossier** sans projet. L’affichage réel du volet a été vérifié avec un projet par le test d’hôte. Le Mac s’étant verrouillé avant la recette manuelle, le clic physique dans la barre d’activité et l’accueil sans dossier n’ont pas été inspectés manuellement. Les fichiers React/CSS n’ont pas changé ; la campagne Playwright de v0.4.2 ci-dessous reste la dernière recette du cockpit web.
+
+Aucun prompt Copilot payant ni appel au compte Azure DevOps réel n’a été effectué. Cette recette locale ne confirme aucune nouvelle exécution CI, aucun essai Windows ni publication distante. Les dépendances n’ont pas changé.
+
 ## Vérifications locales de v0.4.2
 
 La version 0.4.2 ajoute les thèmes clairs **Aube, Brume et Sauge**, les thèmes sombres **Minuit et Forêt** et le choix **Suivre VS Code** dans les Réglages. La recette locale du 13 octobre 2026 donne les résultats suivants :
