@@ -222,6 +222,19 @@ describe('agent, skill and workflow registry', () => {
 });
 
 describe('personal profile editing', () => {
+  it('keeps the edited profile excluded from supporting kit installation with either path separator', async () => {
+    const { registry, userPath } = await setup();
+    const report = await registry.installKit([
+      'agents\\fs-dev.agent.md',
+      'agents/fs-plan.agent.md',
+    ]);
+    expect(report.conflicts).toEqual([]);
+    for (const id of ['fs-dev', 'fs-plan'])
+      await expect(readFile(join(userPath, 'agents', `${id}.agent.md`))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    expect(await readFile(join(userPath, 'skills/ai-plan/SKILL.md'), 'utf8')).toContain('ai-plan');
+  });
   it('preserves additional agent metadata and relocates bundled skill links', async () => {
     const { registry, userPath } = await setup();
     const bundled = (await registry.load()).agents[0];

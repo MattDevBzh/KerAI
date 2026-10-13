@@ -132,9 +132,9 @@ describe('DevOps kit integration', () => {
       f.workflow.steps.filter((step) => step.policy !== 'read-only').map((step) => step.id),
     ).toEqual(['implement']);
     const report = await f.registry.installKit();
-    expect(report.installed).toContain('skills/devops-inspect/scripts/ado-readonly.cjs');
-    expect(report.installed).toContain('skills/devops-azure-preflight/LICENSE');
-    expect(report.installed).toContain('skills/devops-azure-preflight/sources.json');
+    expect(report.installed).toContain(join('skills/devops-inspect/scripts/ado-readonly.cjs'));
+    expect(report.installed).toContain(join('skills/devops-azure-preflight/LICENSE'));
+    expect(report.installed).toContain(join('skills/devops-azure-preflight/sources.json'));
     const installed = await f.registry.load();
     for (const data of [f.data, installed]) {
       for (const id of ['plan', 'review', 'test-guide', 'validate']) {
@@ -160,7 +160,9 @@ describe('DevOps kit integration', () => {
     expect((await runProcess(process.execPath, [script, '--help'], f.workspace)).code).toBe(0);
     const skill = join(f.registry.userPath, 'skills/devops-plan/SKILL.md');
     await writeFile(skill, 'Personal instructions');
-    expect((await f.registry.installKit()).conflicts).toContain('skills/devops-plan/SKILL.md');
+    expect((await f.registry.installKit()).conflicts).toContain(
+      join('skills/devops-plan/SKILL.md'),
+    );
     expect(await readFile(skill, 'utf8')).toBe('Personal instructions');
   });
   it('exposes only explicit read capabilities and rejects model-supplied test references', async () => {

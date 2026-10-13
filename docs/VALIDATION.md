@@ -7,12 +7,14 @@ Cette version réunit le kit DevOps, ses six avatars et l’écran de compositio
 | Périmètre | Résultat observé |
 | --- | --- |
 | Format, TypeScript et build | `npm run check` réussi |
-| Métier et intégration | **373 tests Vitest réussis**, 3 spécifiques à Windows ignorés sur macOS |
+| Métier et intégration | **374 tests Vitest réussis**, 3 spécifiques à Windows ignorés sur macOS |
 | Interface Chromium | **76 scénarios Playwright réussis**, dont les trois parcours de la bibliothèque de kits et les deux du kit DevOps |
 | Vrai hôte VS Code Insiders | Smoke réussi : activation, CSP, catalogue DevOps, six identités d’avatars et leurs 18 fichiers, installation utilisateur, profils, persistance, Git et restaurations |
 | Rendu | Bibliothèque et composition inspectées à 1440 px ; import avec conflit contrôlé à 390 px sans débordement |
 | Avatars DevOps | Six sprites source inspectés, exports PNG 192×192 et GIF de travail à quatre images vérifiés |
 | Ressources de skills | Huit skills DevOps validées ; licence Microsoft et provenance vérifiées et embarquées |
+
+La première CI Windows a révélé un défaut de comparaison entre chemins avec `/` et `\` : l’installation des ressources associées ne préservait pas l’exclusion du profil en cours d’édition, provoquant un refus de sauvegarde. La comparaison est normalisée et un test de non-régression vérifie les deux séparateurs. Les assertions des rapports d’installation utilisent les chemins natifs de chaque plateforme.
 
 Les nouveaux tests utilisent le vrai `KitService` avec des répertoires temporaires : sélection transitive, ressources partagées personnalisées, export de fichier et réimport, installation puis relecture du registre, conflits apparus après aperçu, révisions multiples, kit sauvegardé invalide, checksum erroné, dépendance ou référence locale absente, collision fichier/dossier, chemins interdits et liens symboliques. Les boîtes de dialogue natives de choix de fichiers sont remplacées par un pont dans les scénarios Chromium ; leurs opérations de fichiers et leur validation métier sont réelles. Le smoke VS Code couvre l’activation et le catalogue, sans pilote UI des boîtes natives.
 

@@ -109,7 +109,7 @@ npm run package         # releases/feature-studio-1.0.0.vsix
 
 **F5 → Feature Studio** ouvre l’hôte de développement. `npm run dev` fournit le frontend ; `http://127.0.0.1:5173/?demo=1` affiche les données de démonstration. Les opérations de fichiers et l’exécution des agents nécessitent l’extension.
 
-La recette locale de v1 compte **373 tests métier réussis**, **76 scénarios d’interface** et un smoke réussi dans VS Code Insiders. Trois tests spécifiques à Windows sont ignorés sur macOS. Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les VSIX livrés possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
+La recette locale de v1 compte **374 tests métier réussis**, **76 scénarios d’interface** et un smoke réussi dans VS Code Insiders. Trois tests spécifiques à Windows sont ignorés sur macOS. Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les VSIX livrés possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
 
 ## Licence et provenance
 

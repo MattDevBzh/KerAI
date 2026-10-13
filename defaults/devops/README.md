@@ -1,6 +1,6 @@
 # Kit DevOps
 
-Six agents, huit skills et un parcours « DevOps — du besoin au test vérifié » sont fournis avec Feature Studio. Ils sont disponibles directement dans Agents, Skills et Parcours. Le bouton d’installation du kit Copilot les copie aussi dans le compte utilisateur sans remplacer ses personnalisations.
+Six agents, huit skills et un parcours « DevOps — du besoin au test vérifié » sont fournis avec Feature Studio. Ils sont disponibles directement dans Agents, Skills et Parcours. Dans Kits, choisis DevOps puis Voir le kit pour les installer dans ton catalogue personnel. Les personnalisations différentes restent préservées et les conflits sont affichés avant installation.
 
 Challenge → Plan technique → Modifications locales → Relecture → Guide de test → Validation du test.
 

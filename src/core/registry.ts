@@ -282,6 +282,7 @@ export class AgentRegistry {
   }
 
   async installKit(excludedTargets: string[] = []): Promise<InstallationReport> {
+    const excluded = new Set(excludedTargets.map((target) => target.replaceAll('\\', '/')));
     const manifest = z
       .object({ files: z.array(z.object({ source: z.string(), target: z.string() })) })
       .parse(
@@ -312,7 +313,7 @@ export class AgentRegistry {
       conflicts: [],
     };
     for (const entry of entries) {
-      if (excludedTargets.includes(entry.target)) continue;
+      if (excluded.has(entry.target.replaceAll('\\', '/'))) continue;
       const source = await safePath(this.defaultsPath, entry.source);
       const original = await readFile(source);
       const content = entry.target.endsWith('.md')

@@ -2,6 +2,7 @@
 
 ## 1.0.0 — 2026-10-13
 
+- Corrige la sauvegarde de profils fournis sous Windows : l’installation des ressources associées exclut le profil en cours d’édition avec les deux séparateurs de chemin.
 - Ajoute l’écran Kits : bibliothèque Atelier Copilot / DevOps, import local, composition par parcours/agent/skill, résolution transitive des dépendances, aperçu des instructions et fichiers, export `.fskit.json` puis installation utilisateur.
 - Inclut les scripts, références et licences des profils choisis. Vérifie le format, les empreintes, les chemins et les dépendances ; conserve les fichiers personnels différents. Plusieurs révisions d’un kit restent accessibles et un fichier invalide est signalé sans bloquer la bibliothèque.
 - Livre le parcours DevOps à six agents, huit skills, son collecteur Azure DevOps en lecture seule et la vérification du test exécuté manuellement. Réutilise la méthode Microsoft azure-validate avec provenance et licence embarquées.
