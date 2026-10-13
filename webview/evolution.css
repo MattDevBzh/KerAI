@@ -194,7 +194,7 @@
   background: var(--green);
 }
 .catalog-dot.error {
-  background: var(--coral);
+  background: var(--error);
 }
 .catalog-dot.checking {
   background: var(--apricot);
@@ -776,7 +776,7 @@
   flex-shrink: 0;
 }
 .evidence-entry.failed .evidence-status {
-  color: var(--coral);
+  color: var(--error);
 }
 .evidence-entry > summary > span:nth-child(2) {
   flex: 1;
@@ -799,7 +799,7 @@
   color: var(--green);
 }
 .evidence-entry.failed .evidence-result {
-  color: var(--coral);
+  color: var(--error);
 }
 .evidence-body {
   padding: 16px;
@@ -903,7 +903,7 @@
   margin-top: 3px;
 }
 .review-finding.blocking > svg {
-  color: var(--coral);
+  color: var(--error);
 }
 .review-finding.warning > svg {
   color: var(--apricot);
@@ -994,8 +994,8 @@
   border-radius: 4px;
 }
 .validation-evidence > .blocker-count {
-  color: var(--coral);
-  border-color: color-mix(in srgb, var(--coral) 30%, var(--border));
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 30%, var(--border));
 }
 .validation-card-footer {
   display: flex;
@@ -1430,7 +1430,7 @@
   position: sticky;
   bottom: 0;
   padding: 18px;
-  border: 1px solid var(--coral);
+  border: 1px solid var(--error);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
@@ -1439,7 +1439,7 @@
 .workflow-delete-confirm p {
   font-size: 11px;
   line-height: 1.8;
-  color: var(--coral);
+  color: var(--error);
 }
 .workflow-delete-confirm > div {
   display: flex;
@@ -1815,5 +1815,5 @@
   padding-left: 20px;
 }
 .approval-blockers strong {
-  color: var(--coral);
+  color: var(--error);
 }

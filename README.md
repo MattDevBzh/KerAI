@@ -6,13 +6,13 @@
 
 Une feature devient un parcours : spécifications, plan, développement, tests, relecture. Chaque étape possède son agent, ses skills, ses MCP, son contexte et ses tentatives. Tu vois ce qui avance, tu fournis une US, tu réponds en direct et tu choisis les validations humaines du parcours.
 
-[Télécharger le VSIX](releases/feature-studio-0.4.1.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Livraison et Azure DevOps](docs/devops-delivery.md) · [Recette Playwright](defaults/quality/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
+[Télécharger le VSIX](releases/feature-studio-0.4.2.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Livraison et Azure DevOps](docs/devops-delivery.md) · [Recette Playwright](defaults/quality/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
 
 ![Le cockpit Feature Studio — données de démonstration](docs/images/dashboard.png)
 
 ## Installation
 
-1. Télécharge **[feature-studio-0.4.1.vsix](releases/feature-studio-0.4.1.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
+1. Télécharge **[feature-studio-0.4.2.vsix](releases/feature-studio-0.4.2.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Lance **Feature Studio : ouvrir le cockpit** dans la palette de commandes. Le bouton **Feature Studio** de la barre d’état ouvre aussi le cockpit.
@@ -23,6 +23,12 @@ Prérequis : **VS Code 1.110 ou ultérieur**, Git pour les branches/diffs, et **
 Si `copilot` n’est pas trouvé, renseigne le chemin complet dans **Réglages → Chemin du CLI dans VS Code** (`featureStudio.cliPath`). Sur macOS avec Homebrew, ce peut être `/opt/homebrew/bin/copilot`. L’extension ne met pas le CLI à jour automatiquement. Voir [l’installation officielle du CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
 
 **Feature Studio ouvre son propre onglet de travail.** Il utilise le CLI local et son authentification ; il ne remplace pas les composants internes de la vue Chat de l’extension GitHub Copilot. Les deux interfaces peuvent coexister. Aucun serveur applicatif supplémentaire n’est requis ; les requêtes IA passent naturellement par GitHub Copilot.
+
+## Choisir l’apparence du cockpit
+
+En haut de **Réglages**, la section **L’ambiance du cockpit** propose six cartes : **Suivre VS Code** (automatique), trois thèmes clairs — **Aube** (crème et corail), **Brume** (bleu et ardoise), **Sauge** (vert et lin) — et deux thèmes sombres — **Minuit** (bleu et indigo), **Forêt** (vert et cuivre).
+
+Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
 
 ## Choisir un parcours
 
@@ -226,7 +232,7 @@ npx playwright install chromium
 npm run test:ui        # Parcours webview, sans requêtes IA
 npm run test:extension # Vrai hôte VS Code isolé, sans prompt IA
 npm run smoke:mcp     # Diagnostic MCP local explicite, sans prompt IA
-npm run package       # Produit releases/feature-studio-0.4.1.vsix
+npm run package       # Produit releases/feature-studio-0.4.2.vsix
 ```
 
 Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développement. `npm run dev` ouvre le frontend de développement ; `http://127.0.0.1:5173/?demo=1` affiche des données d’exemple avec un bandeau explicite. Sans ce paramètre et hors VS Code, aucune exécution n’est simulée.

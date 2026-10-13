@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { settingsSchema } from '../core/store';
 import { avatarSchema } from '../core/registry';
 import type { ClientMessage } from '../shared/types';
+import { THEME_IDS } from '../shared/themes';
 import { workflowSchema } from '../core/workflow';
 import {
   launchSchema,
@@ -19,6 +20,7 @@ const id = z.string().min(1).max(150),
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
   ...devOpsMessageVariants,
+  z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
   z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),
   z
     .object({

@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -69,6 +69,28 @@
     "configuration": {
       "title": "Feature Studio",
       "properties": {
+        "featureStudio.appearance.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "aube",
+            "brume",
+            "sauge",
+            "minuit",
+            "foret"
+          ],
+          "enumDescriptions": [
+            "Suivre le thème de VS Code, y compris son mode contraste élevé.",
+            "Thème clair Aube, aux tons chauds.",
+            "Thème clair Brume, aux tons bleutés.",
+            "Thème clair Sauge, aux tons verts.",
+            "Thème sombre Minuit, aux tons bleus.",
+            "Thème sombre Forêt, aux tons verts."
+          ],
+          "default": "auto",
+          "scope": "application",
+          "description": "Apparence du cockpit, enregistrée dans les réglages personnels de VS Code."
+        },
         "featureStudio.cliPath": {
           "type": "string",
           "default": "copilot",
@@ -105,7 +127,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-0.4.1.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-0.4.2.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",

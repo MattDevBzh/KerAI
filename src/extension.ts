@@ -16,6 +16,7 @@ import { parseMessage } from './host/messages';
 import { readHeadFile } from './host/GitFileContent';
 import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
+import { normalizeTheme } from './shared/themes';
 
 let panel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
@@ -31,6 +32,12 @@ export async function activate(context: vscode.ExtensionContext) {
   const send = (message: HostMessage) => {
     if (panel) void panel.webview.postMessage(message);
   };
+  const getTheme = () =>
+    normalizeTheme(vscode.workspace.getConfiguration('featureStudio').get('appearance.theme'));
+  const sendTheme = (requestId?: string, error?: string) =>
+    send({ type: 'themeState', theme: getTheme(), requestId, error });
+  // Theme writes share a queue so fast successive choices keep their requested order.
+  let themeWrites = Promise.resolve();
   const report = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     output.appendLine(message);
@@ -38,6 +45,9 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   context.subscriptions.push(
     output,
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
+    }),
     vscode.workspace.registerTextDocumentContentProvider('feature-studio-diff', {
       provideTextDocumentContent: (uri) => diffContents.get(uri.toString()) ?? '',
     }),
@@ -198,8 +208,25 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const notice = (message: string) => send({ type: 'notice', message });
   const dispatch = async (raw: unknown): Promise<void | CheckpointComparison> => {
-    const message = parseMessage(raw),
-      current = await ensure();
+    const message = parseMessage(raw);
+    if (message.type === 'setTheme') {
+      themeWrites = themeWrites.then(async () => {
+        try {
+          await vscode.workspace
+            .getConfiguration('featureStudio')
+            .update('appearance.theme', message.theme, vscode.ConfigurationTarget.Global);
+          sendTheme(message.requestId);
+        } catch (error) {
+          sendTheme(
+            message.requestId,
+            redact(error instanceof Error ? error.message : String(error)),
+          );
+        }
+      });
+      await themeWrites;
+      return;
+    }
+    const current = await ensure();
     const deliveryMessage = devOpsMessageSchema.safeParse(message);
     if (deliveryMessage.success) {
       await devops!.handle(deliveryMessage.data);
@@ -245,6 +272,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       case 'ready':
         webviewReady = true;
+        sendTheme();
         current.publish();
         if (devops) send({ type: 'devopsState', state: devops.getState() });
         return;
@@ -771,6 +799,7 @@ export async function activate(context: vscode.ExtensionContext) {
     let html = await readFile(path.join(context.extensionPath, 'dist/webview/index.html'), 'utf8');
     const csp = `default-src 'none'; img-src ${target.webview.cspSource} data:; style-src ${target.webview.cspSource} 'unsafe-inline'; font-src ${target.webview.cspSource}; script-src 'nonce-${nonce}'; connect-src 'none'; base-uri ${target.webview.cspSource}; form-action 'none';`;
     html = html
+      .replace(/<html\b/, `<html data-studio-theme="${getTheme()}"`)
       .replace(
         '<head>',
         `<head><base href="${base}"><meta http-equiv="Content-Security-Policy" content="${csp}">`,
@@ -808,6 +837,7 @@ export async function activate(context: vscode.ExtensionContext) {
       context.subscriptions,
     );
     await ensure();
+    sendTheme();
     service!.publish();
     if (devops) send({ type: 'devopsState', state: devops.getState() });
   };
@@ -860,6 +890,7 @@ export async function activate(context: vscode.ExtensionContext) {
   return {
     getState: () => service?.snapshot(),
     getUiReady: () => webviewReady,
+    getTheme,
     getDevOpsState: () => devops?.getState(),
     dispatch: (message: ClientMessage) => dispatch(message),
   };

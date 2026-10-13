@@ -1,8 +1,8 @@
 :root {
   font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   font-size: 13px;
-  color: var(--vscode-foreground, #e8e7e2);
-  background: var(--vscode-editor-background, #181b1c);
+  color: var(--fg);
+  background: var(--bg);
   font-synthesis: none;
   --bg: var(--vscode-editor-background, #181b1c);
   --side: var(--vscode-sideBar-background, #1d2021);
@@ -25,6 +25,7 @@
 }
 body {
   margin: 0;
+  padding: 0;
 }
 button,
 input,
@@ -58,13 +59,13 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--vscode-focusBorder, var(--apricot));
+  outline: 2px solid var(--focus);
 }
 button {
   color: inherit;
 }
 a {
-  color: var(--vscode-textLink-foreground, var(--apricot));
+  color: var(--link);
 }
 button svg {
   flex-shrink: 0;
@@ -84,7 +85,7 @@ select {
 input,
 textarea,
 select {
-  color: var(--vscode-input-foreground, var(--fg));
+  color: var(--input-fg);
   background: var(--panel-soft);
   border: 1px solid var(--input-border);
   padding: 11px 12px;
@@ -97,7 +98,7 @@ textarea {
 }
 input::placeholder,
 textarea::placeholder {
-  color: var(--vscode-input-placeholderForeground, #7e8885);
+  color: var(--placeholder);
 }
 select {
   padding-right: 28px;
@@ -196,12 +197,12 @@ svg {
   transform: translateY(-1px);
 }
 .button.primary {
-  color: #272624;
+  color: var(--on-accent);
   background: var(--coral);
   border-color: var(--coral);
 }
 .button.primary:hover:not(:disabled) {
-  background: #f4b6a1;
+  background: var(--accent-hover);
 }
 .button.secondary {
   background: transparent;
@@ -276,7 +277,7 @@ svg {
 }
 .badge.coral,
 .attempt-state.coral {
-  color: var(--coral);
+  color: var(--error);
 }
 .badge.apricot {
   background: color-mix(in srgb, var(--apricot) 10%, transparent);
@@ -288,7 +289,7 @@ svg {
   background: color-mix(in srgb, var(--lavender) 10%, transparent);
 }
 .badge.coral {
-  background: color-mix(in srgb, var(--coral) 10%, transparent);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
 }
 .count-pill {
   font-size: 10px;
@@ -343,7 +344,7 @@ svg {
   align-items: center;
   justify-content: center;
   background: var(--coral);
-  color: #282925;
+  color: var(--on-accent);
   width: 37px;
   height: 37px;
   border-radius: 10px;
@@ -474,7 +475,7 @@ svg {
   box-shadow: 0 0 0 3px #9fc3ac0e;
 }
 .connection-dot.unavailable {
-  background: var(--coral);
+  background: var(--error);
 }
 .connection-dot.checking {
   background: var(--apricot);
@@ -823,7 +824,7 @@ main {
 }
 .segmented-progress .failed,
 .segmented-progress .interrupted {
-  background: var(--coral);
+  background: var(--error);
 }
 .session-bottom {
   display: flex;
@@ -1103,10 +1104,10 @@ main {
   flex-shrink: 0;
 }
 .toast.error {
-  border-left-color: var(--coral);
+  border-left-color: var(--error);
 }
 .toast.error > svg {
-  color: var(--coral);
+  color: var(--error);
 }
 .workspace-notices {
   margin: 14px 38px;
@@ -1772,9 +1773,9 @@ main {
   gap: 8px;
   font-size: 10px;
   line-height: 1.7;
-  color: var(--coral);
-  border: 1px solid color-mix(in srgb, var(--coral) 30%, transparent);
-  background: color-mix(in srgb, var(--coral) 7%, transparent);
+  color: var(--error);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+  background: color-mix(in srgb, var(--error) 7%, transparent);
   border-radius: 6px;
   padding: 12px;
   margin: 16px 0;
@@ -1845,7 +1846,7 @@ main {
 }
 .activity-event.error .event-marker,
 .activity-event.error p {
-  color: var(--coral);
+  color: var(--error);
 }
 .activity-event.warning .event-marker {
   color: var(--apricot);
@@ -2269,7 +2270,7 @@ main {
   background: var(--green);
 }
 .toggle-label input:focus-visible + .toggle-switch {
-  outline: 2px solid var(--vscode-focusBorder, var(--apricot));
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 .settings-save {
@@ -2456,21 +2457,12 @@ main {
   margin: 7px 0 24px;
   color: var(--apricot);
 }
-body.vscode-light {
+html[data-studio-theme-effective='auto'] body.vscode-light {
   --coral: #b75139;
   --apricot: #916122;
   --lavender: #75609a;
   --green: #397757;
   color-scheme: light;
-}
-body.vscode-light .button.primary {
-  color: #fff;
-}
-body.vscode-light .button.primary:hover:not(:disabled) {
-  background: #a3442f;
-}
-body.vscode-light .brand-mark {
-  color: #fff;
 }
 body.vscode-high-contrast,
 body.vscode-high-contrast-light {

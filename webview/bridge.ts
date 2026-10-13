@@ -38,6 +38,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'checkpointComparison',
         'stepApprovalResult',
         'profileSaveResult',
+        'themeState',
       ].includes(event.data.type)
     )
       callback(event.data);

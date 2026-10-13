@@ -12,12 +12,12 @@
 .quality-human-note,
 .quality-proof-ref,
 .quality-command-fields small {
-  opacity: 0.78;
+  color: var(--muted);
   font-size: 12px;
 }
 .quality-report,
 .quality-empty {
-  border: 1px solid var(--vscode-panel-border, #444);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
   overflow-wrap: anywhere;
@@ -34,20 +34,20 @@
   padding: 3px 8px;
   border-radius: 20px;
   font-size: 11px;
-  background: var(--vscode-badge-background, #393e49);
-  color: var(--vscode-badge-foreground, #fff);
+  background: var(--panel-soft);
+  color: var(--fg);
 }
 .quality-verdict.passed {
-  background: #174b35;
-  color: #d5ffe5;
+  background: var(--success-bg);
+  color: var(--green);
 }
 .quality-verdict.failed,
 .quality-verdict.invalid {
-  background: #65272a;
-  color: #ffe2e4;
+  background: var(--error-bg);
+  color: var(--error);
 }
 .quality-case {
-  border-top: 1px solid var(--vscode-panel-border, #444);
+  border-top: 1px solid var(--border);
   margin: 14px 0;
   padding-top: 12px;
 }
@@ -62,7 +62,7 @@
 .quality-error {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: var(--vscode-errorForeground, #ff9b9b);
+  color: var(--error);
 }
 .quality-media {
   display: grid;
@@ -86,7 +86,7 @@
 .quality-media figcaption {
   margin-top: 5px;
   font-size: 11px;
-  opacity: 0.75;
+  color: var(--muted);
 }
 .quality-command-fields {
   display: grid;

@@ -1,3 +1,4 @@
+import { ThemePicker } from './ThemePicker';
 import { UsageDashboard } from './UsageDashboard';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
 import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
@@ -2855,6 +2856,7 @@ function SettingsView({
           </p>
         </div>
       </div>
+      {!automation && <ThemePicker />}
       <form onSubmit={submit}>
         {!automation && (
           <>

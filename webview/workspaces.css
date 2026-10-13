@@ -434,7 +434,7 @@
   color: var(--green);
 }
 .change-symbol.deleted {
-  color: var(--coral);
+  color: var(--error);
 }
 .checkpoint-change > div {
   flex: 1;
@@ -542,7 +542,7 @@
   position: sticky;
   bottom: 0;
   background: var(--panel);
-  border: 1px solid var(--coral);
+  border: 1px solid var(--error);
   border-radius: 9px;
   padding: 22px;
   box-shadow: var(--shadow);
@@ -551,7 +551,7 @@
 }
 .restore-confirm .eyebrow {
   font-size: 8px;
-  color: var(--coral);
+  color: var(--error);
 }
 .restore-confirm h3 {
   font-size: 18px;

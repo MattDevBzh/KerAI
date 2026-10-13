@@ -1,0 +1,361 @@
+/* Only native appearance consumes VS Code colors. Every surface uses studio tokens. */
+:root {
+  --input-fg: var(--vscode-input-foreground, var(--fg));
+  --placeholder: var(--vscode-input-placeholderForeground, var(--muted));
+  --focus: var(--vscode-focusBorder, var(--apricot));
+  --link: var(--vscode-textLink-foreground, var(--apricot));
+  --on-accent: #202322;
+  --accent-hover: #f4b6a1;
+  --error: var(--vscode-errorForeground, #ffaaa5);
+  --success-bg: color-mix(in srgb, var(--green) 9%, var(--panel));
+  --error-bg: color-mix(in srgb, var(--error) 9%, var(--panel));
+}
+html[data-studio-theme-effective='auto'] body.vscode-light {
+  --on-accent: #ffffff;
+  --accent-hover: #963d2d;
+  --coral: #a5402e;
+  --error: var(--vscode-errorForeground, #a12e32);
+  --apricot: #82501b;
+  --lavender: #6a4c92;
+  --green: #296446;
+  color-scheme: light;
+}
+html[data-studio-theme-effective='auto']:has(body.vscode-light),
+html[data-studio-theme-effective='auto']:has(body.vscode-high-contrast-light) {
+  color-scheme: light;
+}
+html[data-studio-theme-effective='aube'],
+html[data-studio-theme='aube']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-aube {
+  --bg: #faf5ee;
+  --side: #eee4d8;
+  --panel: #fffaf4;
+  --panel-soft: #f0e5d9;
+  --fg: #302823;
+  --muted: #665549;
+  --border: #c4b4a4;
+  --input-border: #8b7766;
+  --coral: #a33e2c;
+  --error: #a12e32;
+  --apricot: #80501a;
+  --lavender: #704b88;
+  --green: #376247;
+  --on-accent: #fffaf4;
+  --accent-hover: #893121;
+  color-scheme: light;
+}
+html[data-studio-theme-effective='brume'],
+html[data-studio-theme='brume']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-brume {
+  --bg: #f1f5fb;
+  --side: #e0e8f3;
+  --panel: #f9fbff;
+  --panel-soft: #e6edf7;
+  --fg: #1d2d42;
+  --muted: #4d6179;
+  --border: #b4c1d2;
+  --input-border: #71839c;
+  --coral: #275aa3;
+  --error: #a12e32;
+  --apricot: #785320;
+  --lavender: #624596;
+  --green: #28614e;
+  --on-accent: #ffffff;
+  --accent-hover: #204984;
+  color-scheme: light;
+}
+html[data-studio-theme-effective='sauge'],
+html[data-studio-theme='sauge']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-sauge {
+  --bg: #f2f6ee;
+  --side: #e2e9d9;
+  --panel: #fafcf6;
+  --panel-soft: #e8eedf;
+  --fg: #28352a;
+  --muted: #52624b;
+  --border: #b5c2aa;
+  --input-border: #76896c;
+  --coral: #38623f;
+  --error: #a12e32;
+  --apricot: #805029;
+  --lavender: #6d4e83;
+  --green: #285f45;
+  --on-accent: #ffffff;
+  --accent-hover: #294b2e;
+  color-scheme: light;
+}
+html[data-studio-theme-effective='minuit'],
+html[data-studio-theme='minuit']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-minuit {
+  --bg: #111725;
+  --side: #171f33;
+  --panel: #1c263d;
+  --panel-soft: #26324b;
+  --fg: #eef2ff;
+  --muted: #b7c4e0;
+  --border: #465774;
+  --input-border: #7b8eb1;
+  --coral: #b8b5ff;
+  --error: #ffb1ad;
+  --apricot: #efc58c;
+  --lavender: #b8c6ff;
+  --green: #9bd4bb;
+  --on-accent: #182039;
+  --accent-hover: #cecbff;
+  color-scheme: dark;
+}
+html[data-studio-theme-effective='foret'],
+html[data-studio-theme='foret']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-foret {
+  --bg: #13201c;
+  --side: #182b24;
+  --panel: #20362d;
+  --panel-soft: #2a4438;
+  --fg: #f1f6ed;
+  --muted: #c0cebb;
+  --border: #4c6b59;
+  --input-border: #819f85;
+  --coral: #f4bd96;
+  --error: #ffb1ad;
+  --apricot: #e8ce94;
+  --lavender: #cec1ef;
+  --green: #afdbb1;
+  --on-accent: #253428;
+  --accent-hover: #ffd0b0;
+  color-scheme: dark;
+}
+html[data-studio-theme-effective]:not([data-studio-theme-effective='auto']),
+html[data-studio-theme]:not([data-studio-theme='auto']):not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ) {
+  --input-fg: var(--fg);
+  --placeholder: var(--muted);
+  --focus: var(--coral);
+  --link: var(--coral);
+}
+/* High contrast keeps VS Code's palette and reinforces all interactive outlines. */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --coral: var(--vscode-textLink-foreground, var(--fg));
+  --apricot: var(--vscode-textLink-foreground, var(--fg));
+  --lavender: var(--vscode-textLink-foreground, var(--fg));
+  --green: var(--vscode-textLink-foreground, var(--fg));
+  --on-accent: var(--vscode-editor-background, var(--bg));
+  --accent-hover: var(--coral);
+  --focus: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, var(--fg)));
+}
+.appearance-card {
+  margin-bottom: 24px;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.theme-choice {
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+.theme-choice input {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--coral);
+  z-index: 1;
+}
+.theme-choice-content {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 9px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--bg);
+  height: 100%;
+}
+.theme-choice:hover .theme-choice-content {
+  background: var(--panel-soft);
+}
+.theme-choice.selected .theme-choice-content {
+  border-color: var(--coral);
+  box-shadow: inset 0 0 0 1px var(--coral);
+}
+.theme-choice:has(input:focus-visible) .theme-choice-content {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.theme-choice input:focus-visible {
+  outline: none;
+}
+.theme-grid:disabled .theme-choice {
+  cursor: wait;
+}
+.theme-preview {
+  display: flex;
+  height: 72px;
+  margin-right: 28px;
+  overflow: hidden;
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+  background: var(--bg);
+  pointer-events: none;
+}
+.theme-preview-sidebar {
+  width: 25%;
+  background: var(--side);
+  border-right: 1px solid var(--border);
+  padding: 10px 7px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+.theme-preview-sidebar i {
+  height: 4px;
+  background: var(--muted);
+  border-radius: 2px;
+}
+.theme-preview-sidebar i:first-child {
+  background: var(--coral);
+}
+.theme-preview-workspace {
+  flex: 1;
+  padding: 10px;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+}
+.theme-preview-workspace > i {
+  height: 5px;
+  width: 65%;
+  background: var(--fg);
+  border-radius: 2px;
+}
+.theme-preview-workspace > span {
+  display: flex;
+  gap: 6px;
+}
+.theme-preview-workspace > span i {
+  flex: 1;
+  height: 28px;
+  background: var(--panel);
+  border: 1px solid var(--input-border);
+  border-top: 3px solid var(--coral);
+  border-radius: 3px;
+}
+.theme-preview-workspace > span i:last-child {
+  border-top-color: var(--green);
+}
+.theme-choice-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.theme-choice-title strong {
+  flex: 1;
+}
+.theme-choice-title > svg:last-child {
+  color: var(--coral);
+  flex-shrink: 0;
+}
+.theme-choice-description {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.theme-help,
+.theme-contrast-note {
+  margin-top: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+  font-size: 12px;
+}
+.theme-contrast-note {
+  color: var(--fg);
+  border-left: 3px solid var(--focus);
+  padding-left: 12px;
+}
+.theme-feedback {
+  min-height: 20px;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--green);
+}
+.theme-feedback[role='alert'] {
+  color: var(--error);
+}
+@media (max-width: 650px) {
+  .theme-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .theme-choice-content {
+    padding: 10px;
+  }
+  .theme-choice-description {
+    font-size: 10px;
+  }
+  .theme-preview {
+    margin-right: 20px;
+    height: 62px;
+  }
+  .theme-preview-sidebar {
+    padding: 8px 4px;
+  }
+  .theme-preview-workspace {
+    padding: 8px 6px;
+  }
+}
+@media (forced-colors: active) {
+  .theme-choice.selected .theme-choice-content {
+    outline: 2px solid Highlight;
+  }
+  .theme-preview {
+    forced-color-adjust: auto;
+  }
+}
+
+/* The webview injects native body/markdown defaults; set the cockpit's own surfaces. */
+body {
+  color: var(--fg);
+  background: var(--bg);
+}
+kbd {
+  color: var(--fg);
+  background: var(--panel-soft);
+  border-color: var(--input-border);
+}
+blockquote {
+  color: var(--fg);
+  background: var(--panel-soft);
+  border-color: var(--lavender);
+}
+/* The automatic swatch shows the editor even when the cockpit has its own palette. */
+.theme-preview-auto {
+  --bg: var(--vscode-editor-background, #181b1c);
+  --side: var(--vscode-sideBar-background, #1d2021);
+  --panel: var(--vscode-editorWidget-background, #202425);
+  --fg: var(--vscode-foreground, #e8e7e2);
+  --muted: var(--vscode-descriptionForeground, #a3aaa8);
+  --border: var(--vscode-panel-border, #353b3b);
+  --input-border: var(--vscode-input-border, #7b8b87);
+  --coral: var(--vscode-textLink-foreground, #eea58f);
+  --green: #9fc3ac;
+}
+body.vscode-light .theme-preview-auto {
+  --green: #296446;
+}

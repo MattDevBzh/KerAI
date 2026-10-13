@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { parseMessage } from '../src/host/messages';
+import { normalizeTheme, THEME_IDS } from '../src/shared/themes';
 
 describe('webview protocol boundary', () => {
+  it('accepts only named themes and bounded correlated requests', () => {
+    for (const theme of THEME_IDS) {
+      const request = { type: 'setTheme', theme, requestId: 'theme-change' };
+      expect(parseMessage(request)).toEqual(request);
+      expect(normalizeTheme(theme)).toBe(theme);
+    }
+    for (const invalid of [
+      { type: 'setTheme', theme: 'dark', requestId: 'theme-change' },
+      { type: 'setTheme', theme: 'aube' },
+      { type: 'setTheme', theme: 'aube', requestId: '' },
+      { type: 'setTheme', theme: 'aube', requestId: 'x'.repeat(151) },
+      { type: 'setTheme', theme: 'aube', requestId: 'theme-change', key: 'cliPath' },
+      { type: 'setTheme', theme: 'aube', requestId: 'theme-change', target: 'workspace' },
+    ])
+      expect(() => parseMessage(invalid)).toThrow();
+    for (const value of [undefined, null, {}, 0, 'dark', 'aube" onload="arbitrary'])
+      expect(normalizeTheme(value)).toBe('auto');
+  });
   it('requires explicit bounded restore paths, a checkpoint id and a full fingerprint', () => {
     const restore = {
       type: 'restoreCheckpoint',

@@ -27,10 +27,10 @@
   line-height: 1.6;
 }
 .devops-card {
-  border: 1px solid var(--vscode-panel-border, #393b46);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
-  background: var(--vscode-editor-background, #191a22);
+  background: var(--panel);
 }
 .devops-card summary {
   cursor: pointer;
@@ -60,9 +60,9 @@
 .devops-panel select {
   box-sizing: border-box;
   width: 100%;
-  background: var(--vscode-input-background, #242631);
+  background: var(--panel-soft);
   color: inherit;
-  border: 1px solid var(--vscode-input-border, #444654);
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   padding: 9px;
   font: inherit;
@@ -75,9 +75,9 @@
   cursor: pointer;
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid var(--vscode-button-border, #565967);
+  border: 1px solid var(--input-border);
   color: inherit;
-  background: var(--vscode-button-secondaryBackground, #313443);
+  background: var(--panel-soft);
 }
 .devops-panel button:disabled {
   opacity: 0.45;
@@ -96,18 +96,18 @@
   min-width: 160px;
 }
 .devops-error {
-  border: 1px solid #bd6060;
-  background: #a030301f;
+  border: 1px solid var(--error);
+  background: var(--error-bg);
   border-radius: 8px;
   padding: 16px;
 }
 .devops-notice {
-  border-left: 3px solid #dbad53;
+  border-left: 3px solid var(--apricot);
   padding-left: 12px;
 }
 .devops-tag {
   font-size: 11px;
-  border: 1px solid var(--vscode-panel-border, #454856);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 2px 7px;
   display: inline-block;
@@ -137,7 +137,7 @@
   max-height: 400px;
   overflow: auto;
   padding: 12px;
-  background: #0002;
+  background: var(--panel-soft);
   font-size: 12px;
 }
 .delivery-conversation {
@@ -145,29 +145,29 @@
   overflow: auto;
 }
 .delivery-conversation article {
-  border-left: 3px solid #648ecc;
+  border-left: 3px solid var(--lavender);
   padding: 8px 14px;
   margin: 10px 0;
 }
 .delivery-conversation .user {
-  border-color: #85858e;
-  background: #ffffff04;
+  border-color: var(--muted);
+  background: var(--panel-soft);
 }
 .delivery-conversation p {
   white-space: pre-wrap;
   margin: 5px 0;
 }
 .delivery-preview {
-  border-color: #648ecc;
-  background: #648ecc0c;
+  border-color: var(--lavender);
+  background: var(--panel-soft);
 }
 .devops-panel a {
-  color: var(--vscode-textLink-foreground, #86b7ff);
+  color: var(--link);
 }
 .devops-pr-link {
   margin-top: 16px;
   padding-top: 8px;
-  border-top: 1px solid var(--vscode-panel-border, #393b46);
+  border-top: 1px solid var(--border);
 }
 @media (max-width: 850px) {
   .devops-columns,
@@ -445,7 +445,7 @@
   margin: 12px auto 20px;
 }
 .devops-dashboard :is(button, a, input, select, summary):focus-visible {
-  outline: 2px solid var(--vscode-focusBorder, var(--devops-accent));
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 body:is(.vscode-high-contrast, .vscode-high-contrast-light)

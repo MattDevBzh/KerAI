@@ -1,4 +1,6 @@
 import type { DevOpsClientMessage, DevOpsState } from './devops';
+import type { ThemeId } from './themes';
+export * from './themes';
 export * from './devops';
 import type {
   McpServerConfig,
@@ -238,6 +240,7 @@ export interface StudioState {
 }
 export type ClientMessage =
   | DevOpsClientMessage
+  | { type: 'setTheme'; theme: ThemeId; requestId: string }
   | { type: 'installQualityKit'; featureId?: string }
   | { type: 'openQualityAttachment'; featureId: string; evidenceId: string; attachmentId: string }
   | {
@@ -363,6 +366,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'themeState'; theme: ThemeId; requestId?: string; error?: string }
   | ({ type: 'profileSaveResult'; requestId: string; error?: string } & Partial<
       import('./profiles').ProfileSaveResult
     >)

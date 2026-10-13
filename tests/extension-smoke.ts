@@ -4,10 +4,12 @@ import { readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ClientMessage, StudioState, CheckpointComparison } from '../src/shared/types';
 import type { DevOpsConfig, DevOpsState } from '../src/shared/devops';
+import { THEME_IDS, type ThemeId } from '../src/shared/themes';
 
 interface Api {
   getState(): StudioState | undefined;
   getUiReady(): boolean;
+  getTheme(): ThemeId;
   getDevOpsState(): DevOpsState | undefined;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
 }
@@ -15,6 +17,39 @@ export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension<Api>('MattDevBzh.feature-studio');
   assert.ok(extension, 'Extension found in the real VS Code extension host');
   const api = await extension.activate();
+  assert.equal(api.getState(), undefined, 'Opening the cockpit is independent of theme changes');
+  assert.equal(api.getTheme(), 'auto', 'The isolated user profile starts in automatic mode');
+  for (const theme of THEME_IDS) {
+    await api.dispatch({ type: 'setTheme', theme, requestId: `smoke-theme-${theme}` });
+    const config = vscode.workspace
+      .getConfiguration('featureStudio')
+      .inspect<ThemeId>('appearance.theme');
+    assert.equal(config?.globalValue, theme, 'Theme choice is saved to the isolated user profile');
+    assert.equal(config?.workspaceValue, undefined, 'Theme choice creates no workspace setting');
+    assert.equal(config?.workspaceFolderValue, undefined);
+    assert.equal(api.getTheme(), theme);
+    assert.equal(
+      api.getState(),
+      undefined,
+      'Changing appearance never initializes the business store',
+    );
+  }
+  await assert.rejects(
+    api.dispatch({
+      type: 'setTheme',
+      theme: 'arbitrary',
+      requestId: 'bad-theme',
+    } as unknown as ClientMessage),
+  );
+  await assert.rejects(
+    api.dispatch({
+      type: 'setTheme',
+      theme: 'aube',
+      requestId: 'bad-key',
+      key: 'cliPath',
+    } as unknown as ClientMessage),
+  );
+  assert.equal(api.getTheme(), 'foret', 'Invalid requests preserve the recorded choice');
   await vscode.commands.executeCommand('featureStudio.open');
   for (let retry = 0; retry < 100 && !api.getUiReady(); retry++)
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -72,6 +107,23 @@ export async function run(): Promise<void> {
     description: 'No Copilot prompt is sent.',
     workflowId: 'feature',
   });
+  const beforeThemeChange = api.getState();
+  const beforeThemeIndex = await readFile(join(source, '.git', 'index'));
+  await Promise.all([
+    api.dispatch({ type: 'setTheme', theme: 'aube', requestId: 'theme-fast-first' }),
+    api.dispatch({ type: 'setTheme', theme: 'minuit', requestId: 'theme-fast-last' }),
+  ]);
+  assert.equal(api.getTheme(), 'minuit', 'Successive changes persist in requested order');
+  assert.deepEqual(
+    api.getState(),
+    beforeThemeChange,
+    'Appearance changes preserve all business state',
+  );
+  assert.deepEqual(await readFile(join(source, '.git', 'index')), beforeThemeIndex);
+  await vscode.workspace
+    .getConfiguration('featureStudio')
+    .update('appearance.theme', 'foret', vscode.ConfigurationTarget.Global);
+  assert.equal(api.getTheme(), 'foret', 'External user setting changes are read authoritatively');
   let state = api.getState()!;
   const feature = state.features.at(-1)!;
   assert.equal(feature.steps.length, 5);
@@ -341,6 +393,11 @@ export async function run(): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   await vscode.commands.executeCommand('featureStudio.open');
   assert.equal(
+    api.getTheme(),
+    'foret',
+    'The user theme survives closing and reopening the cockpit',
+  );
+  assert.equal(
     api.getState()?.features.find((f) => f.id === isolated.id)?.worktree?.path,
     isolated.worktree.path,
   );
@@ -371,6 +428,6 @@ export async function run(): Promise<void> {
     'Smoke extension host',
   );
   console.log(
-    'PASS: activation, panel/CSP, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
+    'PASS: activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
   );
 }

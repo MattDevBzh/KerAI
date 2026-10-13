@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2 — 2026-10-13
+
+- Ajoute trois thèmes clairs — Aube (crème et corail), Brume (bleu et ardoise), Sauge (vert et lin) — et deux thèmes sombres — Minuit (bleu et indigo), Forêt (vert et cuivre) — en plus du mode automatique Suivre VS Code.
+- Ajoute un sélecteur de six cartes en haut de Réglages. Le choix s’applique après confirmation de son enregistrement, sans redémarrage, et persiste dans le réglage utilisateur VS Code `featureStudio.appearance.theme`, sans écriture projet ni invalidation du travail en cours.
+- Donne priorité au contraste élevé de VS Code tout en conservant la préférence choisie. La démonstration permet un aperçu pendant la session sans enregistrer de préférence.
+
 ## 0.4.1 — 2026-10-13
 
 - Ajoute les sous-menus Azure DevOps **PR** et **Tickets**, toujours visibles et utilisables sans session active, avec accès à la configuration même sans connexion. Le menu parent conserve son aperçu.

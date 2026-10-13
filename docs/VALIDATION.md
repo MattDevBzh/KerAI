@@ -1,5 +1,22 @@
 # Validation et limites — v0.4, 13 octobre 2026
 
+## Vérifications locales de v0.4.2
+
+La version 0.4.2 ajoute les thèmes clairs **Aube, Brume et Sauge**, les thèmes sombres **Minuit et Forêt** et le choix **Suivre VS Code** dans les Réglages. La recette locale du 13 octobre 2026 donne les résultats suivants :
+
+| Périmètre | Résultat observé |
+| --- | --- |
+| Format, TypeScript et build | `npm run format:check`, `npm run typecheck` et `npm run build` réussis |
+| Métier et intégration | **341 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
+| Interface | **71 scénarios Playwright réussis**, dont 8 consacrés aux thèmes |
+| Rendu visuel | Cinq palettes capturées en Réglages et sur le dashboard à 1440 et 390 px ; contrôle visuel et absence de débordement |
+| Accessibilité | Navigation clavier avec sauvegarde différée et focus conservé ; contrastes des paires de texte vérifiées ≥ 4,5:1 et bordures de contrôles ≥ 3:1 ; modes contraste élevé clair/sombre et couleurs forcées couverts |
+| Vrai hôte VS Code Insiders | Six choix enregistrés dans un profil utilisateur isolé, ordre des écritures, modification externe et réouverture vérifiés ; index Git et état des sessions conservés |
+
+Les tests d’interface utilisent les couleurs natives de VS Code dans les deux sens : thème personnel clair avec éditeur sombre, et thème personnel sombre avec éditeur clair. Le contraste élevé garde la priorité sans effacer la préférence. Les erreurs de sauvegarde conservent le choix précédent ; la préférence reste indépendante des brouillons et des agents en cours. Le protocole accepte uniquement les six identifiants et l’écriture cible les réglages personnels, sans fichier de configuration dans le projet. La démonstration ne conserve le choix que pendant sa session.
+
+Les contrôles de contraste portent sur les éléments et paires vérifiés, sans constituer une certification d’accessibilité exhaustive. Aucun prompt Copilot payant ni appel au compte Azure DevOps réel n’a été effectué. Cette recette locale ne confirme aucune nouvelle exécution CI, aucun essai Windows ni publication distante. Les dépendances n’ont pas changé. Les résultats des versions précédentes restent historiques.
+
 ## Vérifications locales de v0.4.1
 
 La version 0.4.1 ajoute les sous-menus permanents **PR** et **Tickets** à Azure DevOps, leurs tableaux dédiés et les métadonnées facultatives récupérées dans les appels existants. La recette locale du 13 octobre 2026 donne les résultats suivants :
