@@ -1,0 +1,108 @@
+{
+  "id": "devops",
+  "name": "DevOps — du besoin au test vérifié",
+  "description": "Challenge, plan, modifications locales, relecture, guide hors production et vérification du test manuel.",
+  "icon": "workflow",
+  "steps": [
+    {
+      "id": "challenge",
+      "name": "Challenge de la demande",
+      "description": "Confronter le besoin au code DevOps du dépôt et clarifier les décisions.",
+      "agentId": "fs-devops-challenge",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "devops-challenge"
+      ],
+      "maxAttempts": 5,
+      "artifact": "devops-challenge.md",
+      "dependsOn": []
+    },
+    {
+      "id": "plan",
+      "name": "Plan technique",
+      "description": "Définir les changements, les faits Azure DevOps utiles et les critères de test.",
+      "agentId": "fs-devops-plan",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "devops-plan",
+        "devops-azure-preflight"
+      ],
+      "maxAttempts": 5,
+      "artifact": "devops-plan.md",
+      "dependsOn": [
+        "challenge"
+      ]
+    },
+    {
+      "id": "implement",
+      "name": "Modifications locales",
+      "description": "Implémenter le plan approuvé sans publication ni exécution distante.",
+      "agentId": "fs-devops-implement",
+      "policy": "workspace-write",
+      "model": "",
+      "skills": [
+        "devops-implement"
+      ],
+      "maxAttempts": 5,
+      "artifact": "devops-implement.md",
+      "dependsOn": [
+        "plan"
+      ]
+    },
+    {
+      "id": "review",
+      "name": "Relecture indépendante",
+      "description": "Relire le diff réel, les effets CI/CD et les chemins d’échec.",
+      "agentId": "fs-devops-review",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "devops-review",
+        "devops-azure-preflight"
+      ],
+      "maxAttempts": 5,
+      "artifact": "devops-review.md",
+      "dependsOn": [
+        "implement"
+      ]
+    },
+    {
+      "id": "test-guide",
+      "name": "Guide de test hors production",
+      "description": "Préparer la procédure manuelle, les cibles isolées, les preuves attendues et le nettoyage.",
+      "agentId": "fs-devops-test-guide",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "devops-test-guide",
+        "devops-azure-preflight"
+      ],
+      "maxAttempts": 5,
+      "artifact": "devops-test-guide.md",
+      "dependsOn": [
+        "review"
+      ]
+    },
+    {
+      "id": "validate",
+      "name": "Validation du test",
+      "description": "Après le test manuel, vérifier le commit, le build et les résultats depuis les preuves hôte.",
+      "agentId": "fs-devops-validate",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "devops-validate",
+        "devops-azure-preflight"
+      ],
+      "maxAttempts": 5,
+      "artifact": "devops-validate.md",
+      "dependsOn": [
+        "test-guide"
+      ],
+      "requiredDevOpsEvidence": true,
+      "askBeforeRun": true
+    }
+  ]
+}

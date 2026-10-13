@@ -159,7 +159,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const token = await vscode.window.showInputBox({
               title: 'Connexion Azure DevOps',
               prompt:
-                'Jeton personnel : Work Items (lecture), Code (lecture et écriture). Stocké uniquement dans SecretStorage.',
+                'Lecture : Code, Work Items, Build et Test Management selon tes besoins. Écriture Code uniquement pour créer des PR. Stocké dans SecretStorage.',
               password: true,
               ignoreFocusOut: true,
             });
@@ -197,6 +197,16 @@ export async function activate(context: vscode.ExtensionContext) {
         });
         devops = controller;
         await controller.initialize();
+        next.devopsInspector = (signal) => {
+          next.assertTrusted();
+          return controller.inspector(signal);
+        };
+        next.devopsProjectKey = () => {
+          const config = controller.getState().config;
+          return config
+            ? `${config.organization}/${config.project}/${config.repository}`.toLowerCase()
+            : undefined;
+        };
         return next;
       } catch (error) {
         await newLease.release();
@@ -610,6 +620,92 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         output.appendLine(`Migration utilisateur\n${JSON.stringify(result, null, 2)}`);
         if (result.conflicts.length) output.show(true);
+        return;
+      }
+      case 'kitCatalog':
+      case 'kitPreview':
+      case 'kitCompose':
+      case 'kitImport':
+      case 'kitExport':
+      case 'kitInstall': {
+        try {
+          current.assertTrusted();
+          if (message.type === 'kitCatalog') {
+            send({
+              type: 'kitResult',
+              requestId: message.requestId,
+              catalog: await current.kits.catalog(),
+            });
+          } else if (message.type === 'kitPreview' || message.type === 'kitCompose') {
+            const bundle =
+              message.type === 'kitCompose'
+                ? await current.kits.compose(message.metadata, message.roots)
+                : message.source === 'bundled'
+                  ? await current.kits.preset(message.kitId)
+                  : await current.kits.saved(message.kitId);
+            send({
+              type: 'kitResult',
+              requestId: message.requestId,
+              preview: await current.kits.preview(bundle),
+            });
+          } else if (message.type === 'kitImport') {
+            const selected = await vscode.window.showOpenDialog({
+              canSelectMany: false,
+              canSelectFolders: false,
+              filters: { 'Kit Feature Studio': ['json'] },
+              title: 'Choisir un kit .fskit.json',
+            });
+            if (!selected?.[0])
+              send({ type: 'kitResult', requestId: message.requestId, cancelled: true });
+            else
+              send({
+                type: 'kitResult',
+                requestId: message.requestId,
+                preview: await current.kits.preview(
+                  await current.kits.readBundle(selected[0].fsPath),
+                ),
+              });
+          } else if (message.type === 'kitExport') {
+            const bundle = current.kits.bundle(message.token);
+            const destination = await vscode.window.showSaveDialog({
+              defaultUri: vscode.Uri.file(
+                path.join(current.workspacePath, `${bundle.metadata.id}.fskit.json`),
+              ),
+              filters: { 'Kit Feature Studio': ['json'] },
+              title: 'Exporter le kit',
+            });
+            if (!destination)
+              send({ type: 'kitResult', requestId: message.requestId, cancelled: true });
+            else {
+              current.assertConfigurable();
+              await writeFile(destination.fsPath, JSON.stringify(bundle, null, 2) + '\n');
+              await current.kits.remember(bundle);
+              send({
+                type: 'kitResult',
+                requestId: message.requestId,
+                message: `Kit exporté : ${destination.fsPath}`,
+                catalog: await current.kits.catalog(),
+              });
+            }
+          } else {
+            current.assertConfigurable();
+            const result = await current.kits.install(message.token);
+            await current.refresh();
+            send({
+              type: 'kitResult',
+              requestId: message.requestId,
+              message: result,
+              preview: await current.kits.preview(current.kits.bundle(message.token)),
+              catalog: await current.kits.catalog(),
+            });
+          }
+        } catch (error) {
+          send({
+            type: 'kitResult',
+            requestId: message.requestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         return;
       }
       case 'installKit': {

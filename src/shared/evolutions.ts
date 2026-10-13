@@ -20,6 +20,7 @@ export interface McpCatalog {
   checkedAt?: string;
 }
 export interface RunLaunchOptions {
+  devopsTest?: import('./devopsKit').DevOpsTestTarget;
   initialContext: string;
   mcpServerIds: string[];
   memoryIds: string[];
@@ -93,6 +94,7 @@ export interface AutopilotState extends AutopilotConfig {
   updatedAt: string;
 }
 export interface TestEvidence {
+  devops?: import('./devopsKit').DevOpsEvidence;
   quality?: import('./quality').QualityEvidence;
   id: string;
   source: 'host';

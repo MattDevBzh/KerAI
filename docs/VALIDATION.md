@@ -1,4 +1,57 @@
-# Validation et limites — v0.4, 13 octobre 2026
+# Validation et limites — v1.0.0, 13 octobre 2026
+
+## Vérifications locales de v1.0.0
+
+Cette version réunit le kit DevOps, ses six avatars et l’écran de composition/import/export des kits. Recette exécutée sur macOS, Node 24.1.0 et VS Code Insiders 1.141.0.
+
+| Périmètre | Résultat observé |
+| --- | --- |
+| Format, TypeScript et build | `npm run check` réussi |
+| Métier et intégration | **373 tests Vitest réussis**, 3 spécifiques à Windows ignorés sur macOS |
+| Interface Chromium | **76 scénarios Playwright réussis**, dont les trois parcours de la bibliothèque de kits et les deux du kit DevOps |
+| Vrai hôte VS Code Insiders | Smoke réussi : activation, CSP, catalogue DevOps, six identités d’avatars et leurs 18 fichiers, installation utilisateur, profils, persistance, Git et restaurations |
+| Rendu | Bibliothèque et composition inspectées à 1440 px ; import avec conflit contrôlé à 390 px sans débordement |
+| Avatars DevOps | Six sprites source inspectés, exports PNG 192×192 et GIF de travail à quatre images vérifiés |
+| Ressources de skills | Huit skills DevOps validées ; licence Microsoft et provenance vérifiées et embarquées |
+
+Les nouveaux tests utilisent le vrai `KitService` avec des répertoires temporaires : sélection transitive, ressources partagées personnalisées, export de fichier et réimport, installation puis relecture du registre, conflits apparus après aperçu, révisions multiples, kit sauvegardé invalide, checksum erroné, dépendance ou référence locale absente, collision fichier/dossier, chemins interdits et liens symboliques. Les boîtes de dialogue natives de choix de fichiers sont remplacées par un pont dans les scénarios Chromium ; leurs opérations de fichiers et leur validation métier sont réelles. Le smoke VS Code couvre l’activation et le catalogue, sans pilote UI des boîtes natives.
+
+Les lectures Azure DevOps restent testées avec des fixtures HTTP : **aucun test sur un compte Azure DevOps réel ni prompt Copilot payant n’a été lancé pour cette recette**. L’isolation effective du test hors production exige la préparation humaine et les preuves du projet concerné. Voir [les limites du validateur](DEVOPS-KIT.md#ce-que-le-verdict-couvre).
+
+La CI configure Node 22 sous Linux et Windows, vérifie les empreintes des VSIX livrés, puis exécute les suites prévues dans `.github/workflows/ci.yml`. Son résultat distant est consultable dans [GitHub Actions](https://github.com/MattDevBzh/KerAI/actions/workflows/ci.yml) ; les résultats locaux ci-dessus ne s’y substituent pas. La release v1.0.0 fournit le VSIX et son empreinte de téléchargement.
+
+Les validations des versions antérieures restent ci-dessous comme historique.
+
+## Vérifications locales de v0.5.1
+
+Le kit comprend désormais huit skills. `devops-azure-preflight` adapte `azure-validate` 1.2.3 de Microsoft aux étapes de plan, relecture, guide et validation, avec sources figées et licence MIT embarquée.
+
+| Périmètre du complément | Résultat observé |
+| --- | --- |
+| TypeScript | `npm run typecheck` réussi |
+| Registre, migration, contexte et DevOps | **50 tests Vitest ciblés réussis** ; injection unique de la nouvelle skill dans le contexte des quatre étapes, avant et après installation utilisateur ; copie de sa licence et de sa provenance |
+| Interface du parcours DevOps | **2 scénarios Playwright réussis** : duplication et lancement manuel avec contrat de preuve |
+| Skills | **8 skills validées** avec `quick_validate.py` |
+
+La recette complète de la v0.5.0 figure ci-dessous ; le complément porte sur les ressources du kit et leurs associations. Aucune commande IaC n’a été exécutée pour cette adaptation, et son interprétation par un modèle sur un projet Azure réel reste à éprouver. Les profils utilisateur existants restent prioritaires : les associations à ajouter sont expliquées dans [Kit DevOps](DEVOPS-KIT.md).
+
+## Vérifications locales de v0.5.0
+
+Le kit DevOps apporte six agents, sept skills, un parcours et un script autonome partageant le collecteur en lecture seule avec l’extension. Le test hors production est mis en place et exécuté manuellement, puis sa vérification exige des références humaines et des preuves hôte.
+
+| Périmètre | Résultat observé |
+| --- | --- |
+| Format, TypeScript et build | `npm run check` réussi |
+| Métier et intégration | **363 tests Vitest réussis**, 3 ignorés sur cette plateforme ; dont 18 nouveaux scénarios DevOps |
+| Interface | **73 scénarios Playwright réussis**, dont les nouveaux parcours de duplication et de lancement DevOps ; formulaire contrôlé à 390 px |
+| Skills et script | Sept skills validées avec `quick_validate.py` ; copie utilisateur du script réellement exécutée avec `--help`, conflits personnels conservés |
+| Vrai hôte VS Code Insiders | Smoke réussi, avec présence des six étapes DevOps et du validateur dans le catalogue ; installation utilisateur et parcours hôtes existants vérifiés |
+
+Les fixtures HTTP vérifient les routes GET, le périmètre du dépôt, l’absence des valeurs de variables et des URL de téléchargement, la pagination, les données tronquées et les erreurs de droits. Les cas négatifs couvrent mauvais pipeline/SHA/branche, stage ignoré ou échoué malgré un build vert, reprise de stage échouée, absence d’artefact ou de tests, résultats partiels et incohérence des fichiers locaux. Les tests d’intégration couvrent la persistance, le rattachement de la preuve à la tentative, le contrat de relecture, l’arrêt du pilote et l’invalidation de l’aperçu.
+
+Les réponses Azure DevOps sont des fixtures : **aucun compte Azure DevOps réel ni prompt Copilot payant n’a été utilisé pour cette recette**. Les droits réels du PAT et l’interprétation du guide par un modèle restent à éprouver sur ton projet. Cette validation locale ne constitue ni une exécution CI ni une publication distante. Les limites du contrôle d’isolation et des données collectées sont détaillées dans [Kit DevOps](DEVOPS-KIT.md).
+
+Les anciennes sessions restent lisibles. Les nouveaux champs du parcours et des preuves nécessitent la v0.5.0 pour rouvrir les sessions DevOps ; les anciens binaires ne connaissent pas ce contrat.
 
 ## Vérifications locales de v0.4.4
 

@@ -130,6 +130,10 @@ export class DevOpsController {
       throw new Error('Configure l’organisation, le projet et le dépôt Azure DevOps dans ce menu.');
     return new AzureDevOps(this.state.config, this.options.secrets, this.options.http);
   }
+  inspector(signal?: AbortSignal) {
+    if (this.disposed) throw new Error('La connexion Azure DevOps est fermée.');
+    return this.api().inspector(signal);
+  }
   initialize(): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('Le menu de livraison est fermé.'));
     if (this.initialization) return this.initialization;

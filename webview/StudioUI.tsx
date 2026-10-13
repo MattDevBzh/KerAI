@@ -31,6 +31,7 @@ import {
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { QualityPanel } from './QualityUI';
+import { DevOpsEvidencePanel } from './DevOpsKitUI';
 import type {
   AcceptanceCriterion,
   Attempt,
@@ -718,6 +719,7 @@ export function EvidencePanel({
   const evidence = attempt?.evidence ?? [];
   return (
     <div className="evidence-panel">
+      <DevOpsEvidencePanel evidence={evidence} />
       <QualityPanel
         evidence={evidence}
         onOpenAttachment={(evidenceId, attachmentId) => {
@@ -763,7 +765,11 @@ export function EvidencePanel({
                 <strong>{e.name}</strong>
                 <small>
                   {stamp(e.startedAt)} ·{' '}
-                  {e.source === 'host' ? 'Exécuté par le host' : 'Source non confirmée'}
+                  {e.devops
+                    ? 'Collecté par le host · test exécuté manuellement'
+                    : e.source === 'host'
+                      ? 'Exécuté par le host'
+                      : 'Source non confirmée'}
                 </small>
               </span>
               <span className="evidence-result">
@@ -1919,6 +1925,17 @@ function WorkflowEditor({
                     </select>
                   </label>
                 </div>
+                <label className="inline-check">
+                  <input
+                    type="checkbox"
+                    checked={
+                      step.requiredDevOpsEvidence === true || step.agentId === 'fs-devops-validate'
+                    }
+                    disabled={step.agentId === 'fs-devops-validate'}
+                    onChange={(e) => update({ requiredDevOpsEvidence: e.target.checked })}
+                  />
+                  <span>Exiger une preuve du test DevOps manuel</span>
+                </label>
                 <label className="field">
                   <span>Rapport qualité requis</span>
                   <select

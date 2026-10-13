@@ -1,5 +1,6 @@
 import type { QualityKind } from '../shared/quality';
 import type { Attempt, Feature, FeatureStep, TestEvidence } from '../shared/types';
+import { needsDevOpsEvidence } from '../shared/devopsKit';
 
 export function currentTestEvidence(attempt: Attempt): TestEvidence[] {
   return [...new Map((attempt.evidence ?? []).map((proof) => [proof.commandId, proof])).values()];
@@ -91,9 +92,16 @@ export function approvalBlockers(
     blockers.push('La relecture demande des corrections.');
   const requiresReview =
     feature.autopilot?.reviewStepId === step.id ||
-    (['feature', 'quality-feature'].includes(feature.workflowId) && step.id === 'review') ||
+    (['feature', 'quality-feature', 'devops'].includes(feature.workflowId) &&
+      step.id === 'review') ||
+    ['fs-devops-review', 'fs-devops-validate'].includes(step.agentId) ||
+    needsDevOpsEvidence(step) ||
     feature.workflowId === 'code-review';
-  if (actor === 'autopilot' && requiresReview && !attempt.review)
+  if (
+    (actor === 'autopilot' || needsDevOpsEvidence(step) || step.agentId === 'fs-devops-review') &&
+    requiresReview &&
+    !attempt.review
+  )
     blockers.push('La relecture structurée attendue est absente.');
   if (
     feature.reviewComments?.some(
@@ -102,6 +110,29 @@ export function approvalBlockers(
   )
     blockers.push('Des commentaires bloquants restent ouverts pour cette étape.');
   const evidence = currentTestEvidence(attempt);
+  if (needsDevOpsEvidence(step)) {
+    const target = attempt.launch?.devopsTest;
+    if (
+      !target?.isolationConfirmed ||
+      !evidence.some(
+        (proof) =>
+          proof.source === 'host' &&
+          proof.devops?.status === 'passed' &&
+          proof.devops.featureId === feature.id &&
+          proof.devops.attemptId === attempt.id &&
+          JSON.stringify(proof.devops.target) === JSON.stringify(target) &&
+          proof.exitCode === 0 &&
+          !proof.error &&
+          !proof.truncated &&
+          proof.devops.checks.length > 0 &&
+          proof.devops.checks.every((item) => item.passed) &&
+          evidenceIsCurrent(attempt, proof),
+      )
+    )
+      blockers.push(
+        'Une vérification hôte réussie du test Azure DevOps déclaré par l’humain est requise.',
+      );
+  }
   for (const kind of requiredQualityKinds(step)) {
     if (!evidence.some((proof) => qualityIsCurrent(feature, attempt, proof, kind)))
       blockers.push(

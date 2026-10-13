@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { devOpsConfigSchema } from '../core/devopsSchemas';
 import type { DevOpsConfig, DevOpsPullRequest, DevOpsTicket } from '../shared/devops';
+import { DevOpsInspector } from './DevOpsInspector';
 export interface SecretStore {
   get(key: string): PromiseLike<string | undefined>;
   store(key: string, value: string): PromiseLike<void>;
@@ -124,6 +125,7 @@ export class AzureDevOps {
   private async request(
     url: string,
     body?: unknown,
+    signal?: AbortSignal,
   ): Promise<{ data: Record<string, unknown>; continuation?: string }> {
     const token = await this.secrets.get(this.key());
     if (!token) throw new Error('Connecte Azure DevOps avec un jeton personnel depuis le menu.');
@@ -136,7 +138,9 @@ export class AzureDevOps {
           'Content-Type': 'application/json',
         },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(20000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
+          : AbortSignal.timeout(20000),
         redirect: 'error',
       });
     } catch {
@@ -147,7 +151,7 @@ export class AzureDevOps {
     if (!response.ok) {
       if (response.status === 401 || response.status === 403)
         throw new Error(
-          'Azure DevOps refuse l’accès. Vérifie le jeton, son expiration et les droits Work Items (lecture) / Code (lecture et écriture).',
+          'Azure DevOps refuse l’accès. Vérifie le jeton, son expiration et les droits de lecture du service demandé (Code, Build, Test Management ou Work Items). L’écriture Code est nécessaire uniquement pour créer une PR.',
         );
       if (response.status === 404)
         throw new Error(
@@ -180,6 +184,16 @@ export class AzureDevOps {
     } catch {
       throw new Error('Réponse Azure DevOps invalide.');
     }
+  }
+  /** Read-only API exposed to agents and the standalone inspection script. */
+  inspector(signal?: AbortSignal): DevOpsInspector {
+    return new DevOpsInspector(this.config, (route, query) =>
+      this.request(
+        `${this.base()}/_apis/${route}?${new URLSearchParams({ ...query, 'api-version': '7.1' })}`,
+        undefined,
+        signal,
+      ),
+    );
   }
   async dashboard(): Promise<{
     account: string;

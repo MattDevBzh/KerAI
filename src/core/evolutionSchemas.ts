@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { qualityEvidenceSchema } from './qualitySchemas';
+import { devOpsEvidenceSchema, devOpsTestTargetSchema } from './devopsKitSchemas';
 
 export const boundedId = z
   .string()
@@ -24,6 +25,7 @@ const path = z
   .refine((value) => !value.includes('\0'), 'Chemin invalide.');
 export const launchSchema = z
   .object({
+    devopsTest: devOpsTestTargetSchema.optional(),
     initialContext: z.string().max(60000),
     mcpServerIds: uniqueIds,
     memoryIds: uniqueIds,
@@ -214,6 +216,7 @@ export const reviewSchema = z
   });
 export const evidenceSchema = z
   .object({
+    devops: devOpsEvidenceSchema.optional(),
     quality: qualityEvidenceSchema.optional(),
     id: boundedId,
     source: z.literal('host'),

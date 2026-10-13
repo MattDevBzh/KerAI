@@ -26,6 +26,9 @@ import type {
   StudioState,
 } from '../src/shared/types';
 import { isDemo, subscribe } from './bridge';
+import { needsDevOpsEvidence } from '../src/shared/devopsKit';
+import { devOpsTestTargetSchema } from '../src/core/devopsKitSchemas';
+import { DevOpsTestForm } from './DevOpsKitUI';
 export type Dispatch = (message: ClientMessage) => void;
 export function StudioDialog({
   title,
@@ -174,6 +177,9 @@ export function LaunchDialog({
   const previous = step.attempts.at(-1)?.launch;
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
+    ...(previous?.devopsTest
+      ? { devopsTest: { ...previous.devopsTest, isolationConfirmed: false } }
+      : {}),
     initialContext:
       previous?.initialContext ?? configured?.initialContext ?? step.initialContext ?? '',
     mcpServerIds: (
@@ -289,6 +295,10 @@ export function LaunchDialog({
     preview.stepId === step.id &&
     !pending &&
     !submitted.current;
+  const devopsReady =
+    !needsDevOpsEvidence(step) ||
+    (devOpsTestTargetSchema.safeParse(launch.devopsTest).success &&
+      launch.devopsTest?.isolationConfirmed === true);
 
   return (
     <StudioDialog
@@ -300,6 +310,12 @@ export function LaunchDialog({
       <div className="launch-grid">
         <div className="launch-inputs">
           <span className="eyebrow">VOTRE INTENTION</span>
+          {needsDevOpsEvidence(step) && (
+            <DevOpsTestForm
+              value={launch.devopsTest}
+              onChange={(devopsTest) => update({ devopsTest })}
+            />
+          )}
           <label className="field">
             <span>US, demande ou contexte initial</span>
             <textarea
@@ -575,7 +591,7 @@ export function LaunchDialog({
               {error}
             </div>
           )}
-          <button className="button secondary" disabled={pending} onClick={prepare}>
+          <button className="button secondary" disabled={pending || !devopsReady} onClick={prepare}>
             {pending ? <LoaderCircle size={15} className="spin" /> : <Search size={15} />}{' '}
             {preview && previewFresh ? 'Actualiser l’aperçu' : 'Préparer l’aperçu'}
           </button>

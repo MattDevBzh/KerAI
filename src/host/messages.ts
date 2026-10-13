@@ -5,6 +5,7 @@ import { avatarSchema } from '../core/registry';
 import type { ClientMessage } from '../shared/types';
 import { THEME_IDS } from '../shared/themes';
 import { workflowSchema } from '../core/workflow';
+import { kitMessageVariants } from '../core/kitSchemas';
 import {
   launchSchema,
   autopilotConfigSchema,
@@ -19,6 +20,7 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  ...kitMessageVariants,
   ...devOpsMessageVariants,
   z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
   z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),

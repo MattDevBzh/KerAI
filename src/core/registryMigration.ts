@@ -137,8 +137,8 @@ export class RegistryMigration {
 
   private async isDefault(target: string, content: Buffer): Promise<boolean> {
     const sources = target.startsWith('agents/')
-      ? [target, `kit/.github/${target}`]
-      : [`kit/.github/${target}`];
+      ? [target, `devops/${target}`, `kit/.github/${target}`]
+      : [`devops/${target}`, `kit/.github/${target}`];
     for (const source of sources) {
       const original = await existing(this.registry.defaultsPath, source);
       if (original) {

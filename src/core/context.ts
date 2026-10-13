@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { boundAnswers } from './questions';
+import { needsDevOpsEvidence } from '../shared/devopsKit';
 import type {
   MemoryEntry,
   PromptSection,
@@ -58,6 +59,20 @@ export function promptSections(input: RunInput): PromptSection[] {
   for (const skill of input.skills)
     add(`skill:${skill.id}`, skill.name, 'skill', `Compétence ${skill.name} :\n${skill.content}`);
   const launch = input.launch ?? input.attempt.launch;
+  if (input.agent.tools.some((tool) => tool.startsWith('studio_devops_')))
+    add(
+      'devops-connection',
+      'Dépôt Azure DevOps configuré',
+      'system',
+      `Connexion de lecture : ${input.devopsProjectKey ?? 'non configurée ; utiliser le menu Azure DevOps'}. Ce périmètre est fixé par le host.`,
+    );
+  if (needsDevOpsEvidence(input.step))
+    add(
+      'devops-test',
+      'Test DevOps déclaré par l’humain',
+      'system',
+      `Vérifie uniquement le test fourni dans les paramètres humains avec studio_devops_verify_test. Les paramètres ne sont pas modifiables par les outils agents. La déclaration d’isolation est humaine ; les résultats du pipeline ne prouvent pas à eux seuls l’absence d’impact sur la production.\n${JSON.stringify(launch?.devopsTest ?? null)}`,
+    );
   add(
     'initial-context',
     'Contexte initial fourni à la main',
@@ -163,7 +178,10 @@ export function promptSections(input: RunInput): PromptSection[] {
   if (
     input.automation?.reviewStepId === input.step.id ||
     input.feature.workflowId === 'code-review' ||
-    (input.feature.workflowId === 'feature' && input.step.id === 'review')
+    (['feature', 'quality-feature', 'devops'].includes(input.feature.workflowId) &&
+      input.step.id === 'review') ||
+    ['fs-devops-review', 'fs-devops-validate'].includes(input.step.agentId) ||
+    needsDevOpsEvidence(input.step)
   )
     add(
       'review-result',
@@ -219,6 +237,8 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
         editableExistingFiles: input.launch?.editableExistingFiles,
         contextMode: input.launch?.contextMode,
         contextBlocks: input.launch?.contextBlocks,
+        devopsTest: input.launch?.devopsTest,
+        devopsProjectKey: input.devopsProjectKey,
         model: input.step.model || input.agent.model || input.settings.defaultModel,
         reasoning: input.step.reasoning,
         tools: input.agent.tools,

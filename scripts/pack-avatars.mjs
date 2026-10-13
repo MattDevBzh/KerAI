@@ -13,8 +13,16 @@ const ids = [
   'robot',
   'ninja',
   'captain',
+  'devops-scout',
+  'devops-architect',
+  'devops-builder',
+  'devops-sentinel',
+  'devops-lab',
+  'devops-controller',
 ];
-for (const id of ids) {
+for (const id of ids.filter(
+  (id) => !process.argv.includes('--devops') || id.startsWith('devops-'),
+)) {
   const source = await readFile(`design/avatars/${id}.png`);
   const meta = await sharp(source).metadata();
   if (meta.width !== 1536 || meta.height !== 1024)

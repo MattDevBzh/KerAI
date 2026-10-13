@@ -561,8 +561,9 @@ export function DevOpsUI({
               </div>
               <p>
                 Le jeton est saisi dans une fenêtre sécurisée VS Code et conservé dans
-                SecretStorage. Droits : Work Items en lecture, Code en lecture et écriture. Les
-                identifiants Git du push restent ceux de ton environnement.
+                SecretStorage. Lecture : Work Items et Code ; Build et Test Management pour le kit
+                DevOps. Écriture Code uniquement pour créer des PR. Les identifiants Git du push
+                restent ceux de ton environnement.
               </p>
             </form>
           </details>

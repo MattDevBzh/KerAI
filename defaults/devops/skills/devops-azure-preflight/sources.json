@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/microsoft/azure-skills",
+  "commit": "5aa6e04819634ca4945ef57d6aa059eb4f5944e7",
+  "sources": [
+    {
+      "path": "LICENSE",
+      "sha256": "8a5d8efb70942e65032f930c761d097feeb41a7517ebd04c9d2e4ec3764071c5"
+    },
+    {
+      "path": "skills/azure-validate/SKILL.md",
+      "sha256": "207cdd198906b644bca68ee08d51b377d8ebf0c9e1b579405cc675b2e6e7972e"
+    },
+    {
+      "path": "skills/azure-validate/references/role-verification.md",
+      "sha256": "a65e952998810969b290ef6832dca7a8c41be9b951e7e7c9a42ee6e84cce2649"
+    },
+    {
+      "path": "skills/azure-validate/references/recipes/bicep/README.md",
+      "sha256": "5a70caeea9f0823b4b3f1bfafbb3ac8403a9dd50b603bd035fe2cfba28c6abe5"
+    },
+    {
+      "path": "skills/azure-validate/references/recipes/terraform/README.md",
+      "sha256": "8759dd0b7100261384d8c9c21206eccabf669f54bb15f1fd009ba047e9d6fe50"
+    },
+    {
+      "path": "skills/azure-validate/references/recipes/azd/README.md",
+      "sha256": "d0d60a8dbd8af0dc3719c8db8a239135ae6e319ecfd16e0935e7980f90a8c9a7"
+    }
+  ],
+  "skill": "azure-validate",
+  "version": "1.2.3",
+  "adaptation": "Instructions françaises intégrées au parcours manuel Feature Studio ; scripts amont non exécutés et non distribués."
+}

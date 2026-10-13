@@ -35,3 +35,17 @@ a focused cute code reviewer ninja with indigo hood and mask, expressive eyes, t
 ## captain
 
 a confident friendly devops spaceship captain with navy jacket, gold epaulettes, orange communicator, little console and a heroic quiff
+
+
+## Équipe DevOps — v1
+
+Six nouveaux appels imagegen, un par personnage. Direction commune : sprite-sheet pixel art 16-bit 1536×1024, grille 3×2, personnage cohérent et cadrage identique dans les six cellules. Cellule 0 au repos, cellules 1–4 en boucle de travail, cellule 5 avec validation. Fond sombre violet illustré, palette chaleureuse, aucun texte. Les originaux sont conservés ici ; aucun personnage n’a été dessiné par script. Le script `pack-avatars.mjs --devops` découpe et redimensionne les cellules, puis assemble le GIF à quatre images.
+
+| Source | Identité et accessoires demandés | Agent |
+| --- | --- | --- |
+| `devops-scout.png` | Femme rousse, capuche turquoise, loupe et console de recherche | Éclaireur |
+| `devops-architect.png` | Homme noir, lunettes, veste indigo, plans lumineux cyan | Architecte |
+| `devops-builder.png` | Femme aux cheveux bouclés, casque de chantier jaune, gilet rouge, outils | Bâtisseur |
+| `devops-sentinel.png` | Femme asiatique au carré noir, cape violette, bouclier et console de revue | Vigie |
+| `devops-lab.png` | Homme brun, lunettes de laboratoire, blouse menthe, enceinte de test | Laborantin |
+| `devops-controller.png` | Femme aux cheveux argentés, casque orange, veste marine, poste de contrôle | Contrôleur |

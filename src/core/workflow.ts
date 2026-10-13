@@ -25,6 +25,7 @@ export const workflowSchema = z
             agentId: id,
             policy: z.enum(['read-only', 'workspace-write', 'tests']),
             requiredQuality: qualityKindSchema.optional(),
+            requiredDevOpsEvidence: z.boolean().optional(),
             model: z.string().optional(),
             reasoning: z.string().optional(),
             skills: z.array(id),

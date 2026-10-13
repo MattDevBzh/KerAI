@@ -1,4 +1,5 @@
 import { ThemePicker } from './ThemePicker';
+import { KitsUI } from './KitsUI';
 import { UsageDashboard } from './UsageDashboard';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
 import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
@@ -39,6 +40,7 @@ import {
   MessageSquare,
   Play,
   Plus,
+  Package,
   RefreshCw,
   Search,
   Send,
@@ -89,6 +91,7 @@ import {
 } from './StudioUI';
 
 type View =
+  | 'kits'
   | 'usage'
   | 'devops'
   | 'devops-prs'
@@ -140,6 +143,7 @@ const nav = [
   { id: 'usage', label: 'Consommation', icon: BarChart3 },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
   { id: 'workflows', label: 'Parcours', icon: Workflow },
+  { id: 'kits', label: 'Kits', icon: Package },
   { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'skills', label: 'Skills', icon: BookOpen },
@@ -330,6 +334,26 @@ export default function App() {
       return;
     }
     if (isDemo) {
+      if (message.type.startsWith('kit') && 'requestId' in message) {
+        window.postMessage(
+          {
+            type: 'kitResult',
+            requestId: message.requestId,
+            ...(message.type === 'kitCatalog'
+              ? {
+                  catalog: [],
+                  message:
+                    'Les kits installables sont disponibles dans l’extension VS Code. Ici, vous pouvez explorer la composition avec les profils de démonstration.',
+                }
+              : {
+                  error:
+                    'L’import, l’export et l’installation des kits nécessitent l’extension VS Code.',
+                }),
+          },
+          '*',
+        );
+        return;
+      }
       setNotice({
         text: 'Démonstration : aucune commande, écriture ou exécution Copilot n’a été effectuée.',
       });
@@ -449,8 +473,8 @@ export default function App() {
               <RefreshCw size={14} />
             </button>
           </div>
-          <button className="sidebar-link" onClick={() => dispatch({ type: 'installKit' })}>
-            <WandSparkles size={14} /> Installer le kit utilisateur <ArrowUpRight size={13} />
+          <button className="sidebar-link" onClick={() => chooseView('kits')}>
+            <Package size={14} /> Gérer les kits <ArrowUpRight size={13} />
           </button>
           <button className="sidebar-link" onClick={() => dispatch({ type: 'migrateUserKit' })}>
             <ArrowUpRight size={14} /> Migrer les profils du projet
@@ -626,6 +650,7 @@ export default function App() {
           )}
           {view === 'memory' && <ProjectMemoryView state={state} dispatch={dispatch} />}
           {view === 'workflows' && <WorkflowLibrary state={state} dispatch={dispatch} />}
+          {view === 'kits' && <KitsUI state={state} dispatch={dispatch} />}
           {view === 'agents' && (
             <Library
               title="Des agents, chacun son regard."
@@ -2270,6 +2295,12 @@ const avatarOptions = [
   { id: 'robot', name: 'Le robot' },
   { id: 'ninja', name: 'Le ninja' },
   { id: 'captain', name: 'La capitaine' },
+  { id: 'devops-scout', name: 'Éclaireur' },
+  { id: 'devops-architect', name: 'Architecte DevOps' },
+  { id: 'devops-builder', name: 'Bâtisseur' },
+  { id: 'devops-sentinel', name: 'Vigie' },
+  { id: 'devops-lab', name: 'Laborantin' },
+  { id: 'devops-controller', name: 'Contrôleur' },
 ];
 const avatarDefaults: Record<string, string> = {
   'fs-specs': 'detective',
@@ -2580,8 +2611,10 @@ function AgentEditor({
               />
               <small>
                 Noms pris en charge : read, search, edit, execute. execute permet uniquement les
-                commandes de test préautorisées, sans accès shell. Les autres alias ne sont pas pris
-                en charge. Les permissions de l’étape restent applicables.
+                commandes de test préautorisées, sans accès shell. studio_devops_inspect lit les
+                pipelines et résultats du dépôt Azure DevOps configuré ; studio_devops_verify_test
+                vérifie le test manuel dans une étape exigeant sa preuve. Les permissions de l’étape
+                restent applicables.
               </small>
             </label>
             <ModelSelect state={state} value={model} onChange={setModel} />

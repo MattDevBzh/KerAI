@@ -44,12 +44,19 @@ import { PolicyEngine, sha256 } from './PolicyEngine';
 import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
 import { WorkspaceLease } from './WorkspaceLease';
 import { inspectExistingChanges, backupExistingChanges } from './ExistingChanges';
+import type { DevOpsInspector } from './DevOpsInspector';
+import { needsDevOpsEvidence } from '../shared/devopsKit';
+import { gitRead } from './gitRead';
+import { KitService } from './KitService';
 
 export class StudioService extends EventEmitter {
   engine = new WorkflowEngine();
   state!: StudioState;
   adapter!: AgentAdapter;
+  devopsInspector?: (signal: AbortSignal) => DevOpsInspector;
+  devopsProjectKey?: () => string | undefined;
   readonly registry: AgentRegistry;
+  readonly kits: KitService;
   readonly workspaces: FeatureWorkspace;
   private workspaceTask?: Promise<void>;
   private active?: {
@@ -80,6 +87,7 @@ export class StudioService extends EventEmitter {
   ) {
     super();
     this.registry = new AgentRegistry(workspacePath, defaultsPath);
+    this.kits = new KitService(this.registry);
     this.workspaces = new FeatureWorkspace(workspacePath, join(store.rootPath, 'workspaces'));
   }
   async initialize(): Promise<void> {
@@ -418,7 +426,7 @@ export class StudioService extends EventEmitter {
     });
   }
   async getTools(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal) {
-    const host = new ToolHost(input, callbacks, signal);
+    const host = new ToolHost(input, callbacks, signal, this.devopsInspector);
     this.toolHosts.set(input.attempt.id, host);
     return await host.createTools();
   }
@@ -447,6 +455,10 @@ export class StudioService extends EventEmitter {
         mcpServerIds: step.mcpServerIds ?? [],
       },
     );
+    if (needsDevOpsEvidence(step) && !selected.devopsTest?.isolationConfirmed)
+      throw new Error(
+        'Renseigne le test exécuté et confirme sa mise en place hors production dans le formulaire de lancement.',
+      );
     const mcpServers = selected.mcpServerIds.map((id) => {
       const server = this.state.settings.mcpServers?.find((item) => item.id === id);
       if (!server?.enabled || !server.tools.length)
@@ -530,6 +542,7 @@ export class StudioService extends EventEmitter {
       launch: selected,
     };
     return {
+      devopsProjectKey: this.devopsProjectKey?.(),
       feature,
       step,
       attempt,
@@ -1057,7 +1070,22 @@ export class StudioService extends EventEmitter {
         return latest ? currentTestEvidence(latest) : [];
       });
     const policy = new PolicyEngine(await this.featurePath(featureId), 'read-only', []);
-    for (const evidence of proofs)
+    for (const evidence of proofs) {
+      if (evidence.devops) {
+        const head = await gitRead(
+          await this.featurePath(featureId),
+          ['rev-parse', '--verify', 'HEAD^{commit}'],
+          { rawOutput: true },
+        );
+        if (
+          head.code !== 0 ||
+          head.truncated ||
+          head.stdout.trim() !== evidence.devops.target.commit
+        )
+          throw new Error(
+            'Le commit local a changé depuis la vérification du test DevOps. Relance la validation.',
+          );
+      }
       for (const [file, hash] of Object.entries(evidence.fileHashes)) {
         let current = '<missing>';
         try {
@@ -1070,6 +1098,7 @@ export class StudioService extends EventEmitter {
             `La preuve de test est obsolète : ${file} a changé. Relance les tests avant validation.`,
           );
       }
+    }
     // Recheck revision after asynchronous reads before touching the approval.
     this.assertTrusted();
     this.engine.approveStep(featureId, stepId, actor, expectedAttemptId, expectedRevision);

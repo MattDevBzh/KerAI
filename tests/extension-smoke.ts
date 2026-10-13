@@ -95,6 +95,19 @@ export async function run(): Promise<void> {
   );
   assert.ok(api.getState()?.workflows.some((workflow) => workflow.id === 'quality-feature'));
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-visual-tests'));
+  assert.equal(
+    api.getState()?.workflows.find((workflow) => workflow.id === 'devops')?.steps.length,
+    6,
+  );
+  assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-devops-validate'));
+  const devopsAgents = api.getState()!.agents.filter((agent) => agent.id.startsWith('fs-devops-'));
+  assert.equal(new Set(devopsAgents.map((agent) => agent.avatar)).size, 6);
+  for (const agent of devopsAgents) {
+    for (const asset of ['idle.png', 'working.gif', 'approved.png'])
+      assert.ok(
+        await readFile(join(extension.extensionPath, 'dist/webview/avatars', agent.avatar!, asset)),
+      );
+  }
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-counterexamples'));
   const cockpitTabs = () =>
     vscode.window.tabGroups.all.flatMap((group) =>

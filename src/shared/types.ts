@@ -34,6 +34,7 @@ export type StepStatus =
   | 'interrupted';
 export type FeatureStatus = 'draft' | 'running' | 'attention' | 'completed';
 export interface WorkflowStep {
+  requiredDevOpsEvidence?: boolean;
   requiredQuality?: import('./quality').QualityKind;
   id: string;
   name: string;
@@ -239,6 +240,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./kits').KitClientMessage
   | DevOpsClientMessage
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
   | { type: 'installQualityKit'; featureId?: string }
@@ -366,6 +368,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | import('./kits').KitHostMessage
   | { type: 'themeState'; theme: ThemeId; requestId?: string; error?: string }
   | ({ type: 'profileSaveResult'; requestId: string; error?: string } & Partial<
       import('./profiles').ProfileSaveResult
@@ -385,6 +388,7 @@ export type HostMessage =
   | { type: 'checkpointComparison'; requestId: string; comparison: CheckpointComparison }
   | { type: 'navigate'; view: 'create' | 'dashboard'; featureId?: string };
 export interface RunInput {
+  devopsProjectKey?: string;
   feature: Feature;
   step: FeatureStep;
   attempt: Attempt;

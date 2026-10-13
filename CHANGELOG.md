@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.0 — 2026-10-13
+
+- Ajoute l’écran Kits : bibliothèque Atelier Copilot / DevOps, import local, composition par parcours/agent/skill, résolution transitive des dépendances, aperçu des instructions et fichiers, export `.fskit.json` puis installation utilisateur.
+- Inclut les scripts, références et licences des profils choisis. Vérifie le format, les empreintes, les chemins et les dépendances ; conserve les fichiers personnels différents. Plusieurs révisions d’un kit restent accessibles et un fichier invalide est signalé sans bloquer la bibliothèque.
+- Livre le parcours DevOps à six agents, huit skills, son collecteur Azure DevOps en lecture seule et la vérification du test exécuté manuellement. Réutilise la méthode Microsoft azure-validate avec provenance et licence embarquées.
+- Ajoute six avatars DevOps distincts, chacun avec repos, animation de travail et validation, intégrés aux agents et au sélecteur de personnalisation.
+- Recompose le README autour de l’installation, des kits et du parcours DevOps, avec captures et lien vers la dernière release. Le guide détaillé reste disponible dans `docs/GUIDE.md`.
+
+## 0.5.1 — 2026-10-13
+
+- Réutilise la skill Microsoft `azure-validate` 1.2.3 dans une adaptation autonome `devops-azure-preflight`, reliée aux étapes de plan, relecture, guide et validation.
+- Ajoute les contrôles Bicep/Terraform/azd, la correspondance opérations-identités-rôles-scopes et les preuves attendues, en conservant l’exécution manuelle du test.
+- Embarque la licence MIT et la provenance exacte des sources ; vérifie l’injection de la skill et sa copie utilisateur.
+
+## 0.5.0 — 2026-10-13
+
+- Ajoute le kit DevOps : six agents, sept skills, un parcours fourni et un script autonome de collecte Azure DevOps en lecture seule.
+- Prépare les critères et l’isolation dès le plan, puis détaille le guide de test après relecture des modifications locales.
+- Expose des outils hôtes GET pour les définitions, builds, timelines, noms d’artefacts et résultats de tests du dépôt configuré, avec sources, pagination et limites explicites ; les valeurs de variables, logs et URL de téléchargement restent exclus.
+- Arrête le pilote avant la validation du test manuel. Le formulaire humain fixe pipeline, build, SHA, branche, stages, artefacts et besoin de résultats de tests ; une preuve hôte complète, cohérente avec le workspace, et une relecture structurée sont exigées pour approuver.
+- Conserve ces preuves et leurs limites dans la session. L’installation utilisateur du kit préserve les personnalisations et fournit le même collecteur sous forme de script Node autonome.
+
 ## 0.4.4 — 2026-10-13
 
 - Remplace le geek frontal par un avatar en pixel art plus soigné, vu de trois quarts devant un ultrabook, avec une déclinaison monochrome assortie pour la barre d’activité.

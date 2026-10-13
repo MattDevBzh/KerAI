@@ -1,4 +1,5 @@
 import type { Feature } from '../shared/types';
+import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { budgetBlockReason } from './budgets';
 import {
   approvalBlockers,
@@ -125,6 +126,10 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
     const blockers = approvalBlockers(feature, step, 'autopilot');
     return blockers.length ? pause(blockers.join(' ')) : { kind: 'approve', stepId: step.id };
   }
+  if (needsDevOpsEvidence(step))
+    return pause(
+      'Mets en place et lance le test hors production, puis renseigne ses références dans le lancement manuel de la validation DevOps.',
+    );
   if (step.askBeforeRun) return pause(`Confirmation avant exécution requise : ${step.name}.`);
   if (step.attempts.length >= step.maxAttempts)
     return pause('Nombre maximal de tentatives atteint.');

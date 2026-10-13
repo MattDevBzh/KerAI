@@ -23,6 +23,12 @@ export const avatarSchema = z.enum([
   'robot',
   'ninja',
   'captain',
+  'devops-scout',
+  'devops-architect',
+  'devops-builder',
+  'devops-sentinel',
+  'devops-lab',
+  'devops-controller',
 ]);
 const agentMetadata = z.object({
   name: z.string().min(1),
@@ -176,6 +182,7 @@ export class AgentRegistry {
     };
     for (const [root, source, agentFolder, skillFolder, workflowFolder] of [
       [this.defaultsPath, 'bundled', 'agents', 'kit/.github/skills', 'workflows'],
+      [this.defaultsPath, 'bundled', 'devops/agents', 'devops/skills', 'devops/workflows'],
       [this.userPath, 'user', 'agents', 'skills', 'feature-studio/workflows'],
       [
         this.workspacePath,
@@ -290,6 +297,14 @@ export class AgentRegistry {
     for (const file of await files(this.defaultsPath, 'workflows'))
       if (/\.ya?ml$/.test(file))
         entries.push({ source: file, target: join('feature-studio/workflows', basename(file)) });
+    for (const [folder, target] of [
+      ['devops/agents', 'agents'],
+      ['devops/workflows', 'feature-studio/workflows'],
+      ['devops/skills', 'skills'],
+    ] as const)
+      for (const file of await files(this.defaultsPath, folder))
+        entries.push({ source: file, target: join(target, relative(folder, file)) });
+    entries.push({ source: 'devops/README.md', target: 'feature-studio/devops/README.md' });
     const report: InstallationReport = {
       directory: this.userPath,
       installed: [],

@@ -12,3 +12,14 @@ await build({
   logLevel: 'info',
 });
 await copyFile('scripts/copilot-launcher.js', 'dist/copilot-launcher.js');
+await build({
+  entryPoints: ['src/host/devopsCli.ts'],
+  outfile: 'defaults/devops/skills/devops-inspect/scripts/ado-readonly.cjs',
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  target: 'node22',
+  minify: true,
+  legalComments: 'none',
+  logLevel: 'info',
+});
