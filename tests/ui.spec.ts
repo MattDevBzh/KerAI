@@ -72,6 +72,30 @@ async function hosted(page: Page, state = fresh()) {
           }
           if (m.type === 'previewRun' && Reflect.get(window, 'autoPreview')) {
             const content = m.launch.initialContext;
+            const step = data.features
+              .find((f) => f.id === m.featureId)
+              ?.steps.find((s) => s.id === m.stepId);
+            const agent = data.agents.find((a) => a.id === step?.agentId);
+            const supplied = Reflect.get(window, 'previewSections') as
+              | { id: string; label: string; source: string; content: string }[]
+              | undefined;
+            const sections = (
+              supplied ?? [{ id: 'human', label: 'Votre contexte', source: 'human', content }]
+            ).map((s) => ({
+              ...s,
+              originalContent: s.content,
+              content: m.launch.contextBlocks?.[s.id]?.content ?? s.content,
+              editable: s.source !== 'system',
+              enabled:
+                s.source === 'system' ||
+                (m.launch.contextBlocks?.[s.id]?.enabled ??
+                  (m.launch.contextMode ?? (agent?.emptyContextByDefault ? 'empty' : 'all')) ===
+                    'all'),
+            }));
+            const prompt = sections
+              .filter((s) => s.enabled)
+              .map((s) => s.content)
+              .join('\n\n');
             setTimeout(
               () =>
                 window.postMessage(
@@ -82,14 +106,13 @@ async function hosted(page: Page, state = fresh()) {
                       featureId: m.featureId,
                       stepId: m.stepId,
                       fingerprint: 'a'.repeat(64),
-                      prompt: content || 'Instructions de test déterministes',
-                      sections: [
-                        { id: 'human', label: 'Votre contexte', source: 'human', content },
-                      ],
-                      characters: content.length,
-                      estimatedTokens: Math.ceil(content.length / 4),
+                      prompt: prompt || 'Instructions de test déterministes',
+                      sections,
+                      characters: prompt.length,
+                      estimatedTokens: Math.ceil(prompt.length / 4),
                       maxCharacters: 60000,
                       errors: [],
+                      existingChanges: Reflect.get(window, 'existingChanges'),
                     },
                   },
                   '*',
@@ -218,14 +241,23 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
   await hosted(page);
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
+  await expect(
+    page.getByText('Enregistré au niveau utilisateur, disponible dans tous les projets.'),
+  ).toBeVisible();
   await page.getByLabel('Son petit nom').fill('Capitaine Bug');
   await page.getByRole('button', { name: 'La capitaine' }).click();
   await page.getByLabel('Nom du profil').fill('Quality companion');
   await page.getByLabel('Instructions', { exact: false }).fill('Vérifie les critères de réussite.');
+  await page.getByRole('checkbox', { name: 'Contexte vide par défaut' }).check();
   await page.getByRole('button', { name: 'Enregistrer le profil' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'saveAgent',
-    agent: { id: 'quality-companion', nickname: 'Capitaine Bug', avatar: 'captain' },
+    agent: {
+      emptyContextByDefault: true,
+      id: 'quality-companion',
+      nickname: 'Capitaine Bug',
+      avatar: 'captain',
+    },
   });
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
   await page.keyboard.press('Escape');
@@ -1393,4 +1425,206 @@ test('une comparaison tardive ou invalidée par une mutation ne réactive jamais
   );
   await expect(page.locator('.checkpoint-change')).toHaveCount(0);
   expect((await messages(page)).some((m) => m.type === 'restoreCheckpoint')).toBe(false);
+});
+
+test('migration accessible et édition locale orientée vers la migration', async ({ page }) => {
+  const state = fresh();
+  state.agents[0].source = 'workspace';
+  state.agents[0].nickname = 'Agent projet à migrer';
+  state.agents[0].path = '.github/agents/project.agent.md';
+  await hosted(page, state);
+  await page.getByRole('button', { name: 'Migrer les profils du projet' }).click();
+  expect((await messages(page)).at(-1)).toEqual({ type: 'migrateUserKit' });
+  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await page.getByRole('button').filter({ hasText: 'Agent projet à migrer' }).click();
+  await expect(page.getByRole('button', { name: 'Enregistrer le profil' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Migrer vers le compte utilisateur' }).click();
+  expect((await messages(page)).at(-1)).toEqual({ type: 'migrateUserKit' });
+});
+
+test('contexte : décocher la spec, modifier le plan et actualiser avant lancement', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.evaluate(() =>
+    Reflect.set(window, 'previewSections', [
+      {
+        id: 'artifact:specs',
+        label: 'Spec fonctionnelle',
+        source: 'artifact',
+        content: 'SPEC_ORIGINALE',
+      },
+      {
+        id: 'artifact:plan',
+        label: 'Plan technique',
+        source: 'artifact',
+        content: 'PLAN_ORIGINAL',
+      },
+      {
+        id: 'completion',
+        label: 'Format de sortie',
+        source: 'system',
+        content: 'CADRE_OBLIGATOIRE',
+      },
+    ]),
+  );
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  await page.getByRole('checkbox', { name: /Spec fonctionnelle/ }).uncheck();
+  const plan = page.locator('.context-block').filter({ hasText: 'Plan technique' });
+  await plan.locator('summary').click();
+  await page.getByLabel('Contenu · Plan technique').fill('PLAN_ADAPTÉ');
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  await page.getByText('Lire le prompt assemblé complet', { exact: true }).click();
+  const prompt = page
+    .locator('.assembled-prompt')
+    .filter({ hasText: 'Lire le prompt assemblé complet' });
+  await expect(prompt).toContainText('PLAN_ADAPTÉ');
+  await expect(prompt).toContainText('CADRE_OBLIGATOIRE');
+  await expect(prompt).not.toContainText('SPEC_ORIGINALE');
+  await expect(prompt).not.toContainText('PLAN_ORIGINAL');
+  await page.screenshot({ path: 'test-results/context-selection.png', fullPage: true });
+  await page.getByRole('button', { name: 'Lancer cette étape' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    launch: {
+      contextBlocks: {
+        'artifact:specs': { enabled: false },
+        'artifact:plan': { content: 'PLAN_ADAPTÉ' },
+      },
+    },
+  });
+});
+
+test('contexte vide par défaut : sélectionner seulement la spec, tout cocher et réinitialiser', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.agents.find(
+    (agent) => agent.id === state.features[0].steps[1].agentId,
+  )!.emptyContextByDefault = true;
+  await hosted(page, state);
+  await page.evaluate(() =>
+    Reflect.set(window, 'previewSections', [
+      { id: 'artifact:specs', label: 'Spec fonctionnelle', source: 'artifact', content: 'SPEC' },
+      { id: 'artifact:plan', label: 'Plan technique', source: 'artifact', content: 'PLAN' },
+      { id: 'agent', label: 'Instructions de l’agent', source: 'agent', content: 'ROLE' },
+    ]),
+  );
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  await expect(page.locator('.context-block input:checked')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Tout cocher' }).click();
+  await expect(page.locator('.context-block input:checked')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Tout décocher' }).click();
+  await page.getByRole('checkbox', { name: /Spec fonctionnelle/ }).check();
+  const spec = page.locator('.context-block').filter({ hasText: 'Spec fonctionnelle' });
+  await spec.locator('summary').click();
+  await page.getByLabel('Contenu · Spec fonctionnelle').fill('NOUVELLE_SPEC');
+  await page.getByRole('button', { name: 'Rétablir le contenu d’origine' }).click();
+  await expect(page.getByLabel('Contenu · Spec fonctionnelle')).toHaveValue('SPEC');
+  await expect(page.locator('.context-block input:checked')).toHaveCount(1);
+  await finishLaunch(page);
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    launch: { contextMode: 'empty', contextBlocks: { 'artifact:specs': { enabled: true } } },
+  });
+});
+
+test('autoriser un fichier existant exige une sélection explicite et un nouvel aperçu', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.evaluate(() =>
+    Reflect.set(window, 'existingChanges', {
+      files: [
+        { path: 'SyfadisProvider.cs' },
+        { path: 'Other.cs' },
+        { path: 'deleted.cs', reason: 'Fichier supprimé' },
+      ],
+      omittedCount: 0,
+    }),
+  );
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByRole('checkbox', { name: 'SyfadisProvider.cs' })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /deleted.cs/ })).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'SyfadisProvider.cs' }).check();
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await finishLaunch(page);
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    launch: { editableExistingFiles: ['SyfadisProvider.cs'] },
+  });
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByRole('checkbox', { name: 'SyfadisProvider.cs' })).not.toBeChecked();
+});
+
+test('dernière étape : afficher les blocages, un refus hôte et la confirmation de fin', async ({
+  page,
+}) => {
+  const state = fresh();
+  const feature = state.features[0];
+  const step = feature.steps[1];
+  step.dependsOn = [];
+  feature.steps = [step];
+  feature.activeStepId = step.id;
+  feature.criteria = [{ id: 'ac', text: 'Nettoyage ciblé', status: 'pending', evidence: '' }];
+  await hosted(page, state);
+  await page.locator('.session-card').first().click();
+  await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeDisabled();
+  await expect(page.getByText('Validation bloquée', { exact: true })).toBeVisible();
+  await expect(page.locator('.approval-blockers')).toContainText('critères d’acceptation');
+  feature.criteria[0] = {
+    ...feature.criteria[0],
+    status: 'passed',
+    evidence: 'Relecture effectuée',
+  };
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await page.getByRole('button', { name: 'Valider cette étape' }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Validation en cours…' })).toBeDisabled();
+  await page.evaluate(
+    ({ featureId, stepId, attemptId }) =>
+      window.postMessage(
+        {
+          type: 'stepApprovalResult',
+          featureId,
+          stepId,
+          attemptId,
+          error: 'La preuve de test est obsolète : source modifiée.',
+        },
+        '*',
+      ),
+    { featureId: feature.id, stepId: step.id, attemptId: step.attempts[0].id },
+  );
+  await expect(
+    page.getByText('La validation n’a pas été enregistrée', { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.approval-blockers[role="alert"]')).toContainText(
+    'preuve de test est obsolète',
+  );
+  await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Valider cette étape' }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  step.status = 'approved';
+  step.attempts[0].status = 'approved';
+  feature.status = 'completed';
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(
+    page.getByText('Parcours entièrement validé — session terminée', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Valider cette étape' })).toHaveCount(0);
 });

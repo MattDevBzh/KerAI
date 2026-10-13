@@ -106,9 +106,37 @@ describe('real CLI process launch, without a Copilot account or model calls', ()
     },
   );
 
-  it('reports a missing executable instead of an unexplained closed stream', async () => {
+  it.skipIf(process.platform !== 'win32')(
+    'resolves and runs an absolute path without the .bat extension',
+    async () => {
+      const { root, executable: script } = await fixture('process.stdin.pipe(process.stdout);');
+      await writeFile(
+        join(root, 'copilot.bat'),
+        '@echo off\r\n"%FEATURE_STUDIO_TEST_NODE%" "%FEATURE_STUDIO_TEST_SCRIPT%" %*\r\n',
+      );
+      const launch = await prepare(root, join(root, 'copilot'));
+      expect(launch.executable).toBe(join(root, 'copilot.bat'));
+      const run = execute(launch, ['--headless', '--stdio'], {
+        FEATURE_STUDIO_TEST_NODE: process.execPath,
+        FEATURE_STUDIO_TEST_SCRIPT: script,
+      });
+      run.child.stdin.end('RPC bytes\r\n');
+      expect(await run.done).toEqual({ code: 0, stdout: 'RPC bytes\r\n', stderr: '' });
+    },
+  );
+
+  it('rejects a missing executable before starting the SDK', async () => {
     const { root } = await fixture('');
-    const launch = await prepare(root, join(root, 'does-not-exist.exe'));
+    await expect(prepare(root, join(root, 'does-not-exist.exe'))).rejects.toThrow(
+      'Copilot CLI introuvable au chemin configuré',
+    );
+  });
+
+  it('reports an executable removed after resolution instead of an unexplained closed stream', async () => {
+    const { root, executable } = await fixture('', 'removed.exe');
+    await chmod(executable, 0o755);
+    const launch = await prepare(root, executable);
+    await rm(executable);
     const run = execute(launch, ['--headless', '--stdio']);
     run.child.stdin.end();
     expect((await run.done).code).not.toBe(0);

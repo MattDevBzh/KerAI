@@ -5,11 +5,13 @@ import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises';
 import { stringify } from 'yaml';
 import { Store } from './core/store';
 import { CopilotCliAdapter } from './host/CopilotCliAdapter';
+import { RegistryMigration } from './core/registryMigration';
 import { StudioService } from './host/StudioService';
 import { WorkspaceLease } from './host/WorkspaceLease';
 import { PolicyEngine, sha256 } from './host/PolicyEngine';
 import { parseMessage } from './host/messages';
 import { gitRead } from './host/gitRead';
+import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 
 let panel: vscode.WebviewPanel | undefined;
@@ -235,7 +237,7 @@ export async function activate(context: vscode.ExtensionContext) {
         send({
           type: 'runPreview',
           requestId: message.requestId,
-          preview: current.previewRun(
+          preview: await current.previewRun(
             message.featureId,
             message.stepId,
             message.feedback,
@@ -271,14 +273,36 @@ export async function activate(context: vscode.ExtensionContext) {
         current.cancel(message.featureId);
         return;
       case 'approveStep':
-        if (!message.expectedAttemptId || message.expectedRevision === undefined)
-          throw new Error('Recharge le livrable avant de le valider.');
-        await current.approveStep(
-          message.featureId,
-          message.stepId,
-          message.expectedAttemptId,
-          message.expectedRevision,
-        );
+        try {
+          if (!message.expectedAttemptId || message.expectedRevision === undefined)
+            throw new Error('Recharge le livrable avant de le valider.');
+          await current.approveStep(
+            message.featureId,
+            message.stepId,
+            message.expectedAttemptId,
+            message.expectedRevision,
+          );
+          send({
+            type: 'stepApprovalResult',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            attemptId: message.expectedAttemptId,
+          });
+          notice(
+            current.engine.getFeature(message.featureId).status === 'completed'
+              ? 'Dernière étape validée : session terminée.'
+              : 'Étape validée.',
+          );
+        } catch (error) {
+          send({
+            type: 'stepApprovalResult',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            attemptId: message.expectedAttemptId,
+            error: redact((error as Error).message),
+          });
+          throw error;
+        }
         return;
       case 'answerQuestions':
         current.assertTrusted();
@@ -320,13 +344,13 @@ export async function activate(context: vscode.ExtensionContext) {
         current.assertConfigurable();
         await current.registry.saveAgent(message.agent);
         await current.refresh();
-        notice('Agent enregistré dans .github/agents.');
+        notice(`Agent enregistré au niveau utilisateur dans ${current.registry.userPath}.`);
         return;
       case 'saveSkill':
         current.assertConfigurable();
         await current.registry.saveSkill(message.id, message.content);
         await current.refresh();
-        notice('Skill enregistré dans .github/skills.');
+        notice(`Skill enregistrée au niveau utilisateur dans ${current.registry.userPath}.`);
         return;
       case 'saveSettings': {
         current.assertTrusted();
@@ -371,6 +395,54 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         await current.saveSettings(message.settings);
         notice('Réglages enregistrés.');
+        return;
+      }
+      case 'migrateUserKit': {
+        current.assertConfigurable();
+        // Ensure relocated kit links have their shared resources; existing custom files are preserved.
+        await current.registry.installKit();
+        const migration = new RegistryMigration(current.registry);
+        const plan = await migration.plan();
+        const conflicts = plan.filter((entry) => entry.conflict);
+        if (conflicts.length) {
+          output.appendLine(
+            `Migration : profils conservés dans le projet\n${conflicts.map((entry) => `${entry.label} : ${entry.conflict}`).join('\n')}`,
+          );
+          output.show(true);
+        }
+        const candidates = plan.filter((entry) => !entry.conflict);
+        if (!candidates.length) {
+          notice(
+            conflicts.length
+              ? 'Aucun profil migrable sans conflit. Voir la sortie Feature Studio.'
+              : 'Aucun agent ou skill à migrer dans ce projet.',
+          );
+          return;
+        }
+        const selected = await vscode.window.showQuickPick(
+          candidates.map((entry) => ({
+            label: entry.label,
+            description: entry.source,
+            detail: `${entry.files.length} fichier(s) → ${current.registry.userPath}. Sauvegarde puis retrait de la copie du projet.`,
+            entry,
+          })),
+          {
+            canPickMany: true,
+            title: 'Migrer les agents et skills vers le compte utilisateur',
+            placeHolder:
+              'Sélectionner les profils à partager entre les projets. Les originaux seront sauvegardés puis retirés du projet.',
+            ignoreFocusOut: true,
+          },
+        );
+        if (!selected?.length) return;
+        current.assertConfigurable();
+        const result = await migration.migrate(selected.map((item) => item.entry));
+        await current.refresh();
+        notice(
+          `${result.migrated.length} profil(s) migré(s), ${result.conflicts.length} conflit(s). Sauvegarde : ${result.backupDirectory}.`,
+        );
+        output.appendLine(`Migration utilisateur\n${JSON.stringify(result, null, 2)}`);
+        if (result.conflicts.length) output.show(true);
         return;
       }
       case 'installKit': {
@@ -630,6 +702,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('featureStudio.installKit', async () => {
       await open();
       await dispatch({ type: 'installKit' }).catch(report);
+    }),
+    vscode.commands.registerCommand('featureStudio.migrateUserKit', async () => {
+      await open();
+      await dispatch({ type: 'migrateUserKit' }).catch(report);
     }),
     vscode.window.registerWebviewPanelSerializer('featureStudio', {
       deserializeWebviewPanel: async (restored) => {

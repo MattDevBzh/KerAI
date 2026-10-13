@@ -1,3 +1,4 @@
+import { approvalBlockers, featureCompletionBlockers } from '../src/core/validation';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowDownToLine,
@@ -417,6 +418,9 @@ export default function App() {
           <button className="sidebar-link" onClick={() => dispatch({ type: 'installKit' })}>
             <WandSparkles size={14} /> Installer le kit utilisateur <ArrowUpRight size={13} />
           </button>
+          <button className="sidebar-link" onClick={() => dispatch({ type: 'migrateUserKit' })}>
+            <ArrowUpRight size={14} /> Migrer les profils du projet
+          </button>
           <div className="sidebar-footnote">
             Votre intention. Vos agents.
             <br />
@@ -677,6 +681,10 @@ export default function App() {
           agent={agentEditor}
           state={state}
           onClose={() => setAgentEditor(null)}
+          onMigrate={() => {
+            setAgentEditor(null);
+            dispatch({ type: 'migrateUserKit' });
+          }}
           save={(a) => {
             dispatch({ type: 'saveAgent', agent: a });
             setAgentEditor(null);
@@ -687,6 +695,10 @@ export default function App() {
         <SkillEditor
           skill={skillEditor}
           onClose={() => setSkillEditor(null)}
+          onMigrate={() => {
+            setSkillEditor(null);
+            dispatch({ type: 'migrateUserKit' });
+          }}
           save={(id, content) => {
             dispatch({ type: 'saveSkill', id, content });
             setSkillEditor(null);
@@ -1341,6 +1353,29 @@ function StepPanel({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [config, setConfig] = useState(false);
   const [launchResume, setLaunchResume] = useState<boolean | null>(null);
+  const [approvalPending, setApprovalPending] = useState(false);
+  const [approvalError, setApprovalError] = useState('');
+  const approvalReasons =
+    step.status === 'awaiting_review' ? approvalBlockers(feature, step, 'human') : [];
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (
+          message.type === 'stepApprovalResult' &&
+          message.featureId === feature.id &&
+          message.stepId === step.id &&
+          message.attemptId === latest?.id
+        ) {
+          setApprovalPending(false);
+          setApprovalError(message.error ?? '');
+        }
+      }),
+    [feature.id, step.id, latest?.id],
+  );
+  useEffect(() => {
+    setApprovalError('');
+    setApprovalPending(false);
+  }, [latest?.id, latest?.revision]);
   useEffect(() => {
     const received = latest?.artifact?.content ?? '';
     if (received === content) setSavedContent(received);
@@ -1808,7 +1843,10 @@ function StepPanel({
                   </button>
                 ) : (
                   <div className="completion-note">
-                    <CheckCircle2 size={18} /> Parcours entièrement validé
+                    <CheckCircle2 size={18} />{' '}
+                    {feature.status === 'completed'
+                      ? 'Parcours entièrement validé — session terminée'
+                      : `Étape validée. ${featureCompletionBlockers(feature).join(' ') || 'D’autres étapes restent à valider.'}`}
                   </div>
                 )}
                 <button
@@ -1822,31 +1860,63 @@ function StepPanel({
             ) : (
               <>
                 {step.status === 'awaiting_review' && (
-                  <button
-                    className="button primary"
-                    disabled={
-                      dirty ||
-                      Boolean(feature.archived) ||
-                      !state.workspace.trusted ||
-                      Boolean(state.workspaceOperation)
-                    }
-                    onClick={() =>
-                      confirm(
-                        'Valider cette étape ?',
-                        'Cette décision approuve le livrable actuel et débloque les étapes qui en dépendent.',
-                        () =>
-                          dispatch({
-                            type: 'approveStep',
-                            featureId: feature.id,
-                            stepId: step.id,
-                            expectedAttemptId: latest?.id,
-                            expectedRevision: latest?.revision ?? 0,
-                          }),
-                      )
-                    }
-                  >
-                    <Check size={16} /> Valider cette étape
-                  </button>
+                  <>
+                    {approvalReasons.length > 0 && (
+                      <div className="approval-blockers" role="status">
+                        <strong>Validation bloquée</strong>
+                        <ul>
+                          {approvalReasons.map((reason) => (
+                            <li key={reason}>{reason}</li>
+                          ))}
+                        </ul>
+                        <button className="button secondary" onClick={() => setTab('review')}>
+                          Voir les critères et commentaires
+                        </button>
+                      </div>
+                    )}
+                    {approvalError && (
+                      <div className="approval-blockers" role="alert">
+                        <strong>La validation n’a pas été enregistrée</strong>
+                        <p>{approvalError}</p>
+                      </div>
+                    )}
+                    <button
+                      className="button primary"
+                      disabled={
+                        approvalPending ||
+                        approvalReasons.length > 0 ||
+                        running ||
+                        dirty ||
+                        Boolean(feature.archived) ||
+                        !state.workspace.trusted ||
+                        Boolean(state.workspaceOperation)
+                      }
+                      onClick={() =>
+                        confirm(
+                          'Valider cette étape ?',
+                          'Cette décision approuve le livrable actuel et débloque les étapes qui en dépendent.',
+                          () => {
+                            setApprovalError('');
+                            setApprovalPending(true);
+                            dispatch({
+                              type: 'approveStep',
+                              featureId: feature.id,
+                              stepId: step.id,
+                              expectedAttemptId: latest?.id,
+                              expectedRevision: latest?.revision ?? 0,
+                            });
+                          },
+                        )
+                      }
+                    >
+                      {approvalPending ? (
+                        <LoaderCircle size={16} className="spin" />
+                      ) : (
+                        <Check size={16} />
+                      )}{' '}
+                      {approvalPending ? 'Validation en cours…' : 'Valider cette étape'}
+                    </button>
+                  </>
                 )}
                 {latest?.sessionId &&
                   ['failed', 'cancelled', 'interrupted', 'waiting_input'].includes(step.status) && (
@@ -2175,11 +2245,13 @@ function AgentEditor({
   agent,
   state,
   onClose,
+  onMigrate,
   save,
 }: {
   agent: AgentProfile | 'new';
   state: StudioState;
   onClose: () => void;
+  onMigrate: () => void;
   save: (a: Extract<ClientMessage, { type: 'saveAgent' }>['agent']) => void;
 }) {
   const blank = agent === 'new';
@@ -2195,6 +2267,9 @@ function AgentEditor({
   const [tools, setTools] = useState(source?.tools.join(', ') ?? '');
   const [model, setModel] = useState(source?.model ?? '');
   const [skills, setSkills] = useState(source?.skills ?? []);
+  const [emptyContextByDefault, setEmptyContextByDefault] = useState(
+    source?.emptyContextByDefault ?? false,
+  );
   const slug = (v: string) =>
     v
       .normalize('NFD')
@@ -2229,6 +2304,7 @@ function AgentEditor({
             skills,
             nickname: nickname.trim() || undefined,
             avatar,
+            emptyContextByDefault,
           });
         }}
       >
@@ -2322,6 +2398,21 @@ function AgentEditor({
           </label>
           <ModelSelect state={state} value={model} onChange={setModel} />
         </div>
+        <label className="context-default-option">
+          <input
+            type="checkbox"
+            checked={emptyContextByDefault}
+            onChange={(e) => setEmptyContextByDefault(e.target.checked)}
+          />
+          <span>
+            <strong>Contexte vide par défaut</strong>
+            <small>
+              Tous les blocs optionnels commencent décochés à chaque nouvelle tentative.
+              Sélectionnez ensuite la spec, le plan ou les autres informations utiles. Le cadre
+              d’exécution reste actif.
+            </small>
+          </span>
+        </label>
         <fieldset className="skill-options">
           <legend>Skills associées</legend>
           {state.skills.map((s) => (
@@ -2344,14 +2435,22 @@ function AgentEditor({
         </fieldset>
         <div className="modal-actions">
           <span className="muted">
-            {source?.source === 'bundled' || source?.source === 'user'
-              ? 'Une version propre au projet sera enregistrée.'
-              : 'Profil enregistré dans .github/agents.'}
+            {source?.source === 'workspace'
+              ? 'Migrer ce profil avant de le modifier au niveau utilisateur.'
+              : 'Enregistré au niveau utilisateur, disponible dans tous les projets.'}
           </span>
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
-          <button className="button primary" disabled={!id || !name.trim() || !instructions.trim()}>
+          {source?.source === 'workspace' && (
+            <button type="button" className="button secondary" onClick={onMigrate}>
+              Migrer vers le compte utilisateur
+            </button>
+          )}
+          <button
+            className="button primary"
+            disabled={source?.source === 'workspace' || !id || !name.trim() || !instructions.trim()}
+          >
             Enregistrer le profil <Check size={15} />
           </button>
         </div>
@@ -2362,10 +2461,12 @@ function AgentEditor({
 function SkillEditor({
   skill,
   onClose,
+  onMigrate,
   save,
 }: {
   skill: SkillInfo | 'new';
   onClose: () => void;
+  onMigrate: () => void;
   save: (id: string, content: string) => void;
 }) {
   const blank = skill === 'new';
@@ -2432,14 +2533,22 @@ function SkillEditor({
         )}
         <div className="modal-actions">
           <span className="muted">
-            {source?.source === 'bundled' || source?.source === 'user'
-              ? 'Une version propre au projet sera enregistrée.'
-              : '.github/skills/' + (id || 'identifiant') + '/SKILL.md'}
+            {source?.source === 'workspace'
+              ? 'Migrer cette skill avant de la modifier au niveau utilisateur.'
+              : 'Enregistrée au niveau utilisateur, disponible dans tous les projets.'}
           </span>
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
-          <button className="button primary" disabled={!id || !content.trim()}>
+          {source?.source === 'workspace' && (
+            <button type="button" className="button secondary" onClick={onMigrate}>
+              Migrer vers le compte utilisateur
+            </button>
+          )}
+          <button
+            className="button primary"
+            disabled={source?.source === 'workspace' || !id || !content.trim()}
+          >
             Enregistrer la skill <Check size={15} />
           </button>
         </div>

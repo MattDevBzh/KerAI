@@ -3,6 +3,7 @@ import { WorkflowEngine } from '../src/core/workflow';
 import { defaultSettings } from '../src/core/store';
 import { buildPrompt, emptyLaunch, previewContext, selectMemory } from '../src/core/context';
 import type { RunInput, MemoryEntry } from '../src/shared/types';
+import { launchSchema } from '../src/core/evolutionSchemas';
 
 function input(): RunInput {
   const engine = new WorkflowEngine();
@@ -60,6 +61,86 @@ const entry: MemoryEntry = {
 };
 
 describe('deterministic context compiler', () => {
+  it('can exclude a spec, edit a plan for one run and retain execution rules without altering sources', () => {
+    const data = input();
+    for (const [id, content] of [
+      ['specs', 'SPEC_ORIGINALE'],
+      ['plan', 'PLAN_ORIGINAL'],
+    ])
+      data.feature.steps.push({
+        ...structuredClone(data.step),
+        id,
+        name: id,
+        dependsOn: [],
+        status: 'approved',
+        attempts: [
+          {
+            ...structuredClone(data.attempt),
+            id,
+            status: 'approved',
+            artifact: { name: `${id}.md`, content, updatedAt: 'now' },
+          },
+        ],
+      });
+    const original = structuredClone(data.feature);
+    const before = previewContext(data);
+    data.launch!.contextBlocks = {
+      'artifact:specs': { enabled: false },
+      'artifact:plan': { enabled: true, content: 'PLAN_PERSONNALISÉ' },
+    };
+    const result = previewContext(data);
+    expect(result.prompt).not.toContain('SPEC_ORIGINALE');
+    expect(result.prompt).not.toContain('PLAN_ORIGINAL');
+    expect(result.prompt).toContain('PLAN_PERSONNALISÉ');
+    expect(result.sections.find((section) => section.id === 'artifact:specs')).toMatchObject({
+      enabled: false,
+      content: expect.stringContaining('SPEC_ORIGINALE'),
+    });
+    expect(result.prompt).toBe(buildPrompt(data));
+    expect(result.fingerprint).not.toBe(before.fingerprint);
+    expect(data.feature).toEqual(original);
+    expect(result.characters).toBe(result.prompt.length);
+    expect(
+      result.sections
+        .filter((section) => section.source === 'system')
+        .every((section) => section.enabled && !section.editable),
+    ).toBe(true);
+  });
+  it('starts all optional blocks unchecked for an empty-default agent and allows explicit selection', () => {
+    const data = input();
+    data.agent.emptyContextByDefault = true;
+    data.memory = [{ ...entry, content: 'a'.repeat(4100) }];
+    const empty = previewContext(data);
+    expect(
+      empty.sections
+        .filter((section) => section.source !== 'system')
+        .every((section) => !section.enabled),
+    ).toBe(true);
+    expect(empty.prompt).not.toContain('US-42');
+    expect(empty.prompt).not.toContain('Respect public API');
+    expect(empty.errors).toEqual([]);
+    data.launch!.contextBlocks = { 'initial-context': { enabled: true } };
+    expect(buildPrompt(data)).toContain('US-42');
+    expect(buildPrompt(data)).not.toContain('Respect public API');
+    data.launch!.contextMode = 'all';
+    expect(buildPrompt(data)).toContain('Respect public API');
+  });
+  it('rejects attempts to change execution rules and bounds custom content at the host boundary', () => {
+    for (const id of ['step', 'completion', 'tools', 'review-result'])
+      expect(() =>
+        launchSchema.parse({
+          ...emptyLaunch(),
+          contextBlocks: { [id]: { enabled: false, content: 'override' } },
+        }),
+      ).toThrow();
+    expect(() =>
+      launchSchema.parse({
+        ...emptyLaunch(),
+        contextBlocks: { agent: { content: 'x'.repeat(60001) } },
+      }),
+    ).toThrow();
+    expect(launchSchema.parse(emptyLaunch())).toEqual(emptyLaunch());
+  });
   it('previews the exact business prompt with manually entered user story and source labels', () => {
     const data = input();
     const preview = previewContext(data);

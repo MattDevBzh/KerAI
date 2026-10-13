@@ -1,12 +1,14 @@
 import type { Tool } from '@github/copilot-sdk';
 import { randomUUID } from 'node:crypto';
-import { readdir, readFile, mkdir, writeFile, lstat } from 'node:fs/promises';
+import { readdir, readFile, mkdir, writeFile, lstat, rename, rm, open } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import type { RunInput, RunCallbacks, RunEvent, TestEvidence } from '../shared/types';
 import { PolicyEngine, isSensitivePath, sha256 } from './PolicyEngine';
 import { runProcess, redact } from './process';
 import { gitRead } from './gitRead';
+import { GitReview, gitPageSchema, gitChangesSchema, gitDiffSchema } from './GitReview';
+import { MAX_TEXT_BYTES, lineOffsets, readTextFile, textPage } from './textFiles';
 
 export async function gitInfo(root: string): Promise<{ branch: string; dirty: Set<string> }> {
   const branch = await gitRead(root, ['symbolic-ref', '--short', 'HEAD'], {
@@ -50,6 +52,7 @@ export class ToolHost {
   private policy!: PolicyEngine;
   private writes: Promise<unknown> = Promise.resolve();
   private observedFiles = new Set<string>();
+  private readViews = new Map<string, { hash: string; spans: [number, number][]; full: boolean }>();
   constructor(
     private input: RunInput,
     private callbacks: RunCallbacks,
@@ -71,6 +74,7 @@ export class ToolHost {
       .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
     for (const attempt of attempts) Object.assign(owned, attempt.fileHashes ?? {});
     Object.assign(owned, this.input.feature.workspaceFileHashes ?? {});
+    Object.assign(owned, this.input.existingChangeGrants ?? {});
     this.policy = new PolicyEngine(
       this.input.workspacePath,
       this.input.step.policy,
@@ -107,6 +111,7 @@ export class ToolHost {
         }
       },
     });
+    const gitReview = new GitReview(this.input.workspacePath, this.policy, this.signal);
     const tools: Tool[] = [
       tool(
         'studio_list_files',
@@ -116,105 +121,144 @@ export class ToolHost {
       ),
       tool(
         'studio_read_file',
-        'Read a UTF-8 workspace text file before editing. Paths relative to workspace. Files over 256KB and secrets refused.',
-        z.object({ path: z.string() }),
-        async ({ path: relative }) => {
+        'Read UTF-8 files up to 4 MiB. Optional 1-based inclusive startLine/endLine. Small files are returned whole; otherwise defaults to 200 lines, max 2000 lines and 64000 bytes per response. Follow nextStartLine. sha256 identifies the entire file. Read the exact block before studio_replace_text; a partial read does not permit whole-file replacement.',
+        z.object({
+          path: z.string(),
+          startLine: z.number().int().positive().optional(),
+          endLine: z.number().int().positive().optional(),
+        }),
+        async ({ path: relative, startLine, endLine }) => {
           const target = await this.policy.resolve(relative);
-          const stat = await lstat(target);
-          if (stat.size > 256_000 || !stat.isFile())
-            throw new Error('Fichier trop volumineux ou non régulier.');
-          const content = await readFile(target);
-          if (content.includes(0)) throw new Error('Fichier binaire non pris en charge.');
-          await this.policy.recordRead(relative, content);
-          this.observedFiles.add(path.posix.normalize(relative));
-          return { path: relative, content: content.toString('utf8'), sha256: sha256(content) };
+          const { bytes, text } = await readTextFile(target, this.signal);
+          const { from, to, ...page } = textPage(text, startLine, endLine);
+          const normalized = path.posix.normalize(relative);
+          const hash = sha256(bytes);
+          const previous = this.readViews.get(normalized);
+          const view = previous?.hash === hash ? previous : { hash, spans: [], full: false };
+          view.spans.push([from, to]);
+          view.spans.sort((a, b) => a[0] - b[0]);
+          view.spans = view.spans.reduce<[number, number][]>((merged, span) => {
+            const last = merged.at(-1);
+            if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1]);
+            else merged.push([...span]);
+            return merged;
+          }, []);
+          view.full =
+            view.spans.length === 1 && view.spans[0][0] === 0 && view.spans[0][1] === text.length;
+          this.readViews.set(normalized, view);
+          await this.policy.recordRead(normalized, bytes);
+          this.observedFiles.add(normalized);
+          return { path: normalized, ...page, sizeBytes: bytes.length, sha256: hash };
         },
       ),
       tool(
         'studio_search',
-        'Search a literal string in workspace text files (not a regex), at most 100 matching lines.',
-        z.object({ query: z.string().min(1).max(200), path: z.string().default('.') }),
-        async ({ query, path: dir }) => {
-          const matches: { path: string; line: number; text: string }[] = [];
-          for (const file of await this.list(dir)) {
-            if (this.signal.aborted) break;
+        'Search a literal string in UTF-8 workspace files up to 4 MiB, at most 100 matching lines. path may be a file or directory. For one file, startLine resumes search. Results are excerpts, not permission to edit: read matching lines first. Reports truncation and skipped files.',
+        z.object({
+          query: z.string().min(1).max(200),
+          path: z.string().default('.'),
+          startLine: z.number().int().positive().default(1),
+        }),
+        async ({ query, path: dir, startLine }) => {
+          const matches: {
+            path: string;
+            line: number;
+            text: string;
+            column: number;
+            excerptStartColumn: number;
+          }[] = [];
+          const skipped: { path: string; reason: string }[] = [];
+          let skippedCount = 0;
+          const target = await this.policy.resolve(dir);
+          const single = (await lstat(target)).isFile();
+          if (!single && startLine !== 1)
+            throw new Error('startLine nécessite un chemin de fichier.');
+          const files = single ? [path.posix.normalize(dir)] : await this.list(dir);
+          let scannedBytes = 0;
+          for (const file of files) {
+            this.signal.throwIfAborted();
             const absolute = await this.policy.resolve(file);
-            const stat = await lstat(absolute);
-            if (stat.size > 256_000) continue;
-            const content = await readFile(absolute);
-            if (content.includes(0)) continue;
-            const lines = content.toString('utf8').split('\n');
-            for (let i = 0; i < lines.length && matches.length < 100; i++)
-              if (lines[i].includes(query))
-                matches.push({ path: file, line: i + 1, text: lines[i].slice(0, 400) });
-            if (matches.length >= 100) break;
+            let content;
+            try {
+              content = await readTextFile(absolute, this.signal);
+            } catch (error) {
+              this.signal.throwIfAborted();
+              if (single) throw error;
+              skippedCount++;
+              if (skipped.length < 20)
+                skipped.push({ path: file, reason: (error as Error).message });
+              continue;
+            }
+            scannedBytes += content.bytes.length;
+            if (scannedBytes > 64 * 1024 * 1024)
+              return {
+                matches,
+                limit: 100,
+                truncated: true,
+                skipped,
+                skippedCount,
+                next: { path: file, startLine: 1 },
+                note: 'Budget de recherche atteint ; poursuivre dans des fichiers ou dossiers ciblés.',
+              };
+            const offsets = lineOffsets(content.text);
+            for (let i = single ? startLine - 1 : 0; i < offsets.length; i++) {
+              const line = content.text
+                .slice(offsets[i], offsets[i + 1] ?? content.text.length)
+                .replace(/\r?\n$/, '');
+              const column = line.indexOf(query);
+              if (column < 0) continue;
+              if (matches.length === 100)
+                return {
+                  matches,
+                  limit: 100,
+                  truncated: true,
+                  skipped,
+                  skippedCount,
+                  next: { path: file, startLine: i + 1 },
+                  note: single
+                    ? undefined
+                    : 'Suite indiquée pour ce fichier ; cibler les autres fichiers pour poursuivre la recherche.',
+                };
+              const excerptStart = Math.max(0, column - 100);
+              matches.push({
+                path: file,
+                line: i + 1,
+                column: column + 1,
+                excerptStartColumn: excerptStart + 1,
+                text: line.slice(excerptStart, excerptStart + 400),
+              });
+            }
           }
-          return { matches, limit: 100 };
-        },
-      ),
-      tool(
-        'studio_git_diff',
-        'Read Git diff including staged and unstaged changes (no external diff or text conversion). Optional single relative file.',
-        z.object({ path: z.string().optional() }),
-        async ({ path: relative }) => {
-          if (relative) await this.policy.resolve(relative);
-          const names = relative
-            ? [relative]
-            : (
-                await gitRead(
-                  this.input.workspacePath,
-                  [
-                    'diff',
-                    '--no-ext-diff',
-                    '--no-textconv',
-                    '--relative',
-                    '--name-only',
-                    '-z',
-                    'HEAD',
-                    '--',
-                  ],
-                  { signal: this.signal, timeoutMs: 10000, rawOutput: true },
-                )
-              ).stdout
-                .split('\0')
-                .filter(Boolean);
-          const safeNames = names.filter((name) => !isSensitivePath(name)).slice(0, 250);
-          if (!safeNames.length)
-            return {
-              diff: '',
-              note: 'Aucun diff suivi accessible. Les nouveaux fichiers se lisent avec studio_read_file.',
-            };
-          const args = [
-            '-c',
-            'core.pager=cat',
-            'diff',
-            '--no-ext-diff',
-            '--no-textconv',
-            '--relative',
-            'HEAD',
-            '--',
-            ...safeNames.map((name) => `:(literal)${name}`),
-          ];
-          const result = await gitRead(this.input.workspacePath, args, {
-            signal: this.signal,
-            timeoutMs: 10000,
-          });
-          if (result.code !== 0)
-            return {
-              diff: '',
-              unavailable: result.stderr,
-              note: 'Untracked files and repositories without HEAD require studio_read_file.',
-            };
           return {
-            diff: result.stdout,
-            truncated: result.truncated,
-            note: 'Untracked files are not in the Git diff; list/read them separately.',
+            matches,
+            limit: 100,
+            truncated: !single && files.length >= 1500,
+            skipped,
+            skippedCount,
           };
         },
       ),
+      tool(
+        'studio_git_branches',
+        'List local and locally known remote branches (e.g. develop, origin/develop), with current branch and HEAD SHA. Read-only: no fetch or checkout. Follow nextOffset with expectedSha256.',
+        gitPageSchema,
+        (args) => gitReview.branches(args),
+      ),
+      tool(
+        'studio_git_changes',
+        'List changed files before reviewing a diff. baseRef selects an existing local or remote branch. comparison: merge-base (default, changes introduced on current branch) or direct (compare branch tips). With baseRef, committed changes only by default; includeLocal:true adds staged/unstaged changes and lists untracked files. Without baseRef: local changes vs HEAD. Reports SHA identities and exclusions. Follow nextOffset with expectedSha256.',
+        gitChangesSchema,
+        (args) => gitReview.changes(args),
+      ),
+      tool(
+        'studio_git_diff',
+        'Read a paginated Git diff. baseRef: local branch (develop) or remote reference (origin/develop). comparison: merge-base (default) or direct. With baseRef, committed changes only unless includeLocal:true; without baseRef, staged/unstaged changes vs HEAD. Optional single workspace-relative path with /. List files first with studio_git_changes. startLine/endLine are DIFF lines (not source lines); follow nextStartLine with expectedSha256 and the same comparison/path. No tests, fetch, checkout, external diff or text conversion.',
+        gitDiffSchema,
+        (args) => gitReview.diff(args),
+      ),
     ];
     const canEdit = this.input.agent.tools.some((name) =>
-      ['edit', 'write', 'studio_write_file'].includes(name),
+      ['edit', 'write', 'studio_write_file', 'studio_replace_text'].includes(name),
     );
     if (this.input.step.policy !== 'read-only' && canEdit)
       tools.push(
@@ -229,6 +273,11 @@ export class ToolHost {
                 if (this.signal.aborted) throw new Error('Exécution annulée.');
                 const normalized = path.posix.normalize(relative);
                 const target = await this.policy.assertWrite(normalized);
+                const view = this.readViews.get(normalized);
+                if (view && !view.full)
+                  throw new Error(
+                    'Lecture partielle : utiliser studio_replace_text ou lire le fichier entier avant son remplacement.',
+                  );
                 await mkdir(path.dirname(target), { recursive: true });
                 await this.policy.assertWrite(normalized);
                 if (this.signal.aborted) throw new Error('Exécution annulée.');
@@ -240,7 +289,97 @@ export class ToolHost {
                 this.changedFiles.add(normalized);
                 this.fileHashes[normalized] = sha256(content);
                 this.policy.recordWrite(normalized, content);
+                this.readViews.set(normalized, {
+                  hash: this.fileHashes[normalized],
+                  spans: [[0, content.length]],
+                  full: true,
+                });
                 return { written: normalized, sha256: this.fileHashes[normalized] };
+              });
+            this.writes = write;
+            return await write;
+          },
+        ),
+        tool(
+          'studio_replace_text',
+          'Replace one exact unique block in an existing UTF-8 file up to 4 MiB. First read the entire oldText block with studio_read_file, then supply its whole-file sha256 as expectedSha256. Literal matching (no regex), preserves all other bytes and line endings. Ambiguous, unseen, dirty or stale content is refused. Re-read before another edit. Use \\r\\n if the read content uses CRLF.',
+          z.object({
+            path: z.string(),
+            oldText: z.string().min(1).max(64_000),
+            newText: z.string().max(256_000),
+            expectedSha256: z.string().regex(/^[a-f0-9]{64}$/),
+          }),
+          async ({ path: relative, oldText, newText, expectedSha256 }) => {
+            const write = this.writes
+              .catch(() => undefined)
+              .then(async () => {
+                this.signal.throwIfAborted();
+                const normalized = path.posix.normalize(relative);
+                const target = await this.policy.resolve(normalized, true);
+                const current = await readTextFile(target, this.signal);
+                const hash = sha256(current.bytes);
+                const view = this.readViews.get(normalized);
+                if (hash !== expectedSha256 || view?.hash !== hash)
+                  throw new Error(
+                    'Empreinte différente ou lecture absente : relis le fichier avant cette édition.',
+                  );
+                const at = current.text.indexOf(oldText);
+                if (at < 0)
+                  throw new Error(
+                    'Bloc introuvable : reprendre exactement le texte lu, y compris les fins de ligne.',
+                  );
+                if (current.text.indexOf(oldText, at + 1) !== -1)
+                  throw new Error(
+                    'Bloc ambigu : ajouter du contexte pour obtenir une occurrence unique.',
+                  );
+                if (!view.spans.some(([start, end]) => start <= at && end >= at + oldText.length))
+                  throw new Error(
+                    'Bloc non lu : lire toutes les lignes concernées avant cette édition.',
+                  );
+                await this.policy.assertWrite(normalized);
+                const content =
+                  current.text.slice(0, at) + newText + current.text.slice(at + oldText.length);
+                if (newText.includes('\0') || Buffer.from(content).toString('utf8') !== content)
+                  throw new Error(
+                    'Le remplacement doit être un texte UTF-8 valide sans octet nul.',
+                  );
+                if (Buffer.byteLength(content) > MAX_TEXT_BYTES)
+                  throw new Error('Le résultat dépasserait la limite de 4 Mio.');
+                const temporary = path.join(
+                  path.dirname(target),
+                  `.feature-studio-edit-${randomUUID()}.tmp`,
+                );
+                let temporaryCreated = false;
+                try {
+                  const handle = await open(temporary, 'wx', current.mode);
+                  temporaryCreated = true;
+                  try {
+                    await handle.writeFile(content, { encoding: 'utf8', signal: this.signal });
+                    await handle.chmod(current.mode & 0o777);
+                  } finally {
+                    await handle.close();
+                  }
+                  await this.policy.assertWrite(normalized);
+                  if (sha256((await readTextFile(target, this.signal)).bytes) !== expectedSha256)
+                    throw new Error(
+                      'Le fichier a changé pendant la préparation de l’édition. Relis-le.',
+                    );
+                  this.signal.throwIfAborted();
+                  await rename(temporary, target);
+                } finally {
+                  if (temporaryCreated) await rm(temporary, { force: true });
+                }
+                const nextHash = sha256(content);
+                this.changedFiles.add(normalized);
+                this.fileHashes[normalized] = nextHash;
+                this.policy.recordWrite(normalized, content);
+                this.readViews.set(normalized, { hash: nextHash, spans: [], full: false });
+                return {
+                  written: normalized,
+                  replacements: 1,
+                  sha256: nextHash,
+                  note: 'Relire la zone avant toute autre édition.',
+                };
               });
             this.writes = write;
             return await write;
@@ -324,8 +463,11 @@ export class ToolHost {
       studio_list_files: ['read', 'search', 'studio_list_files'],
       studio_read_file: ['read', 'studio_read_file'],
       studio_search: ['search', 'studio_search'],
+      studio_git_branches: ['read', 'studio_git_branches', 'studio_git_diff'],
+      studio_git_changes: ['read', 'studio_git_changes', 'studio_git_diff'],
       studio_git_diff: ['read', 'studio_git_diff'],
       studio_write_file: ['edit', 'write', 'studio_write_file'],
+      studio_replace_text: ['edit', 'write', 'studio_write_file', 'studio_replace_text'],
       studio_run_test: ['execute', 'studio_run_test'],
     };
     return tools.filter((tool) => capabilities[tool.name].some((name) => requested.has(name)));

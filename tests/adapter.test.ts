@@ -187,7 +187,7 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     fake = transport();
     callbacks = { onEvent: vi.fn(), onSession: vi.fn() };
     adapter = new CopilotCliAdapter({
-      cliPath: '/bin/copilot',
+      cliPath: process.execPath,
       launcherPath: resolve('scripts/copilot-launcher.js'),
       storagePath: storage,
       getTools: async () => [{ name: 'studio_read_file', handler: async () => 'file contents' }],

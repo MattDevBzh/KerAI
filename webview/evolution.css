@@ -1692,3 +1692,128 @@
     font-size: 10px;
   }
 }
+
+.context-default-option,
+.context-block-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  cursor: pointer;
+}
+.context-default-option {
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.context-default-option small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.context-selection-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.context-block {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.context-block-toggle span {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+}
+.context-block-toggle small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.context-block input[type='checkbox'],
+.context-default-option input {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.context-block-excluded {
+  border-style: dashed;
+}
+.context-block-excluded .context-block-toggle span {
+  color: var(--muted);
+}
+.preview-sections .context-block details {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.context-block-editor {
+  padding: 0 12px;
+}
+.context-block-editor textarea {
+  width: 100%;
+  resize: vertical;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.context-block > details > button {
+  margin: 0 12px 12px;
+}
+.context-pending {
+  font-size: 12px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.existing-changes-picker {
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 360px;
+  overflow: auto;
+}
+.existing-changes-picker legend {
+  font-size: 12px;
+  font-weight: 600;
+}
+.existing-changes-picker label {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+  align-items: flex-start;
+  font-size: 11px;
+  cursor: pointer;
+}
+.existing-changes-picker input {
+  flex-shrink: 0;
+}
+.existing-changes-picker span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.existing-changes-picker small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.approval-blockers {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.approval-blockers ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+.approval-blockers strong {
+  color: var(--coral);
+}

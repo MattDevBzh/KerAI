@@ -24,12 +24,19 @@ export interface RunLaunchOptions {
   mcpServerIds: string[];
   memoryIds: string[];
   useProjectMemory: boolean;
+  /** Omitted: follow the agent's default. Only optional context blocks are affected. */
+  contextMode?: 'all' | 'empty';
+  contextBlocks?: Record<string, { enabled?: boolean; content?: string }>;
+  editableExistingFiles?: string[];
 }
 export interface PromptSection {
   id: string;
   label: string;
   source: 'human' | 'agent' | 'skill' | 'artifact' | 'memory' | 'system';
   content: string;
+  enabled?: boolean;
+  editable?: boolean;
+  originalContent?: string;
 }
 export interface RunPreview {
   featureId: string;
@@ -41,6 +48,8 @@ export interface RunPreview {
   estimatedTokens: number;
   maxCharacters: number;
   errors: string[];
+  resumesSession?: boolean;
+  existingChanges?: { files: { path: string; reason?: string }[]; omittedCount: number };
 }
 export interface HumanRequest {
   id: string;

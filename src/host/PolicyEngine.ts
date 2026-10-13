@@ -102,7 +102,7 @@ export class PolicyEngine {
     const current = sha256(content);
     if (this.dirtyFiles.has(normalized) && this.ownedHashes[normalized] !== current)
       throw new Error(
-        `Modification préexistante protégée : ${normalized}. Enregistre-la dans Git ou intègre-la toi-même avant de relancer.`,
+        `Modification préexistante protégée : ${normalized}. Au prochain lancement, prépare l’aperçu et sélectionne ce fichier dans « Reprendre des modifications existantes », puis actualise l’aperçu. Un accord dans la conversation ne suffit pas.`,
       );
     if (this.readHashes.get(normalized) !== current)
       throw new Error(

@@ -1,6 +1,41 @@
 # Changelog
 
-## Unreleased
+## 0.3.6 — 2026-10-13
+
+- Ajoute une sélection explicite des fichiers déjà modifiés que l’agent peut reprendre, dans l’aperçu avant lancement. Une autorisation conversationnelle seule n’ouvre plus une fausse piste : le refus indique directement ce contrôle.
+- Lie cette autorisation aux octets vérifiés par l’aperçu et sauvegarde les fichiers sélectionnés avant l’exécution. Les changements externes ultérieurs, fichiers non sélectionnés et restrictions du profil restent protégés.
+- Affiche les motifs de blocage près du bouton de validation, un état de validation en cours, les refus hôtes et une confirmation explicite de fin de session. Le parcours n’est annoncé entièrement validé que lorsque la feature est réellement terminée.
+
+## 0.3.5 — 2026-10-13
+
+- Ajoute des cases à cocher et une édition par bloc dans l’aperçu de lancement : livrables, instructions d’agent, skills, mémoire, besoin et retours humains.
+- Ajoute le réglage personnel « Contexte vide par défaut » aux agents, ainsi que Tout cocher / Tout décocher et la restauration du contenu original pour une tentative.
+- Calcule le prompt et son budget uniquement à partir des blocs inclus. Conserve le cadre d’exécution, vérifie l’aperçu avant lancement et enregistre les choix dans l’historique de la tentative sans modifier les sources.
+- Utilise une nouvelle session Copilot lorsque le contexte est personnalisé, pour ne pas réintroduire les blocs exclus via l’ancien historique.
+
+## 0.3.4 — 2026-10-13
+
+- Ajoute aux agents les comparaisons contre une branche locale ou distante déjà connue (`develop`, `origin/develop`), depuis l’ancêtre commun ou directement entre les deux versions.
+- Sépare la comparaison des commits de l’inclusion explicite des changements locaux ; conserve le diff local contre HEAD quand aucune branche n’est fournie.
+- Ajoute la liste paginée des branches et fichiers modifiés, les SHA de comparaison et la pagination des diffs avec détection des changements entre pages.
+- Refuse les références absentes, ambiguës et les résultats Git tronqués. Préserve les exclusions de fichiers sensibles et le fonctionnement en lecture seule.
+
+## 0.3.3 — 2026-10-13
+
+- Enregistre les créations et éditions d’agents et skills au niveau utilisateur et corrige les libellés de l’éditeur.
+- Ajoute une migration sélectionnable des anciens profils du projet, avec scripts et ressources de skills, sauvegardes, adaptation des liens du kit et vérification avant retrait des doublons.
+- Conserve les deux versions en cas de personnalisations différentes et refuse les sources ou destinations modifiées depuis l’aperçu.
+
+## 0.3.2 — 2026-10-13
+
+- Lit les fichiers UTF-8 jusqu’à 4 Mio par plages de lignes, avec réponses bornées, pagination explicite et empreinte du fichier entier.
+- Recherche également dans les gros fichiers et dans un fichier précis, avec indication des résultats tronqués et fichiers ignorés.
+- Ajoute `studio_replace_text` pour modifier un bloc unique effectivement lu, sans réécrire le fichier entier dans le contexte du modèle. Vérifie l’empreinte, préserve les fins de ligne et conserve les restrictions de permissions et de changements préexistants.
+- Interdit le remplacement intégral après une lecture partielle et conserve la compatibilité avec les points de restauration.
+
+## 0.3.1 — 2026-10-13
+
+- Résout les chemins Windows complets sans extension vers le fichier `.exe`, `.cmd` ou `.bat` existant. Signale les chemins introuvables avant de démarrer le transport SDK.
 
 - Corrige la résolution du CLI dans le PATH et le lancement des shims Windows `.bat`/`.cmd`, tout en conservant le SDK JSON-RPC, les outils hôtes et la reprise des sessions.
 - Ajoute `featureStudio.debugCli`, les diagnostics de sortie filtrés, le nettoyage des processus et les tests de transport réels sans appels Copilot.

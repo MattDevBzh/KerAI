@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { AgentAdapter, RunCallbacks, RunInput, RunResult } from '../src/shared/types';
@@ -339,6 +339,98 @@ describe('manual context, human questions and MCP sessions', () => {
     memoryIds: [] as string[],
     useProjectMemory: false,
   };
+  it('binds existing-file authorization to preview bytes, backs them up and preserves unselected files', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Existing changes',
+      description: '',
+      workflowId: 'single',
+    });
+    feature.steps[0].agentId = 'fs-dev';
+    const original = '// existing feature work\r\nRemoveRange();\r\n';
+    await writeFile(join(f.workspace, 'SyfadisProvider.cs'), original);
+    await writeFile(join(f.workspace, 'Other.cs'), 'human work');
+    const first = await f.service.previewRun(feature.id, 'session');
+    expect(first.existingChanges?.files.map((file) => file.path)).toContain('SyfadisProvider.cs');
+    const selected = { ...launch, editableExistingFiles: ['SyfadisProvider.cs'] };
+    await expect(f.service.runStep(feature.id, 'session', '', false, selected)).rejects.toThrow(
+      /aperçu/,
+    );
+    const stale = await f.service.previewRun(feature.id, 'session', '', false, selected);
+    const authorized = original + '// latest human edit\r\n';
+    await writeFile(join(f.workspace, 'SyfadisProvider.cs'), authorized);
+    await expect(
+      f.service.runStep(feature.id, 'session', '', false, selected, stale.fingerprint),
+    ).rejects.toThrow(/aperçu/);
+    expect(f.adapter.run).not.toHaveBeenCalled();
+    const fresh = await f.service.previewRun(feature.id, 'session', '', false, selected);
+    f.run(async (input, callbacks, signal) => {
+      const tools = await f.service.getTools(input, callbacks, signal);
+      const read = await invoke(tools, 'studio_read_file', { path: 'SyfadisProvider.cs' });
+      const hash = JSON.parse(read.textResultForLlm).sha256;
+      const edited = await invoke(tools, 'studio_replace_text', {
+        path: 'SyfadisProvider.cs',
+        expectedSha256: hash,
+        oldText: 'RemoveRange();',
+        newText: 'if (!isTargeted) RemoveRange();',
+      });
+      expect(edited.resultType).toBe('success');
+      await invoke(tools, 'studio_read_file', { path: 'Other.cs' });
+      expect(
+        (await invoke(tools, 'studio_write_file', { path: 'Other.cs', content: 'overwrite' }))
+          .resultType,
+      ).toBe('failure');
+      return finished();
+    });
+    await f.service.runStep(feature.id, 'session', '', false, selected, fresh.fingerprint);
+    expect(await readFile(join(f.workspace, 'SyfadisProvider.cs'), 'utf8')).toBe(
+      authorized.replace('RemoveRange();', 'if (!isTargeted) RemoveRange();'),
+    );
+    expect(await readFile(join(f.workspace, 'Other.cs'), 'utf8')).toBe('human work');
+    const saved = (await f.service.store.load()).features[0].steps[0].attempts[0];
+    expect(saved.changedFiles).toEqual(['SyfadisProvider.cs']);
+    expect(await readFile(join(saved.existingChangesBackup!, '0.bin'), 'utf8')).toBe(authorized);
+    expect(
+      JSON.parse(await readFile(join(saved.existingChangesBackup!, 'manifest.json'), 'utf8'))
+        .files[0].path,
+    ).toBe('SyfadisProvider.cs');
+  });
+  it('persists block choices, sends exactly the preview and avoids resuming excluded context', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Context controls',
+      description: 'SOURCE_A_EXCLURE',
+      workflowId: 'single',
+    });
+    await f.service.runStep(feature.id, 'session');
+    const selected = {
+      ...launch,
+      contextMode: 'empty' as const,
+      contextBlocks: { 'initial-context': { enabled: true, content: 'CONTEXTE_MODIFIÉ' } },
+    };
+    const preview = await f.service.previewRun(feature.id, 'session', '', true, selected);
+    expect(preview.resumesSession).toBe(false);
+    expect(preview.prompt).not.toContain('SOURCE_A_EXCLURE');
+    expect(preview.prompt).toContain('CONTEXTE_MODIFIÉ');
+    await expect(
+      f.service.runStep(
+        feature.id,
+        'session',
+        '',
+        true,
+        { ...selected, contextMode: 'all' },
+        preview.fingerprint,
+      ),
+    ).rejects.toThrow(/aperçu/);
+    await f.service.runStep(feature.id, 'session', '', true, selected, preview.fingerprint);
+    expect(f.inputs.at(-1)?.resumeSessionId).toBeUndefined();
+    expect(f.inputs.at(-1)?.preparedPrompt).toBe(preview.prompt);
+    const stored = (await f.service.store.load()).features[0].steps[0].attempts.at(-1)!;
+    expect(stored.launch).toEqual(selected);
+    expect(f.service.engine.getFeature(feature.id).description).toBe('SOURCE_A_EXCLURE');
+  });
   it('binds a run to its preview, persists the user story and selects only explicit MCPs', async () => {
     const f = await fixture();
     await f.service.checkRuntime();
@@ -365,7 +457,7 @@ describe('manual context, human questions and MCP sessions', () => {
       workflowId: 'single',
     });
     const options = { ...launch, mcpServerIds: ['ado'] };
-    const preview = f.service.previewRun(feature.id, 'session', '', false, options);
+    const preview = await f.service.previewRun(feature.id, 'session', '', false, options);
     expect(preview.prompt).toContain('US-208');
     await expect(
       f.service.runStep(
@@ -476,9 +568,9 @@ describe('manual context, human questions and MCP sessions', () => {
       description: '',
       workflowId: 'single',
     });
-    expect(() =>
+    await expect(
       f.service.previewRun(feature.id, 'session', '', false, { ...launch, mcpServerIds: ['ado'] }),
-    ).toThrow(/activé/);
+    ).rejects.toThrow(/activé/);
   });
 });
 
@@ -627,7 +719,7 @@ describe('bounded autopilot and local project memory', () => {
       description: '',
       workflowId: 'single',
     });
-    expect(f.service.previewRun(target.id, 'session').prompt).not.toContain(
+    expect((await f.service.previewRun(target.id, 'session')).prompt).not.toContain(
       'Prefer existing store',
     );
     const launch = {
@@ -636,11 +728,11 @@ describe('bounded autopilot and local project memory', () => {
       memoryIds: ['architecture'],
       useProjectMemory: true,
     };
-    expect(f.service.previewRun(target.id, 'session', '', false, launch).prompt).toContain(
+    expect((await f.service.previewRun(target.id, 'session', '', false, launch)).prompt).toContain(
       'Prefer existing store',
     );
     f.service.engine.saveArtifact(source.id, 'session', 'Changed decision');
-    expect(() => f.service.previewRun(target.id, 'session', '', false, launch)).toThrow(
+    await expect(f.service.previewRun(target.id, 'session', '', false, launch)).rejects.toThrow(
       /plus validé/,
     );
     expect(f.inputs).toHaveLength(1); // memory saving and preview are entirely local
@@ -689,6 +781,9 @@ describe('host approval proofs and revision guards', () => {
     await writeFile(join(f.workspace, 'tests/fixture.ts'), 'initial');
     await f.service.approveStep(feature.id, 'session', attempt.id, attempt.revision ?? 0);
     expect(feature.status).toBe('completed');
+    expect(
+      (await f.service.store.load()).features.find((item) => item.id === feature.id)?.status,
+    ).toBe('completed');
     await f.service.saveCriteria(feature.id, [
       { id: 'criterion', text: 'Human acceptance', status: 'pending', evidence: '' },
     ]);
@@ -737,14 +832,14 @@ describe('branch and memory invalidation regressions', () => {
       updatedAt: '',
       source: { featureId: feature.id, stepId: 'plan', attemptId: feature.steps[1].attempts[0].id },
     });
-    expect(() =>
+    await expect(
       f.service.previewRun(feature.id, 'specs', '', false, {
         initialContext: '',
         mcpServerIds: [],
         memoryIds: ['old-plan'],
         useProjectMemory: true,
       }),
-    ).toThrow(/va invalider/);
+    ).rejects.toThrow(/va invalider/);
     expect(feature.steps[1].status).toBe('approved');
     expect(f.inputs).toHaveLength(2);
   });

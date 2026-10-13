@@ -33,6 +33,14 @@ Sources : [SDK TypeScript et options actuelles](https://github.com/github/copilo
 
 ## Restriction technique des outils
 
+### Connexion manuelle sur Windows
+
+Si le CLI démarre mais que Feature Studio annonce une authentification absente, ouvrir un terminal PowerShell dédié. Affecter `$env:COPILOT_HOME` au chemin exact affiché par le diagnostic, puis lancer `& "<chemin complet de copilot.bat>" login`. Terminer la connexion GitHub, fermer ce terminal et relancer le diagnostic Feature Studio. Cette variable ne doit pas être rendue permanente : elle ne concerne que la connexion au runtime isolé. Le chemin historique peut contenir deux segments `copilot-runtime` ; utiliser le chemin affiché pour conserver les sessions existantes.
+
+Les chemins complets sans extension sont également résolus sous Windows vers un fichier existant `.exe`, `.cmd` ou `.bat`. Un chemin complet introuvable produit une erreur avant le lancement du SDK et ne bascule pas vers un autre CLI du `PATH`.
+
+### Catalogue et permissions
+
 Les flags classiques `--allow-tool=write` ne confinent pas les écritures par chemin. Les règles `shell(command:*)` autorisent un nom/préfixe de commande, sans garantir que ses arguments ou le code exécuté respectent les limites du workspace. Le `cwd` et les instructions en langage naturel ne suffisent pas pour une restriction de tests.
 
 L'adaptateur injecte les outils `studio_*` fournis par `ToolHost` : liste, lecture, recherche, écriture, diff et commande de test configurée. Chaque handler vérifie les permissions dans `PolicyEngine` et reçoit le signal d'annulation. Il n'existe aucun shell libre accessible au modèle. Les chemins et les commandes sont évalués par l'hôte ; les profils `read-only`, `workspace-write` et `tests` sélectionnent les capacités correspondantes.
@@ -110,3 +118,18 @@ Le prompt métier est compilé de manière déterministe par `core/context.ts` :
 Les callbacks d’usage sont cumulés et dédupliqués par identifiant d’événement. Une mesure reçue avant erreur, timeout ou annulation reste persistée ; une fin sans usage ne l’efface pas. Les budgets comptent toutes les tentatives et suspendent les nouveaux appels si un seuil est atteint ou si une mesure requise reste inconnue. Les seuils ne peuvent garantir le coût d’un appel déjà en cours.
 
 Le support MCP local, HTTP et SSE, l’authentification Azure DevOps et la preuve réelle sans prompt sont décrits dans [MCP.md](MCP.md). Aucun nouveau prompt payant n’a été nécessaire pour valider cette itération ; les résultats du smoke historique ci-dessus appartiennent à la livraison 0.1.
+
+
+## Gros fichiers et édition partielle (0.3.2)
+
+Les outils hôtes lisent les fichiers texte UTF-8 jusqu’à **4 Mio**, limite alignée sur les fichiers restaurables des checkpoints. Les fichiers binaires et UTF-8 invalides sont refusés explicitement. Aucun shell ni outil natif supplémentaire n’est autorisé.
+
+- `studio_search` accepte un dossier ou un fichier. Il renvoie au plus 100 lignes correspondantes, avec des extraits centrés sur la correspondance. Pour un fichier, `startLine` permet de poursuivre la recherche. Les limites de scan, les résultats tronqués et les fichiers ignorés sont signalés. Une recherche n’autorise pas une écriture.
+- `studio_read_file` accepte `startLine` et `endLine`, numérotés à partir de 1 et inclusifs. Sans plage, un petit fichier est rendu entièrement ; sinon, la lecture commence par 200 lignes. Une plage est limitée à 2 000 lignes et le contenu renvoyé à 64 000 octets, sans couper une ligne. Une ligne dépassant cette limite est refusée explicitement. `nextStartLine`, `totalLines`, `truncated` et l’empreinte `sha256` du **fichier entier** accompagnent le contenu exact.
+- `studio_replace_text` reçoit `path`, `oldText`, `newText` et `expectedSha256`. L’ancien bloc doit être unique et entièrement couvert par les lectures de la version courante du fichier. Le remplacement est littéral : conserver les caractères et fins de ligne du contenu lu. La taille du résultat reste limitée à 4 Mio. Relire la zone après chaque modification avant une autre édition.
+
+Les agents possédant la capacité `edit`, `write` ou `studio_write_file` reçoivent automatiquement le nouvel outil quand le profil permet l’écriture. Un profil en lecture seule ne le reçoit pas ; le profil Tests reste limité à ses dossiers. Il n’est pas nécessaire de réinstaller le kit. Recharger VS Code puis relancer l’étape renouvelle le catalogue d’outils.
+
+Une lecture partielle ne permet jamais de remplacer le fichier complet avec `studio_write_file`. Les blocs ambigus, non lus ou basés sur une ancienne empreinte sont refusés. Les modifications humaines préexistantes restent protégées. Les écritures sont sérialisées avec les commandes de tests. Le remplacement partiel prépare un fichier temporaire voisin puis vérifie de nouveau le fichier avant son renommage ; il conserve les octets hors du bloc, notamment le BOM UTF-8 et les fins de ligne CRLF. Cela détecte les changements depuis la lecture, sans constituer un verrou exclusif contre les autres applications.
+
+Parcours conseillé : rechercher `SyncUsers`, lire les lignes entourant la méthode, remplacer un bloc unique en utilisant l’empreinte retournée, puis relire la méthode.

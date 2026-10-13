@@ -136,7 +136,7 @@ Dans **Agents**, ouvre un profil et change **Son petit nom**. Choisis l’un des
 
 Chaque avatar possède une image de repos, un **vrai GIF de travail à quatre images**, puis une pose de validation. Les animations respectent la préférence système de réduction des mouvements. Le pseudo et le personnage sont sauvegardés dans le profil du projet ; le rôle technique reste indépendant du petit nom.
 
-Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. Une personnalisation d’un profil fourni crée sa version dans `.github/agents/`. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
+Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. Les créations et modifications sont enregistrées dans `~/.copilot/agents/` et `~/.copilot/skills/` (ou dans `COPILOT_HOME` si défini), pour être disponibles dans tous tes projets. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
 
 Les capacités reconnues sont `read`, `search`, `edit`/`write` et `execute`, ainsi que les noms précis des outils `studio_*`. `execute` donne accès uniquement aux commandes de tests déjà autorisées, et seulement dans une étape de profil Tests. Il n’ouvre aucun terminal libre. La permission effective est toujours l’intersection du profil d’étape et des outils de l’agent.
 
@@ -155,7 +155,7 @@ Clique **Installer le kit utilisateur** pour rendre le kit disponible dans tous 
 | Templates, scripts et documentation du kit | `feature-studio/kit/` |
 | Exemples propres aux projets | `feature-studio/kit/examples/` |
 
-L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies présentes dans les projets ne sont pas supprimées. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. Une modification depuis l’éditeur du cockpit continue à créer une surcharge propre au projet.
+L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies du projet sont conservées tant que tu ne demandes pas leur migration. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. L’éditeur enregistre désormais au niveau utilisateur. Si une copie du projet existe, migre-la d’abord afin qu’elle ne masque pas tes modifications personnelles.
 
 Les liens des agents et skills installés pointent vers les templates utilisateur. La carte `.ai/project.md`, lorsqu’elle existe, reste celle du projet courant. Les exemples de configuration et le runner .NET restent optionnels : depuis le projet concerné, le runner utilisateur peut être appelé explicitement avec `python "$HOME/.copilot/feature-studio/kit/scripts/ai_tools.py" --help` (adapter le chemin si `COPILOT_HOME` est défini). La documentation originale du kit décrit aussi son ancien mode d’installation dans un dépôt. Aucun script, MCP ou outil externe n’est exécuté pendant la copie.
 
@@ -208,3 +208,59 @@ Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développe
 Le test réel facultatif est séparé dans `scripts/smoke-copilot.ts` et exige `FEATURE_STUDIO_LIVE_TEST=1`. Il consomme du quota Copilot. Il ne fait partie ni de `npm test` ni de la CI. Les sources des avatars et leurs prompts sont dans [design/avatars](design/avatars/PROMPTS.md) ; `node scripts/pack-avatars.mjs` reconstruit leurs PNG/GIF.
 
 Voir [la validation livrée et les limites connues](docs/VALIDATION.md) pour distinguer tests automatiques, test du CLI réel, versions testées et plateformes non vérifiées.
+
+
+### Déplacer les anciennes personnalisations vers ton compte
+
+Dans le projet concerné, utilise **Migrer les profils du projet** dans la barre latérale, ou la commande **Feature Studio : migrer les agents et skills vers le compte utilisateur**. Sélectionne les profils à migrer dans la liste. L’action prépare les ressources du kit utilisateur, puis sauvegarde et déplace uniquement ta sélection.
+
+- Les agents sont placés dans `~/.copilot/agents/` ; chaque skill est copiée avec tout son dossier, y compris scripts et ressources.
+- Une copie identique ou une version standard non personnalisée du kit peut être remplacée. Une version utilisateur personnalisée différemment reste intacte : le conflit est détaillé dans **Sortie → Feature Studio** et le profil du projet est conservé.
+- Les liens des templates du kit sont adaptés. Un lien Markdown relatif vers une ressource absente à la nouvelle destination bloque la migration du profil concerné.
+- Les fichiers source sont sauvegardés sous `~/.copilot/feature-studio/migrations/<identifiant>/project/`. Les versions utilisateur remplacées sont sauvegardées sous `user/`. `manifest.json` indique le projet et les destinations ; `result.json` contient le bilan. Pour restaurer manuellement, reprends la version voulue depuis ces sauvegardes après avoir vérifié les fichiers actuels.
+- Le retrait du fichier du projet n’arrive qu’après vérification des sauvegardes, copies et sources. Les profils non sélectionnés, configurations du projet et workflows restent en place. Si un fichier retiré était versionné, Git affichera une suppression à relire avant commit.
+
+La migration s’exécute sur le poste où l’extension est installée ; installer le VSIX seul ne déplace aucun fichier. Les autres fenêtres déjà ouvertes doivent actualiser leur catalogue pour voir les changements partagés.
+
+### Relecture contre une branche locale ou distante
+
+Depuis la version 0.3.4, un agent disposant de l’outil `read` peut comparer la branche de son espace de travail avec `develop`, `main`, `origin/develop` ou une autre branche existante. Indique par exemple dans ta demande : **« Relis ma branche courante par rapport à origin/develop, en incluant mes changements non commités. »** Aucun changement de branche n’est nécessaire.
+
+- `studio_git_branches` liste les branches locales et les références distantes déjà connues, ainsi que la branche courante et son SHA. Aucun fetch automatique : si une référence distante manque ou doit être actualisée, actualise-la avec Git avant la relecture.
+- `studio_git_changes` liste les fichiers concernés. `baseRef` choisit la branche ; `comparison: "merge-base"` (par défaut) retient les changements introduits depuis l’ancêtre commun. `comparison: "direct"` compare les deux versions de branche et peut donc montrer aussi les changements présents uniquement sur la base.
+- `studio_git_diff` accepte ces mêmes paramètres et un `path` de fichier relatif au workspace, avec `/`. Avec une base explicite, seuls les changements commités sont inclus par défaut. `includeLocal: true` ajoute les changements indexés et non indexés ; les fichiers non suivis sont listés séparément et lus avec `studio_read_file`. Sans base, le comportement reste le diff local contre HEAD.
+- Pour les grandes réponses, l’agent suit `nextOffset` (listes) ou `nextStartLine` (diff), en fournissant le `sha256` précédent comme `expectedSha256` et en conservant les paramètres de comparaison. Les lignes de pagination sont celles du **diff**, pas les numéros du fichier source. Les en-têtes `@@` du diff donnent les positions dans les fichiers.
+
+Chaque comparaison indique la base résolue, son SHA, le SHA de HEAD et le SHA réellement utilisé pour le départ du diff. Les branches absentes ou ambiguës provoquent une erreur explicite ; il n’y a pas de remplacement silencieux par HEAD. Les renommages sont présentés comme suppression/ajout, les sous-modules sont exclus et les fichiers binaires restent signalés par Git. L’accès aux chemins sensibles reste interdit. Les modèles n’ont pas besoin de permissions d’écriture ou d’exécution pour utiliser ces outils.
+
+Les réponses de diff sont limitées à 64 000 octets par page. Un diff global de plus de 100 fichiers ou de 12 000 caractères de chemins doit être parcouru fichier par fichier. La collecte Git est plafonnée à 16 millions de caractères pour un diff et 4 millions pour une liste ; au-delà, une erreur explicite remplace tout résultat tronqué. Une ligne dépassant 64 000 octets ne peut pas être paginée par lignes. Les empreintes détectent les modifications entre pages ; elles ne verrouillent pas les fichiers contre des modifications externes pendant la lecture.
+
+### Choisir et éditer le contexte avant lancement
+
+Depuis la version 0.3.5, ouvre une tentative puis **Préparer l’aperçu**. Chaque bloc optionnel possède sa propre case : besoin, instructions de l’agent, skills, livrables validés, mémoire sélectionnée, réponses et retours humains. Pour le développeur, tu peux par exemple décocher le livrable de spec et conserver le plan technique. **Lire ou modifier** ouvre un éditeur ; **Rétablir le contenu d’origine** annule la modification de ce bloc. Les fichiers, skills et livrables d’origine restent intacts.
+
+**Tout cocher** et **Tout décocher** agissent sur les blocs optionnels. La mission de l’étape, les permissions des outils, les consignes d’interaction et le format de sortie restent regroupés sous **Cadre d’exécution toujours inclus**. Les connexions MCP se sélectionnent séparément : décocher un bloc de texte ne modifie pas les permissions des outils.
+
+Dans l’éditeur d’un agent, active **Contexte vide par défaut** : chaque nouveau lancement manuel commence avec tous les blocs optionnels décochés. Pour un testeur, il suffit ensuite de cocher la spec. Les champs humains que tu saisis explicitement sont inclus ; tu peux les décocher dans l’aperçu. La mémoire du projet demeure opt-in. Ce réglage est enregistré dans le profil utilisateur sous `emptyContextByDefault: true` et s’applique également aux lancements automatisés qui n’ont pas de sélection explicite.
+
+Après une modification, prépare à nouveau l’aperçu pour valider le prompt final et son compteur de caractères/tokens. Les choix et les textes personnalisés sont conservés avec la tentative exécutée, sans modifier les choix par défaut des lancements suivants. Une personnalisation démarre une nouvelle session Copilot, même depuis une demande de reprise : cela évite de transmettre involontairement l’ancien historique. Cette sélection concerne le contexte transmis au lancement ; elle ne retire pas à l’agent son accès autorisé aux fichiers ou outils.
+
+### Reprendre du code déjà modifié
+
+Depuis la version 0.3.6, le développeur peut continuer une fonctionnalité dont les fichiers contiennent déjà des changements locaux, sans devoir les commiter ou les supprimer au préalable :
+
+1. Ouvre une nouvelle tentative dans le dossier contenant tes changements, puis **Préparer l’aperçu**.
+2. Dans **Reprendre des modifications existantes**, coche uniquement les fichiers concernés, par exemple `SyfadisProvider.cs`.
+3. Prépare à nouveau l’aperçu, puis lance la tentative.
+
+Le host lie l’autorisation à la version exacte des fichiers sélectionnés. Un changement intervenu après l’aperçu impose un nouvel aperçu ; après lancement, une nouvelle édition humaine reste protégée même si l’agent relit le fichier. Les permissions de l’agent et du profil restent applicables : un relecteur ne gagne pas l’écriture, et un testeur reste limité à ses dossiers. Les fichiers supprimés, sensibles, liés symboliquement ou physiquement, non UTF-8 ou de plus de 4 Mio ne peuvent pas être repris par cette autorisation. La sélection est limitée à 100 fichiers et 32 Mio ; l’aperçu liste au plus 250 chemins non sensibles et signale les omissions.
+
+Une sauvegarde vérifiée des octets de chaque fichier sélectionné est enregistrée avant les hooks et l’agent. Son dossier est indiqué dans l’activité de la tentative : `existing-changes/<attemptId>` sous le stockage de Feature Studio. `manifest.json` associe chaque chemin source à sa copie `.bin`, son empreinte et son mode d’origine. Pour une restauration manuelle, arrête d’abord l’agent, consulte ce manifeste puis recopie uniquement la sauvegarde voulue vers son chemin source, après avoir conservé toute modification plus récente. La sauvegarde couvre le contenu de travail, pas l’index Git ; aucun stage, reset ou stash automatique n’est effectué.
+
+Les cases ne sont pas reprises automatiquement au lancement suivant. Le pilote automatique ne peut pas réutiliser une telle sélection sans aperçu confirmé : reprends ces fichiers lors d’une tentative manuelle. Les fichiers effectivement modifiés par l’agent continuent ensuite à suivre le mécanisme habituel d’empreintes de la feature.
+
+### Comprendre une validation refusée
+
+Le bouton **Valider cette étape** affiche les blocages connus avant confirmation : livrable absent, questions, corrections demandées, tests ou critères incomplets, commentaires bloquants. Le lien **Voir les critères et commentaires** mène aux contrôles correspondants. La dernière étape exige aussi que les critères globaux soient validés avec leur preuve et que les commentaires bloquants soient résolus.
+
+Les vérifications physiques (par exemple un fichier modifié depuis les tests) restent effectuées au clic côté host ; leur motif de refus est alors affiché durablement près du bouton. Une validation réussie actualise le statut et confirme **session terminée** si toutes les conditions de fin sont satisfaites. Ces messages ne contournent pas les règles de validation.

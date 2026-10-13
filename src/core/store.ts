@@ -66,6 +66,7 @@ const attempt = z.object({
   approvedAt: z.string().optional(),
   fileHashes: z.record(z.string(), z.string()).optional(),
   launch: launchSchema.optional(),
+  existingChangesBackup: z.string().optional(),
   promptFingerprint: z.string().max(256).optional(),
   promptCharacters: z.number().int().nonnegative().max(5000000).optional(),
   memorySnapshot: z.array(memorySchema).max(256).optional(),

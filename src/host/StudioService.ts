@@ -41,6 +41,7 @@ import {
 import { PolicyEngine, sha256 } from './PolicyEngine';
 import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
 import { WorkspaceLease } from './WorkspaceLease';
+import { inspectExistingChanges, backupExistingChanges } from './ExistingChanges';
 
 export class StudioService extends EventEmitter {
   engine = new WorkflowEngine();
@@ -413,10 +414,15 @@ export class StudioService extends EventEmitter {
         throw new Error(`Le MCP ${id} doit être activé avec des outils autorisés avant lancement.`);
       return structuredClone(server);
     });
-    const memory = selectMemory(this.state.memory ?? [], selected, agent.id);
+    const selectedMemory = selectMemory(this.state.memory ?? [], selected, agent.id);
+    const memory = selectedMemory.filter(
+      (entry) =>
+        selected.contextBlocks?.[`memory:${entry.id}`]?.enabled ??
+        (selected.contextMode ?? (agent.emptyContextByDefault ? 'empty' : 'all')) === 'all',
+    );
     if (
       selected.useProjectMemory &&
-      selected.memoryIds.some((id) => !memory.some((entry) => entry.id === id))
+      selected.memoryIds.some((id) => !selectedMemory.some((entry) => entry.id === id))
     )
       throw new Error(
         'Une mémoire sélectionnée est absente, désactivée ou ne concerne pas cet agent.',
@@ -484,9 +490,16 @@ export class StudioService extends EventEmitter {
       skills: this.state.skills.filter((skill) => skillIds.includes(skill.id)),
       workspacePath: this.workspaces.executionPath(feature),
       settings: structuredClone(this.state.settings),
-      resumeSessionId: resume ? previous?.sessionId : undefined,
+      // A resumed transcript could reintroduce blocks removed from the new prompt.
+      resumeSessionId:
+        resume &&
+        !agent.emptyContextByDefault &&
+        selected.contextMode === undefined &&
+        !Object.keys(selected.contextBlocks ?? {}).length
+          ? previous?.sessionId
+          : undefined,
       launch: selected,
-      memory: structuredClone(memory),
+      memory: structuredClone(selectedMemory),
       mcpServers,
       automation: feature.autopilot
         ? {
@@ -496,17 +509,23 @@ export class StudioService extends EventEmitter {
         : undefined,
     };
   }
-  previewRun(
+  async previewRun(
     featureId: string,
     stepId: string,
     feedback = '',
     resume = false,
     launch?: RunLaunchOptions,
-  ): RunPreview {
+  ): Promise<RunPreview> {
     this.assertTrusted();
+    await this.featurePath(featureId);
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     const blocked = budgetBlockReason(input.feature);
-    return previewContext(input, blocked ? [blocked] : []);
+    const existingChanges = await inspectExistingChanges(
+      input,
+      (await gitInfo(input.workspacePath)).dirty,
+    );
+    this.assertTrusted();
+    return { ...previewContext(input, blocked ? [blocked] : []), existingChanges };
   }
   async runStep(
     featureId: string,
@@ -558,6 +577,11 @@ export class StudioService extends EventEmitter {
         `Cette session est liée à la branche ${feature.branch}. Reviens sur cette branche avant de la lancer.`,
       );
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
+    if (input.launch?.editableExistingFiles?.length && !previewFingerprint)
+      throw new Error(
+        'L’autorisation de reprendre des fichiers existants exige un aperçu confirmé au lancement manuel.',
+      );
+    await inspectExistingChanges(input, info.dirty);
     const preview = previewContext(input);
     if (preview.errors.length) throw new Error(preview.errors.join(' '));
     if (previewFingerprint && previewFingerprint !== preview.fingerprint)
@@ -567,6 +591,7 @@ export class StudioService extends EventEmitter {
     const blocked = budgetBlockReason(feature);
     if (blocked) throw new Error(blocked);
     const attempt = this.engine.beginRun(featureId, stepId, feedback, resume);
+    if (!input.resumeSessionId) delete attempt.sessionId;
     attempt.launch = structuredClone(input.launch!);
     attempt.memorySnapshot = structuredClone(input.memory ?? []);
     attempt.promptFingerprint = preview.fingerprint;
@@ -664,6 +689,20 @@ export class StudioService extends EventEmitter {
         });
         this.rememberCheckpoint(feature, before);
         attempt.checkpointBeforeId = before.id;
+        await this.persist();
+      }
+      attempt.existingChangesBackup = await backupExistingChanges(
+        input,
+        this.store.rootPath,
+        controller.signal,
+      );
+      if (attempt.existingChangesBackup) {
+        callbacks.onEvent({
+          id: randomUUID(),
+          at: new Date().toISOString(),
+          kind: 'info',
+          message: `Sauvegarde des modifications existantes : ${attempt.existingChangesBackup}`,
+        });
         await this.persist();
       }
       await this.hooks('beforeRun', input, controller.signal, callbacks);
