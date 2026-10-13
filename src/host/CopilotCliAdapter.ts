@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { CopilotLaunch } from './CopilotLaunch';
+import { redact } from './process';
 import { z } from 'zod';
 import {
   CopilotClient,
@@ -43,6 +45,9 @@ export interface CopilotCliAdapterOptions {
   clientFactory?: (options: CopilotClientOptions) => CopilotClient;
   checkTimeoutMs?: number;
   resolveMcpSecret?: McpSecretResolver;
+  /** Packaged Node launcher; stdout/stdin remain reserved for the SDK's JSON-RPC. */
+  launcherPath?: string;
+  debugLog?: (message: string) => void;
 }
 
 export class RunCancelledError extends Error {
@@ -191,11 +196,13 @@ export function parseReview(content: string): ReviewReport | undefined {
 
 export class CopilotCliAdapter implements AgentAdapter {
   private readonly clients = new Set<CopilotClient>();
+  private readonly launches = new Map<CopilotClient, CopilotLaunch>();
+  private readonly closing = new Map<CopilotClient, Promise<void>>();
   private readonly runs = new Set<AbortController>();
   private disposed = false;
   constructor(private readonly options: CopilotCliAdapterOptions) {}
 
-  private async newClient(): Promise<CopilotClient> {
+  private async newClient(secrets: Set<string> = new Set()): Promise<CopilotClient> {
     if (this.disposed) throw new Error('Adaptateur fermé.');
     const directory = join(this.options.storagePath, 'copilot-runtime');
     await mkdir(directory, { recursive: true });
@@ -203,10 +210,22 @@ export class CopilotCliAdapter implements AgentAdapter {
     const path =
       typeof this.options.cliPath === 'function' ? this.options.cliPath() : this.options.cliPath;
     if (!path.trim()) throw new Error('Chemin Copilot CLI manquant.');
+    const launch = await CopilotLaunch.create(path, directory, this.options.debugLog, secrets);
+    if (this.disposed) {
+      await launch.dispose();
+      throw new Error('Adaptateur fermé.');
+    }
+    const env = {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      FEATURE_STUDIO_REDACT_VALUES: JSON.stringify([...secrets]),
+    };
+    delete (env as NodeJS.ProcessEnv).NODE_OPTIONS;
     const settings: CopilotClientOptions = {
       connection: RuntimeConnection.forStdio({
-        path,
+        path: this.options.launcherPath ?? join(__dirname, 'copilot-launcher.js'),
         args: [
+          launch.configPath,
           '--no-remote',
           '--no-custom-instructions',
           '--disable-builtin-mcps',
@@ -218,15 +237,44 @@ export class CopilotCliAdapter implements AgentAdapter {
       useLoggedInUser: true,
       enableRemoteSessions: false,
       logLevel: 'none',
+      env,
     };
-    const client = this.options.clientFactory
-      ? this.options.clientFactory(settings)
-      : new CopilotClient(settings);
-    this.clients.add(client);
-    return client;
+    try {
+      const client = this.options.clientFactory
+        ? this.options.clientFactory(settings)
+        : new CopilotClient(settings);
+      this.clients.add(client);
+      this.launches.set(client, launch);
+      this.options.debugLog?.(
+        launch.safe(`Démarrage Copilot CLI : ${launch.executable} ; transport JSON-RPC stdio.`),
+      );
+      return client;
+    } catch (error) {
+      await launch.dispose();
+      throw error;
+    }
+  }
+
+  private async runtimeError(error: unknown, client?: CopilotClient): Promise<Error> {
+    const launch = client && this.launches.get(client);
+    const failure = launch ? await launch.failure(error) : new Error(redact(errorMessage(error)));
+    this.options.debugLog?.(failure.message);
+    return failure;
   }
 
   private async close(client: CopilotClient, session?: CopilotSession): Promise<void> {
+    const pending = this.closing.get(client);
+    if (pending) return pending;
+    const closing = this.closeRuntime(client, session);
+    this.closing.set(client, closing);
+    try {
+      await closing;
+    } finally {
+      this.closing.delete(client);
+    }
+  }
+
+  private async closeRuntime(client: CopilotClient, session?: CopilotSession): Promise<void> {
     // Disconnect preserves persisted session data. A hung transport must not hang the extension.
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -243,7 +291,11 @@ export class CopilotCliAdapter implements AgentAdapter {
       /* forceStop below closes broken transport too */
     } finally {
       if (timer) clearTimeout(timer);
+      const launch = this.launches.get(client);
+      await launch?.stop();
       await client.forceStop().catch(() => {});
+      await launch?.dispose();
+      this.launches.delete(client);
       this.clients.delete(client);
     }
   }
@@ -251,6 +303,7 @@ export class CopilotCliAdapter implements AgentAdapter {
   async check(): Promise<RuntimeStatus> {
     let client: CopilotClient | undefined;
     const controller = new AbortController();
+    this.runs.add(controller);
     const timer = setTimeout(
       () => controller.abort(new Error('Le diagnostic Copilot CLI a expiré.')),
       this.options.checkTimeoutMs ?? 15_000,
@@ -286,9 +339,14 @@ export class CopilotCliAdapter implements AgentAdapter {
           })),
       };
     } catch (error) {
-      return { state: 'unavailable', models: [], error: errorMessage(error) };
+      return {
+        state: 'unavailable',
+        models: [],
+        error: (await this.runtimeError(error, client)).message,
+      };
     } finally {
       clearTimeout(timer);
+      this.runs.delete(controller);
       if (client) await this.close(client);
     }
   }
@@ -310,7 +368,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         controller.signal,
       );
       secrets = plan.secrets;
-      client = await this.newClient();
+      client = await this.newClient(secrets);
       await withSignal(client.start(), controller.signal);
       session = await withSignal(
         client.createSession({
@@ -361,7 +419,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         state: 'error',
         tools: [],
         checkedAt: new Date().toISOString(),
-        error: redactMcp(errorMessage(error), secrets),
+        error: redactMcp((await this.runtimeError(error, client)).message, secrets),
       };
     } finally {
       clearTimeout(timer);
@@ -397,7 +455,12 @@ export class CopilotCliAdapter implements AgentAdapter {
         message: redactMcp(message, secrets),
       });
     try {
-      client = await this.newClient();
+      const mcp = await withSignal(
+        resolveMcpPlan(input.mcpServers ?? [], this.options.resolveMcpSecret),
+        controller.signal,
+      );
+      secrets = mcp.secrets;
+      client = await this.newClient(secrets);
       if (controller.signal.aborted) throw cancelled(controller.signal);
       await withSignal(client.start(), controller.signal);
       const auth = await withSignal(client.getAuthStatus(), controller.signal);
@@ -479,11 +542,6 @@ export class CopilotCliAdapter implements AgentAdapter {
         throw new Error(
           'Catalogue hôte invalide : des outils studio uniques, avec handlers, sont requis.',
         );
-      const mcp = await withSignal(
-        resolveMcpPlan(input.mcpServers ?? [], this.options.resolveMcpSecret),
-        controller.signal,
-      );
-      secrets = mcp.secrets;
       // Native MCP reads can bypass callbacks when the runtime classifies them read-only.
       // Exact managed asks force the normal MCP request (with readOnly) when auto approval is off.
       const mcpAskRules = [...mcp.grants.values()]
@@ -783,7 +841,8 @@ export class CopilotCliAdapter implements AgentAdapter {
         review,
       };
     } catch (error) {
-      const message = redactMcp(errorMessage(error), secrets);
+      if (controller.signal.aborted) throw cancelled(controller.signal);
+      const message = redactMcp((await this.runtimeError(error, client)).message, secrets);
       if (error instanceof Error && error.message === message) throw error;
       throw new Error(message);
     } finally {

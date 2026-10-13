@@ -140,7 +140,7 @@ export interface AgentProfile {
   instructions: string;
   tools: string[];
   model?: string;
-  source: 'bundled' | 'workspace';
+  source: 'bundled' | 'user' | 'workspace';
   path: string;
   skills: string[];
   nickname?: string;
@@ -152,7 +152,7 @@ export interface SkillInfo {
   description: string;
   content: string;
   path: string;
-  source: 'bundled' | 'workspace';
+  source: 'bundled' | 'user' | 'workspace';
 }
 export interface TestCommand {
   id: string;

@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -188,6 +188,7 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     callbacks = { onEvent: vi.fn(), onSession: vi.fn() };
     adapter = new CopilotCliAdapter({
       cliPath: '/bin/copilot',
+      launcherPath: resolve('scripts/copilot-launcher.js'),
       storagePath: storage,
       getTools: async () => [{ name: 'studio_read_file', handler: async () => 'file contents' }],
       clientFactory: (settings) => {
@@ -210,7 +211,18 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(fake.session.send).not.toHaveBeenCalled();
     expect(options?.baseDirectory).toBe(join(storage, 'copilot-runtime'));
     expect(options?.workingDirectory).toBe(options?.baseDirectory);
-    expect(options?.connection).toMatchObject({ kind: 'stdio', path: '/bin/copilot' });
+    expect(options?.connection).toMatchObject({
+      kind: 'stdio',
+      path: resolve('scripts/copilot-launcher.js'),
+    });
+    expect(options?.env?.ELECTRON_RUN_AS_NODE).toBe('1');
+    expect(options?.connection && 'args' in options.connection && options.connection.args).toEqual([
+      expect.stringContaining('config.json'),
+      '--no-remote',
+      '--no-custom-instructions',
+      '--disable-builtin-mcps',
+      '--disallow-temp-dir',
+    ]);
   });
   it('discovers server tools without prompt or model-visible execution tools', async () => {
     const catalog = await adapter.discoverMcp({
