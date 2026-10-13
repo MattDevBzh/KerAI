@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, defaultSettings } from '../src/core/store';
 import { WorkflowEngine } from '../src/core/workflow';
-import type { MemoryEntry } from '../src/shared/types';
+import type { MemoryEntry, FeatureCheckpoint } from '../src/shared/types';
 
 const roots: string[] = [];
 async function setup() {
@@ -42,6 +42,63 @@ function feature() {
   return { engine, item };
 }
 describe('durable versioned store', () => {
+  it('migrates v2 without inventing an execution root, retaining contexts and budgets', async () => {
+    const { store } = await setup(),
+      { engine, item } = feature();
+    item.steps[0].initialContext = 'US-208: keep the existing behavior';
+    item.budget = { maxRuns: 4, maxPromptChars: 25000, modelProfile: 'current' };
+    await writeFile(
+      store.path,
+      JSON.stringify({
+        schemaVersion: 2,
+        features: engine.features,
+        settings: defaultSettings,
+        memory: [],
+      }),
+    );
+    const migrated = await store.load();
+    expect(migrated.features).toEqual(engine.features);
+    expect(migrated.features[0].worktree).toBeUndefined();
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(3);
+  });
+  it('retains worktree identity, per-attempt checkpoints and restored ownership across reload', async () => {
+    const { store } = await setup(),
+      { engine, item } = feature();
+    item.branch = 'codex/feature-studio-fixture';
+    item.worktree = {
+      path: '/private/tmp/worktree',
+      branch: item.branch,
+      baseBranch: 'main',
+      baseCommit: 'a'.repeat(40),
+      createdAt: 'now',
+    };
+    const point: FeatureCheckpoint = {
+      id: '66090868-36d2-4c18-bf11-25baef0fbe13',
+      label: 'Before run',
+      kind: 'before-run',
+      createdAt: 'now',
+      branch: item.branch,
+      head: 'a'.repeat(40),
+      fileCount: 1,
+      totalBytes: 5,
+      excludedCount: 1,
+      excludedPaths: ['.env: protected'],
+    };
+    const attempt = engine.beginRun(item.id, 'run');
+    engine.finishRun(item.id, 'run', { content: 'Artifact', questions: [], changedFiles: [] });
+    attempt.checkpointBeforeId = point.id;
+    attempt.checkpointAfterId = '783bc489-7531-477e-aa4f-0e09529eacbc';
+    item.checkpoints = [point, { ...point, id: attempt.checkpointAfterId, kind: 'after-run' }];
+    item.workspaceFileHashes = { 'restored.txt': 'a'.repeat(64), 'deleted.txt': '<missing>' };
+    await store.save(engine.features, defaultSettings);
+    const restored = await store.load();
+    expect(restored.schemaVersion).toBe(3);
+    expect(restored.features).toEqual(engine.features);
+    const invalid = { ...item, worktree: { ...item.worktree, branch: 'wrong-branch' } };
+    const original = await readFile(store.path, 'utf8');
+    expect(() => store.save([invalid], defaultSettings)).toThrow();
+    expect(await readFile(store.path, 'utf8')).toBe(original);
+  });
   it('uses independent empty defaults and recovers running attempts as interrupted on load', async () => {
     const { store } = await setup();
     const blank = await store.load();
@@ -73,16 +130,16 @@ describe('durable versioned store', () => {
     expect((await store.load()).features[0].title).toBe('last');
     expect(await readdir(root)).toEqual(['state.json']);
   });
-  it('migrates v0 settings omissions, persisting v2', async () => {
+  it('migrates v0 settings omissions, persisting v3', async () => {
     const { store } = await setup();
     await writeFile(
       store.path,
       JSON.stringify({ schemaVersion: 0, features: [], settings: { defaultModel: '' } }),
     );
     const state = await store.load();
-    expect(state.schemaVersion).toBe(2);
+    expect(state.schemaVersion).toBe(3);
     expect(state.settings.timeoutMinutes).toBe(20);
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(2);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(3);
   });
   it('rejects unknown versions and corruption without changing the original file', async () => {
     const { store } = await setup();
@@ -146,7 +203,7 @@ describe('durable versioned store', () => {
       }),
     );
     const migrated = await store.load();
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(3);
     expect(migrated.features).toEqual(historical);
     expect(migrated.memory).toEqual([]);
     expect(migrated.features[0].autopilot).toBeUndefined();

@@ -19,6 +19,7 @@ async function hosted(page: Page, state = fresh()) {
     Object.assign(window, {
       testMessages: messages,
       autoPreview: true,
+      autoComparison: true,
       acquireVsCodeApi: () => ({
         getState: () => saved,
         setState: (v: object) => (saved = v),
@@ -26,6 +27,49 @@ async function hosted(page: Page, state = fresh()) {
           messages.push(m);
           if (m.type === 'ready')
             setTimeout(() => window.postMessage({ type: 'state', state: data }, '*'), 0);
+          if (m.type === 'compareCheckpoint' && Reflect.get(window, 'autoComparison')) {
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'checkpointComparison',
+                    requestId: m.requestId,
+                    comparison: {
+                      featureId: m.featureId,
+                      checkpointId: m.checkpointId,
+                      ...(m.targetCheckpointId ? { targetCheckpointId: m.targetCheckpointId } : {}),
+                      fingerprint: 'b'.repeat(64),
+                      files: Reflect.get(window, 'checkpointFiles') ?? [
+                        {
+                          path: 'src/palette.ts',
+                          status: 'modified',
+                          beforeHash: 'old',
+                          afterHash: 'new',
+                          binary: false,
+                          restorable: true,
+                        },
+                        {
+                          path: 'notes/new.md',
+                          status: 'added',
+                          afterHash: 'added',
+                          binary: false,
+                          restorable: true,
+                        },
+                        {
+                          path: '.env',
+                          status: 'modified',
+                          binary: false,
+                          restorable: false,
+                          reason: 'Fichier exclu des points',
+                        },
+                      ],
+                    },
+                  },
+                  '*',
+                ),
+              0,
+            );
+          }
           if (m.type === 'previewRun' && Reflect.get(window, 'autoPreview')) {
             const content = m.launch.initialContext;
             setTimeout(
@@ -105,6 +149,7 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
     title: 'Analyser un composant',
     description: 'Comprendre les contraintes.',
     workflowId: 'single',
+    isolated: false,
     agentId: 'reviewer',
     model: 'real-model',
   });
@@ -161,7 +206,11 @@ test('les questions structurées sont répondues et les diffs utilisent le bridg
   });
   await page.getByRole('tab', { name: 'Fichiers' }).click();
   await page.getByRole('button', { name: 'Voir le diff' }).click();
-  expect((await messages(page)).at(-1)).toEqual({ type: 'openDiff', path: 'src/palette.ts' });
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'openDiff',
+    path: 'src/palette.ts',
+    featureId: 'command-palette',
+  });
 });
 test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au clavier', async ({
   page,
@@ -939,4 +988,409 @@ test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+});
+function checkpointState(): StudioState {
+  const state = fresh();
+  state.workspace.canIsolate = true;
+  const feature = state.features[0];
+  feature.worktree = {
+    path: '/demo/atelier-product/.worktrees/command-palette',
+    branch: 'codex/command-palette',
+    baseBranch: 'main',
+    baseCommit: 'a'.repeat(40),
+    createdAt: '2026-10-13T09:00:00Z',
+  };
+  feature.branch = feature.worktree.branch;
+  feature.steps[1].attempts[0].checkpointBeforeId = 'before';
+  feature.steps[1].attempts[0].checkpointAfterId = 'after';
+  feature.checkpoints = [
+    {
+      id: 'before',
+      label: 'Avant conception',
+      kind: 'before-run',
+      createdAt: '2026-10-13T09:10:00Z',
+      branch: feature.branch,
+      head: 'a'.repeat(40),
+      stepId: 'design',
+      attemptId: feature.steps[1].attempts[0].id,
+      fileCount: 42,
+      totalBytes: 184320,
+      excludedCount: 1,
+      excludedPaths: ['.env'],
+    },
+    {
+      id: 'after',
+      label: 'Après conception',
+      kind: 'after-run',
+      createdAt: '2026-10-13T09:15:00Z',
+      branch: feature.branch,
+      head: 'a'.repeat(40),
+      stepId: 'design',
+      attemptId: feature.steps[1].attempts[0].id,
+      fileCount: 43,
+      totalBytes: 186420,
+      excludedCount: 1,
+      excludedPaths: ['.env'],
+    },
+  ];
+  return state;
+}
+async function openCheckpoints(page: Page) {
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Points de restauration', exact: false }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'Le code garde des points de repère.' }),
+  ).toBeVisible();
+}
+test('création Git : worktree par défaut feature/session libre, relecture dans le dossier courant', async ({
+  page,
+}) => {
+  const state = checkpointState();
+  await hosted(page, state);
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeChecked();
+  await expect(
+    page.getByText('Les changements non commités restent dans le dossier source', { exact: false }),
+  ).toBeVisible();
+  await page.getByRole('radio', { name: 'Session libre' }).click();
+  await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeChecked();
+  await page.getByLabel('Qu’allons-nous faire ?').fill('Une session isolée');
+  await page.getByRole('button', { name: 'Créer la session' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'createFeature',
+    workflowId: 'single',
+    isolated: true,
+  });
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  await page.getByRole('radio', { name: 'Relecture de code' }).click();
+  await expect(page.getByRole('radio', { name: 'Dossier courant' })).toBeChecked();
+  await page.getByLabel('Qu’allons-nous faire ?').fill('Relire les changements existants');
+  await page.getByRole('button', { name: 'Créer la session' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'createFeature',
+    workflowId: 'code-review',
+    isolated: false,
+  });
+  expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
+});
+test('espace courant legacy, isolation indisponible et opérations Git bloquent les mutations', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.workspace.canIsolate = false;
+  state.workspace.isolationReason = 'Ce dossier ne contient pas encore de commit Git.';
+  await hosted(page, state);
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: 'Dossier courant' })).toBeChecked();
+  await expect(page.getByText(state.workspace.isolationReason)).toBeVisible();
+  await page.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await page.locator('.session-card').first().click();
+  await expect(page.locator('.git-workspace-band')).toContainText('Dossier courant');
+  await expect(page.locator('.git-workspace-band')).toContainText(state.workspace.path);
+  await page.getByRole('button', { name: 'Ouvrir le dossier' }).click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'openFeatureWorkspace',
+    featureId: 'command-palette',
+  });
+  state.workspaceOperation = { featureId: 'command-palette', label: 'Sauvegarde Git en cours' };
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(
+    page.getByRole('button', { name: 'Nouvelle tentative', exact: true }),
+  ).toBeDisabled();
+  await page.getByRole('button', { name: 'Points de restauration', exact: false }).click();
+  await expect(page.getByRole('button', { name: 'Nouveau point' })).toBeDisabled();
+});
+test('points : diff à la bonne racine, sélection vide et restauration ciblée confirmée avec fingerprint', async ({
+  page,
+}) => {
+  await hosted(page, checkpointState());
+  await openCheckpoints(page);
+  await page.locator('.checkpoint-list button').filter({ hasText: 'Avant conception' }).click();
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  await expect(
+    page.getByRole('checkbox', { name: 'Restaurer src/palette.ts', exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole('checkbox', { name: 'Restaurer notes/new.md', exact: true }),
+  ).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Restaurer .env', exact: true })).toBeDisabled();
+  await expect(page.getByText('la restauration le supprimera', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restaurer la sélection' })).toBeDisabled();
+  await page
+    .locator('.checkpoint-change')
+    .filter({ hasText: 'src/palette.ts' })
+    .getByRole('button', { name: 'Diff', exact: true })
+    .click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'openCheckpointDiff',
+    featureId: 'command-palette',
+    checkpointId: 'before',
+    path: 'src/palette.ts',
+  });
+  await page.getByRole('checkbox', { name: 'Restaurer src/palette.ts', exact: true }).check();
+  await page.getByRole('button', { name: 'Restaurer la sélection' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('sauvegarde de récupération');
+  await expect(page.getByRole('alertdialog')).toContainText(
+    'validations du parcours deviendront à actualiser',
+  );
+  expect((await messages(page)).some((m) => m.type === 'restoreCheckpoint')).toBe(false);
+  await page.getByRole('button', { name: 'Confirmer la restauration' }).click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'restoreCheckpoint',
+    featureId: 'command-palette',
+    checkpointId: 'before',
+    paths: ['src/palette.ts'],
+    expectedFingerprint: 'b'.repeat(64),
+  });
+  await expect(page.locator('.checkpoint-list button')).toHaveCount(2);
+  await page.evaluate(() =>
+    window.postMessage(
+      { type: 'error', message: 'Comparaison obsolète : recommencez avant de restaurer.' },
+      '*',
+    ),
+  );
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Comparaison obsolète');
+});
+test('comparaison de deux points reste consultative et route le diff avec ses deux ids', async ({
+  page,
+}) => {
+  await hosted(page, checkpointState());
+  await openCheckpoints(page);
+  await page.locator('.checkpoint-list button').filter({ hasText: 'Avant conception' }).click();
+  await page.getByLabel('Cible de la comparaison').selectOption('after');
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  await expect(page.getByText('consultation uniquement', { exact: false })).toBeVisible();
+  await expect(page.locator('.checkpoint-change')).toHaveCount(3);
+  await expect(page.getByRole('dialog').getByRole('checkbox')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Restaurer la sélection' })).toHaveCount(0);
+  await page
+    .locator('.checkpoint-change')
+    .first()
+    .getByRole('button', { name: 'Diff', exact: true })
+    .click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'openCheckpointDiff',
+    featureId: 'command-palette',
+    checkpointId: 'before',
+    targetCheckpointId: 'after',
+    path: 'src/palette.ts',
+  });
+  expect((await messages(page)).some((m) => m.type === 'restoreCheckpoint')).toBe(false);
+});
+test('point manuel et état courant restent pilotés par le host, sans appel IA', async ({
+  page,
+}) => {
+  const state = fresh();
+  state.features[0].checkpoints = [];
+  await hosted(page, state);
+  await openCheckpoints(page);
+  await page.getByRole('button', { name: 'Nouveau point' }).click();
+  await page.getByLabel('Nom du point manuel').fill('Avant mon ajustement');
+  await page.getByRole('button', { name: 'Créer le point', exact: true }).click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'createCheckpoint',
+    featureId: 'command-palette',
+    label: 'Avant mon ajustement',
+  });
+  await expect(page.locator('.checkpoint-list button')).toHaveCount(0);
+  expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
+  state.features[0].checkpoints = [
+    {
+      id: 'manual',
+      label: 'Avant mon ajustement',
+      kind: 'manual',
+      createdAt: '2026-10-13T09:30:00Z',
+      branch: 'main',
+      head: 'a'.repeat(40),
+      fileCount: 10,
+      totalBytes: 8192,
+      excludedCount: 0,
+      excludedPaths: [],
+    },
+  ];
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.locator('.checkpoint-list button')).toHaveCount(1);
+  await expect(page.locator('.checkpoint-list')).toContainText('Point manuel');
+});
+test('restauration et nouveaux lancements restent indisponibles pendant une tentative globale', async ({
+  page,
+}) => {
+  const state = checkpointState();
+  state.features[1].steps[0].status = 'running';
+  await hosted(page, state);
+  await page.locator('.session-card').first().click();
+  await expect(
+    page.getByRole('button', { name: 'Nouvelle tentative', exact: true }),
+  ).toBeDisabled();
+  await page.getByRole('button', { name: 'Points de restauration', exact: false }).click();
+  await expect(page.getByRole('button', { name: 'Nouveau point' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Comparer les fichiers' })).toBeDisabled();
+  expect(
+    (await messages(page)).some((m) => m.type === 'runStep' || m.type === 'restoreCheckpoint'),
+  ).toBe(false);
+});
+test('panneau points de restauration utilisable au clavier et contenu dans la largeur mobile', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await hosted(page, checkpointState());
+  await openCheckpoints(page);
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  await expect(page.locator('.checkpoint-change')).toHaveCount(3);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.getByRole('checkbox', { name: 'Restaurer src/palette.ts', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await expect(
+    page.getByRole('checkbox', { name: 'Restaurer src/palette.ts', exact: true }),
+  ).toBeChecked();
+  await page.getByRole('button', { name: 'Restaurer la sélection' }).click();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.getByRole('button', { name: 'Conserver l’état actuel' }).click();
+  expect((await messages(page)).some((m) => m.type === 'restoreCheckpoint')).toBe(false);
+});
+test('capture documentée du panneau de comparaison et restauration Git', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await hosted(page, checkpointState());
+  await openCheckpoints(page);
+  await page.locator('.checkpoint-list button').filter({ hasText: 'Avant conception' }).click();
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  await page.getByRole('checkbox', { name: 'Restaurer src/palette.ts', exact: true }).check();
+  await expect(page.getByRole('button', { name: 'Restaurer la sélection' })).toBeEnabled();
+  await labelCapture(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'docs/images/checkpoints.png', fullPage: false });
+});
+test('une tentative ouvre directement la comparaison de ses points avant et après', async ({
+  page,
+}) => {
+  await hosted(page, checkpointState());
+  await page.locator('.session-card').first().click();
+  await page
+    .locator('.attempt-checkpoint-links')
+    .getByRole('button', { name: 'Comparer', exact: true })
+    .click();
+  await expect(page.getByLabel('Cible de la comparaison')).toHaveValue('after');
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'compareCheckpoint',
+    featureId: 'command-palette',
+    checkpointId: 'before',
+    targetCheckpointId: 'after',
+  });
+  await expect(page.getByRole('button', { name: 'Restaurer la sélection' })).toHaveCount(0);
+});
+test('le statut hôte de comparaison puis de diff conserve la réponse et la sélection', async ({
+  page,
+}) => {
+  const state = checkpointState();
+  await hosted(page, state);
+  await page.evaluate(() => Reflect.set(window, 'autoComparison', false));
+  await openCheckpoints(page);
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  const request = (await messages(page)).at(-1) as Extract<
+    ClientMessage,
+    { type: 'compareCheckpoint' }
+  >;
+  state.workspaceOperation = {
+    featureId: request.featureId,
+    label: 'Comparaison des fichiers',
+    readOnly: true,
+  };
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.getByRole('button', { name: 'Nouveau point' })).toBeDisabled();
+  delete state.workspaceOperation;
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.getByRole('button', { name: 'Nouveau point' })).toBeEnabled();
+  await page.evaluate(
+    (r) =>
+      window.postMessage(
+        {
+          type: 'checkpointComparison',
+          requestId: r.requestId,
+          comparison: {
+            featureId: r.featureId,
+            checkpointId: r.checkpointId,
+            fingerprint: 'c'.repeat(64),
+            files: [
+              { path: 'src/palette.ts', status: 'modified', binary: false, restorable: true },
+            ],
+          },
+        },
+        '*',
+      ),
+    request,
+  );
+  const checkbox = page.getByRole('checkbox', { name: 'Restaurer src/palette.ts', exact: true });
+  await checkbox.check();
+  state.workspaceOperation = {
+    featureId: request.featureId,
+    label: 'Ouverture de la comparaison',
+    readOnly: true,
+  };
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.getByRole('button', { name: 'Restaurer la sélection' })).toBeDisabled();
+  await expect(checkbox).toBeChecked();
+  delete state.workspaceOperation;
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.getByRole('button', { name: 'Restaurer la sélection' })).toBeEnabled();
+});
+test('une comparaison tardive ou invalidée par une mutation ne réactive jamais la restauration', async ({
+  page,
+}) => {
+  const state = checkpointState();
+  await hosted(page, state);
+  await page.evaluate(() => Reflect.set(window, 'autoComparison', false));
+  await openCheckpoints(page);
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  const first = (await messages(page)).at(-1) as Extract<
+    ClientMessage,
+    { type: 'compareCheckpoint' }
+  >;
+  await page.locator('.checkpoint-list button').filter({ hasText: 'Avant conception' }).click();
+  const response = (requestId: string, checkpointId: string) => ({
+    type: 'checkpointComparison',
+    requestId,
+    comparison: {
+      featureId: 'command-palette',
+      checkpointId,
+      fingerprint: 'c'.repeat(64),
+      files: [{ path: 'src/palette.ts', status: 'modified', binary: false, restorable: true }],
+    },
+  });
+  await page.evaluate(
+    (message) => window.postMessage(message, '*'),
+    response(first.requestId, 'after'),
+  );
+  await expect(page.locator('.checkpoint-change')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Comparer les fichiers' }).click();
+  const second = (await messages(page)).at(-1) as Extract<
+    ClientMessage,
+    { type: 'compareCheckpoint' }
+  >;
+  await page.evaluate(
+    (message) => window.postMessage(message, '*'),
+    response(second.requestId, 'before'),
+  );
+  await page.getByRole('checkbox', { name: 'Restaurer src/palette.ts', exact: true }).check();
+  state.workspaceOperation = {
+    featureId: 'command-palette',
+    label: 'Création d’un point en cours',
+  };
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.getByRole('button', { name: 'Comparer les fichiers' })).toBeDisabled();
+  await expect(page.locator('.checkpoint-change')).toHaveCount(0);
+  delete state.workspaceOperation;
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await page.evaluate(
+    (message) => window.postMessage(message, '*'),
+    response(second.requestId, 'before'),
+  );
+  await expect(page.locator('.checkpoint-change')).toHaveCount(0);
+  expect((await messages(page)).some((m) => m.type === 'restoreCheckpoint')).toBe(false);
 });

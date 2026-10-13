@@ -15,6 +15,8 @@ import type {
   ModelProfile,
 } from './evolutions';
 export * from './evolutions';
+import type { FeatureWorktree, FeatureCheckpoint, CheckpointComparison } from './workspaces';
+export * from './workspaces';
 export type PolicyProfile = 'read-only' | 'workspace-write' | 'tests';
 export type StepStatus =
   | 'pending'
@@ -102,6 +104,8 @@ export interface Attempt {
   review?: ReviewReport;
   revision?: number;
   approvedBy?: 'human' | 'autopilot';
+  checkpointBeforeId?: string;
+  checkpointAfterId?: string;
 }
 export interface FeatureStep extends WorkflowStep {
   status: StepStatus;
@@ -124,6 +128,10 @@ export interface Feature {
   budget?: FeatureBudget;
   criteria?: AcceptanceCriterion[];
   reviewComments?: ReviewComment[];
+  worktree?: FeatureWorktree;
+  checkpoints?: FeatureCheckpoint[];
+  /** Latest file contents explicitly written by this feature or restored by its owner. */
+  workspaceFileHashes?: Record<string, string>;
 }
 export interface AgentProfile {
   id: string;
@@ -187,8 +195,15 @@ export interface RuntimeStatus {
   error?: string;
 }
 export interface StudioState {
-  schemaVersion: 1 | 2;
-  workspace: { name: string; path: string; trusted: boolean; branch: string };
+  schemaVersion: 1 | 2 | 3;
+  workspace: {
+    name: string;
+    path: string;
+    trusted: boolean;
+    branch: string;
+    canIsolate?: boolean;
+    isolationReason?: string;
+  };
   features: Feature[];
   workflows: Workflow[];
   agents: AgentProfile[];
@@ -199,6 +214,7 @@ export interface StudioState {
   mcpCatalogs?: Record<string, McpCatalog>;
   humanRequests?: HumanRequest[];
   memory?: MemoryEntry[];
+  workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
   | { type: 'ready' | 'refresh' | 'checkRuntime' | 'installKit' | 'openSettings' }
@@ -209,6 +225,7 @@ export type ClientMessage =
       workflowId: string;
       agentId?: string;
       model?: string;
+      isolated?: boolean;
     }
   | {
       type: 'runStep';
@@ -255,8 +272,31 @@ export type ClientMessage =
       askBeforeRun?: boolean;
     }
   | { type: 'archiveFeature'; featureId: string; archived: boolean }
-  | { type: 'openDiff'; path: string }
-  | { type: 'openFile'; path: string }
+  | { type: 'openDiff'; path: string; featureId?: string }
+  | { type: 'openFile'; path: string; featureId?: string }
+  | { type: 'openFeatureWorkspace'; featureId: string }
+  | { type: 'createCheckpoint'; featureId: string; label: string }
+  | {
+      type: 'compareCheckpoint';
+      requestId: string;
+      featureId: string;
+      checkpointId: string;
+      targetCheckpointId?: string;
+    }
+  | {
+      type: 'openCheckpointDiff';
+      featureId: string;
+      checkpointId: string;
+      targetCheckpointId?: string;
+      path: string;
+    }
+  | {
+      type: 'restoreCheckpoint';
+      featureId: string;
+      checkpointId: string;
+      paths: string[];
+      expectedFingerprint: string;
+    }
   | { type: 'exportFeature'; featureId: string }
   | {
       type: 'saveAgent';
@@ -293,6 +333,7 @@ export type HostMessage =
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
   | { type: 'runPreview'; requestId: string; preview: RunPreview }
+  | { type: 'checkpointComparison'; requestId: string; comparison: CheckpointComparison }
   | { type: 'navigate'; view: 'create' | 'dashboard'; featureId?: string };
 export interface RunInput {
   feature: Feature;

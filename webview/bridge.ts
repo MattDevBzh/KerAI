@@ -28,7 +28,9 @@ export function subscribe(callback: (message: HostMessage) => void) {
   const handler = (event: MessageEvent<HostMessage>) => {
     if (
       event.data &&
-      ['state', 'error', 'notice', 'navigate', 'runPreview'].includes(event.data.type)
+      ['state', 'error', 'notice', 'navigate', 'runPreview', 'checkpointComparison'].includes(
+        event.data.type,
+      )
     )
       callback(event.data);
   };

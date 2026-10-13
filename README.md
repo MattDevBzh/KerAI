@@ -6,13 +6,13 @@
 
 Une feature devient un parcours : spécifications, plan, développement, tests, relecture. Chaque étape possède son agent, ses skills, ses MCP, son contexte et ses tentatives. Tu vois ce qui avance, tu fournis une US, tu réponds en direct et tu choisis les validations humaines du parcours.
 
-[Télécharger le VSIX](releases/feature-studio-0.2.0.vsix) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
+[Télécharger le VSIX](releases/feature-studio-0.3.0.vsix) · [Espaces Git et restauration](docs/WORKSPACES.md) · [Architecture](docs/ARCHITECTURE.md) · [Créer un workflow](docs/WORKFLOWS.md) · [Intégration Copilot](docs/COPILOT.md) · [Validation et limites](docs/VALIDATION.md)
 
 ![Le cockpit Feature Studio — données de démonstration](docs/images/dashboard.png)
 
 ## Installation
 
-1. Télécharge **[feature-studio-0.2.0.vsix](releases/feature-studio-0.2.0.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
+1. Télécharge **[feature-studio-0.3.0.vsix](releases/feature-studio-0.3.0.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Lance **Feature Studio : ouvrir le cockpit** dans la palette de commandes. Le bouton **Feature Studio** de la barre d’état ouvre aussi le cockpit.
@@ -26,17 +26,17 @@ Si `copilot` n’est pas trouvé, renseigne le chemin complet dans **Réglages �
 
 ## Choisir un parcours
 
-| Parcours | Pour quoi ? | Étapes |
-| --- | --- | --- |
-| Feature complète | Développer un besoin avec des décisions intermédiaires | Spécifications → plan → développement → tests → relecture |
-| Relecture seule | Examiner les changements sans écrire, compiler ou tester | Relecture |
-| Session libre | Confier une tâche à un seul agent, dans une vraie conversation | Une étape de développement configurable |
+| Parcours         | Pour quoi ?                                                    | Étapes                                                    |
+| ---------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
+| Feature complète | Développer un besoin avec des décisions intermédiaires         | Spécifications → plan → développement → tests → relecture |
+| Relecture seule  | Examiner les changements sans écrire, compiler ou tester       | Relecture                                                 |
+| Session libre    | Confier une tâche à un seul agent, dans une vraie conversation | Une étape de développement configurable                   |
 
 Le tableau de bord affiche les sessions, leur état, leur branche et leur progression. Recherche, filtres et archives permettent de retrouver les anciens travaux. Aucune session d’exemple n’est ajoutée à ton projet.
 
 ### Développer une feature
 
-1. Clique **Nouvelle session**, choisis le parcours, donne un titre et décris le résultat attendu.
+1. Clique **Nouvelle session**, choisis le parcours, donne un titre et décris le résultat attendu. **L’espace de cette session** propose un **Worktree isolé** pour une feature ou une session libre, et le **Dossier courant** pour une relecture. Tu peux changer ce choix avant la création.
 2. Ouvre une étape. **Configurer** permet de choisir l’agent, le modèle réellement proposé par le CLI, les skills, le raisonnement lorsqu’il est disponible et la limite de tentatives.
 3. Clique **Exécuter cette étape** : colle ta **US, demande ou contexte initial**, choisis les MCP utiles, puis **Préparer l’aperçu**. Relis les sources et le prompt assemblé ; **Lancer cette étape** démarre ensuite la vraie session. Le même dialogue apparaît pour une reprise ou une nouvelle tentative. Tout changement invalide l’aperçu précédent.
 4. Si l’agent utilise `studio_ask_human`, sa question apparaît pendant l’exécution : réponds et clique **Transmettre la réponse**. L’appel attend réellement ta réponse. Si le modèle termine plutôt avec un bloc de questions, réponds au formulaire puis **Reprendre la session**. Les échanges sont conservés.
@@ -51,7 +51,31 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 
 **Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Une reprise consomme elle aussi une tentative. Si la limite est atteinte, **Configurer → Limite de tentatives** permet de la relever explicitement.
 
-Les sessions restent liées à leur branche. Change de branche dans VS Code avant de créer la session si tu souhaites isoler une feature. Feature Studio ne crée pas de branche, commit, push, PR ou déploiement à ta place.
+Les sessions restent liées à leur branche et à leur dossier d’exécution. À la création d’une session isolée, Feature Studio crée une branche et un worktree local depuis le dernier commit **HEAD**. Il ne crée aucun commit, push, PR ni déploiement automatiquement.
+
+## Un espace Git et des points de restauration par feature
+
+Le **Worktree isolé** est un dossier frère du projet, avec sa branche `codex/feature-studio-…`. Il contient uniquement l’état commité de HEAD : les modifications non commitées, les fichiers non suivis et les changements déjà stagés restent dans le dossier source. Aucune dépendance ni préparation d’outils n’est installée automatiquement. Les hooks Git, `fsmonitor` et filtres externes sont neutralisés ; LFS/smudge n’est pas matérialisé automatiquement. Prépare cet environnement avant de demander des tests qui en ont besoin.
+
+L’isolation demande d’ouvrir la racine d’un dépôt Git ayant un commit HEAD. Si elle est indisponible, son choix est désactivé et le cockpit affiche la raison. La **relecture seule** utilise le dossier courant par défaut pour examiner le diff déjà présent. Les sessions créées avant la v0.3 conservent aussi leur dossier courant ; elles ne sont pas déplacées automatiquement.
+
+Le bandeau **ESPACE GIT** affiche le dossier et la branche de la feature. **Ouvrir le dossier** ouvre une nouvelle fenêtre VS Code ; le cockpit d’origine garde l’historique et le pilotage de la session. Si tu ouvres un autre cockpit dans le worktree, son verrou bloque l’accès du cockpit d’origine à cette feature jusqu’à sa fermeture ; les vues de fichiers normales restent utilisables. Les fichiers, diffs, tests et hooks de cette feature sont résolus dans son propre espace.
+
+Dans **Points de restauration** :
+
+1. Une tentative isolée conserve un point **Avant la tentative**, avant les hooks, puis un point **Après la tentative**, y compris après annulation ou échec lorsque la capture reste possible. **Avant**, **Après** et **Comparer** sont accessibles depuis son historique.
+2. **Nouveau point → Créer le point** ajoute un point manuel nommé, également disponible pour les anciennes sessions dans le dossier courant.
+3. Choisis un point, puis **Comparer les fichiers** avec **État actuel du dossier** ou un autre point. **Diff** ouvre sa comparaison dans VS Code. Une comparaison point-vers-point est consultative.
+4. Pour revenir à un point depuis l’état actuel, coche explicitement les fichiers voulus ; la sélection est vide au départ. **Restaurer la sélection → Confirmer la restauration** demande au host de vérifier l’empreinte de la comparaison. Les fichiers ajoutés depuis le point choisi seront supprimés seulement si tu les coches.
+5. Une sauvegarde de récupération est enregistrée et rattachée durablement à l’historique **avant toute écriture**. Les validations et preuves d’acceptation deviennent à revalider et le pilote est mis en pause. Si les fichiers ont changé depuis la comparaison, il faut **Actualiser la comparaison**.
+
+![Comparer des points et sélectionner les fichiers — données de démonstration](docs/images/checkpoints.png)
+
+Ces points conservent le contenu et les permissions des fichiers inclus ; ils ne restaurent ni l’index Git, ni la branche, ni les commits. Les fichiers ignorés non suivis, secrets usuels, dossiers de configuration, dépendances, sorties de build et liens sont exclus. Limites : **4 MiB par fichier, 64 MiB par point et 10 000 fichiers candidats**. Ce mécanisme est une restauration ciblée, pas une sauvegarde exhaustive du projet. **Archiver la session** conserve son dossier et ses points sur disque.
+
+La création, la comparaison et la restauration Git n’ajoutent aucune requête IA. Elles ne publient rien. Les opérations sont verrouillées pendant une tentative ou une autre mutation ; le host recontrôle racine, branche et fichiers. Les buffers non enregistrés sont protégés dans la fenêtre VS Code courante seulement : les autres fenêtres et processus restent hors sandbox. [Périmètre, exclusions et limites détaillés](docs/WORKSPACES.md).
+
+**Stockage v3 :** les formats v0/v1/v2 migrent en conservant leurs données connues. Une fois ces données enregistrées en v3, ne réinstalle pas la v0.2 pour les ouvrir : elle refuse ce format et ne sait pas conserver les métadonnées de worktree. Il n’existe pas de migration inverse automatique.
 
 ![Préparer une US et ses MCP — données de démonstration](docs/images/launch-context.png)
 
@@ -77,7 +101,7 @@ Dans une feature, le **pilote automatique** enchaîne les étapes disponibles su
 
 La boucle de correction est facultative : choisis une étape de relecture et une étape de développement en amont. Le pilote utilise le verdict structuré de la relecture ou une preuve de tests en échec ; il rejoue ensuite les étapes devenues obsolètes. Un checkpoint reste prioritaire sur cette boucle. Par défaut, **zéro cycle de correction supplémentaire** : augmente le nombre seulement si tu le souhaites. Il n’y a aucun agent chargé de décider du prochain agent ; l’orchestration est du code local.
 
-Le **centre de validation** rassemble le livrable, les fichiers/diffs, les commandes de test et leurs sorties réelles, les critères d’acceptation et tes commentaires, éventuellement associés à un fichier/une ligne. Un constat du modèle est distingué d’une preuve issue du runner. Les remarques bloquantes et les critères sans preuve empêchent de déclarer le parcours terminé. Le pilote ne valide pas une étape Tests sans résultat hôte réussi. Une édition du livrable invalide l’ancienne validation ; les preuves sont revérifiées par empreinte des fichiers observés. Le diff reste celui de HEAD vers le workspace courant, sans snapshot Git par tentative.
+Le **centre de validation** rassemble le livrable, les fichiers/diffs, les commandes de test et leurs sorties réelles, les critères d’acceptation et tes commentaires, éventuellement associés à un fichier/une ligne. Un constat du modèle est distingué d’une preuve issue du runner. Les remarques bloquantes et les critères sans preuve empêchent de déclarer le parcours terminé. Le pilote ne valide pas une étape Tests sans résultat hôte réussi. Une édition du livrable invalide l’ancienne validation ; les preuves sont revérifiées par empreinte des fichiers observés. Le diff de **Fichiers → Voir le diff** compare HEAD aux fichiers de l’espace de la feature. **Points de restauration** propose en plus les comparaisons propres à ses points avant/après ou manuels.
 
 Le panneau **consommation** cumule les mesures reçues et indique les tentatives dont l’usage est inconnu. Tu peux fixer un nombre total de runs, des seuils de tokens/nano-AIU et une taille maximale de contexte. Les validations, aperçus et éditions locales n’appellent pas de modèle. Les profils **économie / équilibré / qualité** utilisent les modèles que tu leur attribues dans les réglages parmi ceux réellement disponibles ; leur nom ne promet aucun tarif. Si le CLI n’annonce que `auto`, aucun modèle moins cher n’est inventé.
 
@@ -130,11 +154,11 @@ Le runner du kit concerne **.NET/VSTest**. Il est conservé comme option et n’
 
 Dans **Réglages → Commandes de test autorisées**, ajoute un nom, un exécutable et ses arguments **un par ligne**. Par exemple, pour ce dépôt :
 
-| Champ | Valeur |
-| --- | --- |
-| Nom | Tests unitaires |
-| Exécutable | `npm` |
-| Arguments | `test` puis `--` puis `--run` (trois lignes) |
+| Champ      | Valeur                                       |
+| ---------- | -------------------------------------------- |
+| Nom        | Tests unitaires                              |
+| Exécutable | `npm`                                        |
+| Arguments  | `test` puis `--` puis `--run` (trois lignes) |
 
 Les **Chemins de test** sont des préfixes de dossiers, sans glob : `tests`, `test`, `__tests__` par défaut. Ajuste-les avant de demander la création de tests ailleurs. Le profil Tests peut écrire seulement dans ces dossiers et exécuter uniquement les commandes configurées. Leur code retour, leurs sorties et les échecs sont consignés.
 
@@ -144,10 +168,10 @@ Dans **Automatisations**, les hooks `beforeRun` et `afterRun` exécutent des com
 
 ## Données, permissions et consommation
 
-- Les features, essais, réponses, validations et journaux sont sauvegardés dans le stockage local de l’extension VS Code, par dossier. Le format est versionné et les écritures sont atomiques.
+- Les features, essais, réponses, validations, journaux et métadonnées de worktree sont sauvegardés dans le stockage local de l’extension VS Code, par dossier. Le format v3 est versionné et les écritures sont atomiques. Les contenus des points de restauration restent dans le stockage privé de l’extension, hors des checkouts.
 - Les conversations Copilot utilisent un répertoire de données propre à Feature Studio. `~/.copilot` n’est pas modifié. Le trousseau existant est réutilisé si le CLI le permet.
 - **Exporter** produit un fichier Markdown avec les livrables et l’historique de la session.
-- Un seul cockpit est actif pour un même dossier sur une machine, et une seule tentative tourne à la fois. Cette règle évite les écritures concurrentes.
+- Un seul cockpit est actif pour une même racine sur une machine, et une seule tentative tourne à la fois dans ce cockpit. Deux projets sources distincts peuvent tourner en parallèle. La racine du worktree est également verrouillée pendant son utilisation. Une mutation Git exige l’absence de tentative active et un pilote en pause.
 - Les écritures préexistantes non validées dans Git sont protégées. Les fichiers créés par la même feature peuvent être retravaillés si leur contenu n’a pas été modifié entre-temps. Les suppressions humaines, les chemins sensibles et les liens symboliques sont refusés.
 - L’agent dispose des outils hôtes et des seuls outils MCP explicitement choisis. Il ne dispose d’aucun shell générique, accès de navigation natif ou commande Git d’écriture. Le catalogue réel et la provenance des outils MCP sont vérifiés avant l’envoi du prompt.
 - L’interface affiche les tokens, le modèle effectif et les nano-AIU uniquement si le CLI les fournit. Elle cumule également les tentatives échouées/annulées et signale les données inconnues. Les plafonds sont contrôlés avant chaque nouveau run ; un run en cours peut dépasser un seuil de tokens ou de nano-AIU. Ce ne sont pas des euros ni un plafond financier garanti.
@@ -163,7 +187,7 @@ npx playwright install chromium
 npm run test:ui        # Parcours webview, sans requêtes IA
 npm run test:extension # Vrai hôte VS Code isolé, sans prompt IA
 npm run smoke:mcp     # Diagnostic MCP local explicite, sans prompt IA
-npm run package       # Produit releases/feature-studio-0.2.0.vsix
+npm run package       # Produit releases/feature-studio-0.3.0.vsix
 ```
 
 Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développement. `npm run dev` ouvre le frontend de développement ; `http://127.0.0.1:5173/?demo=1` affiche des données d’exemple avec un bandeau explicite. Sans ce paramètre et hors VS Code, aucune exécution n’est simulée.

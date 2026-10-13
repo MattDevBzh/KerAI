@@ -199,6 +199,8 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
         budget: input.feature.budget,
         comments: input.feature.reviewComments,
         criteria: input.feature.criteria,
+        workspacePath: input.workspacePath,
+        worktree: input.feature.worktree,
       }),
     )
     .digest('hex');

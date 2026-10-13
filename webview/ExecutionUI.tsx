@@ -254,7 +254,8 @@ export function LaunchDialog({
     state.workspace.trusted &&
     state.runtime.state === 'ready' &&
     !feature.archived &&
-    !feature.steps.some((s) => s.status === 'running') &&
+    !state.features.some((f) => f.steps.some((s) => s.status === 'running')) &&
+    !state.workspaceOperation &&
     step.attempts.length < step.maxAttempts;
   const canStart =
     eligible &&

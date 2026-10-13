@@ -321,7 +321,7 @@ describe('StudioService execution gates', () => {
     });
     const active = f.service.runStep(first.id, 'session');
     await ready;
-    await expect(f.service.runStep(second.id, 'session')).rejects.toThrow(/déjà active/);
+    await expect(f.service.runStep(second.id, 'session')).rejects.toThrow(/opération en cours/);
     await expect(f.service.saveSettings(f.service.state.settings)).rejects.toThrow(/Arrête/);
     f.service.cancel(first.id);
     await active;

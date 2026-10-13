@@ -1,6 +1,7 @@
 import { runTests, downloadAndUnzipVSCode } from '@vscode/test-electron';
 import { build } from 'esbuild';
-import { mkdtemp, mkdir, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, access, writeFile, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 await build({
@@ -14,6 +15,22 @@ await build({
 const testRoot = await mkdtemp(path.join(tmpdir(), 'feature-studio-vscode-'));
 const workspace = path.join(testRoot, 'workspace');
 await mkdir(workspace);
+const git = (...args) =>
+  execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgSign=false', ...args], {
+    cwd: workspace,
+    stdio: 'pipe',
+  });
+git('init', '-b', 'main');
+git('config', 'user.name', 'Feature Studio Test');
+git('config', 'user.email', 'test@example.invalid');
+await writeFile(path.join(workspace, 'story.txt'), 'Committed feature context\n');
+await writeFile(path.join(workspace, 'binary.bin'), Buffer.from([0xff, 0xfe]));
+git('add', '--', 'story.txt');
+git('add', '--', 'binary.bin');
+git('commit', '-m', 'Isolated fixture');
+await writeFile(path.join(workspace, 'story.txt'), 'Human staged source\n');
+git('add', '--', 'story.txt');
+await writeFile(path.join(workspace, 'story.txt'), 'Human unstaged source\n');
 const insiders = '/Applications/Visual Studio Code - Insiders.app/Contents/MacOS/Code - Insiders';
 let installed =
   process.env.VSCODE_EXECUTABLE_PATH ||
@@ -51,3 +68,4 @@ await runTests({
     path.join(testRoot, 'extensions'),
   ],
 });
+await rm(testRoot, { recursive: true, force: true });

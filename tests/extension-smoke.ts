@@ -1,11 +1,13 @@
 import * as assert from 'node:assert/strict';
 import * as vscode from 'vscode';
-import type { ClientMessage, StudioState } from '../src/shared/types';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { ClientMessage, StudioState, CheckpointComparison } from '../src/shared/types';
 
 interface Api {
   getState(): StudioState | undefined;
   getUiReady(): boolean;
-  dispatch(message: ClientMessage): Promise<void>;
+  dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
 }
 export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension<Api>('MattDevBzh.feature-studio');
@@ -138,6 +140,104 @@ export async function run(): Promise<void> {
   assert.equal(state.agents.find((a) => a.id === 'smoke-agent')?.nickname, 'Capitaine Test');
   await api.dispatch({ type: 'installKit' });
   assert.ok(api.getState()!.agents.length >= 9);
+  const source = vscode.workspace.workspaceFolders![0].uri.fsPath;
+  const sourceIndex = await readFile(join(source, '.git', 'index'));
+  assert.equal(api.getState()!.workspace.canIsolate, true);
+  await api.dispatch({
+    type: 'createFeature',
+    title: 'Git isolated smoke',
+    description: 'No AI calls',
+    workflowId: 'single',
+    isolated: true,
+  });
+  const isolated = api.getState()!.features.at(-1)!;
+  assert.ok(isolated.worktree);
+  const file = join(isolated.worktree.path, 'story.txt');
+  assert.equal(await readFile(file, 'utf8'), 'Committed feature context\n');
+  assert.equal(await readFile(join(source, 'story.txt'), 'utf8'), 'Human unstaged source\n');
+  assert.deepEqual(await readFile(join(source, '.git', 'index')), sourceIndex);
+  await api.dispatch({ type: 'createCheckpoint', featureId: isolated.id, label: 'Before edit' });
+  const point = api.getState()!.features.find((f) => f.id === isolated.id)!.checkpoints![0];
+  await writeFile(file, 'Feature workspace change\n');
+  await writeFile(join(isolated.worktree.path, 'binary.bin'), Buffer.from([0xff, 0xfd]));
+  const comparison = (await api.dispatch({
+    type: 'compareCheckpoint',
+    requestId: 'smoke-git',
+    featureId: isolated.id,
+    checkpointId: point.id,
+  })) as CheckpointComparison;
+  assert.ok(comparison.files.some((change) => change.path === 'story.txt'));
+  await api.dispatch({ type: 'openFile', featureId: isolated.id, path: 'story.txt' });
+  assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, file);
+  const document = vscode.window.activeTextEditor!.document;
+  const edit = new vscode.WorkspaceEdit();
+  edit.insert(document.uri, new vscode.Position(0, 0), 'Unsaved human buffer\n');
+  assert.ok(await vscode.workspace.applyEdit(edit));
+  assert.ok(document.isDirty);
+  const restore: ClientMessage = {
+    type: 'restoreCheckpoint',
+    featureId: isolated.id,
+    checkpointId: point.id,
+    paths: ['story.txt'],
+    expectedFingerprint: comparison.fingerprint,
+  };
+  await assert.rejects(api.dispatch(restore), /non enregistrées/);
+  assert.equal(await readFile(file, 'utf8'), 'Feature workspace change\n');
+  await vscode.commands.executeCommand('workbench.action.files.revert');
+  assert.ok(!document.isDirty);
+  await api.dispatch({
+    type: 'openCheckpointDiff',
+    featureId: isolated.id,
+    checkpointId: point.id,
+    path: 'story.txt',
+  });
+  const diffTexts = vscode.workspace.textDocuments
+    .filter((doc) => doc.uri.scheme === 'feature-studio-diff')
+    .map((doc) => doc.getText());
+  assert.ok(diffTexts.includes('Committed feature context\n'));
+  assert.ok(diffTexts.includes('Feature workspace change\n'));
+  await api.dispatch({
+    type: 'openCheckpointDiff',
+    featureId: isolated.id,
+    checkpointId: point.id,
+    path: 'binary.bin',
+  });
+  assert.ok(
+    vscode.workspace.textDocuments.some(
+      (doc) =>
+        doc.uri.scheme === 'feature-studio-diff' &&
+        doc.getText().startsWith('[Fichier binaire · 2 octets · SHA-256 '),
+    ),
+  );
+  await api.dispatch(restore);
+  assert.equal(await readFile(file, 'utf8'), 'Committed feature context\n');
+  const recovery = api
+    .getState()!
+    .features.find((f) => f.id === isolated.id)!
+    .checkpoints!.at(-1)!;
+  assert.equal(recovery.kind, 'recovery');
+  await assert.rejects(api.dispatch(restore), /changé/);
+  const recoverComparison = (await api.dispatch({
+    type: 'compareCheckpoint',
+    requestId: 'smoke-recovery',
+    featureId: isolated.id,
+    checkpointId: recovery.id,
+  })) as CheckpointComparison;
+  await api.dispatch({
+    ...restore,
+    checkpointId: recovery.id,
+    expectedFingerprint: recoverComparison.fingerprint,
+  });
+  assert.equal(await readFile(file, 'utf8'), 'Feature workspace change\n');
+  assert.equal(await readFile(join(source, 'story.txt'), 'utf8'), 'Human unstaged source\n');
+  assert.deepEqual(await readFile(join(source, '.git', 'index')), sourceIndex);
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  await vscode.commands.executeCommand('featureStudio.open');
+  assert.equal(
+    api.getState()?.features.find((f) => f.id === isolated.id)?.worktree?.path,
+    isolated.worktree.path,
+  );
+  assert.equal(api.getState()?.features.find((f) => f.id === isolated.id)?.checkpoints?.length, 3);
   await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
   await new Promise((resolve) => setTimeout(resolve, 200));
   await vscode.commands.executeCommand('featureStudio.open');
@@ -146,6 +246,6 @@ export async function run(): Promise<void> {
     'Smoke extension host',
   );
   console.log(
-    'PASS: activation, panel/CSP, defaults, manual context preview, missing-preview refusal, MCP/secret settings, budget/autopilot/memory, avatars, kit, close/reopen recovery. No paid prompt.',
+    'PASS: activation, panel/CSP, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
   );
 }

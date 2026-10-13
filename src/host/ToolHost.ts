@@ -6,27 +6,39 @@ import { z } from 'zod';
 import type { RunInput, RunCallbacks, RunEvent, TestEvidence } from '../shared/types';
 import { PolicyEngine, isSensitivePath, sha256 } from './PolicyEngine';
 import { runProcess, redact } from './process';
+import { gitRead } from './gitRead';
 
 export async function gitInfo(root: string): Promise<{ branch: string; dirty: Set<string> }> {
-  const branch = await runProcess('git', ['symbolic-ref', '--short', 'HEAD'], root, {
+  const branch = await gitRead(root, ['symbolic-ref', '--short', 'HEAD'], {
     timeoutMs: 5000,
+    rawOutput: true,
   }).catch(() => undefined);
-  const status = await runProcess(
-    'git',
-    ['-c', 'core.fsmonitor=false', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
-    root,
-    { timeoutMs: 10000 },
-  );
+  const status = await gitRead(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {
+    timeoutMs: 10000,
+    rawOutput: true,
+    maxBytes: 4_000_000,
+  });
   if (status.code !== 0) return { branch: 'sans Git', dirty: new Set() };
+  if (status.truncated || branch?.truncated)
+    throw new Error('État Git trop volumineux ; inspection des fichiers interrompue.');
   const records = status.stdout.split('\0');
+  const prefixResult = await gitRead(root, ['rev-parse', '--show-prefix'], {
+    timeoutMs: 5000,
+    rawOutput: true,
+  });
+  if (prefixResult.code || prefixResult.truncated) throw new Error('Racine Git indisponible.');
+  const prefix = prefixResult.stdout.replace(/\r?\n$/, '');
   const dirty = new Set<string>();
+  const add = (file: string) => {
+    if (file.startsWith(prefix)) dirty.add(file.slice(prefix.length));
+  };
   for (let index = 0; index < records.length; index++) {
     const entry = records[index];
     if (entry.length < 4) continue;
-    dirty.add(entry.slice(3));
+    add(entry.slice(3));
     if (/[RC]/.test(entry.slice(0, 2))) {
       index++;
-      if (records[index]) dirty.add(records[index]);
+      if (records[index]) add(records[index]);
     }
   }
   return { branch: branch?.code === 0 ? branch.stdout.trim() : 'HEAD détachée', dirty };
@@ -58,6 +70,7 @@ export class ToolHost {
       .flatMap((step) => step.attempts)
       .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
     for (const attempt of attempts) Object.assign(owned, attempt.fileHashes ?? {});
+    Object.assign(owned, this.input.feature.workspaceFileHashes ?? {});
     this.policy = new PolicyEngine(
       this.input.workspacePath,
       this.input.step.policy,
@@ -148,11 +161,19 @@ export class ToolHost {
           const names = relative
             ? [relative]
             : (
-                await runProcess(
-                  'git',
-                  ['diff', '--name-only', '-z', 'HEAD', '--'],
+                await gitRead(
                   this.input.workspacePath,
-                  { signal: this.signal, timeoutMs: 10000 },
+                  [
+                    'diff',
+                    '--no-ext-diff',
+                    '--no-textconv',
+                    '--relative',
+                    '--name-only',
+                    '-z',
+                    'HEAD',
+                    '--',
+                  ],
+                  { signal: this.signal, timeoutMs: 10000, rawOutput: true },
                 )
               ).stdout
                 .split('\0')
@@ -169,11 +190,12 @@ export class ToolHost {
             'diff',
             '--no-ext-diff',
             '--no-textconv',
+            '--relative',
             'HEAD',
             '--',
             ...safeNames.map((name) => `:(literal)${name}`),
           ];
-          const result = await runProcess('git', args, this.input.workspacePath, {
+          const result = await gitRead(this.input.workspacePath, args, {
             signal: this.signal,
             timeoutMs: 10000,
           });

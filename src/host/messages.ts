@@ -37,6 +37,7 @@ export const messageSchema = z.discriminatedUnion('type', [
       workflowId: id,
       agentId: id.optional(),
       model: short.optional(),
+      isolated: z.boolean().optional(),
     })
     .strict(),
   z
@@ -104,8 +105,47 @@ export const messageSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('archiveFeature'), featureId: id, archived: z.boolean() }).strict(),
-  z.object({ type: z.literal('openDiff'), path: short }).strict(),
-  z.object({ type: z.literal('openFile'), path: short }).strict(),
+  z.object({ type: z.literal('openDiff'), path: short, featureId: id.optional() }).strict(),
+  z.object({ type: z.literal('openFile'), path: short, featureId: id.optional() }).strict(),
+  z.object({ type: z.literal('openFeatureWorkspace'), featureId: id }).strict(),
+  z
+    .object({
+      type: z.literal('createCheckpoint'),
+      featureId: id,
+      label: z.string().trim().min(1).max(200),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('compareCheckpoint'),
+      requestId: id,
+      featureId: id,
+      checkpointId: z.string().uuid(),
+      targetCheckpointId: z.string().uuid().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('openCheckpointDiff'),
+      featureId: id,
+      checkpointId: z.string().uuid(),
+      targetCheckpointId: z.string().uuid().optional(),
+      path: z.string().min(1).max(4000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('restoreCheckpoint'),
+      featureId: id,
+      checkpointId: z.string().uuid(),
+      paths: z
+        .array(z.string().min(1).max(4000))
+        .min(1)
+        .max(200)
+        .refine((paths) => new Set(paths).size === paths.length, 'Fichiers dupliqués.'),
+      expectedFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .strict(),
   z.object({ type: z.literal('exportFeature'), featureId: id }).strict(),
   z
     .object({

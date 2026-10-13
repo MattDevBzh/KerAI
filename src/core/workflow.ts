@@ -150,6 +150,27 @@ export class WorkflowEngine {
   refreshFeatureStatus(featureId: string): void {
     this.touch(this.getFeature(featureId));
   }
+  invalidateAfterRestore(featureId: string): void {
+    const feature = this.getFeature(featureId);
+    if (feature.steps.some((step) => step.status === 'running'))
+      throw new Error('Arrête la tentative avant de restaurer les fichiers.');
+    for (const step of feature.steps) {
+      if (!step.attempts.length) continue;
+      step.status = 'stale';
+      const attempt = step.attempts.at(-1)!;
+      attempt.revision = (attempt.revision ?? 0) + 1;
+    }
+    for (const criterion of feature.criteria ?? []) {
+      criterion.status = 'pending';
+      criterion.evidence = '';
+    }
+    if (feature.autopilot) {
+      feature.autopilot.status = 'paused';
+      feature.autopilot.reason = 'Fichiers restaurés : revalide les étapes avant de reprendre.';
+      feature.autopilot.updatedAt = new Date().toISOString();
+    }
+    this.touch(feature);
+  }
   private invalidate(feature: Feature, stepId: string) {
     const invalid = new Set([stepId]);
     let changed = true;

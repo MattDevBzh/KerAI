@@ -9,8 +9,8 @@ import { StudioService } from './host/StudioService';
 import { WorkspaceLease } from './host/WorkspaceLease';
 import { PolicyEngine, sha256 } from './host/PolicyEngine';
 import { parseMessage } from './host/messages';
-import { runProcess } from './host/process';
-import type { ClientMessage, HostMessage } from './shared/types';
+import { gitRead } from './host/gitRead';
+import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 
 let panel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
@@ -106,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext) {
   };
 
   const notice = (message: string) => send({ type: 'notice', message });
-  const dispatch = async (raw: unknown): Promise<void> => {
+  const dispatch = async (raw: unknown): Promise<void | CheckpointComparison> => {
     const message = parseMessage(raw),
       current = await ensure();
     switch (message.type) {
@@ -126,6 +126,90 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'createFeature': {
         const created = await current.createFeature(message);
         send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+        return;
+      }
+      case 'openFeatureWorkspace': {
+        current.assertTrusted();
+        const root = await current.featurePath(message.featureId);
+        await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(root), {
+          forceNewWindow: true,
+        });
+        return;
+      }
+      case 'createCheckpoint':
+        await current.createCheckpoint(message.featureId, message.label);
+        notice('Point de restauration enregistré localement.');
+        return;
+      case 'compareCheckpoint': {
+        const comparison = await current.compareCheckpoint(
+          message.featureId,
+          message.checkpointId,
+          message.targetCheckpointId,
+        );
+        send({
+          type: 'checkpointComparison',
+          requestId: message.requestId,
+          comparison,
+        });
+        return comparison;
+      }
+      case 'openCheckpointDiff': {
+        const contents = await current.checkpointDiff(
+          message.featureId,
+          message.checkpointId,
+          message.path,
+          message.targetCheckpointId,
+        );
+        const display = (value?: Buffer): string =>
+          value && (value.includes(0) || !Buffer.from(value.toString('utf8'), 'utf8').equals(value))
+            ? `[Fichier binaire · ${value.length} octets · SHA-256 ${sha256(value)}]`
+            : (value?.toString('utf8') ?? '');
+        const left = vscode.Uri.from({
+          scheme: 'feature-studio-diff',
+          path: `/avant/${message.path}`,
+          query: randomBytes(8).toString('hex'),
+        });
+        const right = vscode.Uri.from({
+          scheme: 'feature-studio-diff',
+          path: `/après/${message.path}`,
+          query: randomBytes(8).toString('hex'),
+        });
+        diffContents.set(left.toString(), display(contents.before));
+        diffContents.set(right.toString(), display(contents.after));
+        await vscode.commands.executeCommand(
+          'vscode.diff',
+          left,
+          right,
+          `${message.path} · point ↔ ${message.targetCheckpointId ? 'point' : 'fichiers actuels'}`,
+        );
+        return;
+      }
+      case 'restoreCheckpoint': {
+        const ensureSaved = async (): Promise<void> => {
+          const root = await current.featurePath(message.featureId);
+          const selected = new Set(message.paths.map((file) => path.resolve(root, file)));
+          for (const document of vscode.workspace.textDocuments) {
+            if (!document.isDirty || document.uri.scheme !== 'file') continue;
+            const file = await realpath(document.uri.fsPath).catch(() =>
+              path.resolve(document.uri.fsPath),
+            );
+            if (selected.has(file))
+              throw new Error(
+                `Enregistre ou ferme les modifications non enregistrées de ${path.basename(file)} avant la restauration.`,
+              );
+          }
+        };
+        await ensureSaved();
+        await current.restoreCheckpoint(
+          message.featureId,
+          message.checkpointId,
+          message.paths,
+          message.expectedFingerprint,
+          ensureSaved,
+        );
+        notice(
+          'Fichiers restaurés. Le point de récupération conserve leur état précédent ; les étapes sont à revalider.',
+        );
         return;
       }
       case 'runStep':
@@ -303,20 +387,25 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         const workflowPaths = current.state.workflows.map((item) => item.source).filter(Boolean);
         const requested =
+          !message.featureId &&
           path.isAbsolute(message.path) &&
           [...registryPaths, ...workflowPaths].includes(message.path)
             ? message.path
-            : await new PolicyEngine(current.workspacePath, 'read-only', []).resolve(message.path);
+            : await new PolicyEngine(
+                await current.featurePath(message.featureId),
+                'read-only',
+                [],
+              ).resolve(message.path);
         await vscode.window.showTextDocument(vscode.Uri.file(requested));
         return;
       }
       case 'openDiff': {
-        const absolute = await new PolicyEngine(current.workspacePath, 'read-only', []).resolve(
-          message.path,
-        );
-        const relative = path.relative(current.workspacePath, absolute).split(path.sep).join('/');
-        const old = await runProcess('git', ['show', `HEAD:${relative}`], current.workspacePath, {
+        const root = await current.featurePath(message.featureId);
+        const absolute = await new PolicyEngine(root, 'read-only', []).resolve(message.path);
+        const relative = path.relative(root, absolute).split(path.sep).join('/');
+        const old = await gitRead(root, ['show', `HEAD:${relative}`], {
           timeoutMs: 10000,
+          rawOutput: true,
         });
         const left = vscode.Uri.from({
           scheme: 'feature-studio-diff',
@@ -349,7 +438,12 @@ export async function activate(context: vscode.ExtensionContext) {
           `# ${feature.title}`,
           feature.description,
           `Branche : ${feature.branch}\nWorkflow : ${feature.workflowName}`,
+          `Espace : ${feature.worktree?.path ?? current.workspacePath}`,
         ];
+        for (const checkpoint of feature.checkpoints ?? [])
+          parts.push(
+            `Point de restauration : ${checkpoint.label} · ${checkpoint.kind} · ${checkpoint.createdAt} · ${checkpoint.fileCount} fichiers · ${checkpoint.excludedCount} exclusions · ${checkpoint.id}`,
+          );
         for (const step of feature.steps) {
           parts.push(`## ${step.name} — ${step.status}`);
           for (const [i, attempt] of step.attempts.entries()) {
@@ -545,7 +639,7 @@ export async function activate(context: vscode.ExtensionContext) {
   status.command = 'featureStudio.open';
   status.show();
   context.subscriptions.push(status);
-  // Small read-only API used by the isolated extension-host smoke test.
+  // The isolated extension-host smoke test uses the same validated message handler as the UI.
   return {
     getState: () => service?.snapshot(),
     getUiReady: () => webviewReady,

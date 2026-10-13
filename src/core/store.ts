@@ -16,6 +16,7 @@ import {
   reviewSchema,
 } from './evolutionSchemas';
 import { defaultBudget } from './budgets';
+import { checkpointSchema, worktreeSchema } from './workspaceSchemas';
 
 export const defaultSettings: StudioSettings = {
   defaultModel: '',
@@ -72,6 +73,8 @@ const attempt = z.object({
   review: reviewSchema.optional(),
   revision: z.number().int().nonnegative().optional(),
   approvedBy: z.enum(['human', 'autopilot']).optional(),
+  checkpointBeforeId: z.string().uuid().optional(),
+  checkpointAfterId: z.string().uuid().optional(),
   usage: z
     .object({
       inputTokens: z.number().nonnegative().finite().optional(),
@@ -102,6 +105,9 @@ const feature = z
     budget: budgetSchema.optional(),
     criteria: z.array(criterionSchema).max(200).optional(),
     reviewComments: z.array(commentSchema).max(1000).optional(),
+    worktree: worktreeSchema.optional(),
+    checkpoints: z.array(checkpointSchema).max(10000).optional(),
+    workspaceFileHashes: z.record(z.string(), z.string()).optional(),
     steps: z
       .array(workflowSchema.shape.steps.element.extend({ status, attempts: z.array(attempt) }))
       .min(1),
@@ -136,6 +142,13 @@ const feature = z
       });
     if (value.criteria && new Set(value.criteria.map((c) => c.id)).size !== value.criteria.length)
       context.addIssue({ code: 'custom', message: 'Critères dupliqués.' });
+    if (value.worktree && value.worktree.branch !== value.branch)
+      context.addIssue({ code: 'custom', message: 'Branche de worktree incohérente.' });
+    if (
+      value.checkpoints &&
+      new Set(value.checkpoints.map((c) => c.id)).size !== value.checkpoints.length
+    )
+      context.addIssue({ code: 'custom', message: 'Points de restauration dupliqués.' });
     if (
       value.reviewComments?.some(
         (comment) =>
@@ -201,7 +214,7 @@ export const settingsSchema = z
   .strict();
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -214,7 +227,7 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 2;
+  schemaVersion: 3;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
@@ -235,7 +248,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 2,
+          schemaVersion: 3,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -245,9 +258,9 @@ export class Store {
     if (!raw || typeof raw !== 'object' || !('schemaVersion' in raw))
       throw new Error('Version de stockage absente.');
     const version = (raw as { schemaVersion: unknown }).schemaVersion;
-    if (version !== 0 && version !== 1 && version !== 2)
+    if (version !== 0 && version !== 1 && version !== 2 && version !== 3)
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    const migration = version !== 2;
+    const migration = version !== 3;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -255,7 +268,7 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
@@ -285,7 +298,7 @@ export class Store {
     const snapshot =
       JSON.stringify(
         persistedSchema.parse({
-          schemaVersion: 2,
+          schemaVersion: 3,
           features: structuredClone(features),
           settings: structuredClone(settings),
           memory: structuredClone(memory),

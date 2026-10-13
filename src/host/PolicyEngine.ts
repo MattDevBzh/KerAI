@@ -93,7 +93,7 @@ export class PolicyEngine {
       content = await readFile(target);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        if (this.dirtyFiles.has(normalized))
+        if (this.dirtyFiles.has(normalized) && this.ownedHashes[normalized] !== '<missing>')
           throw new Error(`Suppression préexistante protégée : ${normalized}.`);
         return target;
       }

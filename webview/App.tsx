@@ -59,6 +59,12 @@ import { demoState } from './demo';
 import { LaunchDialog, HumanRequests, McpSettings, McpPicker } from './ExecutionUI';
 import './evolution.css';
 import {
+  GitWorkspacePanel,
+  WorkspaceChoice,
+  hasActiveRun,
+  AttemptCheckpointLinks,
+} from './GitWorkspaceUI';
+import {
   AutopilotBar,
   BudgetMeter,
   ModelBudgetSettings,
@@ -269,6 +275,26 @@ export default function App() {
   }, []);
   useEffect(() => persistView({ view, featureId, stepId }), [view, featureId, stepId]);
   const dispatch = (message: ClientMessage) => {
+    if (
+      state?.workspaceOperation &&
+      [
+        'createFeature',
+        'runStep',
+        'restoreCheckpoint',
+        'createCheckpoint',
+        'startAutopilot',
+        'configureStep',
+        'saveArtifact',
+        'approveStep',
+        'archiveFeature',
+      ].includes(message.type)
+    ) {
+      setNotice({
+        text: `${state.workspaceOperation.label} · attendez la fin de cette opération.`,
+        error: true,
+      });
+      return;
+    }
     if (isDemo) {
       setNotice({
         text: 'Démonstration : aucune commande, écriture ou exécution Copilot n’a été effectuée.',
@@ -458,6 +484,12 @@ export default function App() {
           </div>
         )}
         <main>
+          {state.workspaceOperation && (
+            <div className="workspace-operation global-workspace-operation" role="status">
+              <LoaderCircle className="spin" size={14} />
+              {state.workspaceOperation.label}
+            </div>
+          )}
           {Boolean(state.humanRequests?.length) && (
             <div className="human-global-banner">
               <MessageSquare size={15} />
@@ -711,7 +743,11 @@ function Dashboard({
           </h1>
           <p>Pilotez vos features, une étape et une décision à la fois.</p>
         </div>
-        <button className="button primary new-session" onClick={() => onCreate()}>
+        <button
+          className="button primary new-session"
+          disabled={Boolean(state.workspaceOperation)}
+          onClick={() => onCreate()}
+        >
           <Plus size={17} /> Nouvelle session
         </button>
       </div>
@@ -1017,6 +1053,13 @@ function CreateModal({
   const [description, setDescription] = useState('');
   const [agent, setAgent] = useState('');
   const [model, setModel] = useState('');
+  const [isolated, setIsolated] = useState(
+    Boolean(
+      state.workspace.canIsolate &&
+        ['feature', 'single'].includes(initialWorkflow || state.workflows[0]?.id || ''),
+    ),
+  );
+  const creationBusy = Boolean(state.workspaceOperation) || hasActiveRun(state);
   return (
     <Modal
       title="Une idée, un nouveau parcours."
@@ -1033,6 +1076,7 @@ function CreateModal({
               title: title.trim(),
               description: description.trim(),
               workflowId: workflow,
+              isolated: isolated && Boolean(state.workspace.canIsolate),
               ...(agent ? { agentId: agent } : {}),
               ...(model ? { model } : {}),
             });
@@ -1046,7 +1090,12 @@ function CreateModal({
               aria-checked={workflow === w.id}
               key={w.id}
               className={workflow === w.id ? 'chosen' : ''}
-              onClick={() => setWorkflow(w.id)}
+              onClick={() => {
+                setWorkflow(w.id);
+                setIsolated(
+                  Boolean(state.workspace.canIsolate && ['feature', 'single'].includes(w.id)),
+                );
+              }}
             >
               <span className={`template-icon color-${workflowRank(w) % 3}`}>
                 <WorkflowIcon workflow={w} />
@@ -1059,6 +1108,11 @@ function CreateModal({
             </button>
           ))}
         </div>
+        <WorkspaceChoice
+          state={state}
+          isolated={isolated && Boolean(state.workspace.canIsolate)}
+          onChange={setIsolated}
+        />
         <label className="field">
           <span>
             Qu’allons-nous faire ? <em>*</em>
@@ -1104,7 +1158,11 @@ function CreateModal({
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
-          <button type="submit" className="button primary" disabled={!title.trim() || !workflow}>
+          <button
+            type="submit"
+            className="button primary"
+            disabled={!title.trim() || !workflow || creationBusy}
+          >
             Créer la session <ArrowRight size={16} />
           </button>
         </div>
@@ -1188,6 +1246,7 @@ function FeatureDetail({
           </button>
         </div>
       </div>
+      <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <div className="feature-control-band">
         <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
         <BudgetMeter feature={feature} state={state} dispatch={dispatch} />
@@ -1282,7 +1341,7 @@ function StepPanel({
       setSavedContent(received);
     }
   }, [latest?.artifact?.content, dirty, content]);
-  const running = feature.steps.some((s) => s.status === 'running');
+  const running = hasActiveRun(state) || Boolean(state.workspaceOperation);
   const unlocked = step.dependsOn.every(
     (id) => feature.steps.find((s) => s.id === id)?.status === 'approved',
   );
@@ -1598,13 +1657,13 @@ function StepPanel({
                     <span title={path}>{path}</span>
                     <button
                       className="text-button"
-                      onClick={() => dispatch({ type: 'openFile', path })}
+                      onClick={() => dispatch({ type: 'openFile', path, featureId: feature.id })}
                     >
                       Ouvrir
                     </button>
                     <button
                       className="button secondary small"
-                      onClick={() => dispatch({ type: 'openDiff', path })}
+                      onClick={() => dispatch({ type: 'openDiff', path, featureId: feature.id })}
                     >
                       Voir le diff <ArrowUpRight size={13} />
                     </button>
@@ -1757,7 +1816,12 @@ function StepPanel({
                 {step.status === 'awaiting_review' && (
                   <button
                     className="button primary"
-                    disabled={dirty || Boolean(feature.archived) || !state.workspace.trusted}
+                    disabled={
+                      dirty ||
+                      Boolean(feature.archived) ||
+                      !state.workspace.trusted ||
+                      Boolean(state.workspaceOperation)
+                    }
                     onClick={() =>
                       confirm(
                         'Valider cette étape ?',
@@ -1860,6 +1924,12 @@ function StepPanel({
               dès le premier lancement.
             </p>
           )}
+          <AttemptCheckpointLinks
+            feature={feature}
+            attempt={attempt}
+            state={state}
+            dispatch={dispatch}
+          />
           {attempt?.usage && (
             <div className="usage-note">
               <span>Usage mesuré · {attempt.usage.source}</span>

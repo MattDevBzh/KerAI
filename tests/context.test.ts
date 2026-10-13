@@ -109,7 +109,7 @@ describe('deterministic context compiler', () => {
     data.feature.budget = { maxRuns: 2, maxPromptChars: 1000, modelProfile: 'current' };
     expect(previewContext(data).errors.join(' ')).toContain('limite de 1000');
   });
-  it('invalidates fingerprints when model, permission policy or MCP allowlist changes', () => {
+  it('invalidates fingerprints when model, permissions, MCP or execution root changes', () => {
     const data = input();
     const first = previewContext(data).fingerprint;
     data.step.model = 'different-model';
@@ -134,5 +134,8 @@ describe('deterministic context compiler', () => {
     ];
     expect(previewContext(data).fingerprint).not.toBe(third);
     expect(previewContext(data).prompt).toContain('wit_work_item');
+    const fourth = previewContext(data).fingerprint;
+    data.workspacePath = '/isolated-feature-worktree';
+    expect(previewContext(data).fingerprint).not.toBe(fourth);
   });
 });

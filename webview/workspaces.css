@@ -1,0 +1,832 @@
+.workspace-choice {
+  margin: 0 0 24px;
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--lavender) 3%, var(--bg));
+}
+.workspace-choice legend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.workspace-choice-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.workspace-choice-options > label {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 13px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.workspace-choice-options input {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin: 3px 0 0;
+  accent-color: var(--coral);
+}
+.workspace-choice-options strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+}
+.workspace-choice-options small {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.8;
+  margin-top: 6px;
+}
+.workspace-choice-options > label.selected {
+  border-color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 4%, var(--bg));
+}
+.workspace-choice-options > label.unavailable {
+  opacity: 0.55;
+  cursor: default;
+}
+.workspace-choice-note,
+.workspace-unavailable {
+  font-size: 9px;
+  line-height: 1.8;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+  align-items: start;
+  margin-top: 13px;
+}
+.workspace-choice-note > svg,
+.workspace-unavailable > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--lavender);
+}
+.workspace-unavailable {
+  color: var(--apricot);
+}
+.workspace-unavailable > svg {
+  color: var(--apricot);
+}
+.git-workspace-band {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 0 0 18px;
+  background: var(--panel);
+}
+.git-workspace-band.isolated {
+  border-color: color-mix(in srgb, var(--lavender) 30%, var(--border));
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--lavender) 3%, var(--panel)),
+    var(--panel)
+  );
+}
+.workspace-band-symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: color-mix(in srgb, var(--lavender) 8%, transparent);
+  color: var(--lavender);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.workspace-band-info {
+  flex: 1;
+  min-width: 0;
+}
+.workspace-band-info > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.workspace-band-info .eyebrow {
+  font-size: 7px;
+  letter-spacing: 1.1px;
+}
+.workspace-mode {
+  font-size: 8px;
+  color: var(--lavender);
+  background: color-mix(in srgb, var(--lavender) 9%, transparent);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.workspace-band-info > strong {
+  display: block;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 10px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-band-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 8px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.7;
+}
+.workspace-band-actions {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.workspace-band-actions > .text-button {
+  font-size: 9px;
+}
+.workspace-band-actions > .button {
+  font-size: 10px;
+}
+.checkpoint-dialog {
+  width: 1120px !important;
+}
+.checkpoint-grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.checkpoint-history {
+  min-width: 0;
+}
+.checkpoint-history > .section-heading {
+  margin-bottom: 19px;
+}
+.checkpoint-grid h3 {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+}
+.checkpoint-history > .section-heading > .text-button {
+  font-size: 9px;
+}
+.checkpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 620px;
+  overflow: auto;
+  padding: 1px 2px 1px 1px;
+  scrollbar-width: thin;
+}
+.checkpoint-list > button {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  text-align: left;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  transition: border-color 0.15s;
+}
+.checkpoint-list > button:hover {
+  border-color: var(--muted);
+}
+.checkpoint-list > button.selected {
+  border-color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 4%, var(--bg));
+}
+.checkpoint-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8px;
+  color: var(--lavender);
+  margin-bottom: 10px;
+}
+.checkpoint-kind > span {
+  height: 4px;
+  width: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.checkpoint-kind.after-run {
+  color: var(--green);
+}
+.checkpoint-kind.recovery {
+  color: var(--apricot);
+}
+.checkpoint-kind.manual {
+  color: var(--muted);
+}
+.checkpoint-list strong {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.checkpoint-time {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 8px;
+  color: var(--muted);
+  margin-top: 9px;
+}
+.checkpoint-list small {
+  font-size: 8px;
+  color: var(--muted);
+  line-height: 1.8;
+  margin-top: 6px;
+}
+.checkpoint-list em {
+  font-style: normal;
+  font-size: 8px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 9px;
+  width: 100%;
+  line-height: 1.7;
+}
+.checkpoint-create {
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--coral) 35%, var(--border));
+  border-radius: 8px;
+  margin-bottom: 16px;
+  background: var(--panel);
+}
+.checkpoint-create .field > span {
+  font-size: 10px;
+}
+.checkpoint-create .field input {
+  font-size: 10px;
+}
+.checkpoint-create .button {
+  font-size: 9px;
+}
+.checkpoint-history-note {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  margin-top: 17px;
+  padding: 0 3px;
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.checkpoint-history-note > svg {
+  flex-shrink: 0;
+  color: var(--lavender);
+  margin-top: 2px;
+}
+.checkpoint-comparison {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  min-width: 0;
+}
+.checkpoint-comparison > .section-heading > .muted {
+  font-size: 9px;
+}
+.comparison-direction {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr);
+  gap: 15px;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  margin-bottom: 15px;
+}
+.comparison-direction > span {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.comparison-direction strong {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.comparison-direction small {
+  font-size: 8px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.comparison-direction > svg {
+  color: var(--coral);
+}
+.comparison-direction > .field {
+  margin: 0;
+  min-width: 0;
+}
+.comparison-direction select {
+  font-size: 10px;
+  padding: 10px;
+  background: var(--bg);
+  width: 100%;
+}
+.comparison-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.comparison-toolbar > .field-help {
+  margin: 0;
+  font-size: 9px;
+  color: var(--apricot);
+}
+.snapshot-exclusions {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 15px;
+  padding: 10px 12px;
+  color: var(--muted);
+}
+.snapshot-exclusions summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 9px;
+  color: var(--apricot);
+}
+.snapshot-exclusions ul {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 9px;
+  line-height: 1.9;
+  padding-left: 16px;
+  overflow-wrap: anywhere;
+}
+.restore-selection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.restore-selection-heading > span {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.7;
+}
+.restore-selection-heading > .text-button {
+  font-size: 8px;
+}
+.checkpoint-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 425px;
+  overflow: auto;
+  scrollbar-width: thin;
+  padding: 1px;
+}
+.checkpoint-change {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  min-width: 0;
+}
+.checkpoint-change.selected {
+  border-color: color-mix(in srgb, var(--coral) 50%, var(--border));
+}
+.checkpoint-change input {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.change-symbol {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 13px;
+  flex-shrink: 0;
+  color: var(--apricot);
+  font-weight: 600;
+  line-height: 1;
+}
+.change-symbol.added {
+  color: var(--green);
+}
+.change-symbol.deleted {
+  color: var(--coral);
+}
+.checkpoint-change > div {
+  flex: 1;
+  min-width: 0;
+}
+.checkpoint-change strong {
+  font-size: 10px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-weight: 400;
+  display: block;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.checkpoint-change small {
+  font-size: 8px;
+  display: block;
+  margin-top: 5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.checkpoint-change em {
+  display: block;
+  font-style: normal;
+  font-size: 8px;
+  color: var(--apricot);
+  line-height: 1.7;
+  margin-top: 5px;
+}
+.checkpoint-change > .text-button {
+  font-size: 8px;
+  flex-shrink: 0;
+}
+.checkpoint-empty {
+  min-height: 235px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex-direction: column;
+  padding: 30px 17px;
+  background: radial-gradient(
+    ellipse at top,
+    color-mix(in srgb, var(--lavender) 3%, transparent),
+    transparent
+  );
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  margin: 15px 0;
+}
+.checkpoint-empty > svg {
+  color: var(--lavender);
+  margin-bottom: 20px;
+}
+.checkpoint-empty h3 {
+  font-family: Georgia, serif;
+  font-size: 21px;
+  font-weight: 400;
+  letter-spacing: -0.4px;
+  line-height: 1.5;
+  display: block;
+}
+.checkpoint-empty p {
+  font-size: 10px;
+  line-height: 1.9;
+  color: var(--muted);
+  margin-top: 13px;
+  max-width: 340px;
+}
+.checkpoint-history > .checkpoint-empty h3 {
+  font-size: 20px;
+}
+.checkpoint-history > .checkpoint-empty p {
+  font-size: 9px;
+}
+.restore-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  padding: 18px 0 0;
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.restore-footer p {
+  font-size: 9px;
+  line-height: 1.8;
+  min-width: 0;
+}
+.restore-footer strong {
+  font-size: 10px;
+  font-weight: 500;
+  display: block;
+}
+.restore-footer p > span {
+  color: var(--muted);
+  display: block;
+  margin-top: 5px;
+  max-width: 330px;
+}
+.restore-footer > .button {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.restore-confirm {
+  position: sticky;
+  bottom: 0;
+  background: var(--panel);
+  border: 1px solid var(--coral);
+  border-radius: 9px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+  margin-top: 20px;
+  z-index: 1;
+}
+.restore-confirm .eyebrow {
+  font-size: 8px;
+  color: var(--coral);
+}
+.restore-confirm h3 {
+  font-size: 18px;
+  line-height: 1.6;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  margin: 11px 0;
+}
+.restore-confirm p {
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+.restore-confirm ul {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 10px;
+  line-height: 1.9;
+  padding: 12px 15px;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 145px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.restore-confirm .field-help {
+  font-size: 9px;
+}
+.restore-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 19px;
+}
+.workspace-operation {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--lavender) 25%, var(--border));
+  background: color-mix(in srgb, var(--lavender) 5%, var(--bg));
+  color: var(--lavender);
+  border-radius: 6px;
+  padding: 12px 15px;
+  font-size: 10px;
+  line-height: 1.7;
+  margin-top: 17px;
+}
+.global-workspace-operation {
+  margin: 15px 38px 0;
+}
+.checkpoint-result {
+  padding: 12px 15px;
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border));
+  background: color-mix(in srgb, var(--green) 5%, transparent);
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.8;
+  margin-bottom: 15px;
+}
+@media (max-width: 1050px) {
+  .workspace-band-actions {
+    flex-direction: column;
+    align-items: end;
+    gap: 10px;
+  }
+  .checkpoint-grid {
+    grid-template-columns: 245px minmax(0, 1fr);
+    gap: 18px;
+  }
+  .checkpoint-comparison {
+    padding: 18px;
+  }
+  .comparison-direction {
+    gap: 10px;
+    padding: 12px;
+  }
+  .restore-footer {
+    align-items: start;
+    flex-direction: column;
+  }
+  .restore-footer > .button {
+    align-self: flex-end;
+  }
+  .checkpoint-change {
+    gap: 8px;
+    padding: 11px;
+  }
+}
+@media (max-width: 800px) {
+  .git-workspace-band {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+  .workspace-band-actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: 2px;
+    gap: 20px;
+  }
+  .checkpoint-grid {
+    grid-template-columns: 1fr;
+  }
+  .checkpoint-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 300px;
+    gap: 10px;
+  }
+  .checkpoint-history-note {
+    font-size: 9px;
+  }
+  .checkpoint-dialog {
+    width: 760px !important;
+  }
+  .global-workspace-operation {
+    margin: 15px 25px 0;
+  }
+  .checkpoint-history > .checkpoint-empty {
+    min-height: 170px;
+  }
+  .checkpoint-history > .checkpoint-empty p {
+    max-width: 420px;
+  }
+  .restore-footer {
+    align-items: center;
+    flex-direction: row;
+  }
+  .restore-footer > .button {
+    align-self: auto;
+  }
+}
+@media (max-width: 550px) {
+  .workspace-choice-options {
+    grid-template-columns: 1fr;
+  }
+  .workspace-choice {
+    padding: 14px;
+    margin-bottom: 20px;
+  }
+  .workspace-choice-options > label {
+    padding: 12px;
+  }
+  .workspace-choice-note,
+  .workspace-unavailable {
+    font-size: 9px;
+  }
+  .git-workspace-band {
+    padding: 16px;
+    gap: 10px;
+  }
+  .workspace-band-symbol {
+    width: 31px;
+    height: 31px;
+    border-radius: 8px;
+  }
+  .workspace-band-info > strong {
+    font-size: 9px;
+  }
+  .workspace-band-meta {
+    font-size: 7px;
+  }
+  .workspace-band-actions {
+    gap: 12px;
+    justify-content: space-between;
+  }
+  .workspace-band-actions > .text-button {
+    font-size: 8px;
+    gap: 4px;
+  }
+  .workspace-band-actions > .button {
+    font-size: 9px;
+    padding: 8px;
+    gap: 6px;
+  }
+  .workspace-band-actions .count-pill {
+    font-size: 8px;
+  }
+  .checkpoint-list {
+    grid-template-columns: 1fr;
+    max-height: 280px;
+  }
+  .checkpoint-list > button {
+    padding: 13px;
+  }
+  .checkpoint-comparison {
+    padding: 14px;
+  }
+  .comparison-direction {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .comparison-direction > svg {
+    transform: rotate(90deg);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .checkpoint-change {
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .checkpoint-change > div {
+    min-width: calc(100% - 65px);
+  }
+  .checkpoint-change > .text-button {
+    margin-left: auto;
+  }
+  .checkpoint-grid h3 {
+    font-size: 11px;
+  }
+  .checkpoint-comparison > .section-heading > .muted {
+    font-size: 8px;
+  }
+  .restore-footer {
+    flex-direction: column;
+    align-items: start;
+  }
+  .restore-footer > .button {
+    width: 100%;
+    white-space: normal;
+  }
+  .restore-confirm {
+    padding: 17px;
+  }
+  .restore-confirm h3 {
+    font-size: 16px;
+  }
+  .restore-confirm p {
+    font-size: 10px;
+  }
+  .restore-confirm-actions > .button {
+    flex: 1;
+    font-size: 9px;
+    white-space: normal;
+  }
+  .checkpoint-history > .section-heading > .text-button {
+    font-size: 8px;
+  }
+  .global-workspace-operation {
+    margin: 12px 15px 0;
+  }
+  .checkpoint-dialog .modal-actions > .muted {
+    word-break: break-all;
+    max-width: 100%;
+  }
+  .workspace-operation {
+    font-size: 9px;
+  }
+}
+.attempt-checkpoint-links {
+  border-top: 1px solid var(--border);
+  padding-top: 13px;
+  margin-top: 15px;
+}
+.attempt-checkpoint-links > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 8px;
+}
+.attempt-checkpoint-links > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  margin-top: 9px;
+}
+.attempt-checkpoint-links .text-button {
+  font-size: 8px;
+  color: var(--lavender);
+}

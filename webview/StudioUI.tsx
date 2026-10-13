@@ -92,6 +92,8 @@ export function AutopilotBar({
     [starting, setStarting] = useState(false);
   const auto = feature.autopilot;
   const blocked =
+    Boolean(state.workspaceOperation) ||
+    state.features.some((f) => f.steps.some((s) => s.status === 'running')) ||
     feature.archived ||
     !state.workspace.trusted ||
     state.runtime.state !== 'ready' ||
@@ -1080,7 +1082,9 @@ export function ReviewWorkspace({
               {c.file && (
                 <button
                   className="text-button"
-                  onClick={() => dispatch({ type: 'openFile', path: c.file! })}
+                  onClick={() =>
+                    dispatch({ type: 'openFile', path: c.file!, featureId: feature.id })
+                  }
                 >
                   <FileCode2 size={12} />
                   {c.file}

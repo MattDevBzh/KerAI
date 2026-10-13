@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 
 export function redact(text: string): string {
   return text
@@ -27,6 +28,9 @@ export async function runProcess(
     timeoutMs?: number;
     maxBytes?: number;
     onLine?: (line: string) => void;
+    /** Machine-readable Git data must not be changed by log redaction. */
+    rawOutput?: boolean;
+    env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<ProcessResult> {
   if (options.signal?.aborted) throw new Error('Exécution annulée.');
@@ -36,7 +40,7 @@ export async function runProcess(
       shell: false,
       windowsHide: true,
       detached: process.platform !== 'win32',
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...options.env },
     });
     let stdout = '',
       stderr = '',
@@ -78,8 +82,9 @@ export async function runProcess(
     );
     const abort = () => stop('Exécution annulée.');
     options.signal?.addEventListener('abort', abort, { once: true });
-    const collect = (data: Buffer, error: boolean) => {
-      const text = data.toString();
+    const outDecoder = new StringDecoder('utf8'),
+      errDecoder = new StringDecoder('utf8');
+    const collectText = (text: string, error: boolean) => {
       if (error) {
         stderr += text;
         if (stderr.length > max) {
@@ -104,8 +109,8 @@ export async function runProcess(
         }
       }
     };
-    child.stdout.on('data', (data) => collect(data, false));
-    child.stderr.on('data', (data) => collect(data, true));
+    child.stdout.on('data', (data) => collectText(outDecoder.write(data), false));
+    child.stderr.on('data', (data) => collectText(errDecoder.write(data), true));
     const cleanup = () => {
       clearTimeout(timer);
       if (killTimer && !stopped) clearTimeout(killTimer);
@@ -117,9 +122,17 @@ export async function runProcess(
     });
     child.on('close', (code) => {
       cleanup();
+      collectText(outDecoder.end(), false);
+      collectText(errDecoder.end(), true);
       if (lineBuffer) options.onLine?.(redact(lineBuffer));
       if (stopped) reject(new Error(stopped));
-      else resolve({ code: code ?? -1, stdout: redact(stdout), stderr: redact(stderr), truncated });
+      else
+        resolve({
+          code: code ?? -1,
+          stdout: options.rawOutput ? stdout : redact(stdout),
+          stderr: redact(stderr),
+          truncated,
+        });
     });
   });
 }

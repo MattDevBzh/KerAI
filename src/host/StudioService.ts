@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
-import { basename } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { open, readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type {
   AgentAdapter,
@@ -17,6 +18,8 @@ import type {
   HumanRequest,
   ReviewComment,
   AcceptanceCriterion,
+  FeatureCheckpoint,
+  CheckpointComparison,
 } from '../shared/types';
 import { AgentRegistry } from '../core/registry';
 import { Store, settingsSchema } from '../core/store';
@@ -36,12 +39,16 @@ import {
   commentSchema,
 } from '../core/evolutionSchemas';
 import { PolicyEngine, sha256 } from './PolicyEngine';
+import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
+import { WorkspaceLease } from './WorkspaceLease';
 
 export class StudioService extends EventEmitter {
   engine = new WorkflowEngine();
   state!: StudioState;
   adapter!: AgentAdapter;
   readonly registry: AgentRegistry;
+  readonly workspaces: FeatureWorkspace;
+  private workspaceTask?: Promise<void>;
   private active?: {
     featureId: string;
     stepId: string;
@@ -70,6 +77,7 @@ export class StudioService extends EventEmitter {
   ) {
     super();
     this.registry = new AgentRegistry(workspacePath, defaultsPath);
+    this.workspaces = new FeatureWorkspace(workspacePath, join(store.rootPath, 'workspaces'));
   }
   async initialize(): Promise<void> {
     const persisted = await this.store.load();
@@ -77,7 +85,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       workspace: {
         name: basename(this.workspacePath),
         path: this.workspacePath,
@@ -92,6 +100,17 @@ export class StudioService extends EventEmitter {
       mcpCatalogs: {},
       humanRequests: [],
     };
+    await this.refreshIsolationSupport();
+  }
+  private async refreshIsolationSupport(): Promise<void> {
+    try {
+      await this.workspaces.inspectRepository();
+      this.state.workspace.canIsolate = true;
+      this.state.workspace.isolationReason = undefined;
+    } catch (error) {
+      this.state.workspace.canIsolate = false;
+      this.state.workspace.isolationReason = (error as Error).message;
+    }
   }
   snapshot(): StudioState {
     this.state.workspace.trusted = this.isTrusted();
@@ -130,6 +149,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     Object.assign(this.state, data);
     this.state.workspace.branch = (await gitInfo(this.workspacePath)).branch;
+    await this.refreshIsolationSupport();
     this.publish();
   }
   async checkRuntime(): Promise<void> {
@@ -154,22 +174,208 @@ export class StudioService extends EventEmitter {
     workflowId: string;
     agentId?: string;
     model?: string;
+    isolated?: boolean;
   }): Promise<Feature> {
-    this.assertTrusted();
-    const workflow = this.state.workflows.find((item) => item.id === input.workflowId);
-    if (!workflow) throw new Error('Workflow inconnu.');
-    if (input.agentId && !this.state.agents.some((agent) => agent.id === input.agentId))
-      throw new Error('Agent inconnu.');
-    const info = await gitInfo(this.workspacePath);
-    this.assertTrusted();
-    this.state.workspace.branch = info.branch;
-    const feature = this.engine.createFeature(workflow, {
-      ...input,
-      branch: info.branch,
+    return this.workspaceAction(undefined, 'Création de l’espace de la feature', async () => {
+      const workflow = this.state.workflows.find((item) => item.id === input.workflowId);
+      if (!workflow) throw new Error('Workflow inconnu.');
+      if (input.agentId && !this.state.agents.some((agent) => agent.id === input.agentId))
+        throw new Error('Agent inconnu.');
+      const info = await gitInfo(this.workspacePath);
+      this.assertTrusted();
+      this.state.workspace.branch = info.branch;
+      // Do not publish a partially created feature while Git prepares its checkout.
+      const feature = new WorkflowEngine().createFeature(workflow, {
+        ...input,
+        branch: info.branch,
+      });
+      feature.budget = structuredClone(this.state.settings.budgetDefaults ?? defaultBudget);
+      if (input.isolated) {
+        feature.worktree = await this.workspaces.createWorktree(feature);
+        feature.branch = feature.worktree.branch;
+      }
+      this.engine.features.push(feature);
+      await this.persist();
+      return feature;
     });
-    feature.budget = structuredClone(this.state.settings.budgetDefaults ?? defaultBudget);
-    await this.persist();
-    return feature;
+  }
+  /** Reserve before the first await; another window also must acquire the target lease. */
+  private async workspaceAction<T>(
+    featureId: string | undefined,
+    label: string,
+    action: () => Promise<T>,
+    automated = false,
+    readOnly = false,
+  ): Promise<T> {
+    this.assertTrusted();
+    if (this.active || this.workspaceTask)
+      throw new Error('Attends la fin de l’opération en cours dans le cockpit.');
+    if (this.automation && (!automated || this.automation.featureId !== featureId))
+      throw new Error('Mets le pilote en pause avant cette opération.');
+    let complete!: () => void;
+    this.workspaceTask = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    this.state.workspaceOperation = { featureId, label, readOnly };
+    this.publish();
+    let lease: WorkspaceLease | undefined;
+    try {
+      if (featureId) {
+        const feature = this.engine.getFeature(featureId);
+        const root = await this.workspaces.validate(feature);
+        if (feature.worktree) {
+          lease = new WorkspaceLease(root);
+          await lease.acquire();
+        }
+      }
+      this.assertTrusted();
+      return await action();
+    } finally {
+      try {
+        await lease?.release();
+      } finally {
+        this.workspaceTask = undefined;
+        this.state.workspaceOperation = undefined;
+        complete();
+        this.publish();
+      }
+    }
+  }
+  async featurePath(featureId?: string): Promise<string> {
+    return featureId
+      ? this.workspaces.validate(this.engine.getFeature(featureId))
+      : this.workspacePath;
+  }
+  private rememberCheckpoint(feature: Feature, checkpoint: FeatureCheckpoint): void {
+    feature.checkpoints ??= [];
+    feature.checkpoints.push(checkpoint);
+    feature.updatedAt = new Date().toISOString();
+  }
+  async createCheckpoint(featureId: string, label: string): Promise<void> {
+    await this.workspaceAction(featureId, 'Sauvegarde locale des fichiers', async () => {
+      const feature = this.engine.getFeature(featureId);
+      if (feature.archived) throw new Error('Réactive cette session avant de créer un point.');
+      const checkpoint = await this.workspaces.capture(feature, { kind: 'manual', label });
+      this.rememberCheckpoint(feature, checkpoint);
+      await this.persist();
+    });
+  }
+  async compareCheckpoint(
+    featureId: string,
+    checkpointId: string,
+    targetCheckpointId?: string,
+  ): Promise<CheckpointComparison> {
+    return this.workspaceAction(
+      featureId,
+      'Comparaison des fichiers',
+      () =>
+        this.workspaces.compare(
+          this.engine.getFeature(featureId),
+          checkpointId,
+          targetCheckpointId,
+        ),
+      false,
+      true,
+    );
+  }
+  async checkpointDiff(
+    featureId: string,
+    checkpointId: string,
+    file: string,
+    targetCheckpointId?: string,
+  ): Promise<{ before?: Buffer; after?: Buffer }> {
+    return this.workspaceAction(
+      featureId,
+      'Ouverture de la comparaison',
+      async () => {
+        const feature = this.engine.getFeature(featureId);
+        const comparison = await this.workspaces.compare(feature, checkpointId, targetCheckpointId);
+        const change = comparison.files.find((item) => item.path === file);
+        if (!change) throw new Error('Ce fichier n’appartient pas à la comparaison.');
+        if (!change.restorable) throw new Error(change.reason ?? 'Ce fichier est exclu du point.');
+        const before = await this.workspaces.readFile(feature, checkpointId, file);
+        let after: Buffer | undefined;
+        if (targetCheckpointId)
+          after = await this.workspaces.readFile(feature, targetCheckpointId, file);
+        else {
+          const policy = new PolicyEngine(await this.featurePath(featureId), 'read-only', []);
+          try {
+            const handle = await open(
+              await policy.resolve(file),
+              constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+            );
+            try {
+              const stat = await handle.stat();
+              if (!stat.isFile() || stat.nlink > 1 || stat.size > CHECKPOINT_LIMITS.fileBytes)
+                throw new Error('Fichier actuel non régulier ou trop volumineux.');
+              const buffer = Buffer.alloc(CHECKPOINT_LIMITS.fileBytes + 1);
+              let length = 0;
+              while (length < buffer.length) {
+                const { bytesRead } = await handle.read(
+                  buffer,
+                  length,
+                  buffer.length - length,
+                  length,
+                );
+                if (!bytesRead) break;
+                length += bytesRead;
+              }
+              after = buffer.subarray(0, length);
+              if (length > CHECKPOINT_LIMITS.fileBytes || sha256(after) !== change.afterHash)
+                throw new Error('Les fichiers ont changé. Actualise la comparaison.');
+            } finally {
+              await handle.close();
+            }
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            if (change.afterHash)
+              throw new Error('Les fichiers ont changé. Actualise la comparaison.');
+          }
+        }
+        return { before, after };
+      },
+      false,
+      true,
+    );
+  }
+  async restoreCheckpoint(
+    featureId: string,
+    checkpointId: string,
+    paths: string[],
+    expectedFingerprint: string,
+    beforeWrite?: () => Promise<void>,
+  ): Promise<void> {
+    await this.workspaceAction(featureId, 'Restauration des fichiers sélectionnés', async () => {
+      const feature = this.engine.getFeature(featureId);
+      if (feature.archived) throw new Error('Réactive cette session avant de restaurer.');
+      const comparison = await this.workspaces.compare(feature, checkpointId);
+      if (comparison.fingerprint !== expectedFingerprint)
+        throw new Error('Les fichiers ont changé. Actualise la comparaison avant de restaurer.');
+      let recoverySaved = false;
+      try {
+        const result = await this.workspaces.restore(
+          feature,
+          checkpointId,
+          paths,
+          expectedFingerprint,
+          async (recovery) => {
+            this.rememberCheckpoint(feature, recovery);
+            this.engine.invalidateAfterRestore(featureId);
+            await this.persist();
+            recoverySaved = true;
+            this.assertTrusted();
+            await beforeWrite?.();
+          },
+        );
+        feature.workspaceFileHashes ??= {};
+        for (const file of result.restoredFiles)
+          feature.workspaceFileHashes[file] =
+            comparison.files.find((item) => item.path === file)?.beforeHash ?? '<missing>';
+      } finally {
+        // Even an interrupted restore leaves the recovery point and invalidated reviews visible.
+        if (recoverySaved) await this.persist();
+      }
+    });
   }
   async getTools(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal) {
     const host = new ToolHost(input, callbacks, signal);
@@ -276,7 +482,7 @@ export class StudioService extends EventEmitter {
       attempt,
       agent: structuredClone(agent),
       skills: this.state.skills.filter((skill) => skillIds.includes(skill.id)),
-      workspacePath: this.workspacePath,
+      workspacePath: this.workspaces.executionPath(feature),
       settings: structuredClone(this.state.settings),
       resumeSessionId: resume ? previous?.sessionId : undefined,
       launch: selected,
@@ -311,13 +517,30 @@ export class StudioService extends EventEmitter {
     previewFingerprint?: string,
     automated = false,
   ): Promise<void> {
+    return this.workspaceAction(
+      featureId,
+      'Tentative et points de restauration',
+      () =>
+        this.executeRun(featureId, stepId, feedback, resume, launch, previewFingerprint, automated),
+      automated,
+    );
+  }
+  private async executeRun(
+    featureId: string,
+    stepId: string,
+    feedback = '',
+    resume = false,
+    launch?: RunLaunchOptions,
+    previewFingerprint?: string,
+    automated = false,
+  ): Promise<void> {
     this.assertTrusted();
     if (this.automation && !automated)
       throw new Error('Mets le pilote en pause avant de lancer une tentative manuelle.');
     if (this.active) throw new Error('Une exécution est déjà active dans ce workspace.');
     if (this.state.runtime.state !== 'ready' || !this.state.runtime.authenticated)
       throw new Error('Connecte le CLI Copilot avant de lancer un agent.');
-    const info = await gitInfo(this.workspacePath);
+    const info = await gitInfo(await this.featurePath(featureId));
     this.assertTrusted();
     if (this.automation && !automated)
       throw new Error('Mets le pilote en pause avant de lancer une tentative manuelle.');
@@ -432,6 +655,17 @@ export class StudioService extends EventEmitter {
     try {
       await this.persist();
       this.assertTrusted();
+      if (feature.worktree) {
+        const before = await this.workspaces.capture(feature, {
+          kind: 'before-run',
+          label: `Avant ${step.name}`.slice(0, 200),
+          stepId,
+          attemptId: attempt.id,
+        });
+        this.rememberCheckpoint(feature, before);
+        attempt.checkpointBeforeId = before.id;
+        await this.persist();
+      }
       await this.hooks('beforeRun', input, controller.signal, callbacks);
       this.assertTrusted();
       const result = await this.adapter.run(input, callbacks, controller.signal);
@@ -456,6 +690,28 @@ export class StudioService extends EventEmitter {
           );
       }
     } finally {
+      const owned = this.toolHosts.get(attempt.id)?.fileHashes;
+      if (owned) feature.workspaceFileHashes = { ...feature.workspaceFileHashes, ...owned };
+      if (feature.worktree && attempt.checkpointBeforeId) {
+        try {
+          const after = await this.workspaces.capture(feature, {
+            kind: 'after-run',
+            label: `Après ${step.name}`.slice(0, 200),
+            stepId,
+            attemptId: attempt.id,
+          });
+          this.rememberCheckpoint(feature, after);
+          attempt.checkpointAfterId = after.id;
+        } catch (error) {
+          attempt.logs.push({
+            id: randomUUID(),
+            at: new Date().toISOString(),
+            kind: 'warning',
+            message: `Point après tentative indisponible : ${redact((error as Error).message)}`,
+          });
+          this.error(error);
+        }
+      }
       this.toolHosts.delete(attempt.id);
       try {
         await this.persist();
@@ -511,7 +767,7 @@ export class StudioService extends EventEmitter {
   }
   async testMcp(serverId: string): Promise<void> {
     this.assertTrusted();
-    if (this.active || this.automation)
+    if (this.active || this.automation || this.workspaceTask)
       throw new Error('Arrête l’exécution avant de tester une connexion MCP.');
     const server = this.state.settings.mcpServers?.find((item) => item.id === serverId);
     if (!server) throw new Error('Enregistre d’abord la configuration de ce MCP.');
@@ -534,6 +790,7 @@ export class StudioService extends EventEmitter {
   }
   assertConfigurable(featureId?: string): void {
     this.assertTrusted();
+    if (this.workspaceTask) throw new Error('Attends la fin de l’opération sur les fichiers.');
     if (this.active && (!featureId || this.active.featureId === featureId))
       throw new Error('Arrête la tentative avant de modifier cette configuration.');
     if (this.automation && (!featureId || this.automation.featureId === featureId))
@@ -597,7 +854,7 @@ export class StudioService extends EventEmitter {
   }
   async startAutopilot(featureId: string): Promise<void> {
     this.assertTrusted();
-    if (this.active || this.automation)
+    if (this.active || this.automation || this.workspaceTask)
       throw new Error('Une exécution ou un pilote est déjà actif.');
     const feature = this.engine.getFeature(featureId);
     if (!feature.autopilot)
@@ -672,8 +929,22 @@ export class StudioService extends EventEmitter {
     expectedRevision: number,
     actor: 'human' | 'autopilot' = 'human',
   ): Promise<void> {
-    this.assertTrusted();
     if (actor === 'human') this.assertConfigurable(featureId);
+    return this.workspaceAction(
+      featureId,
+      'Validation des preuves de la feature',
+      () => this.approveInWorkspace(featureId, stepId, expectedAttemptId, expectedRevision, actor),
+      actor === 'autopilot',
+    );
+  }
+  private async approveInWorkspace(
+    featureId: string,
+    stepId: string,
+    expectedAttemptId: string,
+    expectedRevision: number,
+    actor: 'human' | 'autopilot',
+  ): Promise<void> {
+    this.assertTrusted();
     const step = this.engine.getStep(featureId, stepId),
       attempt = step.attempts.at(-1);
     if (
@@ -698,7 +969,7 @@ export class StudioService extends EventEmitter {
         const latest = item.attempts.at(-1);
         return latest ? currentTestEvidence(latest) : [];
       });
-    const policy = new PolicyEngine(this.workspacePath, 'read-only', []);
+    const policy = new PolicyEngine(await this.featurePath(featureId), 'read-only', []);
     for (const evidence of proofs)
       for (const [file, hash] of Object.entries(evidence.fileHashes)) {
         let current = '<missing>';
@@ -809,7 +1080,7 @@ export class StudioService extends EventEmitter {
         kind: 'info',
         message: `Hook ${hook.name} (${event})`,
       });
-      const result = await runProcess(hook.command, hook.args, this.workspacePath, {
+      const result = await runProcess(hook.command, hook.args, input.workspacePath, {
         signal,
         timeoutMs: 60000,
         onLine: (message) =>
@@ -826,7 +1097,7 @@ export class StudioService extends EventEmitter {
   }
   async saveSettings(settings: StudioSettings): Promise<void> {
     this.assertTrusted();
-    if (this.active || this.automation)
+    if (this.active || this.automation || this.workspaceTask)
       throw new Error('Arrête la tentative et le pilote avant de changer les réglages.');
     this.state.settings = settingsSchema.parse(settings);
     await this.persist();
@@ -841,6 +1112,7 @@ export class StudioService extends EventEmitter {
     if (this.publishTimer) clearTimeout(this.publishTimer);
     await this.adapter?.dispose();
     await active?.done;
+    await this.workspaceTask;
     await this.automation?.done;
     if (this.state)
       await this.store.save(this.engine.features, this.state.settings, this.state.memory ?? []);
