@@ -149,7 +149,9 @@ export class DevOpsController {
       try {
         const stored = storedSchema.parse(JSON.parse(await readFile(this.file(), 'utf8')));
         this.state.config = stored.config;
-        this.state.links = stored.links;
+        this.state.links = stored.links.filter((link) =>
+          this.options.features().some((feature) => feature.id === link.featureId),
+        );
         this.state.history = stored.history;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
@@ -176,6 +178,12 @@ export class DevOpsController {
     const ticket = this.state.tickets.find((t) => t.id === id);
     if (!ticket) throw new Error('Actualise les tickets avant cette action.');
     return ticket;
+  }
+  async removeDeletedFeature(featureId: string): Promise<void> {
+    this.state.links = this.state.links.filter((link) => link.featureId !== featureId);
+    if (this.state.preview?.featureId === featureId) this.state.preview = undefined;
+    await this.save();
+    this.options.publish(this.state);
   }
   private featureLink(featureId: string, ticketId?: number): DevOpsLink {
     if (!this.options.features().some((f) => f.id === featureId))

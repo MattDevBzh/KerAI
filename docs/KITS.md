@@ -6,7 +6,7 @@ Un kit rassemble des parcours, des agents, des skills et leurs ressources. L’�
 
 | Kit | Parcours | Agents | Skills |
 | --- | --- | --- | --- |
-| Atelier Copilot | Feature complète, relecture, session libre, recette visuelle | Huit profils Feature Studio et quatre profils du kit original | Sept méthodes du kit Copilot 2.0.0 |
+| Atelier Copilot | Feature complète, relecture, session libre, recette visuelle | Neuf profils Feature Studio et quatre profils du kit original | Sept méthodes du kit Copilot 2.0.0 |
 | DevOps | Challenge → plan → modifications → relecture → guide → vérification | Six spécialistes avec avatars distincts | Huit méthodes, dont Azure DevOps et l’adaptation de Microsoft azure-validate |
 
 Les profils embarqués sont disponibles dès l’installation de l’extension. **Voir le kit → Installer ce kit** les rend aussi accessibles dans le catalogue utilisateur Copilot. Les profils déjà personnalisés dans un projet ou dans le catalogue personnel gardent leur priorité. Une session existante conserve la définition de son parcours.

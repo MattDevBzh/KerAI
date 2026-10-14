@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -74,6 +74,10 @@
       {
         "command": "featureStudio.migrateUserKit",
         "title": "Feature Studio : migrer les agents et skills vers le compte utilisateur"
+      },
+      {
+        "command": "featureStudio.analyzeSession",
+        "title": "Feature Studio : analyser une session"
       }
     ],
     "menus": {
@@ -145,7 +149,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.1.1.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.2.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",

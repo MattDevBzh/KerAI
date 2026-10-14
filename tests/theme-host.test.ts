@@ -117,6 +117,8 @@ vi.mock('../src/host/StudioService', () => ({
     state = host.state;
     initialize = host.initialize;
     async persist() {}
+    async recoverSessionDeletions() {}
+    async recordHumanAction() {}
     on() {}
     publish() {}
     snapshot() {

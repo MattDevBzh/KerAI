@@ -15,3 +15,6 @@ Pour chaque métrique, le tableau distingue les mesures complètes, partielles, 
 Les validations sont actuelles : l’étape et sa dernière tentative doivent être `approved`. Leur auteur est distingué entre humain, pilote automatique et non communiqué pour les anciennes données. Une validation invalidée, par exemple après restauration ou nouvelle tentative, est comptée à part. Les tentatives échouées, annulées, interrompues et en cours sont affichées séparément ; les tentatives en attente de relecture restent dans le total.
 
 La moyenne **tentatives jusqu’à validation** a pour dénominateur les étapes dont la dernière tentative actuellement validée appartient à la sélection. Son numérateur comprend toutes les tentatives de ces étapes jusqu’à cette validation, y compris les tentatives antérieures hors filtres ; ce nombre hors sélection est affiché. Une étape sans validation n’entre pas dans ce dénominateur. Cette mesure décrit l’historique observé ; elle ne classe pas les modèles et ne mesure pas leur qualité.
+
+
+Les appels de l’Observateur possèdent un budget indépendant et ne sont pas des tentatives du parcours. Leur coût est présenté dans les rapports de la session : cette revue, toutes les revues et le total travail + revues. Les compteurs de validations et de tentatives de ce tableau restent ceux des étapes. [Observateur](OBSERVATEUR.md).

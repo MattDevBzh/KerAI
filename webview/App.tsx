@@ -1,3 +1,4 @@
+import { ObservationPanel, TraceStorageSetting, TraceJournal } from './ObservationUI';
 import { usageCredits } from '../src/shared/credits';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
@@ -38,6 +39,8 @@ import {
   Code2,
   Command,
   ExternalLink,
+  Eye,
+  Trash2,
   FileCode2,
   FileText,
   FolderGit2,
@@ -295,6 +298,7 @@ export default function App() {
   );
   const [featureId, setFeatureId] = useState(initialView.featureId ?? '');
   const [stepId, setStepId] = useState(initialView.stepId ?? '');
+  const [observerRequested, setObserverRequested] = useState(false);
   const [create, setCreate] = useState(false);
   const [draftDirty, setDraftDirty] = useState(false);
   const draftDirtyRef = useRef(false);
@@ -317,7 +321,15 @@ export default function App() {
       else if (message.type === 'devopsState') setDevops(message.state);
       else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
-      else if (message.type === 'navigate') {
+      else if (message.type === 'deleteFeatureResult') {
+        if (message.error) setNotice({ text: message.error, error: true });
+        else if (message.freedBytes !== undefined) {
+          setFeatureId('');
+          setNotice({
+            text: `Session supprimée · ${(message.freedBytes / 1024 ** 2).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mio libérés.`,
+          });
+        }
+      } else if (message.type === 'navigate') {
         if (draftDirtyRef.current) {
           setNotice({
             text: 'Enregistrez le brouillon du compte rendu avant de changer de page.',
@@ -328,6 +340,7 @@ export default function App() {
         setView('dashboard');
         setFeatureId(message.featureId ?? '');
         setCreate(message.view === 'create');
+        setObserverRequested(message.view === 'observation');
       }
     });
     send({ type: 'ready' });
@@ -349,6 +362,9 @@ export default function App() {
         'finalizeFeature',
         'approveStep',
         'archiveFeature',
+        'deleteFeature',
+        'previewObservation',
+        'runObservation',
         'deliveryExecute',
         'deliveryCommit',
         'devopsCreateFeature',
@@ -630,6 +646,7 @@ export default function App() {
             (selected ? (
               <FeatureDetail
                 key={selected.id}
+                observerRequested={observerRequested}
                 feature={selected}
                 state={state}
                 devops={devops}
@@ -1359,6 +1376,7 @@ function CreateModal({
   );
 }
 function FeatureDetail({
+  observerRequested,
   feature,
   state,
   devops,
@@ -1370,6 +1388,7 @@ function FeatureDetail({
   confirm,
   onDirtyChange,
 }: {
+  observerRequested?: boolean;
   onDirtyChange: (dirty: boolean) => void;
   feature: Feature;
   state: StudioState;
@@ -1399,6 +1418,10 @@ function FeatureDetail({
   const finalRequested = useRef(false);
   const [celebrationToken, setCelebrationToken] = useState('');
   const [detailDirty, setDetailDirty] = useState(false);
+  const [observerOpen, setObserverOpen] = useState(Boolean(observerRequested));
+  useEffect(() => {
+    if (observerRequested) setObserverOpen(true);
+  }, [observerRequested]);
   const finalKey = useRef('');
   const busy =
     hasActiveRun(state) ||
@@ -1481,6 +1504,21 @@ function FeatureDetail({
         <div className="feature-tools">
           <button
             className="button secondary small"
+            disabled={detailDirty}
+            onClick={() => setObserverOpen(!observerOpen)}
+          >
+            <Eye size={15} /> Analyser cette session
+          </button>
+          <button
+            className="icon-button"
+            disabled={busy || detailDirty}
+            aria-label="Supprimer la session"
+            onClick={() => dispatch({ type: 'deleteFeature', featureId: feature.id })}
+          >
+            <Trash2 size={16} />
+          </button>
+          <button
+            className="button secondary small"
             onClick={() => dispatch({ type: 'exportFeature', featureId: feature.id })}
           >
             <ArrowDownToLine size={15} /> Exporter
@@ -1507,6 +1545,14 @@ function FeatureDetail({
           </button>
         </div>
       </div>
+      {observerOpen && (
+        <ObservationPanel
+          feature={feature}
+          state={state}
+          dispatch={dispatch}
+          close={() => setObserverOpen(false)}
+        />
+      )}
       <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
       <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <div className="feature-control-band">
@@ -2112,6 +2158,9 @@ function StepPanel({
             ))}
           {tab === 'activity' && (
             <div className="activity-list" aria-live={step.status === 'running' ? 'polite' : 'off'}>
+              {attempt?.traceArchive && (
+                <TraceJournal featureId={feature.id} attemptId={attempt.id} dispatch={dispatch} />
+              )}
               {attempt?.logs.map((log) => (
                 <div key={log.id} className={`activity-event ${log.kind}`}>
                   <span className="event-marker">
@@ -3282,6 +3331,10 @@ function SettingsView({
               dispatch={dispatch}
             />
             <ModelBudgetSettings settings={draft} state={state} onChange={set} />
+            <TraceStorageSetting
+              value={draft.traceLimitBytes}
+              onChange={(traceLimitBytes) => set({ traceLimitBytes })}
+            />
             <section className="settings-card">
               <div className="settings-card-title">
                 <span className="settings-icon color-2">

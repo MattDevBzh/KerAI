@@ -19,6 +19,6 @@ Depuis la v0.5.1, `devops-azure-preflight` est une adaptation française ciblée
 
 ## Bibliothèque et avatars de v1
 
-L’écran Kits expose séparément Atelier Copilot (quatre parcours, les huit profils Feature Studio et les quatre agents originaux, sept skills) et DevOps. Le format portable inclut les ressources passives et les dépendances choisies, sans consignes utilisateur globales, connexion MCP ni automatisation active. Le kit original et son manifeste restent inchangés.
+L’écran Kits expose séparément Atelier Copilot (quatre parcours, les neuf profils Feature Studio et les quatre agents originaux, sept skills) et DevOps. Le format portable inclut les ressources passives et les dépendances choisies, sans consignes utilisateur globales, connexion MCP ni automatisation active. Le kit original et son manifeste restent inchangés.
 
 Les six avatars DevOps ont été générés individuellement avec imagegen, puis exportés mécaniquement par `scripts/pack-avatars.mjs --devops`. Les images source et directions artistiques sont dans `design/avatars`. Les identifiants sont `devops-scout`, `devops-architect`, `devops-builder`, `devops-sentinel`, `devops-lab` et `devops-controller`.

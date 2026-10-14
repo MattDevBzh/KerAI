@@ -105,7 +105,7 @@ Ces points conservent le contenu et les permissions des fichiers inclus ; ils ne
 
 La création, la comparaison et la restauration Git n’ajoutent aucune requête IA. Elles ne publient rien. Les opérations sont verrouillées pendant une tentative ou une autre mutation ; le host recontrôle racine, branche et fichiers. Les buffers non enregistrés sont protégés dans la fenêtre VS Code courante seulement : les autres fenêtres et processus restent hors sandbox. [Périmètre, exclusions et limites détaillés](../docs/WORKSPACES.md).
 
-**Stockage v3 :** les formats v0/v1/v2 migrent en conservant leurs données connues. Une fois ces données enregistrées en v3, ne réinstalle pas la v0.2 pour les ouvrir : elle refuse ce format et ne sait pas conserver les métadonnées de worktree. Il n’existe pas de migration inverse automatique.
+**Stockage v5 :** les formats v0 à v4 migrent en conservant leurs données connues. Les anciens binaires refusent le nouveau format. Il n’existe pas de migration inverse automatique. Les sessions possèdent leurs propres archives et états, avec un index léger.
 
 ![Préparer une US et ses MCP — données de démonstration](../docs/images/launch-context.png)
 
@@ -311,3 +311,10 @@ Les vérifications physiques (par exemple un fichier modifié depuis les tests) 
 Sous le visuel Feature Studio de la barre latérale, l’encart affiche les crédits consommés et inclus du compte connecté au CLI, ainsi que le renouvellement et le dépassement autorisé lorsque ces informations sont disponibles. Il interroge le quota toutes les 10 secondes lorsque la vue est visible, sans ouvrir de session ni envoyer de prompt. Le relevé GitHub peut être différé. Un quota absent, une API incompatible ou une unité non confirmée est indiqué comme indisponible, jamais comme zéro. Les crédits inclus ne constituent pas un plafond de facturation si GitHub autorise un dépassement. Les totaux des sessions du cockpit restent distincts de ce relevé du compte.
 
 Les coûts et les seuils sont présentés en crédits. Les mesures historiques sont conservées dans leur précision d’origine (1 crédit = 1 milliard de nano-AIU) ; les valeurs partielles ou inconnues restent signalées.
+
+
+## Analyser et supprimer une session
+
+**Analyser cette session** ouvre l’Observateur : aperçu local, modèle et budget, analyse de toutes les phases, améliorations sourcées, coûts et modèles rappelés par phase, commentaires globaux et bilan de l’Observateur. Les rapports se conservent par version et s’exportent en HTML ou Markdown. Une revue interrompue garde ses résultats et sa consommation mesurée.
+
+Les archives complètes ont une limite initiale de 256 Mio, configurable dans **Réglages → Archives de session**. Le journal s’affiche par pages. **Supprimer définitivement la session** demande une confirmation native, nettoie journaux, rapports, sauvegardes et objets non partagés, puis affiche l’espace libéré. Archiver conserve les données. [Guide complet de l’Observateur et du stockage](OBSERVATEUR.md).

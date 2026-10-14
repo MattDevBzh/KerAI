@@ -52,8 +52,92 @@ import type { DevOpsInspector } from './DevOpsInspector';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { gitRead } from './gitRead';
 import { KitService } from './KitService';
+import { SessionArchive } from './SessionArchive';
+import {
+  DEFAULT_TRACE_BYTES,
+  type ObservationOptions,
+  type SessionObservation,
+  type SessionStorageInfo,
+} from '../shared/observation';
+import { prepareObservation, runObservation, observationSource } from './SessionObserver';
+import { sessionDirectory } from './SessionFiles';
+import {
+  pendingDeletions,
+  markDeletion,
+  cleanSessionFiles,
+  finishDeletion,
+  privateSize,
+  deletionRecord,
+} from './SessionCleanup';
 
 export class StudioService extends EventEmitter {
+  private archives = new Map<string, Promise<SessionArchive>>();
+  private async archiveFor(featureId: string): Promise<SessionArchive> {
+    let pending = this.archives.get(featureId);
+    if (!pending) {
+      pending = SessionArchive.create(
+        this.store.rootPath,
+        featureId,
+        this.state.settings.traceLimitBytes ?? DEFAULT_TRACE_BYTES,
+      );
+      this.archives.set(featureId, pending);
+      void pending.catch(() => {
+        if (this.archives.get(featureId) === pending) this.archives.delete(featureId);
+      });
+    }
+    const archive = await pending;
+    await archive.flush();
+    return archive;
+  }
+  async recordHumanAction(message: import('../shared/types').ClientMessage): Promise<void> {
+    if (this.disposed || !this.isTrusted() || (this.workspaceTask && !this.active)) return;
+    if (!('featureId' in message) || !message.featureId) return;
+    const tracked = new Set([
+      'runStep',
+      'approveStep',
+      'rejectStep',
+      'answerQuestions',
+      'cancelRun',
+      'saveArtifact',
+      'requestCorrection',
+      'finalizeFeature',
+      'configureStep',
+      'archiveFeature',
+      'saveAutopilot',
+      'startAutopilot',
+      'pauseAutopilot',
+      'saveBudget',
+      'saveCriteria',
+      'addReviewComment',
+      'resolveReviewComment',
+      'createCheckpoint',
+      'restoreCheckpoint',
+    ]);
+    if (!tracked.has(message.type)) return;
+    const feature = this.engine.getFeature(message.featureId);
+    try {
+      const archive = await this.archiveFor(feature.id);
+      archive.append({
+        id: randomUUID(),
+        at: new Date().toISOString(),
+        type: 'host.human_request',
+        stepId: 'stepId' in message ? message.stepId : feature.activeStepId,
+        data: JSON.stringify({
+          intent: 'Demande humaine reçue ; les états et preuves déterminent son résultat effectif.',
+          command: message,
+        }),
+      });
+      await archive.flush();
+    } catch (error) {
+      feature.traceWarnings = [
+        ...new Set([
+          ...(feature.traceWarnings ?? []),
+          `Intervention humaine non archivée : ${redact((error as Error).message)}`,
+        ]),
+      ];
+      this.error(error);
+    }
+  }
   engine = new WorkflowEngine();
   state!: StudioState;
   adapter!: AgentAdapter;
@@ -100,7 +184,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -116,6 +200,16 @@ export class StudioService extends EventEmitter {
       mcpCatalogs: {},
       humanRequests: [],
     };
+    for (const deletion of await pendingDeletions(this.store.rootPath)) {
+      this.engine.features.splice(
+        0,
+        this.engine.features.length,
+        ...this.engine.features.filter((f) => f.id !== deletion.featureId),
+      );
+      this.state.memory = (this.state.memory ?? []).filter(
+        (m) => m.source?.featureId !== deletion.featureId,
+      );
+    }
     await this.refreshIsolationSupport();
   }
   private async refreshIsolationSupport(): Promise<void> {
@@ -430,6 +524,22 @@ export class StudioService extends EventEmitter {
     });
   }
   async getTools(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal) {
+    if (input.observation)
+      return [
+        {
+          name: 'studio_observation_context',
+          description:
+            'The entire review context is already in the prompt. No filesystem, shell, MCP or human access.',
+          parameters: { type: 'object', properties: {}, additionalProperties: false },
+          skipPermission: true,
+          defer: 'never' as const,
+          handler: async () => ({
+            resultType: 'success' as const,
+            textResultForLlm:
+              'Use only the frozen sources already supplied. Return the required JSON.',
+          }),
+        },
+      ];
     const host = new ToolHost(input, callbacks, signal, this.devopsInspector);
     this.toolHosts.set(input.attempt.id, host);
     return await host.createTools();
@@ -674,6 +784,7 @@ export class StudioService extends EventEmitter {
     const attempt = this.engine.beginRun(featureId, stepId, feedback, resume);
     if (!input.resumeSessionId) delete attempt.sessionId;
     attempt.roastLevel = input.attempt.roastLevel;
+    attempt.agentName = input.agent.nickname || input.agent.name;
     attempt.launch = structuredClone(input.launch!);
     attempt.memorySnapshot = structuredClone(input.memory ?? []);
     attempt.promptFingerprint = preview.fingerprint;
@@ -694,7 +805,30 @@ export class StudioService extends EventEmitter {
     this.active = { featureId, stepId, controller, done };
     let streamText = '',
       streamId = '';
+    let archive: SessionArchive | undefined;
+    let attemptBytes = 0,
+      attemptRecords = 0;
+    const trace = (event: import('../shared/observation').SessionTrace) => {
+      if (!archive) throw new Error('Archive de session indisponible.');
+      const beforeBytes = archive.info.bytes,
+        beforeRecords = archive.info.records;
+      try {
+        archive.append({ ...event, stepId, attemptId: attempt.id });
+      } catch (error) {
+        controller.abort(error);
+        throw error;
+      } finally {
+        attemptBytes += archive.info.bytes - beforeBytes;
+        attemptRecords += archive.info.records - beforeRecords;
+        attempt.traceArchive = {
+          ...archive.info,
+          bytes: attemptBytes,
+          records: attemptRecords,
+        };
+      }
+    };
     const callbacks: RunCallbacks = {
+      onTrace: trace,
       onUsage: (usage) => {
         attempt.usage = structuredClone(usage);
         if (usage.model) attempt.model = usage.model;
@@ -739,9 +873,10 @@ export class StudioService extends EventEmitter {
         return answer === 'allow';
       },
       onEvent: (event) => {
+        trace({ id: event.id, at: event.at, type: `activity.${event.kind}`, data: event.message });
         const last = attempt.logs.at(-1);
         if (event.kind === 'message' && last?.id === streamId) {
-          streamText += event.message;
+          streamText = (streamText + event.message).slice(-12000);
           last.message = redact(streamText).slice(-12000);
         } else {
           streamText = event.kind === 'message' ? event.message : '';
@@ -751,7 +886,7 @@ export class StudioService extends EventEmitter {
             message: redact(event.message).slice(0, 12000),
           });
         }
-        if (attempt.logs.length > 3000) attempt.logs.splice(0, attempt.logs.length - 3000);
+        if (attempt.logs.length > 500) attempt.logs.splice(0, attempt.logs.length - 500);
         this.schedule();
       },
       onSession: (id) => {
@@ -760,6 +895,21 @@ export class StudioService extends EventEmitter {
       },
     };
     try {
+      archive = await this.archiveFor(featureId);
+      trace({
+        id: randomUUID(),
+        at: attempt.startedAt,
+        type: 'host.launch',
+        data: JSON.stringify({
+          prompt: input.preparedPrompt,
+          agent: input.agent,
+          skills: input.skills,
+          settings: input.settings,
+          launch: input.launch,
+          resumeSessionId: input.resumeSessionId,
+        }),
+      });
+      await archive.flush();
       await this.persist();
       this.assertTrusted();
       if (feature.worktree) {
@@ -790,6 +940,7 @@ export class StudioService extends EventEmitter {
       await this.hooks('beforeRun', input, controller.signal, callbacks);
       this.assertTrusted();
       const result = await this.adapter.run(input, callbacks, controller.signal);
+      await archive.flush();
       if (controller.signal.aborted) throw new Error('Exécution annulée.');
       const host = this.toolHosts.get(attempt.id);
       result.changedFiles = [...(host?.changedFiles ?? [])];
@@ -834,6 +985,18 @@ export class StudioService extends EventEmitter {
         }
       }
       this.toolHosts.delete(attempt.id);
+      if (archive) {
+        try {
+          await archive.flush();
+        } catch (error) {
+          attempt.error = redact((error as Error).message);
+        }
+        attempt.traceArchive = {
+          ...archive.info,
+          bytes: attemptBytes,
+          records: attemptRecords,
+        };
+      }
       try {
         await this.persist();
       } finally {
@@ -1218,6 +1381,198 @@ export class StudioService extends EventEmitter {
       },
     );
   }
+  async previewObservation(featureId: string, options: ObservationOptions) {
+    return this.workspaceAction(
+      undefined,
+      'Préparation du dossier de surveillance',
+      async () => {
+        const feature = this.engine.getFeature(featureId);
+        const archive = await SessionArchive.create(
+          this.store.rootPath,
+          featureId,
+          this.state.settings.traceLimitBytes ?? DEFAULT_TRACE_BYTES,
+        );
+        return (
+          await prepareObservation(
+            this.store.rootPath,
+            structuredClone(feature),
+            this.state.agents,
+            archive,
+            options,
+          )
+        ).preview;
+      },
+      false,
+      true,
+    );
+  }
+  async observeSession(
+    featureId: string,
+    options: ObservationOptions,
+    fingerprint: string,
+  ): Promise<void> {
+    return this.workspaceAction(
+      undefined,
+      'Analyse de la session par l’Observateur',
+      async () => {
+        if (this.state.runtime.state !== 'ready' || !this.state.runtime.authenticated)
+          throw new Error('Connecte Copilot avant de lancer l’Observateur.');
+        if (!this.state.runtime.models.some((m) => m.id === options.model))
+          throw new Error('Modèle indisponible sur ce compte.');
+        const feature = this.engine.getFeature(featureId);
+        const archive = await SessionArchive.create(
+          this.store.rootPath,
+          featureId,
+          this.state.settings.traceLimitBytes ?? DEFAULT_TRACE_BYTES,
+        );
+        const dossier = await prepareObservation(
+          this.store.rootPath,
+          structuredClone(feature),
+          this.state.agents,
+          archive,
+          options,
+        );
+        if (dossier.preview.fingerprint !== fingerprint)
+          throw new Error('La session ou les réglages ont changé. Prépare un nouvel aperçu.');
+        const controller = new AbortController();
+        let complete!: () => void;
+        const done = new Promise<void>((resolve) => {
+          complete = resolve;
+        });
+        this.active = { featureId, stepId: '@observer', controller, done };
+        try {
+          await runObservation({
+            root: this.store.rootPath,
+            feature,
+            dossier,
+            adapter: this.adapter,
+            workspacePath: this.workspacePath,
+            settings: structuredClone(this.state.settings),
+            signal: controller.signal,
+            persist: () => this.persist(),
+          });
+        } finally {
+          this.active = undefined;
+          complete();
+        }
+      },
+      false,
+      true,
+    );
+  }
+  cancelObservation(featureId: string): void {
+    if (this.active?.featureId !== featureId || this.active.stepId !== '@observer')
+      throw new Error('Aucune analyse active pour cette session.');
+    this.active.controller.abort();
+  }
+  observation(featureId: string, observationId: string): SessionObservation {
+    const review = this.engine
+      .getFeature(featureId)
+      .observations?.find((r) => r.id === observationId);
+    if (!review) throw new Error('Analyse inconnue.');
+    return review;
+  }
+  async observationSource(featureId: string, observationId: string, sourceId: string, offset = 0) {
+    return observationSource(
+      this.store.rootPath,
+      featureId,
+      this.observation(featureId, observationId),
+      sourceId,
+      offset,
+    );
+  }
+  async sessionJournal(featureId: string, attemptId: string, offset = 0) {
+    if (this.active?.featureId === featureId && this.active.stepId !== '@observer')
+      throw new Error(
+        'Le journal complet sera disponible à la fin de la tentative. L’activité affiche les événements en cours.',
+      );
+    const feature = this.engine.getFeature(featureId);
+    if (!feature.steps.some((s) => s.attempts.some((a) => a.id === attemptId)))
+      throw new Error('Tentative inconnue.');
+    const archive = await SessionArchive.create(
+      this.store.rootPath,
+      featureId,
+      this.state.settings.traceLimitBytes ?? DEFAULT_TRACE_BYTES,
+    );
+    return archive.page(attemptId, offset);
+  }
+  async sessionStorage(featureId: string): Promise<SessionStorageInfo> {
+    const feature = this.engine.getFeature(featureId);
+    let traces: import('../shared/observation').TraceArchiveInfo;
+    try {
+      const archive = await SessionArchive.create(
+        this.store.rootPath,
+        featureId,
+        this.state.settings.traceLimitBytes ?? DEFAULT_TRACE_BYTES,
+      );
+      traces = {
+        ...archive.info,
+        complete: feature.steps.every((s) => s.attempts.every((a) => a.traceArchive?.complete)),
+      };
+    } catch (error) {
+      traces = {
+        bytes: await privateSize(
+          this.store.rootPath,
+          `${sessionDirectory(featureId)}/traces.jsonl`,
+        ),
+        records: feature.steps.reduce(
+          (n, s) => n + s.attempts.reduce((m, a) => m + (a.traceArchive?.records ?? 0), 0),
+          0,
+        ),
+        complete: false,
+        reason: `Journal illisible ; la suppression reste disponible. ${(error as Error).message}`,
+      };
+    }
+    let sharedBytes = 0;
+    const record = deletionRecord(feature);
+    for (const file of record.quality)
+      sharedBytes += await privateSize(this.store.rootPath, `quality/${file}`);
+    for (const checkpoint of feature.checkpoints ?? []) sharedBytes += checkpoint.totalBytes;
+    let bytes = await privateSize(this.store.rootPath, sessionDirectory(featureId));
+    for (const id of record.attempts)
+      bytes += await privateSize(this.store.rootPath, `existing-changes/${id}`);
+    return {
+      bytes,
+      sharedBytes,
+      traces,
+      traceLimitBytes: this.state.settings.traceLimitBytes ?? DEFAULT_TRACE_BYTES,
+    };
+  }
+  async recoverSessionDeletions(): Promise<void> {
+    for (const record of await pendingDeletions(this.store.rootPath)) {
+      this.engine.features.splice(
+        0,
+        this.engine.features.length,
+        ...this.engine.features.filter((f) => f.id !== record.featureId),
+      );
+      this.state.memory = (this.state.memory ?? []).filter(
+        (m) => m.source?.featureId !== record.featureId,
+      );
+      await this.persist();
+      await this.workspaces.purgeSession(record.featureId, record.checkpoints);
+      await cleanSessionFiles(this.store.rootPath, record, this.engine.features);
+      this.archives.delete(record.featureId);
+      await this.adapter?.deleteSessions?.(record.sessionIds);
+      await finishDeletion(this.store.rootPath, record.featureId);
+    }
+  }
+  async deleteFeature(featureId: string): Promise<number> {
+    return this.workspaceAction(undefined, 'Suppression définitive de la session', async () => {
+      const feature = this.engine.getFeature(featureId);
+      const before = await privateSize(this.store.rootPath, 'sessions');
+      const backups = await privateSize(this.store.rootPath, 'existing-changes');
+      const checkpoints = await privateSize(this.store.rootPath, 'workspaces');
+      const quality = await privateSize(this.store.rootPath, 'quality');
+      await markDeletion(this.store.rootPath, feature);
+      await this.recoverSessionDeletions();
+      const after =
+        (await privateSize(this.store.rootPath, 'sessions')) +
+        (await privateSize(this.store.rootPath, 'existing-changes')) +
+        (await privateSize(this.store.rootPath, 'workspaces')) +
+        (await privateSize(this.store.rootPath, 'quality'));
+      return Math.max(0, before + backups + checkpoints + quality - after);
+    });
+  }
   async saveBudget(featureId: string, budget: FeatureBudget): Promise<void> {
     this.assertConfigurable(featureId);
     this.engine.getFeature(featureId).budget = budgetSchema.parse(budget);
@@ -1337,6 +1692,9 @@ export class StudioService extends EventEmitter {
     if (this.active || this.automation || this.workspaceTask)
       throw new Error('Arrête la tentative et le pilote avant de changer les réglages.');
     this.state.settings = settingsSchema.parse(settings);
+    for (const pending of this.archives.values())
+      await pending.then((archive) => archive.flush()).catch(() => undefined);
+    this.archives.clear();
     await this.persist();
   }
   async dispose(): Promise<void> {

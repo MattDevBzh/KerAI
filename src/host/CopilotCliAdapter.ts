@@ -520,63 +520,64 @@ export class CopilotCliAdapter implements AgentAdapter {
           controller.signal,
         )),
       ];
-      tools.push({
-        name: 'studio_ask_human',
-        description:
-          'Ask the human a question and wait for their real answer. Never invent a response. Cancels with the active attempt.',
-        parameters: {
-          type: 'object',
-          properties: {
-            question: { type: 'string', minLength: 1, maxLength: 2_000 },
-            choices: {
-              type: 'array',
-              items: { type: 'string', minLength: 1, maxLength: 300 },
-              minItems: 2,
-              maxItems: 8,
+      if (!input.observation)
+        tools.push({
+          name: 'studio_ask_human',
+          description:
+            'Ask the human a question and wait for their real answer. Never invent a response. Cancels with the active attempt.',
+          parameters: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', minLength: 1, maxLength: 2_000 },
+              choices: {
+                type: 'array',
+                items: { type: 'string', minLength: 1, maxLength: 300 },
+                minItems: 2,
+                maxItems: 8,
+              },
+              allowFreeform: { type: 'boolean' },
             },
-            allowFreeform: { type: 'boolean' },
+            required: ['question'],
+            additionalProperties: false,
           },
-          required: ['question'],
-          additionalProperties: false,
-        },
-        skipPermission: true,
-        defer: 'never',
-        handler: async (raw, invocation) => {
-          const schema = z
-            .object({
-              question: z.string().trim().min(1).max(2_000),
-              choices: z.array(z.string().trim().min(1).max(300)).min(2).max(8).optional(),
-              allowFreeform: z.boolean().default(true),
-            })
-            .strict();
-          const question = schema.parse(raw);
-          if (!callbacks.onQuestion)
-            throw new Error(
-              'Aucun dialogue humain n’est disponible pour cette question. Termine avec le bloc de questions structuré.',
+          skipPermission: true,
+          defer: 'never',
+          handler: async (raw, invocation) => {
+            const schema = z
+              .object({
+                question: z.string().trim().min(1).max(2_000),
+                choices: z.array(z.string().trim().min(1).max(300)).min(2).max(8).optional(),
+                allowFreeform: z.boolean().default(true),
+              })
+              .strict();
+            const question = schema.parse(raw);
+            if (!callbacks.onQuestion)
+              throw new Error(
+                'Aucun dialogue humain n’est disponible pour cette question. Termine avec le bloc de questions structuré.',
+              );
+            const requestSignal = invocation.signal
+              ? AbortSignal.any([controller.signal, invocation.signal])
+              : controller.signal;
+            if (requestSignal.aborted) throw cancelled(requestSignal);
+            const answer = await withSignal(
+              callbacks.onQuestion({
+                ...question,
+                question: redactMcp(question.question, secrets),
+                choices: question.choices?.map((choice) => redactMcp(choice, secrets)),
+              }),
+              requestSignal,
             );
-          const requestSignal = invocation.signal
-            ? AbortSignal.any([controller.signal, invocation.signal])
-            : controller.signal;
-          if (requestSignal.aborted) throw cancelled(requestSignal);
-          const answer = await withSignal(
-            callbacks.onQuestion({
-              ...question,
-              question: redactMcp(question.question, secrets),
-              choices: question.choices?.map((choice) => redactMcp(choice, secrets)),
-            }),
-            requestSignal,
-          );
-          if (typeof answer !== 'string' || !answer.trim())
-            throw new Error('Une réponse humaine non vide est nécessaire.');
-          if (redactMcp(answer, secrets) !== answer)
-            throw new Error(
-              'Renseigne les identifiants MCP dans les réglages sécurisés, pas dans une réponse destinée au modèle.',
-            );
-          if (!question.allowFreeform && question.choices && !question.choices.includes(answer))
-            throw new Error('La réponse doit correspondre à un choix proposé.');
-          return { resultType: 'success', textResultForLlm: JSON.stringify({ answer }) };
-        },
-      });
+            if (typeof answer !== 'string' || !answer.trim())
+              throw new Error('Une réponse humaine non vide est nécessaire.');
+            if (redactMcp(answer, secrets) !== answer)
+              throw new Error(
+                'Renseigne les identifiants MCP dans les réglages sécurisés, pas dans une réponse destinée au modèle.',
+              );
+            if (!question.allowFreeform && question.choices && !question.choices.includes(answer))
+              throw new Error('La réponse doit correspondre à un choix proposé.');
+            return { resultType: 'success', textResultForLlm: JSON.stringify({ answer }) };
+          },
+        });
       const allowed = new Set(tools.map((t) => t.name));
       if (
         !tools.length ||
@@ -668,7 +669,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         enableOnDemandInstructionDiscovery: false,
         memory: { enabled: false },
         remoteSession: 'off',
-        includeSubAgentStreamingEvents: false,
+        includeSubAgentStreamingEvents: true,
         customAgentsLocalOnly: true,
         infiniteSessions: { enabled: true },
         onPermissionRequest: (request) =>
@@ -695,8 +696,9 @@ export class CopilotCliAdapter implements AgentAdapter {
         },
         systemMessage: {
           mode: 'append',
-          content:
-            'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
+          content: input.observation
+            ? 'Tu analyses une seule session Feature Studio en lecture seule. Toutes les données sont dans le prompt. Aucun accès au projet ni intervention humaine. Réponds avec le JSON demandé.'
+            : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
         },
         customAgents: [
           {
@@ -792,6 +794,28 @@ export class CopilotCliAdapter implements AgentAdapter {
       const onEvent = (event: SessionEvent) => {
         if (seen.has(event.id)) return;
         seen.add(event.id);
+        const recordTrace = () => {
+          if (
+            !/^(user\.message|assistant\.message|assistant\.usage|tool\.|subagent\.|skill\.|hook\.|permission\.|session\.compaction|session\.error)/.test(
+              event.type,
+            ) ||
+            event.type.endsWith('_delta')
+          )
+            return;
+          try {
+            callbacks.onTrace?.({
+              id: event.id,
+              at: event.timestamp,
+              type: `sdk.${event.type}`,
+              agentId: event.agentId,
+              data: redactMcp(JSON.stringify(event.data), secrets),
+            });
+          } catch (error) {
+            const failure = new Error(redactMcp(errorMessage(error), secrets));
+            rejectIdle(failure);
+            controller.abort(failure);
+          }
+        };
         // Usage is consumed before any event/log callback, including runs later cancelled or rejected.
         if (event.type === 'assistant.usage') {
           const data = event.data;
@@ -814,21 +838,35 @@ export class CopilotCliAdapter implements AgentAdapter {
             usage.cost = (usage.cost ?? 0) + data.copilotUsage.totalNanoAiu;
             usage.unit = 'nano-AIU';
           }
+          const modelKey = data.model && data.model !== 'auto' ? data.model : 'Non communiqué';
+          const breakdown = (usage.byModel ??= Object.create(null));
+          const metric = (breakdown[modelKey] ??= {});
+          if (numeric(data.inputTokens))
+            metric.inputTokens = (metric.inputTokens ?? 0) + data.inputTokens;
+          if (numeric(data.outputTokens))
+            metric.outputTokens = (metric.outputTokens ?? 0) + data.outputTokens;
+          if (numeric(data.copilotUsage?.totalNanoAiu))
+            metric.cost = (metric.cost ?? 0) + data.copilotUsage.totalNanoAiu;
+          if (!numeric(data.inputTokens) || !numeric(data.outputTokens))
+            metric.incompleteTokens = true;
+          if (!numeric(data.copilotUsage?.totalNanoAiu)) metric.incompleteCost = true;
           usage.model = actualModel;
           try {
-            callbacks.onUsage?.({ ...usage });
+            callbacks.onUsage?.(structuredClone(usage));
           } catch (error) {
             const failure = new Error(redactMcp(errorMessage(error), secrets));
             rejectIdle(failure);
             controller.abort(failure);
             return;
           }
+          recordTrace();
           emit(
             'usage',
             `Usage mesuré${actualModel ? ` (${actualModel})` : ''} : ${data.inputTokens ?? '?'} tokens entrants, ${data.outputTokens ?? '?'} sortants.`,
           );
           return;
         }
+        recordTrace();
         if (event.agentId) return;
         switch (event.type) {
           case 'assistant.message_delta':
@@ -903,6 +941,25 @@ export class CopilotCliAdapter implements AgentAdapter {
     }
   }
 
+  async deleteSessions(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    const client = await this.newClient(new Set());
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new Error('Délai du nettoyage Copilot dépassé.')),
+      30000,
+    );
+    try {
+      await withSignal(client.start(), controller.signal);
+      const sessions = await withSignal(client.listSessions(), controller.signal);
+      const existing = new Set(sessions.map((session) => session.sessionId));
+      for (const id of new Set(ids))
+        if (existing.has(id)) await withSignal(client.deleteSession(id), controller.signal);
+    } finally {
+      clearTimeout(timer);
+      await this.close(client);
+    }
+  }
   async dispose(): Promise<void> {
     this.disposed = true;
     for (const controller of this.runs)

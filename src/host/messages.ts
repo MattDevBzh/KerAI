@@ -1,5 +1,6 @@
 import { devOpsMessageVariants } from '../core/devopsSchemas';
 import { z } from 'zod';
+import { observationOptionsSchema } from '../core/observationSchemas';
 import { settingsSchema } from '../core/store';
 import { avatarSchema } from '../core/registry';
 import type { ClientMessage } from '../shared/types';
@@ -159,6 +160,52 @@ export const messageSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('archiveFeature'), featureId: id, archived: z.boolean() }).strict(),
+  z
+    .object({
+      type: z.literal('previewObservation'),
+      featureId: id,
+      requestId: id,
+      options: observationOptionsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('runObservation'),
+      featureId: id,
+      fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      options: observationOptionsSchema,
+    })
+    .strict(),
+  z.object({ type: z.literal('cancelObservation'), featureId: id }).strict(),
+  z
+    .object({
+      type: z.literal('exportObservation'),
+      featureId: id,
+      observationId: id,
+      format: z.enum(['html', 'markdown']),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('observationSource'),
+      featureId: id,
+      observationId: id,
+      sourceId: id,
+      requestId: id,
+      offset: z.number().int().nonnegative().max(1000000000).optional(),
+    })
+    .strict(),
+  z.object({ type: z.literal('sessionStorage'), featureId: id, requestId: id }).strict(),
+  z
+    .object({
+      type: z.literal('sessionJournal'),
+      featureId: id,
+      attemptId: id,
+      requestId: id,
+      offset: z.number().int().nonnegative().max(1000000000).optional(),
+    })
+    .strict(),
+  z.object({ type: z.literal('deleteFeature'), featureId: id }).strict(),
   z.object({ type: z.literal('openDiff'), path: short, featureId: id.optional() }).strict(),
   z.object({ type: z.literal('openFile'), path: short, featureId: id.optional() }).strict(),
   z.object({ type: z.literal('openFeatureWorkspace'), featureId: id }).strict(),

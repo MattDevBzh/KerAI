@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-10-14 (préparée localement)
+
+- Ajoute l’Observateur d’une seule session feature : aperçu local, modèle et budget explicites, analyse de toutes les phases, améliorations sourcées, commentaires globaux, consommation par phase et bilan des appels de l’Observateur. Les rapports versionnés s’exportent en HTML autonome ou Markdown.
+- Conserve les traces complètes sur disque, y compris contextes effectivement envoyés, instructions, outils et intentions humaines. Limite initiale de 256 Mio configurable ; activité récente et pagination du journal sans supprimer les événements anciens.
+- Passe au stockage v5 avec index léger et états de session séparés, migration des formats 0 à 4 et vérification des empreintes.
+- Ajoute la suppression définitive confirmée : journaux, rapports, sauvegardes et données locales associées, collecte des objets non partagés et reprise après crash. Les fichiers du projet, branches, worktrees et exports externes restent conservés.
+- Conserve les consommations inconnues ou partielles, les coûts des échecs et annulations et les modèles réellement observés ; les plafonds sont contrôlés entre les appels.
+
 ## 1.1.1 — 2026-10-14
 
 - Corrige la validation d’un fichier repris légitimement par une étape suivante : les empreintes des écritures historiques sont distinguées de l’état courant, avec contrôle des preuves de tests et des modifications extérieures conservé.

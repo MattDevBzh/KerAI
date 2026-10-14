@@ -20,6 +20,11 @@ async function smokeRun(): Promise<void> {
   const extension = vscode.extensions.getExtension<Api>('MattDevBzh.feature-studio');
   assert.ok(extension, 'Extension found in the real VS Code extension host');
   const contributions = extension.packageJSON.contributes;
+  assert.ok(
+    contributions.commands.some(
+      (command: { command: string }) => command.command === 'featureStudio.analyzeSession',
+    ),
+  );
   const container = contributions.viewsContainers.activitybar.find(
     (entry: { id: string }) => entry.id === 'featureStudio',
   );
@@ -507,8 +512,26 @@ async function smokeRun(): Promise<void> {
     api.getState()?.features.find((f) => f.id === feature.id)?.title,
     'Smoke extension host',
   );
+  assert.equal(api.getState()?.schemaVersion, 5);
+  assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-observer'));
+  await api.dispatch({
+    type: 'previewObservation',
+    featureId: feature.id,
+    requestId: 'smoke-observer-preview',
+    options: { model: 'offline-smoke-model', maxCalls: 40 },
+  });
+  await api.dispatch({
+    type: 'sessionStorage',
+    featureId: feature.id,
+    requestId: 'smoke-observer-storage',
+  });
+  assert.equal(
+    api.getState()?.features.find((f) => f.id === feature.id)?.observations?.length ?? 0,
+    0,
+    'Preparation and storage consultation never start a paid model',
+  );
   console.log(
-    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v4 close/reopen, roast profile scopes and premature final-validation refusal. No paid prompt.',
+    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );
 }
 

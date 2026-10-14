@@ -53,6 +53,11 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'profileSaveResult',
         'kitResult',
         'themeState',
+        'observationPreview',
+        'observationSource',
+        'sessionStorage',
+        'sessionJournal',
+        'deleteFeatureResult',
       ].includes(event.data.type)
     )
       callback(event.data);

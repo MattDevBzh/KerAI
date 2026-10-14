@@ -1,4 +1,16 @@
-# Validation et limites — v1.1.1, 14 octobre 2026
+# Validation et limites — v1.2.0 locale, 14 octobre 2026
+
+## Vérifications locales de v1.2.0
+
+- Format, TypeScript, tests et builds réussis : **436 tests métier**, 4 ignorés (3 propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 réservé à la CI).
+- **91 scénarios Chromium** réussis, dont 4 nouveaux scénarios de rapport, aperçu, budget, source, export, suppression et petit écran. Le rendu du rapport a été inspecté sur desktop et à 390 px ; le débordement des boutons de session a été corrigé.
+- **17 tests spécifiques** de l’Observateur et du stockage : couverture de toutes les phases, snapshot immuable, empreintes et références inventées, annulation et coûts conservés, limites de budget, valeurs inconnues, plus de 3 000 événements, messages longs UTF-8, secrets masqués, refus de liens, migration v4 → v5, suppression d’un journal tronqué, nettoyage après crash et préservation des checkpoints partagés.
+- Smoke réussi dans un vrai hôte **VS Code Insiders**, profil temporaire : activation/CSP, commande et profil Observateur, préparation locale d’un dossier et consultation du stockage sans modèle, persistance v5, contrôles Git/checkpoints et parcours existants.
+
+Les tests d’analyse utilisent un adaptateur Copilot simulé et de vrais fichiers temporaires. Ils vérifient les contrats, la comptabilité et les contrôles d’accès ; ils ne constituent pas une mesure de qualité sur un compte Copilot réel. Aucun prompt payant ni opération distante Azure DevOps n’a été exécuté. Les crédits des fixtures ne sont pas une facture réelle. Le contrôle natif de suppression est couvert par le protocole et l’UI simulée ; sa confirmation reste une interaction humaine.
+
+Le package préparé localement est `releases/feature-studio-1.2.0.vsix`, avec son empreinte dans `releases/SHA256SUMS`. Il n’a pas été publié. Le nouveau stockage v5 refuse les anciens binaires ; les données antérieures connues sont migrées, les traces déjà perdues restent explicitement manquantes.
+
 
 ## Vérifications locales de v1.1.1
 

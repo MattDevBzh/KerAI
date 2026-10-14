@@ -1,3 +1,4 @@
+import { observationHtml, observationMarkdown } from './shared/observationReport';
 import { sessionMarkdown } from './shared/sessionExport';
 import { DevOpsController } from './host/DevOpsController';
 import { devOpsMessageSchema } from './core/devopsSchemas';
@@ -142,6 +143,11 @@ export async function activate(context: vscode.ExtensionContext) {
           resolveMcpSecret: (serverId, key) =>
             context.secrets.get(`studio-mcp:${sha256(root)}:${serverId}:${key}`),
         });
+        await next
+          .recoverSessionDeletions()
+          .catch((error) =>
+            next.state.notices.push(`Nettoyage à reprendre : ${(error as Error).message}`),
+          );
         next.on('state', (state) => send({ type: 'state', state }));
         next.on('errorNotice', (message) => report(new Error(message)));
         service = next;
@@ -270,6 +276,7 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
     const current = await ensure();
+    await current.recordHumanAction(message);
     const deliveryMessage = devOpsMessageSchema.safeParse(message);
     if (deliveryMessage.success) {
       await devops!.handle(deliveryMessage.data);
@@ -595,6 +602,125 @@ export async function activate(context: vscode.ExtensionContext) {
           askBeforeRun: message.askBeforeRun,
         });
         await current.persist();
+        return;
+      }
+      case 'previewObservation':
+        try {
+          send({
+            type: 'observationPreview',
+            requestId: message.requestId,
+            preview: await current.previewObservation(message.featureId, message.options),
+          });
+        } catch (error) {
+          send({
+            type: 'observationPreview',
+            requestId: message.requestId,
+            error: (error as Error).message,
+          });
+        }
+        return;
+      case 'runObservation':
+        await current.observeSession(message.featureId, message.options, message.fingerprint);
+        return;
+      case 'cancelObservation':
+        current.cancelObservation(message.featureId);
+        return;
+      case 'sessionStorage':
+        try {
+          send({
+            type: 'sessionStorage',
+            requestId: message.requestId,
+            storage: await current.sessionStorage(message.featureId),
+          });
+        } catch (error) {
+          send({
+            type: 'sessionStorage',
+            requestId: message.requestId,
+            error: (error as Error).message,
+          });
+        }
+        return;
+      case 'sessionJournal':
+        try {
+          send({
+            type: 'sessionJournal',
+            requestId: message.requestId,
+            ...(await current.sessionJournal(message.featureId, message.attemptId, message.offset)),
+          });
+        } catch (error) {
+          send({
+            type: 'sessionJournal',
+            requestId: message.requestId,
+            error: (error as Error).message,
+          });
+        }
+        return;
+      case 'observationSource':
+        try {
+          send({
+            type: 'observationSource',
+            requestId: message.requestId,
+            ...(await current.observationSource(
+              message.featureId,
+              message.observationId,
+              message.sourceId,
+              message.offset,
+            )),
+          });
+        } catch (error) {
+          send({
+            type: 'observationSource',
+            requestId: message.requestId,
+            error: (error as Error).message,
+          });
+        }
+        return;
+      case 'exportObservation': {
+        const review = current.observation(message.featureId, message.observationId);
+        const ext = message.format === 'html' ? 'html' : 'md';
+        const destination = await vscode.window.showSaveDialog({
+          title: 'Exporter le rapport de l’Observateur',
+          defaultUri: vscode.Uri.file(
+            path.join(current.workspacePath, `analyse-${review.id}.${ext}`),
+          ),
+          filters: message.format === 'html' ? { HTML: ['html'] } : { Markdown: ['md'] },
+        });
+        if (!destination) return;
+        await vscode.workspace.fs.writeFile(
+          destination,
+          Buffer.from(
+            message.format === 'html'
+              ? observationHtml(review, current.engine.getFeature(message.featureId))
+              : observationMarkdown(review, current.engine.getFeature(message.featureId)),
+          ),
+        );
+        await vscode.window.showTextDocument(destination);
+        return;
+      }
+      case 'deleteFeature': {
+        current.assertConfigurable(message.featureId);
+        const feature = current.engine.getFeature(message.featureId);
+        const storage = await current.sessionStorage(feature.id);
+        const choice = await vscode.window.showWarningMessage(
+          `Supprimer définitivement « ${feature.title} » ?`,
+          {
+            modal: true,
+            detail: `Les journaux, contextes, rapports, pièces jointes et sauvegardes propres à cette session seront supprimés. Stockage propre : ${(storage.bytes / 1024 ** 2).toFixed(1)} Mio ; objets partagés : ${(storage.sharedBytes / 1024 ** 2).toFixed(1)} Mio (libérés uniquement s’ils ne servent plus). Les fichiers du projet, branches, worktrees et exports externes sont conservés. Cette action est irréversible.`,
+          },
+          'Supprimer définitivement',
+        );
+        if (choice !== 'Supprimer définitivement') return;
+        try {
+          const freedBytes = await current.deleteFeature(feature.id);
+          await devops?.removeDeletedFeature(feature.id);
+          send({ type: 'deleteFeatureResult', featureId: feature.id, freedBytes });
+        } catch (error) {
+          send({
+            type: 'deleteFeatureResult',
+            featureId: feature.id,
+            error: `Nettoyage incomplet, reprise au prochain démarrage : ${(error as Error).message}`,
+          });
+        }
         return;
       }
       case 'archiveFeature':
@@ -1032,6 +1158,19 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   context.subscriptions.push(
     vscode.commands.registerCommand('featureStudio.open', open),
+    vscode.commands.registerCommand('featureStudio.analyzeSession', async () => {
+      await open();
+      const current = await ensure();
+      const chosen = await vscode.window.showQuickPick(
+        current.state.features.map((feature) => ({
+          label: feature.title,
+          description: `${feature.workflowName}${feature.archived ? ' · archive' : ''}`,
+          id: feature.id,
+        })),
+        { placeHolder: 'Quelle session souhaitez-vous analyser ?' },
+      );
+      if (chosen) send({ type: 'navigate', view: 'observation', featureId: chosen.id });
+    }),
     vscode.commands.registerCommand('featureStudio.newFeature', async () => {
       await open();
       send({ type: 'navigate', view: 'create' });

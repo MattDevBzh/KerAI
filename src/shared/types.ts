@@ -20,6 +20,7 @@ import type {
 } from './evolutions';
 export * from './evolutions';
 export * from './collaboration';
+export * from './observation';
 import type { FeatureWorktree, FeatureCheckpoint, CheckpointComparison } from './workspaces';
 export * from './workspaces';
 export type PolicyProfile = 'read-only' | 'workspace-write' | 'tests';
@@ -90,6 +91,16 @@ export interface Usage {
   source: 'measured';
   incompleteTokens?: boolean;
   incompleteCost?: boolean;
+  byModel?: Record<
+    string,
+    {
+      inputTokens?: number;
+      outputTokens?: number;
+      cost?: number;
+      incompleteTokens?: boolean;
+      incompleteCost?: boolean;
+    }
+  >;
 }
 export interface Artifact {
   name: string;
@@ -97,6 +108,8 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  agentName?: string;
+  traceArchive?: import('./observation').TraceArchiveInfo;
   /** Tone captured at launch; older attempts had roast disabled. */
   roastLevel?: import('./roast').RoastLevel;
   artifactVersions?: import('./collaboration').EditorialVersion[];
@@ -137,6 +150,8 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  traceWarnings?: string[];
+  observations?: import('./observation').SessionObservation[];
   descriptionRevision?: number;
   descriptionVersions?: import('./collaboration').EditorialVersion[];
   corrections?: import('./collaboration').CorrectionCycle[];
@@ -208,6 +223,7 @@ export interface HookDefinition {
   enabled: boolean;
 }
 export interface StudioSettings {
+  traceLimitBytes?: number;
   defaultModel: string;
   timeoutMinutes: number;
   testCommands: TestCommand[];
@@ -235,7 +251,7 @@ export interface RuntimeStatus {
 }
 export interface StudioState {
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4;
+  schemaVersion: 1 | 2 | 3 | 4 | 5;
   workspace: {
     name: string;
     path: string;
@@ -257,6 +273,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./observation').ObservationClientMessage
   | import('./collaboration').CollaborationClientMessage
   | import('./kits').KitClientMessage
   | DevOpsClientMessage
@@ -389,6 +406,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | import('./observation').ObservationHostMessage
   | { type: 'correctionResult'; featureId: string; correctionId?: string; error?: string }
   | {
       type: 'artifactSaveResult';
@@ -422,8 +440,9 @@ export type HostMessage =
       error?: string;
     }
   | { type: 'checkpointComparison'; requestId: string; comparison: CheckpointComparison }
-  | { type: 'navigate'; view: 'create' | 'dashboard'; featureId?: string };
+  | { type: 'navigate'; view: 'create' | 'dashboard' | 'observation'; featureId?: string };
 export interface RunInput {
+  observation?: boolean;
   devopsProjectKey?: string;
   feature: Feature;
   step: FeatureStep;
@@ -453,6 +472,7 @@ export interface RunResult {
   review?: ReviewReport;
 }
 export interface RunCallbacks {
+  onTrace?(trace: import('./observation').SessionTrace): void;
   onEvent(event: RunEvent): void;
   onSession(id: string): void;
   /** Cumulative, deduplicated usage for this attempt, including runs that later fail. */
@@ -471,6 +491,7 @@ export interface RunCallbacks {
   }): Promise<boolean>;
 }
 export interface AgentAdapter {
+  deleteSessions?(ids: string[]): Promise<void>;
   check(): Promise<RuntimeStatus>;
   run(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal): Promise<RunResult>;
   dispose(): Promise<void>;

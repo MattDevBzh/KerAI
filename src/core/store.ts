@@ -1,4 +1,14 @@
-import { mkdir, readFile, rename, open, unlink } from 'node:fs/promises';
+import { mkdir, readFile, rename, open, unlink, readdir } from 'node:fs/promises';
+import {
+  digest,
+  sessionDirectory,
+  readPrivate,
+  writePrivate,
+  privateFile,
+  removePrivate,
+} from '../host/SessionFiles';
+import { observationSchema, traceInfoSchema, usageSchema } from './observationSchemas';
+import { pendingDeletions } from '../host/SessionCleanup';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -88,6 +98,8 @@ const correctionCycle = z.object({
   }),
 });
 const attempt = z.object({
+  agentName: z.string().optional(),
+  traceArchive: traceInfoSchema.optional(),
   roastLevel: z.enum(ROAST_LEVELS).optional(),
   artifactVersions: z.array(editorialVersion).optional(),
   descriptionRevision: z.number().int().nonnegative().optional(),
@@ -141,22 +153,13 @@ const attempt = z.object({
   approvedBy: z.enum(['human', 'autopilot']).optional(),
   checkpointBeforeId: z.string().uuid().optional(),
   checkpointAfterId: z.string().uuid().optional(),
-  usage: z
-    .object({
-      inputTokens: z.number().nonnegative().finite().optional(),
-      outputTokens: z.number().nonnegative().finite().optional(),
-      model: z.string().optional(),
-      cost: z.number().nonnegative().finite().optional(),
-      unit: z.string().optional(),
-      source: z.literal('measured'),
-      incompleteTokens: z.boolean().optional(),
-      incompleteCost: z.boolean().optional(),
-    })
-    .optional(),
+  usage: usageSchema.optional(),
 });
 const feature = z
   .object({
     id: z.string(),
+    observations: z.array(observationSchema).optional(),
+    traceWarnings: z.array(z.string()).optional(),
     descriptionRevision: z.number().int().nonnegative().optional(),
     descriptionVersions: z.array(editorialVersion).optional(),
     corrections: z.array(correctionCycle).optional(),
@@ -236,6 +239,12 @@ const feature = z
   });
 export const settingsSchema = z
   .object({
+    traceLimitBytes: z
+      .number()
+      .int()
+      .min(1024 * 1024)
+      .max(4 * 1024 ** 3)
+      .optional(),
     defaultModel: z.string(),
     timeoutMinutes: z.number().min(1).max(120),
     testCommands: z.array(
@@ -288,7 +297,7 @@ export const settingsSchema = z
   .strict();
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(4),
+    schemaVersion: z.literal(5),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -301,11 +310,24 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 4;
+  schemaVersion: 5;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
 }
+const indexSchema = z
+  .object({
+    schemaVersion: z.literal(5),
+    entries: z
+      .array(z.object({ id: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }))
+      .refine(
+        (entries) => new Set(entries.map((e) => e.id)).size === entries.length,
+        'Sessions dupliquées.',
+      ),
+    settings: settingsSchema,
+    memory: z.array(memorySchema),
+  })
+  .strict();
 const queues = new Map<string, Promise<unknown>>();
 
 /** One process serializes all writes to the same file. Snapshots are captured when save is called. */
@@ -322,7 +344,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 4,
+          schemaVersion: 5,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -332,9 +354,39 @@ export class Store {
     if (!raw || typeof raw !== 'object' || !('schemaVersion' in raw))
       throw new Error('Version de stockage absente.');
     const version = (raw as { schemaVersion: unknown }).schemaVersion;
-    if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4)
+    if (
+      version !== 0 &&
+      version !== 1 &&
+      version !== 2 &&
+      version !== 3 &&
+      version !== 4 &&
+      version !== 5
+    )
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    const migration = version !== 4;
+    if (version === 5) {
+      const index = indexSchema.parse(raw);
+      const deleted = new Set((await pendingDeletions(this.rootPath)).map((d) => d.featureId));
+      const features: Feature[] = [];
+      for (const entry of index.entries) {
+        if (deleted.has(entry.id)) continue;
+        const encoded = await readPrivate(
+          this.rootPath,
+          `${sessionDirectory(entry.id)}/state-${entry.hash}.json`,
+        );
+        if (digest(encoded) !== entry.hash)
+          throw new Error('Session altérée : empreinte invalide.');
+        const item = feature.parse(JSON.parse(encoded)) as Feature;
+        if (item.id !== entry.id) throw new Error('Identité de session incohérente.');
+        features.push(item);
+      }
+      raw = {
+        schemaVersion: 5,
+        features,
+        settings: index.settings,
+        memory: index.memory.filter((m) => !m.source || !deleted.has(m.source.featureId)),
+      };
+    }
+    const migration = version !== 5;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -342,15 +394,27 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
       };
     }
     const state = persistedSchema.parse(raw) as PersistedStudio;
-    const engine = new WorkflowEngine(state.features);
     let recovered = false;
+    for (const item of state.features)
+      for (const review of item.observations ?? []) {
+        if (review.status === 'running') {
+          recovered = true;
+          review.status = 'interrupted';
+          review.finishedAt = new Date().toISOString();
+          review.coverage.complete = false;
+          review.error = 'Analyse interrompue ; relance manuelle requise.';
+          for (const call of review.calls)
+            if (call.status === 'running') call.status = 'interrupted';
+        }
+      }
+    const engine = new WorkflowEngine(state.features);
     for (const item of state.features) {
       if (item.status === 'completed' && !item.finalValidation) {
         engine.refreshFeatureStatus(item.id);
@@ -373,34 +437,52 @@ export class Store {
     return state;
   }
   save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
-    const snapshot =
-      JSON.stringify(
-        persistedSchema.parse({
-          schemaVersion: 4,
-          features: structuredClone(features),
-          settings: structuredClone(settings),
-          memory: structuredClone(memory),
-        }),
-        null,
-        2,
-      ) + '\n';
+    const snapshot = persistedSchema.parse({
+      schemaVersion: 5,
+      features: structuredClone(features),
+      settings: structuredClone(settings),
+      memory: structuredClone(memory),
+    });
     const previous = queues.get(this.path) ?? Promise.resolve();
     const work = previous
       .catch(() => undefined)
       .then(async () => {
-        await mkdir(this.rootPath, { recursive: true });
-        const temporary = `${this.path}.${randomUUID()}.tmp`;
-        try {
-          const handle = await open(temporary, 'wx', 0o600);
+        const entries: { id: string; hash: string }[] = [];
+        for (const item of snapshot.features) {
+          const encoded = JSON.stringify(item) + '\n',
+            hash = digest(encoded);
+          const fragment = `${sessionDirectory(item.id)}/state-${hash}.json`;
           try {
-            await handle.writeFile(snapshot, 'utf8');
-            await handle.sync();
-          } finally {
-            await handle.close();
+            if (digest(await readPrivate(this.rootPath, fragment)) !== hash)
+              throw new Error('État de session altéré.');
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            await writePrivate(this.rootPath, fragment, encoded);
           }
-          await rename(temporary, this.path);
-        } finally {
-          await unlink(temporary).catch(() => undefined);
+          entries.push({ id: item.id, hash });
+        }
+        // Commit the index only after every immutable session version is durable.
+        await writePrivate(
+          this.rootPath,
+          'state.json',
+          JSON.stringify({
+            schemaVersion: 5,
+            entries,
+            settings: snapshot.settings,
+            memory: snapshot.memory,
+          }) + '\n',
+        );
+        for (const entry of entries) {
+          const directory = await privateFile(
+            this.rootPath,
+            `${sessionDirectory(entry.id)}/placeholder`,
+          );
+          for (const name of await readdir(join(directory, '..'))) {
+            if (/^state-[a-f0-9]{64}\.json$/.test(name) && name !== `state-${entry.hash}.json`)
+              await removePrivate(this.rootPath, `${sessionDirectory(entry.id)}/${name}`).catch(
+                () => undefined,
+              );
+          }
         }
       });
     queues.set(this.path, work);

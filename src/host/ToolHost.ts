@@ -114,11 +114,24 @@ export class ToolHost {
         try {
           if (this.signal.aborted) throw new Error('Exécution annulée.');
           const args = schema.parse(raw);
+          const traceId = randomUUID();
+          this.callbacks.onTrace?.({
+            id: traceId,
+            at: new Date().toISOString(),
+            type: 'host.tool_call',
+            data: redact(JSON.stringify({ tool: name, arguments: args })),
+          });
           this.emit(
             'tool',
             `${name} ${typeof raw === 'object' && raw && 'path' in raw ? String(raw.path) : ''}`.trim(),
           );
           const value = await handler(args);
+          this.callbacks.onTrace?.({
+            id: `${traceId}:result`,
+            at: new Date().toISOString(),
+            type: 'host.tool_result',
+            data: redact(JSON.stringify({ tool: name, result: value })),
+          });
           return { resultType: 'success', textResultForLlm: redact(JSON.stringify(value)) };
         } catch (error) {
           const message = redact(error instanceof Error ? error.message : String(error));

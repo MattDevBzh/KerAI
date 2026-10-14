@@ -4,6 +4,10 @@ import { StringDecoder } from 'node:string_decoder';
 export function redact(text: string): string {
   return text
     .replace(
+      /("(?:authorization|api[_-]?key|access[_-]?token|password|secret)"\s*:\s*")((?:\\.|[^"\\])*)(")/gi,
+      '$1[secret masqué]$3',
+    )
+    .replace(
       /\b(?:gh[pousr]_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,})\b/g,
       '[secret masqué]',
     )
