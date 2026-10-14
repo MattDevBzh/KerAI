@@ -67,6 +67,34 @@ async function allMatches(
 }
 
 describe('bounded workspace exploration', () => {
+  it.each([true, false])(
+    'lists and searches project .azure sources while excluding credentials (Git: %s)',
+    async (gitEnabled) => {
+      const { root, git, explorer } = await fixture(gitEnabled);
+      const sources = [
+        '.azure/GitflowPipeLines/Fork-PipeLines/Forks-TAG.yml',
+        '.azure/scripts/tag.ps1',
+        '.azure/templates/build.yaml',
+      ];
+      const secrets = [
+        '.azure/msal_token_cache.json',
+        '.azure/azureProfile.json',
+        '.azure/.env',
+        '.azure/azuredevops/cli/credentialstore',
+      ];
+      for (const file of [...sources, ...secrets]) {
+        await mkdir(join(root, file, '..'), { recursive: true });
+        await writeFile(join(root, file), 'needle\n');
+      }
+      if (gitEnabled) await git('add', '-f', '.azure');
+      expect(await allFiles(explorer)).toEqual(sources);
+      expect(await allFiles(explorer, { path: '.azure' })).toEqual(sources);
+      const found = await allMatches(explorer, { path: '.azure', query: 'needle' });
+      expect(found.matches.map((match) => match.path)).toEqual(sources);
+      for (const file of secrets)
+        await expect(list(explorer, { path: file })).rejects.toThrow('sensible');
+    },
+  );
   it('pages every file beyond 1500 and depth 15 deterministically, and searches the full inventory', async () => {
     const { root, explorer } = await fixture();
     await mkdir(join(root, 'source'));

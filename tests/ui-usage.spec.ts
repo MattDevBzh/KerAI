@@ -137,7 +137,9 @@ test('consommation : mesures partielles, zéro réel, unités exactes et validat
   await expect(input).toContainText('Somme observée partielle');
   await expect(input).toContainText('1 zéro(s) réellement mesuré(s)');
   await expect(page.getByRole('article', { name: 'Tokens de sortie' })).toContainText('40');
-  await expect(page.getByRole('article', { name: 'Consommation nano-AIU' })).toContainText('50');
+  await expect(page.getByRole('article', { name: 'Consommation en crédits' })).toContainText(
+    '< 0,000001',
+  );
   await expect(
     page.getByText('1 mesure(s) de coût dans une autre unité exclue(s)', { exact: false }),
   ).toBeVisible();
@@ -160,8 +162,8 @@ test('consommation : mesures partielles, zéro réel, unités exactes et validat
     page.locator('.usage-outcomes div').filter({ hasText: 'Validées par le pilote automatique' }),
   ).toContainText('1');
   await expect(
-    page.getByRole('meter', { name: 'nano-AIU mesurés · Observed model' }),
-  ).toHaveAttribute('aria-valuetext', '50 nano-AIU observés');
+    page.getByRole('meter', { name: 'crédits mesurés · Observed model' }),
+  ).toHaveAttribute('aria-valuetext', '< 0,000001 crédits observés');
   const messages = await page.evaluate(
     () => Reflect.get(window, 'usageMessages') as ClientMessage[],
   );

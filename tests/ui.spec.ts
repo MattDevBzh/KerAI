@@ -867,7 +867,7 @@ test('validation : preuves host, critères et remarques ; approbation liée à l
     expectedRevision: 7,
   });
 });
-test('budgets : montants nano-AIU sans conversion et valeurs absentes ou partielles signalées', async ({
+test('budgets : conversion des crédits vers le stockage nano-AIU et valeurs absentes ou partielles signalées', async ({
   page,
 }) => {
   const state = fresh();
@@ -883,7 +883,7 @@ test('budgets : montants nano-AIU sans conversion et valeurs absentes ou partiel
   await hosted(page, state);
   await page.locator('.session-card').first().click();
   await expect(page.locator('.budget-meter')).toContainText('120');
-  await expect(page.locator('.budget-meter')).toContainText('400');
+  await expect(page.locator('.budget-meter')).toContainText('< 0,000001');
   await expect(page.locator('.budget-meter')).toContainText('mesure absente ou partielle');
   await page.locator('.budget-meter').getByRole('button', { name: 'Budget', exact: true }).click();
   await expect(page.getByLabel('Nombre maximal d’exécutions')).toHaveAttribute('max', '1000');
@@ -897,7 +897,7 @@ test('budgets : montants nano-AIU sans conversion et valeurs absentes ou partiel
       maxRuns: 10,
       maxPromptChars: 60000,
       maxTokens: 5000,
-      maxNanoAiu: 1000,
+      maxNanoAiu: 1_000_000_000_000,
       modelProfile: 'current',
     },
   });

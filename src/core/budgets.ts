@@ -51,8 +51,8 @@ export function budgetBlockReason(feature: Feature): string | undefined {
   }
   if (budget.maxNanoAiu !== undefined) {
     if (totals.unknownCostRuns)
-      return 'Budget : consommation nano-AIU inconnue pour une tentative. Reprise humaine requise.';
-    if (totals.nanoAiu >= budget.maxNanoAiu) return 'Budget : plafond nano-AIU mesuré atteint.';
+      return 'Budget : consommation en crédits inconnue pour une tentative. Reprise humaine requise.';
+    if (totals.nanoAiu >= budget.maxNanoAiu) return 'Budget : plafond de crédits mesuré atteint.';
   }
   return undefined;
 }

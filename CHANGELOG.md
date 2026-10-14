@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.4
+
+- Encadré de crédits du compte Copilot dans le lanceur, actualisé toutes les 10 secondes lorsqu’il est visible, sans appel au modèle. Les quotas absents ou non exprimés en crédits restent indisponibles.
+- Consommation des sessions, budgets, tableaux et exports affichés en crédits ; conservation des mesures historiques et des seuils internes en nano-AIU.
+
+## 1.0.3 — 2026-10-14
+
+- Rend accessibles les pipelines, templates et scripts du dossier `.azure` du projet : ils étaient masqués par une exclusion globale destinée aux données Azure CLI.
+- Conserve le refus des identifiants, caches MSAL, profils, configuration et journaux Azure CLI, ainsi que des fichiers de secrets habituels. Vérifie l’inventaire, la recherche, la lecture et l’édition ciblée d’un YAML suivi par Git.
+
 ## 1.0.2 — 2026-10-14
 
 - Corrige le faux refus « Chemin hors du dépôt » dans le menu Azure DevOps sous Windows : l’inspection Git compare désormais les chemins canoniques, y compris lorsqu’un alias de dossier est utilisé. Les chemins réellement extérieurs au dépôt restent refusés.

@@ -19,7 +19,7 @@ jobs:
       - run: npx vitest run tests/devops-cli-catalog.test.ts
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot.cmd
-      - run: npx vitest run tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts tests/devops-delivery.test.ts
+      - run: npx vitest run tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts tests/devops-delivery.test.ts tests/explorer.test.ts tests/credits.test.ts tests/cockpit-launcher.test.ts
   validate:
     runs-on: ubuntu-latest
     steps:

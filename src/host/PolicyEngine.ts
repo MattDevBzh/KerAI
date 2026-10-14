@@ -9,27 +9,43 @@ export const sha256 = (content: string | Buffer): string =>
   createHash('sha256').update(content).digest('hex');
 const secretName =
   /^(?:\.env(?:\..*)?|\.npmrc|\.pypirc|credentials(?:\..*)?|id_(?:rsa|ed25519)|.*\.(?:pem|key|p12|pfx))$/i;
+// .azure is also a conventional project folder for pipelines and scripts.
+// Block Azure CLI identities/caches by name (including backup extensions), not
+// every source file beneath a directory named .azure.
+const azureIdentityName =
+  /^(?:accesstokens?|azureprofile|msal_token_cache|msal_http_cache|service_principal_entries|personalaccesstokens)(?:\..*)?$/;
+const azureRuntimeEntries = new Set([
+  'config',
+  'clouds.config',
+  'az.json',
+  'az.sess',
+  'commands',
+  'logs',
+  'telemetry',
+  'azuredevops',
+]);
 const excluded = new Set([
   '.git',
   '.feature-studio',
   'node_modules',
   '.ssh',
   '.aws',
-  '.azure',
   '.codex',
   '.copilot',
   '.venv',
   'bin',
   'obj',
 ]);
-export const isSensitivePath = (name: string): boolean =>
-  name
-    .replaceAll('\\', '/')
-    .split('/')
-    .some((segment) => {
-      const folded = canonicalCaseless(segment);
-      return excluded.has(folded) || secretName.test(folded);
-    });
+export const isSensitivePath = (name: string): boolean => {
+  const segments = name.replaceAll('\\', '/').split('/').map(canonicalCaseless);
+  return segments.some(
+    (segment, index) =>
+      excluded.has(segment) ||
+      secretName.test(segment) ||
+      azureIdentityName.test(segment) ||
+      (segments[index - 1] === '.azure' && azureRuntimeEntries.has(segment)),
+  );
+};
 
 export class PolicyEngine {
   private readHashes = new Map<string, string>();

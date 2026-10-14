@@ -140,6 +140,28 @@ function transport() {
     disconnect: vi.fn(async () => {}),
   };
   const client = {
+    rpc: {
+      account: {
+        getQuota: vi.fn(async () => ({
+          quotaSnapshots: {
+            premium_interactions: {
+              usedRequests: 123.5,
+              entitlementRequests: 1500,
+              isUnlimitedEntitlement: false,
+              overage: 0,
+              overageAllowedWithExhaustedQuota: false,
+            },
+          },
+        })),
+        getCurrentAuth: vi.fn(async () => ({
+          authInfo: {
+            type: 'token',
+            token: 'must-never-leave-host',
+            copilotUser: { token_based_billing: true },
+          },
+        })),
+      },
+    },
     start: vi.fn(async () => {}),
     getStatus: vi.fn(async () => ({ version: '1.0.96', protocolVersion: 3 })),
     getAuthStatus: vi.fn(async () => ({ isAuthenticated: true, login: 'matt' })),
@@ -201,6 +223,22 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     vi.useRealTimers();
     await adapter.dispose();
     await rm(storage, { recursive: true, force: true });
+  });
+
+  it('polls account credits without sessions, prompts, credentials in output or repeated launches', async () => {
+    const first = await adapter.getAccountCredits();
+    const second = await adapter.getAccountCredits();
+    expect(first).toMatchObject({ state: 'ready', used: 123.5, included: 1500 });
+    expect(JSON.stringify(second)).not.toContain('must-never-leave-host');
+    expect(fake.client.start).toHaveBeenCalledOnce();
+    expect(fake.client.rpc.account.getQuota).toHaveBeenCalledTimes(2);
+    expect(fake.client.createSession).not.toHaveBeenCalled();
+    expect(fake.session.send).not.toHaveBeenCalled();
+    fake.client.rpc.account.getQuota.mockRejectedValueOnce(new Error('unsupported RPC'));
+    expect(await adapter.getAccountCredits()).toMatchObject({ state: 'unavailable' });
+    expect(fake.client.forceStop).toHaveBeenCalledOnce();
+    expect((await adapter.getAccountCredits()).state).toBe('ready');
+    expect(fake.client.start).toHaveBeenCalledTimes(2);
   });
 
   it('checks live metadata without creating or sending a session', async () => {

@@ -1,3 +1,4 @@
+import { usageCredits } from '../src/shared/credits';
 import { ThemePicker } from './ThemePicker';
 import { KitsUI } from './KitsUI';
 import { UsageDashboard } from './UsageDashboard';
@@ -2118,18 +2119,14 @@ function StepPanel({
           />
           {attempt?.usage && (
             <div className="usage-note">
-              <span>Usage mesuré · {attempt.usage.source}</span>
+              <span>Consommation mesurée</span>
               {attempt.usage.inputTokens !== undefined && (
                 <span>Entrée : {attempt.usage.inputTokens.toLocaleString('fr-FR')} tokens</span>
               )}
               {attempt.usage.outputTokens !== undefined && (
                 <span>Sortie : {attempt.usage.outputTokens.toLocaleString('fr-FR')} tokens</span>
               )}
-              {attempt.usage.cost !== undefined && (
-                <span>
-                  Coût : {attempt.usage.cost} {attempt.usage.unit ?? ''}
-                </span>
-              )}
+              {<span>{usageCredits(attempt.usage)}</span>}
             </div>
           )}
         </div>

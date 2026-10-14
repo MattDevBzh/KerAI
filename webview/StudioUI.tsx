@@ -1,3 +1,4 @@
+import { toCredits, toNanoAiu, formatCredits } from '../src/shared/credits';
 import { useState, type FormEvent } from 'react';
 import {
   ArrowDown,
@@ -482,17 +483,17 @@ function BudgetFields({
         </label>
         <label className="field">
           <span>
-            Seuil de crédits IA · nano-AIU <small>facultatif</small>
+            Seuil de crédits IA <small>facultatif</small>
           </span>
           <input
             type="number"
             min={0}
             step="any"
-            value={value.maxNanoAiu ?? ''}
+            value={value.maxNanoAiu === undefined ? '' : toCredits(value.maxNanoAiu)}
             onChange={(e) =>
               onChange({
                 ...value,
-                maxNanoAiu: e.target.value ? Number(e.target.value) : undefined,
+                maxNanoAiu: e.target.value ? toNanoAiu(Number(e.target.value)) : undefined,
               })
             }
             placeholder="Aucune limite de crédits définie"
@@ -513,7 +514,7 @@ function BudgetFields({
         </select>
         <small>
           Les profils utilisent uniquement les modèles que vous avez associés dans les réglages. Les
-          seuils de tokens et nano-AIU arrêtent AVANT la tentative suivante ; ils ne plafonnent pas
+          seuils de tokens et crédits arrêtent AVANT la tentative suivante ; ils ne plafonnent pas
           une facture ni la consommation de la tentative en cours.
         </small>
       </label>
@@ -574,11 +575,13 @@ export function BudgetMeter({
           <div>
             <strong>
               {totals.nanoAiu > 0 || totals.runs > totals.unknownCostRuns
-                ? number(totals.nanoAiu)
+                ? formatCredits(toCredits(totals.nanoAiu))
                 : '—'}
-              {live?.maxNanoAiu && <small> / {number(live.maxNanoAiu)}</small>}
+              {live?.maxNanoAiu !== undefined && (
+                <small> / {formatCredits(toCredits(live.maxNanoAiu))}</small>
+              )}
             </strong>
-            <span>nano-AIU {totals.unknownCostRuns ? '· mesure incomplète' : 'mesurés'}</span>
+            <span>crédits {totals.unknownCostRuns ? '· mesure incomplète' : 'mesurés'}</span>
           </div>
         </div>
         {live && (

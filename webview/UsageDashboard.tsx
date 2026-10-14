@@ -1,3 +1,4 @@
+import { toCredits, formatCredits } from '../src/shared/credits';
 import { useMemo, useState } from 'react';
 import { BarChart3, ArrowRight } from 'lucide-react';
 import {
@@ -10,7 +11,11 @@ import {
 import type { Feature } from '../src/shared/types';
 import './UsageDashboard.css';
 
-const number = (value: number) => value.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+const number = formatCredits;
+const creditMetric = (metric: UsageMetric): UsageMetric => ({
+  ...metric,
+  value: metric.value === null ? null : toCredits(metric.value),
+});
 const value = (metric: UsageMetric) => (metric.value === null ? 'Inconnu' : number(metric.value));
 const coverage = (metric: UsageMetric) =>
   `${metric.completeRuns} complète(s) · ${metric.partialRuns} partielle(s) · ${metric.unknownRuns} inconnue(s)`;
@@ -54,7 +59,10 @@ function GroupTable({
   groups: UsageGroup[];
   openSession?: (id: string) => void;
 }) {
-  const maximum = Math.max(1, ...groups.map((group) => group.summary.nanoAiu.value ?? 0));
+  const maximum = Math.max(
+    1,
+    ...groups.map((group) => toCredits(group.summary.nanoAiu.value ?? 0)),
+  );
   return (
     <section className="usage-group-panel" aria-label={title}>
       <h2>{title}</h2>
@@ -76,7 +84,7 @@ function GroupTable({
               <th scope="col">Tentatives</th>
               <th scope="col">Entrée</th>
               <th scope="col">Sortie</th>
-              <th scope="col">nano-AIU</th>
+              <th scope="col">crédits</th>
               <th scope="col">Validations actuelles</th>
               <th scope="col">Échecs / annulations</th>
             </tr>
@@ -107,16 +115,16 @@ function GroupTable({
                   <MetricCell metric={summary.outputTokens} />
                 </td>
                 <td>
-                  <MetricCell metric={summary.nanoAiu} />
+                  <MetricCell metric={creditMetric(summary.nanoAiu)} />
                   {summary.nanoAiu.value !== null && (
                     <meter
                       min={0}
                       max={maximum}
-                      value={summary.nanoAiu.value}
-                      aria-label={`nano-AIU mesurés · ${label}`}
-                      aria-valuetext={`${value(summary.nanoAiu)} nano-AIU observés`}
+                      value={toCredits(summary.nanoAiu.value)}
+                      aria-label={`crédits mesurés · ${label}`}
+                      aria-valuetext={`${value(creditMetric(summary.nanoAiu))} crédits observés`}
                     >
-                      {value(summary.nanoAiu)}
+                      {value(creditMetric(summary.nanoAiu))}
                     </meter>
                   )}
                 </td>
@@ -314,16 +322,16 @@ export function UsageDashboard({
               runs={summary.runs}
             />
             <MetricCard
-              label="Consommation nano-AIU"
-              unit="nano-AIU"
-              metric={summary.nanoAiu}
+              label="Consommation en crédits"
+              unit="crédits"
+              metric={creditMetric(summary.nanoAiu)}
               runs={summary.runs}
             />
           </div>
           <div className="usage-coverage" role="status">
             <strong>
               Couverture : {summary.completeTokenRuns}/{summary.runs} tentative(s) avec tokens
-              complets ; {summary.nanoAiu.completeRuns}/{summary.runs} avec nano-AIU complets.
+              complets ; {summary.nanoAiu.completeRuns}/{summary.runs} avec crédits complets.
             </strong>
             <p>
               Une donnée inconnue est distincte d’un zéro mesuré. Les valeurs partielles sont

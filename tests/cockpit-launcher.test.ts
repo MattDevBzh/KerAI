@@ -4,6 +4,7 @@ const host = vi.hoisted(() => ({
   folders: [] as unknown[],
   changed: undefined as undefined | (() => void),
   receive: undefined as undefined | ((message: unknown) => void),
+  visibilityChanged: undefined as undefined | (() => void),
   disposeView: undefined as undefined | (() => void),
   executeCommand: vi.fn(async () => {}),
   showErrorMessage: vi.fn(),
@@ -42,6 +43,7 @@ describe('local cockpit launcher boundary', () => {
     const disposalListeners: { dispose: ReturnType<typeof vi.fn> }[] = [];
     const webview = {
       html: '',
+      postMessage: vi.fn(async () => true),
       options: {} as { localResourceRoots?: unknown[] },
       cspSource: 'vscode-webview:',
       asWebviewUri: (uri: unknown) => ({ toString: () => `vscode-webview:/${uri}` }),
@@ -54,6 +56,10 @@ describe('local cockpit launcher boundary', () => {
     };
     const view = {
       visible: true,
+      onDidChangeVisibility: (callback: () => void) => {
+        host.visibilityChanged = callback;
+        return { dispose: vi.fn() };
+      },
       webview,
       onDidDispose: (callback: () => void) => {
         host.disposeView = callback;
@@ -150,6 +156,50 @@ describe('local cockpit launcher boundary', () => {
     expect(second.launcher.isReady).toBe(false);
     host.receive!({ type: 'open' });
     expect(host.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('refreshes every 10 seconds only while visible, without overlapping or surviving disposal', async () => {
+    vi.useFakeTimers();
+    const read = vi.fn(async () => ({
+      state: 'ready' as const,
+      used: 1.25,
+      included: 1500,
+      checkedAt: new Date().toISOString(),
+    }));
+    const { launcher, view, webview } = resolve(new CockpitLauncher({} as never, read));
+    try {
+      host.receive!({ type: 'ready' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledOnce();
+      expect(webview.postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ title: expect.stringContaining('1,25 /') }),
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(read).toHaveBeenCalledTimes(2);
+      view.visible = false;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(read).toHaveBeenCalledTimes(2);
+      view.visible = true;
+      let finish!: (value: Awaited<ReturnType<typeof read>>) => void;
+      read.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      host.visibilityChanged!();
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(read).toHaveBeenCalledTimes(3);
+      launcher.dispose();
+      webview.postMessage.mockClear();
+      finish({ state: 'ready', used: 2, included: 1500, checkedAt: new Date().toISOString() });
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(read).toHaveBeenCalledTimes(3);
+      expect(webview.postMessage).not.toHaveBeenCalled();
+    } finally {
+      launcher.dispose();
+      vi.useRealTimers();
+    }
   });
 
   it('limits local assets to resources and permits only nonce-bearing inline script and style', () => {

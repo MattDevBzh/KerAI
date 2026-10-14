@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { accountCredits, type AccountCredits } from '../shared/credits';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CopilotLaunch } from './CopilotLaunch';
@@ -200,7 +201,52 @@ export class CopilotCliAdapter implements AgentAdapter {
   private readonly closing = new Map<CopilotClient, Promise<void>>();
   private readonly runs = new Set<AbortController>();
   private disposed = false;
+  private quotaClient: CopilotClient | undefined;
   constructor(private readonly options: CopilotCliAdapterOptions) {}
+
+  /** Account metadata only: no session, prompt, model call or project tools. */
+  async getAccountCredits(): Promise<AccountCredits> {
+    const controller = new AbortController();
+    this.runs.add(controller);
+    const timer = setTimeout(() => controller.abort(), this.options.checkTimeoutMs ?? 8_000);
+    let client: CopilotClient | undefined;
+    try {
+      client = this.quotaClient;
+      if (!client) {
+        client = await this.newClient();
+        await withSignal(client.start(), controller.signal);
+        this.quotaClient = client;
+      }
+      const auth = await withSignal(client.getAuthStatus(), controller.signal);
+      if (!auth.isAuthenticated) {
+        this.quotaClient = undefined;
+        await this.close(client);
+        return {
+          state: 'unavailable',
+          message: 'Connecte Copilot CLI pour consulter tes crédits.',
+        };
+      }
+      const result = await withSignal(client.rpc.account.getQuota({}), controller.signal);
+      // Only the billing flags are projected; credentials never leave the host.
+      const current = await withSignal(client.rpc.account.getCurrentAuth(), controller.signal);
+      return accountCredits(
+        result.quotaSnapshots,
+        current.authInfo && 'copilotUser' in current.authInfo
+          ? current.authInfo.copilotUser
+          : undefined,
+      );
+    } catch {
+      this.quotaClient = undefined;
+      if (client) await this.close(client);
+      return {
+        state: 'unavailable',
+        message: 'Crédits indisponibles : connexion ou API de quota du CLI inaccessible.',
+      };
+    } finally {
+      clearTimeout(timer);
+      this.runs.delete(controller);
+    }
+  }
 
   private async newClient(secrets: Set<string> = new Set()): Promise<CopilotClient> {
     if (this.disposed) throw new Error('Adaptateur fermé.');

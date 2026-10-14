@@ -18,6 +18,7 @@ import { readHeadFile } from './host/GitFileContent';
 import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 import { normalizeTheme } from './shared/themes';
+import { usageCredits } from './shared/credits';
 
 let panel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
@@ -30,7 +31,30 @@ const diffContents = new Map<string, string>();
 
 export async function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Feature Studio');
-  const launcher = new CockpitLauncher(context.extensionUri);
+  let quotaAdapter: CopilotCliAdapter | undefined;
+  let quotaCliPath: string | undefined;
+  const launcher = new CockpitLauncher(context.extensionUri, async () => {
+    if (!vscode.workspace.isTrusted)
+      return {
+        state: 'unavailable',
+        message: 'Approuve cet espace de travail pour connecter Copilot CLI.',
+      };
+    const cliPath = vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot');
+    if (quotaAdapter && cliPath !== quotaCliPath) {
+      await quotaAdapter.dispose();
+      quotaAdapter = undefined;
+    }
+    if (!quotaAdapter) {
+      quotaCliPath = cliPath;
+      quotaAdapter = new CopilotCliAdapter({
+        cliPath,
+        storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
+        launcherPath: path.join(context.extensionPath, 'dist', 'copilot-launcher.js'),
+        getTools: async () => [],
+      });
+    }
+    return quotaAdapter.getAccountCredits();
+  });
   const send = (message: HostMessage) => {
     if (panel) void panel.webview.postMessage(message);
   };
@@ -48,6 +72,11 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     output,
     launcher,
+    {
+      dispose: () => {
+        void quotaAdapter?.dispose();
+      },
+    },
     vscode.window.registerWebviewViewProvider('featureStudio.launcher', launcher),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
@@ -791,7 +820,10 @@ export async function activate(context: vscode.ExtensionContext) {
             if (attempt.feedback) parts.push(`Feedback : ${attempt.feedback}`);
             if (attempt.launch?.initialContext)
               parts.push(`Contexte initial :\n${attempt.launch.initialContext}`);
-            if (attempt.usage) parts.push(`Usage mesuré : ${JSON.stringify(attempt.usage)}`);
+            if (attempt.usage)
+              parts.push(
+                `Consommation : ${usageCredits(attempt.usage)}. Tokens entrée : ${attempt.usage.inputTokens ?? 'inconnus'} ; sortie : ${attempt.usage.outputTokens ?? 'inconnus'}.`,
+              );
             for (const proof of attempt.evidence ?? [])
               parts.push(
                 `#### Preuve hôte · ${proof.name}\n${proof.command} ${proof.args.join(' ')}\n${proof.startedAt} → ${proof.finishedAt}\nCode : ${proof.exitCode ?? 'inconnu'}${proof.truncated ? ' · sortie tronquée' : ''}\n\n\`\`\`text\n${proof.stdout}\n${proof.stderr}\n\`\`\``,

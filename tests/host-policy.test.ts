@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Tool } from '@github/copilot-sdk';
 import type { RunInput, TestEvidence } from '../src/shared/types';
-import { PolicyEngine, sha256 } from '../src/host/PolicyEngine';
+import { PolicyEngine, sha256, isSensitivePath } from '../src/host/PolicyEngine';
 import { ToolHost, gitInfo } from '../src/host/ToolHost';
 import { runProcess } from '../src/host/process';
 import { WorkflowEngine } from '../src/core/workflow';
@@ -98,6 +98,38 @@ async function invoke(tools: Tool[], name: string, args: unknown) {
 }
 
 describe('host file and command policy', () => {
+  it('allows project Azure pipelines but protects CLI identities, caches and configuration', async () => {
+    const root = await setup();
+    const policy = new PolicyEngine(root, 'workspace-write', []);
+    const pipeline = '.azure/GitflowPipeLines/Fork-PipeLines/Forks-TAG.yml';
+    expect(isSensitivePath(pipeline)).toBe(false);
+    await expect(policy.resolve(pipeline, true)).resolves.toBe(join(root, pipeline));
+    for (const file of [
+      '.azure/accessTokens.json',
+      '.azure/msal_token_cache.bin',
+      '.azure/msal_http_cache.bin',
+      '.azure/service_principal_entries.json',
+      '.azure/azureProfile.json',
+      '.azure/personalAccessTokens',
+      '.azure/config',
+      '.azure/clouds.config',
+      '.azure/az.json',
+      '.azure/az.sess',
+      '.azure/commands/run.log',
+      '.azure/logs/run.txt',
+      '.azure/telemetry/run.txt',
+      '.azure/azuredevops/cli/credentialstore',
+      '.azure/templates/.env',
+      '.azure/scripts/credentials.json',
+      '.azure/scripts/private.key',
+      'nested/.AZURE/MSAL_TOKEN_CACHE.JSON.bak',
+    ]) {
+      expect(isSensitivePath(file)).toBe(true);
+      expect(isSensitivePath(file.replaceAll('/', '\\'))).toBe(true);
+      await expect(policy.resolve(file)).rejects.toThrow('sensible');
+      await expect(policy.resolve(file, true)).rejects.toThrow('sensible');
+    }
+  });
   it('uses complete Unicode default case folding, including expansions and non-lowercase folds', () => {
     expect(canonicalCaseless('σ.ts')).toBe(canonicalCaseless('ς.ts'));
     expect(canonicalCaseless('ß.ts')).toBe(canonicalCaseless('SS.ts'));
@@ -241,6 +273,35 @@ describe('host file and command policy', () => {
 });
 
 describe('host tools and Git boundaries', () => {
+  it('reads and patches a tracked project pipeline under .azure with the existing policy guards', async () => {
+    const root = await setup();
+    await gitRepo(root);
+    const file = '.azure/GitflowPipeLines/Fork-PipeLines/Forks-TAG.yml';
+    await mkdir(join(root, '.azure/GitflowPipeLines/Fork-PipeLines'), { recursive: true });
+    const source = 'trigger: none\nsteps: []\n';
+    await writeFile(join(root, file), source);
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'Pipeline fixture');
+    const tools = await new ToolHost(
+      input(root, 'workspace-write'),
+      {
+        onEvent: () => {},
+        onSession: () => {},
+      },
+      new AbortController().signal,
+    ).createTools();
+    const read = await invoke(tools, 'studio_read_file', { path: file });
+    expect(read.resultType).toBe('success');
+    expect(JSON.parse(read.textResultForLlm).content).toBe(source);
+    const edit = await invoke(tools, 'studio_replace_text', {
+      path: file,
+      oldText: 'steps: []',
+      newText: 'steps: [checkout: self]',
+      expectedSha256: sha256(source),
+    });
+    expect(edit.resultType).toBe('success');
+    expect(await readFile(join(root, file), 'utf8')).toContain('steps: [checkout: self]');
+  });
   it('accepts Git precomposed names for decomposed filesystem entries, with grants and safe read spans', async () => {
     const root = await setup();
     await gitRepo(root);

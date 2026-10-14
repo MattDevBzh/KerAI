@@ -65,7 +65,7 @@ describe('measured feature consumption', () => {
     known.budget = { ...defaultBudget, maxTokens: 15 };
     expect(budgetBlockReason(known)).toMatch(/tokens mesurés/);
     known.budget = { ...defaultBudget, maxNanoAiu: 12 };
-    expect(budgetBlockReason(known)).toMatch(/nano-AIU mesuré/);
+    expect(budgetBlockReason(known)).toMatch(/crédits mesuré/);
     known.budget = { ...defaultBudget, maxRuns: 1 };
     expect(budgetBlockReason(known)).toMatch(/runs atteint/);
   });
@@ -99,6 +99,6 @@ describe('measured feature consumption', () => {
     feature.budget = { ...defaultBudget, maxTokens: 100 };
     expect(budgetBlockReason(feature)).toMatch(/tokens inconnue/);
     feature.budget = { ...defaultBudget, maxNanoAiu: 100 };
-    expect(budgetBlockReason(feature)).toMatch(/nano-AIU inconnue/);
+    expect(budgetBlockReason(feature)).toMatch(/crédits inconnue/);
   });
 });

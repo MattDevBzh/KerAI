@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import { z } from 'zod';
+import { formatCredits, type AccountCredits } from '../shared/credits';
 
 const launcherMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready') }).strict(),
@@ -19,8 +20,14 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
   private readonly foldersChanged: vscode.Disposable;
   private viewListeners: vscode.Disposable[] = [];
   private viewGeneration = 0;
+  private quotaTimer: ReturnType<typeof setInterval> | undefined;
+  private quotaBusy = false;
+  private quota: AccountCredits | undefined;
 
-  constructor(private readonly extensionUri: vscode.Uri) {
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly readCredits?: () => Promise<AccountCredits>,
+  ) {
     this.foldersChanged = vscode.workspace.onDidChangeWorkspaceFolders(() => this.render());
   }
 
@@ -46,6 +53,8 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
       if (!message.success) return;
       if (message.data.type === 'ready') {
         this.ready = true;
+        this.postCredits();
+        void this.refreshCredits();
         return;
       }
       // Only these fixed, argument-free commands can cross the welcome boundary.
@@ -65,6 +74,59 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
       }),
     );
     this.render();
+    if (this.readCredits) {
+      this.viewListeners.push(
+        view.onDidChangeVisibility(() => {
+          if (view.visible) void this.refreshCredits();
+        }),
+      );
+      this.quotaTimer = setInterval(() => {
+        void this.refreshCredits();
+      }, 10_000);
+    }
+  }
+
+  private async refreshCredits(): Promise<void> {
+    if (!this.readCredits || !this.visible || !this.ready || this.quotaBusy) return;
+    this.quotaBusy = true;
+    const generation = this.viewGeneration;
+    try {
+      const quota = await this.readCredits();
+      if (generation !== this.viewGeneration) return;
+      this.quota = quota;
+      this.postCredits();
+    } catch {
+      if (generation !== this.viewGeneration) return;
+      this.quota = { state: 'unavailable', message: 'Actualisation des crédits indisponible.' };
+      this.postCredits();
+    } finally {
+      this.quotaBusy = false;
+    }
+  }
+
+  private postCredits(): void {
+    if (!this.quota || !this.ready || !this.view) return;
+    const q = this.quota;
+    const title =
+      q.state === 'ready'
+        ? `${formatCredits(q.used!)} / ${q.unlimited ? 'illimité' : formatCredits(q.included!)} crédits`
+        : 'Crédits indisponibles';
+    const details =
+      q.state === 'ready'
+        ? [
+            'Consommés / inclus · compte Copilot',
+            q.overage ? `${formatCredits(q.overage)} crédits supplémentaires` : '',
+            q.overageAllowed ? 'Dépassement autorisé par Copilot.' : '',
+            q.resetDate
+              ? `Renouvellement : ${new Date(q.resetDate).toLocaleDateString('fr-FR')}`
+              : '',
+            `Actualisé à ${new Date(q.checkedAt!).toLocaleTimeString('fr-FR')} · toutes les 10 s`,
+            'Le relevé GitHub peut être différé.',
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : q.message;
+    void this.view.webview.postMessage({ type: 'credits', title, details });
   }
 
   private render(): void {
@@ -90,6 +152,9 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
     main { padding: 24px 16px; text-align: center; max-width: 320px; margin: 0 auto; }
     img { display: block; width: 112px; height: 112px; max-width: 100%; object-fit: contain; image-rendering: pixelated; margin: 0 auto 18px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border-radius: 16px; }
     h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+    .credits { margin: 0 0 22px; padding: 12px; border: 1px solid var(--vscode-widget-border, var(--vscode-contrastBorder, transparent)); border-radius: 8px; background: var(--vscode-editorWidget-background); text-align: left; }
+    .credits strong { display: block; margin-bottom: 6px; }
+    .credits small { display: block; white-space: pre-line; line-height: 1.5; color: var(--vscode-descriptionForeground); }
     p { margin: 0 0 20px; line-height: 1.5; color: var(--vscode-descriptionForeground); }
     button { display: block; width: 100%; min-height: 32px; padding: 7px 10px; border: 1px solid var(--vscode-button-border, transparent); border-radius: 2px; font: inherit; color: var(--vscode-button-foreground); background: var(--vscode-button-background); cursor: pointer; overflow-wrap: anywhere; }
     button:hover { background: var(--vscode-button-hoverBackground); }
@@ -100,12 +165,18 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
 <body>
   <main>
     <img id="avatar" src="${escapeAttribute(avatar.toString())}" width="112" height="112" alt="">
+    <section class="credits" aria-label="Crédits Copilot" aria-live="polite"><strong id="credits-title">Crédits Copilot</strong><small id="credits-details">Chargement du quota du compte…</small></section>
     <h1>Prêt à créer ?</h1>
     <p>${hasProject ? 'Tes idées, ton projet, ton cockpit.' : 'Ouvre ton projet pour prendre les commandes.'}</p>
     <button id="open" type="button">${hasProject ? 'Ouvrir le cockpit' : 'Ouvrir un dossier'}</button>
   </main>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    window.addEventListener('message', ({ data }) => {
+      if (data?.type !== 'credits') return;
+      document.getElementById('credits-title').textContent = data.title;
+      document.getElementById('credits-details').textContent = data.details;
+    });
     document.getElementById('open').addEventListener('click', () => vscode.postMessage({ type: 'open' }));
     const avatar = document.getElementById('avatar');
     const ready = () => { if (avatar.naturalWidth > 0) vscode.postMessage({ type: 'ready' }); };
@@ -117,6 +188,8 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
   }
 
   private releaseView(): void {
+    if (this.quotaTimer) clearInterval(this.quotaTimer);
+    this.quotaTimer = undefined;
     this.viewGeneration++;
     this.view = undefined;
     this.ready = false;
