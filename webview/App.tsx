@@ -325,6 +325,7 @@ export default function App() {
         'approveStep',
         'archiveFeature',
         'deliveryExecute',
+        'deliveryCommit',
         'devopsCreateFeature',
       ].includes(message.type)
     ) {

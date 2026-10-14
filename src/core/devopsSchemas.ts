@@ -61,6 +61,18 @@ export const devOpsMessageVariants = [
     })
     .strict(),
   z
+    .object({
+      type: z.literal('deliveryCommit'),
+      paths: z
+        .array(z.string().min(1).max(4000))
+        .min(1)
+        .max(200)
+        .refine((p) => new Set(p).size === p.length),
+      title: z.string().trim().min(1).max(200),
+      fingerprint,
+    })
+    .strict(),
+  z
     .object({ type: z.literal('deliveryPreviewPush'), remote: devOpsConfigSchema.shape.remote })
     .strict(),
   z

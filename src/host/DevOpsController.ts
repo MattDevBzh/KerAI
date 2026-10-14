@@ -431,78 +431,99 @@ export class DevOpsController {
           };
           break;
         }
+        case 'deliveryCommit':
         case 'deliveryExecute': {
-          const preview = this.state.preview;
+          const previous = this.state.preview;
           if (
-            !preview ||
-            preview.kind !== message.kind ||
-            preview.fingerprint !== message.fingerprint
+            message.type === 'deliveryExecute' &&
+            (!previous ||
+              previous.kind !== message.kind ||
+              previous.fingerprint !== message.fingerprint)
           )
             throw new Error('Aperçu périmé. Prépare un nouvel aperçu.');
-          await this.options.withMutation(`Livraison : ${preview.kind}`, async () => {
-            const detail = [
-              `Branche : ${preview.branch}`,
-              `Commit : ${preview.head}`,
-              `Titre : ${preview.title}`,
-              preview.remote
-                ? `Remote : ${preview.remote} (${this.state.snapshot?.remoteUrl})`
-                : '',
-              preview.target ? `Cible : ${preview.target}` : '',
-              preview.kind === 'pr' ? `Azure DevOps : ${projectKey(this.state.config!)}` : '',
-              preview.description ?? '',
-              preview.paths.length
-                ? `Fichiers complets sélectionnés :\n${preview.paths.join('\n')}`
-                : '',
-            ]
-              .filter(Boolean)
-              .join('\n');
-            if (
-              !(await this.options.confirm(
-                preview.kind === 'commit'
-                  ? 'Créer ce commit local ?'
-                  : preview.kind === 'push'
-                    ? 'Publier cette branche ?'
-                    : 'Créer cette PR brouillon Azure DevOps ?',
-                detail,
-              ))
-            )
-              return;
-            if (preview.kind === 'commit') {
-              const sha = await this.delivery.commit(preview);
-              this.chat(
-                'assistant',
-                `Commit créé : ${sha}. Les autres fichiers indexés ont été conservés. Veux-tu pousser cette branche ? Utilise « Préparer le push ».`,
+          await this.options.withMutation(
+            `Livraison : ${message.type === 'deliveryCommit' ? 'commit' : message.kind}`,
+            async () => {
+              let preview = previous;
+              if (message.type === 'deliveryCommit') {
+                const result = await this.delivery.previewCommit(
+                  message.paths,
+                  await this.options.getAgentInstructions(),
+                  message.title,
+                );
+                if (result.snapshot.fingerprint !== message.fingerprint)
+                  throw new Error(
+                    'Le dépôt a changé. Actualise les fichiers avant de valider le commit.',
+                  );
+                this.state.snapshot = result.snapshot;
+                this.state.preview = preview = result.preview;
+                this.publish();
+              }
+              if (!preview) throw new Error('Aperçu de livraison manquant.');
+              const detail = [
+                `Branche : ${preview.branch}`,
+                `Commit : ${preview.head}`,
+                `Titre : ${preview.title}`,
+                preview.remote
+                  ? `Remote : ${preview.remote} (${this.state.snapshot?.remoteUrl})`
+                  : '',
+                preview.target ? `Cible : ${preview.target}` : '',
+                preview.kind === 'pr' ? `Azure DevOps : ${projectKey(this.state.config!)}` : '',
+                preview.description ?? '',
+                preview.paths.length
+                  ? `Fichiers complets sélectionnés :\n${preview.paths.join('\n')}`
+                  : '',
+              ]
+                .filter(Boolean)
+                .join('\n');
+              if (
+                !(await this.options.confirm(
+                  preview.kind === 'commit'
+                    ? 'Créer ce commit local ?'
+                    : preview.kind === 'push'
+                      ? 'Publier cette branche ?'
+                      : 'Créer cette PR brouillon Azure DevOps ?',
+                  detail,
+                ))
+              )
+                return;
+              if (preview.kind === 'commit') {
+                const sha = await this.delivery.commit(preview);
+                this.chat(
+                  'assistant',
+                  `Commit créé : ${sha}. Les autres fichiers indexés ont été conservés. Veux-tu pousser cette branche ? Utilise « Préparer le push ».`,
+                );
+              } else if (preview.kind === 'push') {
+                await this.delivery.push(preview);
+                this.chat(
+                  'assistant',
+                  `Branche ${preview.branch} publiée vers ${preview.remote}. Veux-tu créer une PR Azure DevOps ? Renseigne la cible puis « Préparer la PR brouillon ».`,
+                );
+              } else {
+                const snapshot = await this.delivery.inspect(this.state.config?.remote ?? 'origin');
+                if (snapshot.fingerprint !== preview.fingerprint)
+                  throw new Error('Le dépôt a changé. Prépare un nouvel aperçu.');
+                if ((await this.api().branchHead(preview.branch)) !== preview.head)
+                  throw new Error('La branche distante a changé. Prépare un nouvel aperçu.');
+                const pr = await this.api().createPullRequest({
+                  branch: preview.branch,
+                  target: preview.target!,
+                  title: preview.title,
+                  description: preview.description ?? '',
+                  ticketId: preview.ticketId,
+                });
+                this.state.pullRequests.unshift(pr);
+                if (preview.featureId)
+                  this.associatePullRequest(pr.id, preview.featureId, preview.ticketId);
+                this.chat('assistant', `PR brouillon #${pr.id} créée : ${pr.url}`);
+              }
+              this.state.preview = undefined;
+              await this.save();
+              this.state.snapshot = await this.delivery.inspect(
+                this.state.config?.remote ?? 'origin',
               );
-            } else if (preview.kind === 'push') {
-              await this.delivery.push(preview);
-              this.chat(
-                'assistant',
-                `Branche ${preview.branch} publiée vers ${preview.remote}. Veux-tu créer une PR Azure DevOps ? Renseigne la cible puis « Préparer la PR brouillon ».`,
-              );
-            } else {
-              const snapshot = await this.delivery.inspect(this.state.config?.remote ?? 'origin');
-              if (snapshot.fingerprint !== preview.fingerprint)
-                throw new Error('Le dépôt a changé. Prépare un nouvel aperçu.');
-              if ((await this.api().branchHead(preview.branch)) !== preview.head)
-                throw new Error('La branche distante a changé. Prépare un nouvel aperçu.');
-              const pr = await this.api().createPullRequest({
-                branch: preview.branch,
-                target: preview.target!,
-                title: preview.title,
-                description: preview.description ?? '',
-                ticketId: preview.ticketId,
-              });
-              this.state.pullRequests.unshift(pr);
-              if (preview.featureId)
-                this.associatePullRequest(pr.id, preview.featureId, preview.ticketId);
-              this.chat('assistant', `PR brouillon #${pr.id} créée : ${pr.url}`);
-            }
-            this.state.preview = undefined;
-            await this.save();
-            this.state.snapshot = await this.delivery.inspect(
-              this.state.config?.remote ?? 'origin',
-            );
-          });
+            },
+          );
           break;
         }
       }

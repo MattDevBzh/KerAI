@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.6 — 2026-10-14
+
+- Livraison : boutons « Générer le titre du commit » et « Valider le commit » près du champ titre. La validation accepte un titre saisi ou modifié sans étape de ré-aperçu, vérifie le dépôt et conserve la confirmation VS Code ainsi que la sélection explicite des fichiers. Le push reste une action distincte.
+
 ## 1.0.5 — 2026-10-14
 
 - Corrige la sauvegarde des parcours : les YAML sont désormais enregistrés au niveau utilisateur avec les agents et les skills, sous `~/.copilot/feature-studio/workflows` (ou `COPILOT_HOME`). Les anciens fichiers du projet ne sont ni déplacés ni supprimés automatiquement.

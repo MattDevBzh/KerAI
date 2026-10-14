@@ -484,7 +484,6 @@ export function DevOpsUI({
       type: 'deliveryPreviewCommit',
       paths: selected,
       intent,
-      ...(title.trim() ? { title: title.trim() } : {}),
     });
   return (
     <div className="devops-panel">
@@ -719,7 +718,6 @@ export function DevOpsUI({
                           ? [...selected, file.path]
                           : selected.filter((p) => p !== file.path),
                       );
-                      setTitle('');
                     }}
                   />
                   <code>{file.path}</code>
@@ -761,7 +759,6 @@ export function DevOpsUI({
                 value={intent}
                 onChange={(e) => {
                   setIntent(e.target.value);
-                  setTitle('');
                 }}
                 placeholder="ajouter le tableau de bord Azure DevOps"
                 maxLength={1000}
@@ -772,13 +769,33 @@ export function DevOpsUI({
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Proposé selon le profil après préparation"
+                placeholder="Saisis un titre ou utilise Générer le titre du commit"
                 maxLength={200}
               />
             </label>
-            <button disabled={busy || !selected.length} onClick={commitPreview}>
-              {title ? 'Actualiser l’aperçu du commit' : 'Proposer le titre et préparer'}
-            </button>
+            <div className="devops-actions">
+              <button disabled={busy || !selected.length} onClick={commitPreview}>
+                Générer le titre du commit
+              </button>
+              <button
+                disabled={busy || !selected.length || !title.trim() || !state.snapshot}
+                onClick={() =>
+                  send({
+                    type: 'deliveryCommit',
+                    paths: selected,
+                    title: title.trim(),
+                    fingerprint: state.snapshot!.fingerprint,
+                  })
+                }
+              >
+                Valider le commit
+              </button>
+            </div>
+            <p>
+              {selected.length} fichier(s) sélectionné(s). Le titre peut être modifié ou saisi
+              directement. La validation crée un commit local après confirmation VS Code ; le push
+              reste séparé. La génération du titre est locale, sans consommation de crédits.
+            </p>
           </section>
           <div className="devops-columns">
             <section className="devops-card">
@@ -889,27 +906,27 @@ export function DevOpsUI({
               </p>
               {state.preview.kind === 'commit' && (
                 <p>
-                  Hooks et signature Git non exécutés dans ce mode. Utilise le terminal si ton
-                  projet les impose.
+                  Valide avec le bouton « Valider le commit » près du titre. Hooks et signature Git
+                  non exécutés dans ce mode. Utilise le terminal si ton projet les impose.
                 </p>
               )}
-              <button
-                disabled={busy || previewNeedsRefresh}
-                onClick={() =>
-                  send({
-                    type: 'deliveryExecute',
-                    kind: state.preview!.kind,
-                    fingerprint: state.preview!.fingerprint,
-                  })
-                }
-              >
-                {state.preview.kind === 'commit'
-                  ? 'Confirmer le commit'
-                  : state.preview.kind === 'push'
+              {state.preview.kind !== 'commit' && (
+                <button
+                  disabled={busy || previewNeedsRefresh}
+                  onClick={() =>
+                    send({
+                      type: 'deliveryExecute',
+                      kind: state.preview!.kind,
+                      fingerprint: state.preview!.fingerprint,
+                    })
+                  }
+                >
+                  {state.preview.kind === 'push'
                     ? 'Confirmer le push'
                     : 'Confirmer la création de PR'}
-              </button>
-              {previewNeedsRefresh && (
+                </button>
+              )}
+              {previewNeedsRefresh && state.preview.kind !== 'commit' && (
                 <p>
                   Actualise l’aperçu pour prendre en compte les champs ou la sélection modifiés.
                 </p>

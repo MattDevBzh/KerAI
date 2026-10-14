@@ -91,14 +91,19 @@ test('menus Azure DevOps et livraison fonctionnent sans session, configuration l
   await page.getByText('Nouveaux fichiers', { exact: true }).click();
   await expect(page.getByText('new content', { exact: true })).toBeVisible();
 });
-test('commit sélection explicite, titre modifiable et ré-aperçu exigé après modification', async ({
+test('commit : deux boutons visibles, génération renouvelable et validation du titre modifié', async ({
   page,
 }) => {
   await hosted(page);
   await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  const generate = page.getByRole('button', { name: 'Générer le titre du commit', exact: true });
+  const commit = page.getByRole('button', { name: 'Valider le commit', exact: true });
+  await expect(generate).toBeDisabled();
+  await expect(commit).toBeDisabled();
   await page.getByLabel('src/selected.ts').check();
+  await expect(commit).toBeDisabled();
   await page.getByLabel('Intention du changement').fill('ajouter le menu');
-  await page.getByRole('button', { name: 'Proposer le titre et préparer' }).click();
+  await generate.click();
   expect(await messages(page)).toContainEqual({
     type: 'deliveryPreviewCommit',
     paths: ['src/selected.ts'],
@@ -108,17 +113,37 @@ test('commit sélection explicite, titre modifiable et ré-aperçu exigé après
     'feat: ajouter le menu',
   );
   await page.getByLabel('Titre du commit (modifiable)').fill('fix: corriger le menu');
-  await expect(page.getByRole('button', { name: 'Confirmer le commit' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Actualiser l’aperçu du commit' }).click();
-  await expect(page.getByRole('button', { name: 'Confirmer le commit' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Confirmer le commit' }).click();
+  await expect(commit).toBeEnabled();
+  await commit.click();
   expect(await messages(page)).toContainEqual({
-    type: 'deliveryExecute',
-    kind: 'commit',
+    type: 'deliveryCommit',
+    paths: ['src/selected.ts'],
+    title: 'fix: corriger le menu',
     fingerprint: 'b'.repeat(64),
   });
-  await page.getByLabel('src/unrelated.ts').check();
-  await expect(page.getByRole('button', { name: 'Confirmer le commit' })).toBeDisabled();
+  await generate.click();
+  await expect(page.getByLabel('Titre du commit (modifiable)')).toHaveValue(
+    'feat: ajouter le menu',
+  );
+  expect(
+    (await messages(page)).filter((m) => m.type === 'deliveryPreviewCommit').at(-1),
+  ).not.toHaveProperty('title');
+  await page.getByLabel('src/selected.ts').uncheck();
+  await expect(commit).toBeDisabled();
+});
+test('commit : titre manuel sans génération préalable', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  await page.getByLabel('src/selected.ts').check();
+  await page.getByLabel('Titre du commit (modifiable)').fill('fix: correction manuelle');
+  await page.getByRole('button', { name: 'Valider le commit', exact: true }).click();
+  expect(await messages(page)).toContainEqual({
+    type: 'deliveryCommit',
+    paths: ['src/selected.ts'],
+    title: 'fix: correction manuelle',
+    fingerprint: 'b'.repeat(64),
+  });
+  expect((await messages(page)).some((m) => m.type === 'deliveryPreviewCommit')).toBe(false);
 });
 test('tickets lisibles et inertes, critères/commentaires, liens feature et PR', async ({
   page,

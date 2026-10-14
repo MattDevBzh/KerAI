@@ -446,6 +446,66 @@ describe('controller safety and persistence', () => {
     await service.dispose();
   });
 
+  it('validates an edited commit title and selection inside the mutation reservation without a prior preview', async () => {
+    const { controller, options, delivery } = await fixture();
+    await controller.handle({
+      type: 'deliveryCommit',
+      paths: ['a.ts'],
+      title: 'fix: titre modifié',
+      fingerprint: snapshot.fingerprint,
+    });
+    expect(delivery.previewCommit).toHaveBeenCalledWith(['a.ts'], '', 'fix: titre modifié');
+    expect(options.confirm).toHaveBeenCalledWith(
+      'Créer ce commit local ?',
+      expect.stringContaining('fix: titre modifié'),
+    );
+    expect(delivery.commit).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'fix: titre modifié', paths: ['a.ts'] }),
+    );
+    expect(vi.mocked(options.withMutation).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(delivery.previewCommit).mock.invocationCallOrder[0],
+    );
+    expect(controller.getState().preview).toBeUndefined();
+  });
+  it('direct commit rejects changed repositories and respects cancellation', async () => {
+    const { controller, options, delivery } = await fixture();
+    await controller.handle({
+      type: 'deliveryCommit',
+      paths: ['a.ts'],
+      title: 'fix: titre',
+      fingerprint: 'f'.repeat(64),
+    });
+    expect(controller.getState().error).toContain('dépôt a changé');
+    expect(options.confirm).not.toHaveBeenCalled();
+    expect(delivery.commit).not.toHaveBeenCalled();
+    options.confirm = vi.fn(async () => false);
+    await controller.handle({
+      type: 'deliveryCommit',
+      paths: ['a.ts'],
+      title: 'fix: titre',
+      fingerprint: snapshot.fingerprint,
+    });
+    expect(options.confirm).toHaveBeenCalledOnce();
+    expect(delivery.commit).not.toHaveBeenCalled();
+  });
+  it('validates the direct commit request before any operation', () => {
+    const message = {
+      type: 'deliveryCommit',
+      paths: ['a.ts'],
+      title: 'fix: titre',
+      fingerprint: snapshot.fingerprint,
+    };
+    expect(devOpsMessageSchema.safeParse(message).success).toBe(true);
+    for (const invalid of [
+      { paths: [] },
+      { paths: ['a.ts', 'a.ts'] },
+      { title: ' ' },
+      { fingerprint: 'invalid' },
+      { command: 'git push' },
+    ])
+      expect(devOpsMessageSchema.safeParse({ ...message, ...invalid }).success).toBe(false);
+  });
+
   it('requires a separate host confirmation inside the shared mutation reservation', async () => {
     const { controller, options, delivery } = await fixture();
     await controller.handle({ type: 'deliveryPreviewCommit', paths: ['a.ts'] });

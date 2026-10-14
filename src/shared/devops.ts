@@ -116,6 +116,7 @@ export type DevOpsClientMessage =
   | { type: 'devopsCreateFeature'; ticketId: number }
   | { type: 'deliveryChat'; text: string }
   | { type: 'deliveryPreviewCommit'; paths: string[]; title?: string; intent?: string }
+  | { type: 'deliveryCommit'; paths: string[]; title: string; fingerprint: string }
   | { type: 'deliveryPreviewPush'; remote: string }
   | {
       type: 'deliveryPreviewPr';
