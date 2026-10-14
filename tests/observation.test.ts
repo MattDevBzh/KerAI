@@ -479,6 +479,104 @@ describe('durable archives and deletion', () => {
     await f.service.deleteFeature(second.id);
     expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toEqual([]);
   });
+  it('collects owned checkpoint manifests whose references were not persisted before a crash', async () => {
+    const f = await fixture();
+    const survivor = structuredClone(f.feature);
+    survivor.id = 'surviving-feature';
+    f.service.engine.features.push(survivor);
+    survivor.checkpoints = [
+      await f.service.workspaces.capture(survivor, { kind: 'manual', label: 'Survivor' }),
+    ];
+    await writeFile(join(f.workspace, 'app.txt'), 'only the deleted session captured this');
+    const orphan = await f.service.workspaces.capture(f.feature, {
+      kind: 'manual',
+      label: 'Captured before index persistence',
+    });
+    expect(f.feature.checkpoints ?? []).toEqual([]);
+    await f.service.persist();
+    await expect(
+      f.service.workspaces.purgeSession(f.feature.id, [survivor.checkpoints[0].id]),
+    ).rejects.toThrow('autre session');
+    const manifests = join(f.storage, 'workspaces', 'manifests');
+    expect(await readdir(manifests)).toContain(`${orphan.id}.json`);
+    await f.service.deleteFeature(f.feature.id);
+    expect(await readdir(manifests)).toEqual([`${survivor.checkpoints[0].id}.json`]);
+    expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toHaveLength(1);
+    expect(
+      (
+        await f.service.workspaces.readFile(survivor, survivor.checkpoints[0].id, 'app.txt')
+      )?.toString(),
+    ).toBe('protected project content');
+    await f.service.deleteFeature(survivor.id);
+    expect(await readdir(manifests)).toEqual([]);
+    expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toEqual([]);
+  });
+  it('collects orphan quality media while preserving attachments referenced by surviving sessions', async () => {
+    const f = await fixture();
+    const survivor = structuredClone(f.feature);
+    survivor.id = 'surviving-feature';
+    f.service.engine.features.push(survivor);
+    for (const [feature, hash] of [
+      [f.feature, 'a'],
+      [survivor, 'b'],
+    ] as const) {
+      const attempt = f.service.engine.beginRun(feature.id, 'plan');
+      f.service.engine.finishRun(feature.id, 'plan', {
+        content: 'Quality report',
+        questions: [],
+        changedFiles: [],
+      });
+      attempt.evidence = [
+        {
+          id: 'quality-proof',
+          source: 'host',
+          commandId: 'quality-command',
+          name: 'Visual check',
+          command: 'node',
+          args: [],
+          startedAt: attempt.startedAt,
+          finishedAt: 'now',
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          truncated: false,
+          fileHashes: {},
+          quality: {
+            version: 1,
+            kind: 'visual',
+            featureId: feature.id,
+            attemptId: attempt.id,
+            commandId: 'quality-command',
+            evidenceId: 'quality-proof',
+            collectedAt: 'now',
+            status: 'passed',
+            reportPath: '.feature-studio/quality/report.json',
+            cases: [],
+            attachments: [
+              {
+                id: 'image',
+                name: 'Screen',
+                kind: 'screenshot',
+                mime: 'image/png',
+                sizeBytes: 5,
+                sha256: hash.repeat(64),
+              },
+            ],
+          },
+        },
+      ];
+    }
+    const quality = join(f.storage, 'quality');
+    await mkdir(quality);
+    for (const hash of ['a', 'b', 'c'])
+      await writeFile(join(quality, `${hash.repeat(64)}.png`), 'image');
+    await writeFile(join(quality, 'unrelated.txt'), 'preserved');
+    await f.service.persist();
+    await f.service.deleteFeature(f.feature.id);
+    expect((await readdir(quality)).sort()).toEqual([`${'b'.repeat(64)}.png`, 'unrelated.txt']);
+    await f.service.deleteFeature(survivor.id);
+    expect(await readdir(quality)).toEqual(['unrelated.txt']);
+  });
   it('honors a durable deletion marker after a crash, even before cleaning the old index', async () => {
     const f = await fixture();
     await markDeletion(f.storage, f.feature);

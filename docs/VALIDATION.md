@@ -2,10 +2,12 @@
 
 ## Vérifications locales de v1.2.0
 
-- Format, TypeScript, tests et builds réussis : **436 tests métier**, 4 ignorés (3 propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 réservé à la CI).
+- Format, TypeScript, tests et builds réussis : **439 tests métier**, 4 ignorés (3 propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 réservé à la CI).
 - **91 scénarios Chromium** réussis, dont 4 nouveaux scénarios de rapport, aperçu, budget, source, export, suppression et petit écran. Le rendu du rapport a été inspecté sur desktop et à 390 px ; le débordement des boutons de session a été corrigé.
-- **17 tests spécifiques** de l’Observateur et du stockage : couverture de toutes les phases, snapshot immuable, empreintes et références inventées, annulation et coûts conservés, limites de budget, valeurs inconnues, plus de 3 000 événements, messages longs UTF-8, secrets masqués, refus de liens, migration v4 → v5, suppression d’un journal tronqué, nettoyage après crash et préservation des checkpoints partagés.
+- **19 tests spécifiques** de l’Observateur et du stockage : couverture de toutes les phases, snapshot immuable, empreintes et références inventées, annulation et coûts conservés, limites de budget, valeurs inconnues, plus de 3 000 événements, messages longs UTF-8, secrets masqués, refus de liens, migration v4 → v5, suppression d’un journal tronqué, nettoyage après crash, checkpoints et médias orphelins, préservation des objets partagés.
 - Smoke réussi dans un vrai hôte **VS Code Insiders**, profil temporaire : activation/CSP, commande et profil Observateur, préparation locale d’un dossier et consultation du stockage sans modèle, persistance v5, contrôles Git/checkpoints et parcours existants.
+
+La relecture statique ciblée d’Astra high a identifié deux défauts après crash : un manifeste de checkpoint écrit avant sa référence persistée pouvait survivre à la suppression, et le filtrage des liens DevOps au redémarrage restait uniquement en mémoire. Ils ont été corrigés, avec trois tests de régression incluant la collecte des médias qualité orphelins. Une seconde relecture du correctif n’a identifié aucun autre défaut concret dans ce périmètre. Ce verdict reste distinct des tests exécutés.
 
 Les tests d’analyse utilisent un adaptateur Copilot simulé et de vrais fichiers temporaires. Ils vérifient les contrats, la comptabilité et les contrôles d’accès ; ils ne constituent pas une mesure de qualité sur un compte Copilot réel. Aucun prompt payant ni opération distante Azure DevOps n’a été exécuté. Les crédits des fixtures ne sont pas une facture réelle. Le contrôle natif de suppression est couvert par le protocole et l’UI simulée ; sa confirmation reste une interaction humaine.
 

@@ -163,46 +163,46 @@ export class WorkspaceRestoreError extends Error {
 export class FeatureWorkspace {
   /** Delete owned manifests, then collect blobs only after validating every retained manifest. */
   async purgeSession(ownerId: string, ids: string[]): Promise<void> {
-    const root = await this.privateRoot();
-    for (const id of ids) {
-      checkpointId.parse(id);
-      const file = await this.privatePath(`manifests/${id}.json`);
-      try {
-        const manifest = JSON.parse(
-          (await this.readLimited(file, CHECKPOINT_LIMITS.manifestBytes)).toString('utf8'),
-        ) as Manifest;
-        if (manifest.featureId !== ownerId)
-          throw new Error('Point de restauration appartenant à une autre session.');
-        await unlink(file);
-      } catch (error) {
-        if (!absent(error)) throw error;
+    featureId.parse(ownerId);
+    const requested = new Set(ids.map((id) => checkpointId.parse(id)));
+    return this.serial(async () => {
+      const root = await this.privateRoot();
+      const owned: string[] = [];
+      const reachable = new Set<string>();
+      for (const name of await readdir(path.join(root, 'manifests')).catch((error) => {
+        if (absent(error)) return [];
+        throw error;
+      })) {
+        if (!/^[a-f0-9-]{36}\.json$/.test(name))
+          throw new Error('Manifeste privé inattendu ; collecte suspendue.');
+        const manifest = manifestSchema.parse(
+          JSON.parse(
+            (
+              await this.readLimited(
+                await this.privatePath(`manifests/${name}`),
+                CHECKPOINT_LIMITS.manifestBytes,
+              )
+            ).toString('utf8'),
+          ),
+        );
+        if (`${manifest.checkpoint.id}.json` !== name)
+          throw new Error('Identifiant de manifeste privé incohérent ; collecte suspendue.');
+        if (manifest.featureId === ownerId) owned.push(name);
+        else {
+          if (requested.has(manifest.checkpoint.id))
+            throw new Error('Point de restauration appartenant à une autre session.');
+          for (const file of Object.values(manifest.files)) reachable.add(file.hash);
+        }
       }
-    }
-    const reachable = new Set<string>();
-    for (const name of await readdir(path.join(root, 'manifests')).catch((error) => {
-      if (absent(error)) return [];
-      throw error;
-    })) {
-      if (!/^[a-f0-9-]{36}\.json$/.test(name))
-        throw new Error('Manifeste privé inattendu ; collecte suspendue.');
-      const manifest = manifestSchema.parse(
-        JSON.parse(
-          (
-            await this.readLimited(
-              await this.privatePath(`manifests/${name}`),
-              CHECKPOINT_LIMITS.manifestBytes,
-            )
-          ).toString('utf8'),
-        ),
-      );
-      for (const file of Object.values(manifest.files)) reachable.add(file.hash);
-    }
-    for (const name of await readdir(path.join(root, 'objects')).catch((error) => {
-      if (absent(error)) return [];
-      throw error;
-    }))
-      if (/^[a-f0-9]{64}$/.test(name) && !reachable.has(name))
-        await unlink(await this.privatePath(`objects/${name}`));
+      // Capture may have committed a manifest before its reference reached the session index.
+      for (const name of owned) await unlink(await this.privatePath(`manifests/${name}`));
+      for (const name of await readdir(path.join(root, 'objects')).catch((error) => {
+        if (absent(error)) return [];
+        throw error;
+      }))
+        if (/^[a-f0-9]{64}$/.test(name) && !reachable.has(name))
+          await unlink(await this.privatePath(`objects/${name}`));
+    });
   }
   private queue: Promise<unknown> = Promise.resolve();
   constructor(

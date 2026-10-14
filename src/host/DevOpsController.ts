@@ -146,12 +146,14 @@ export class DevOpsController {
   }
   private async initializeState() {
     try {
+      let prunedLinks = false;
       try {
         const stored = storedSchema.parse(JSON.parse(await readFile(this.file(), 'utf8')));
         this.state.config = stored.config;
         this.state.links = stored.links.filter((link) =>
           this.options.features().some((feature) => feature.id === link.featureId),
         );
+        prunedLinks = this.state.links.length !== stored.links.length;
         this.state.history = stored.history;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
@@ -160,6 +162,7 @@ export class DevOpsController {
           );
       }
       this.options.guard();
+      if (prunedLinks) await this.save();
       this.state.snapshot = await this.delivery.inspect();
       if (!this.state.config && this.state.snapshot.remoteUrl) {
         const detected = detectAzureRemote(this.state.snapshot.remoteUrl);

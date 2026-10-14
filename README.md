@@ -118,7 +118,7 @@ npm run package         # releases/feature-studio-1.2.0.vsix
 
 **F5 → Feature Studio** ouvre l’hôte de développement. `npm run dev` fournit le frontend ; `http://127.0.0.1:5173/?demo=1` affiche les données de démonstration. Les opérations de fichiers et l’exécution des agents nécessitent l’extension.
 
-La recette locale de v1.2.0 compte **436 tests métier réussis**, **91 scénarios d’interface** et un smoke réussi dans VS Code Insiders. Trois tests propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 sont ignorés localement ; ce dernier est exécuté en CI. Les tests automatiques n’envoient aucun prompt Copilot payant. L’analyse de session et Azure DevOps sont contrôlés avec des réponses simulées, sans validation sur ton compte réel. Les résultats et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les packages possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
+La recette locale de v1.2.0 compte **439 tests métier réussis**, **91 scénarios d’interface** et un smoke réussi dans VS Code Insiders. Trois tests propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 sont ignorés localement ; ce dernier est exécuté en CI. Les tests automatiques n’envoient aucun prompt Copilot payant. L’analyse de session et Azure DevOps sont contrôlés avec des réponses simulées, sans validation sur ton compte réel. Les résultats et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les packages possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
 
 ## Licence et provenance
 

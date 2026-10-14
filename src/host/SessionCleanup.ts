@@ -82,8 +82,15 @@ export async function cleanSessionFiles(
   await removePrivate(root, sessionDirectory(record.featureId));
   for (const id of record.attempts) await removePrivate(root, `existing-changes/${id}`);
   const retained = new Set(survivors.flatMap(qualityPaths));
-  for (const file of record.quality)
-    if (!retained.has(file)) await removePrivate(root, `quality/${file}`);
+  const qualityDirectory = dirname(await privateFile(root, 'quality/placeholder'));
+  const files = await readdir(qualityDirectory).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  });
+  // Evidence media is copied before its reference is persisted: also collect crash orphans.
+  for (const file of files)
+    if (/^[a-f0-9]{64}\.(png|jpg|zip)$/.test(file) && !retained.has(file))
+      await removePrivate(root, `quality/${file}`);
 }
 export const finishDeletion = (root: string, featureId: string) =>
   removePrivate(root, `deletions/${digest(featureId)}.json`);

@@ -155,6 +155,33 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 describe('controller safety and persistence', () => {
+  it('persists deleted-feature link cleanup when restarting with an existing configuration', async () => {
+    const { options, storageDirectory } = await fixture();
+    const links = ['feature-1', 'deleted-feature'].map((featureId) => ({
+      featureId,
+      projectKey: 'org/project/repo',
+      pullRequestIds: [7],
+    }));
+    await writeFile(
+      path.join(storageDirectory, 'devops.json'),
+      JSON.stringify({
+        version: 1,
+        config,
+        links,
+        history: [],
+      }),
+    );
+    const restarted = new DevOpsController(options);
+    await restarted.initialize();
+    expect(restarted.getState().error).toBeUndefined();
+    expect(restarted.getState().links).toEqual([links[0]]);
+    const stored = JSON.parse(await readFile(path.join(storageDirectory, 'devops.json'), 'utf8'));
+    expect(stored.links).toEqual([links[0]]);
+    expect(stored.config).toEqual(config);
+    expect(stored.history).toEqual([]);
+    expect(options.http).not.toHaveBeenCalled();
+    await restarted.dispose();
+  });
   it.each(['configure', 'disconnect'] as const)(
     'clears the complete dashboard on %s while retaining persistent links and conversation',
     async (action) => {
