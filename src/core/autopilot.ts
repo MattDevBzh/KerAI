@@ -101,6 +101,10 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
       if (pilot.correctionCycles >= pilot.maxCorrectionCycles)
         return pause('Nombre maximal de cycles de correction atteint.');
       const target = feature.steps.find((s) => s.id === pilot.correctionStepId);
+      if (correction && target && !correction.impactedStepIds.includes(target.id))
+        return pause(
+          'La correction automatique sortirait de la route choisie. Élargis explicitement les étapes à corriger avant de reprendre.',
+        );
       const upstream = (id: string, visited = new Set<string>()): boolean => {
         if (visited.has(id)) return false;
         visited.add(id);

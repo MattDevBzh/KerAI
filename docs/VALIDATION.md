@@ -1,4 +1,19 @@
-# Validation et limites — v1.1.0, 14 octobre 2026
+# Validation et limites — v1.1.1, 14 octobre 2026
+
+## Vérifications locales de v1.1.1
+
+La relecture statique indépendante d’Astra medium a identifié trois défauts dans la v1.1.0 : anciennes empreintes d’écriture utilisées comme état courant, redirection du pilote hors de la correction sélectionnée et réinjection de remarques décochées. Sol 6.1 high a corrigé ces chemins, puis Astra a validé le correctif sans nouveau défaut substantiel dans ce périmètre. Son verdict est une revue de code, distincte des tests exécutés.
+
+- Format et TypeScript réussis ; **419 tests métier** réussis, 4 ignorés dans cette suite locale pour les raisons détaillées ci-dessous.
+- **87 scénarios d’interface** réussis.
+- **7 nouveaux cas de régression** réussis : 4 parcours indépendants avec de vrais outils hôtes/fichiers et 3 contrôles des écritures historiques, de leur ordre et de la portée de validation.
+- Le contenu extrait du VSIX a passé le smoke dans un vrai hôte VS Code Insiders. Deux premiers lancements se sont terminés avec le code 1 sans diagnostic d’assertion ; le lancement instrumenté a réussi. La cause de ces deux échecs initiaux n’est pas établie. Le test peut conserver son résultat ou son erreur dans le fichier choisi par `FEATURE_STUDIO_SMOKE_DIAGNOSTICS`.
+
+Le parcours réel des outils de fichiers vérifie qu’un développeur peut écrire un test, que le testeur peut le compléter, exécuter une assertion Node, puis valider et terminer la session. Les modifications extérieures restent refusées. Le même scénario est vérifié sur une session ancienne dépourvue de table d’empreintes courantes et avec un parcours dont l’ordre de stockage diffère de l’ordre d’exécution. Les preuves de tests hôtes restent contrôlées contre leurs fichiers et les preuves DevOps contre leur commit.
+
+Le pilote suspend une correction qui demanderait de rejouer une étape conservée. Le contexte conserve uniquement les remarques sélectionnées figées et les nouvelles remarques pertinentes de l’étape ; décocher une remarque bloquante ne résout pas le blocage global. Les snapshots et preuves historiques restent conservés.
+
+Le paquet livré est `releases/feature-studio-1.1.1.vsix`. Les versions précédentes et leurs empreintes restent dans l’historique.
 
 ## Vérifications locales de v1.1.0
 

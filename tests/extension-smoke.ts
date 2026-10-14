@@ -16,7 +16,7 @@ interface Api {
   getDevOpsState(): DevOpsState | undefined;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
 }
-export async function run(): Promise<void> {
+async function smokeRun(): Promise<void> {
   const extension = vscode.extensions.getExtension<Api>('MattDevBzh.feature-studio');
   assert.ok(extension, 'Extension found in the real VS Code extension host');
   const contributions = extension.packageJSON.contributes;
@@ -510,4 +510,20 @@ export async function run(): Promise<void> {
   console.log(
     'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v4 close/reopen, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );
+}
+
+export async function run(): Promise<void> {
+  const diagnostics = process.env.FEATURE_STUDIO_SMOKE_DIAGNOSTICS;
+  if (diagnostics) await writeFile(diagnostics, 'START\n');
+  try {
+    await smokeRun();
+    if (diagnostics) await writeFile(diagnostics, 'PASS\n');
+  } catch (error) {
+    if (diagnostics)
+      await writeFile(
+        diagnostics,
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+      );
+    throw error;
+  }
 }

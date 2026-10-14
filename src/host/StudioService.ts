@@ -32,6 +32,7 @@ import { emptyLaunch, previewContext, selectMemory } from '../core/context';
 import { defaultBudget, budgetBlockReason } from '../core/budgets';
 import { nextAutopilotAction } from '../core/autopilot';
 import { currentTestEvidence, approvalBlockers } from '../core/validation';
+import { currentOwnedFileHashes } from '../core/ownership';
 import { featureStateKey, finalValidationReady } from '../shared/collaboration';
 import type { CorrectionRequest, EditorialSaveOptions } from '../shared/collaboration';
 import { normalizeRoastLevel } from '../shared/roast';
@@ -1098,7 +1099,10 @@ export class StudioService extends EventEmitter {
   private async verifyProofFiles(feature: Feature, related: Set<string>): Promise<void> {
     const root = await this.featurePath(feature.id);
     const policy = new PolicyEngine(root, 'read-only', []);
+    const ownedPaths = new Set<string>();
     for (const step of feature.steps.filter((item) => related.has(item.id))) {
+      for (const historical of step.attempts)
+        for (const file of Object.keys(historical.fileHashes ?? {})) ownedPaths.add(file);
       const attempt = step.attempts.at(-1);
       if (!attempt) continue;
       const proofs = currentTestEvidence(attempt);
@@ -1117,7 +1121,7 @@ export class StudioService extends EventEmitter {
             );
         }
       }
-      const snapshots = [attempt.fileHashes ?? {}, ...proofs.map((proof) => proof.fileHashes)];
+      const snapshots = proofs.map((proof) => proof.fileHashes);
       for (const hashes of snapshots)
         for (const [file, hash] of Object.entries(hashes)) {
           let current = '<missing>';
@@ -1131,6 +1135,21 @@ export class StudioService extends EventEmitter {
               `La preuve de test est obsolète : ${file} a changé. Relance les tests avant validation.`,
             );
         }
+    }
+    if (feature.steps.every((step) => related.has(step.id)))
+      for (const file of Object.keys(feature.workspaceFileHashes ?? {})) ownedPaths.add(file);
+    const owned = currentOwnedFileHashes(feature, ownedPaths);
+    for (const file of ownedPaths) {
+      let current = '<missing>';
+      try {
+        current = sha256(await readFile(await policy.resolve(file)));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      if (current !== owned[file])
+        throw new Error(
+          `La preuve de test est obsolète : ${file} a changé hors de la dernière écriture autorisée de la feature. Relance son étape avant validation.`,
+        );
     }
   }
   async saveArtifact(

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 — 2026-10-14
+
+- Corrige la validation d’un fichier repris légitimement par une étape suivante : les empreintes des écritures historiques sont distinguées de l’état courant, avec contrôle des preuves de tests et des modifications extérieures conservé.
+- Empêche la boucle de correction automatique de relancer une étape hors du périmètre choisi. Un élargissement nécessite une nouvelle sélection humaine.
+- Respecte les remarques décochées dans le contexte de correction, y compris dans les blocs de contexte génériques.
+
 ## 1.1.0 — 2026-10-14
 
 - Ajoute les corrections ciblées depuis un compte rendu ou une remarque de relecture : choix des étapes de départ, aperçu de l’équipe à rejouer et contexte transmis. Le cycle conserve son historique et respecte les validations, permissions et limites habituelles.

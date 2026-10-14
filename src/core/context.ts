@@ -178,11 +178,23 @@ export function promptSections(input: RunInput): PromptSection[] {
       ? `Critères d'acceptation :\n${criteria.map((c) => `- [${c.status}] ${c.id}: ${c.text}${c.evidence ? ` — preuve humaine : ${c.evidence}` : ''}`).join('\n')}`
       : '',
   );
-  const comments = (input.feature.reviewComments ?? []).filter((c) => !c.resolved);
+  const originalCommentIds = new Set(
+    correction?.snapshot.comments.map((comment) => comment.id) ?? [],
+  );
+  const comments = (input.feature.reviewComments ?? []).filter((comment) => {
+    if (comment.resolved) return false;
+    if (!correction) return true;
+    // Original remarks are already frozen in the explicit correction block; never duplicate a live copy.
+    if (originalCommentIds.has(comment.id)) return false;
+    return (
+      comment.stepId === input.step.id &&
+      input.step.attempts.some((attempt) => attempt.id === comment.attemptId)
+    );
+  });
   add(
     'review-comments',
     'Remarques de relecture ouvertes',
-    'human',
+    correction ? 'system' : 'human',
     comments.length
       ? `Remarques humaines à traiter :\n${comments.map((c) => `- ${c.id}${c.blocking ? ' (bloquante)' : ''}: ${c.text}${c.file ? ` [${c.file}${c.line ? ':' + c.line : ''}]` : ''}`).join('\n')}`
       : '',
