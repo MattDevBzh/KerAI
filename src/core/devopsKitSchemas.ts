@@ -43,6 +43,31 @@ export const devOpsQuerySchema = z.discriminatedUnion('kind', [
     .strict(),
   z.object({ kind: z.enum(['build', 'timeline', 'artifacts', 'test-runs']), buildId: id }).strict(),
 ]);
+// Copilot CLI 1.0.96 silently omits custom tools whose input schema has a
+// top-level oneOf instead of an object. Publish flat parameters, then validate
+// each request with devOpsQuerySchema before accessing Azure DevOps.
+export const devOpsQueryToolSchema = z
+  .object({
+    kind: z.enum([
+      'pipelines',
+      'pipeline',
+      'builds',
+      'build',
+      'timeline',
+      'artifacts',
+      'test-runs',
+    ]),
+    pipelineId: id.optional().describe('Required for pipeline and builds only.'),
+    revision: id.optional().describe('Optional for pipeline only.'),
+    buildId: id.optional().describe('Required for build, timeline, artifacts and test-runs only.'),
+    continuationToken: z
+      .string()
+      .min(1)
+      .max(1000)
+      .optional()
+      .describe('Optional for pipelines and builds only; reuse the returned token unchanged.'),
+  })
+  .strict();
 const observation = z
   .object({
     kind: z.enum([

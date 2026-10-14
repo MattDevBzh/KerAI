@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 — 2026-10-14
+
+- Corrige le lancement de la team DevOps avec Copilot CLI 1.0.96 : le schéma de paramètres de `studio_devops_inspect` est désormais un objet accepté par le CLI. Les combinaisons de paramètres restent strictement validées avant toute lecture Azure DevOps.
+- Détaille les outils manquants, inattendus ou dupliqués et le chemin du CLI en cas de refus du catalogue. Supprime le conseil systématique de mise à jour, qui ne permettait pas d’identifier ce défaut de schéma.
+
 ## 1.0.0 — 2026-10-13
 
 - Corrige la sauvegarde de profils fournis sous Windows : l’installation des ressources associées exclut le profil en cours d’édition avec les deux séparateurs de chemin.

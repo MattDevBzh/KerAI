@@ -722,7 +722,7 @@ export class CopilotCliAdapter implements AgentAdapter {
       } catch (error) {
         if (controller.signal.aborted) throw cancelled(controller.signal);
         throw new Error(
-          `Exécution refusée avant tout prompt : confinement des outils non vérifiable. ${errorMessage(error)} Mets Copilot CLI à jour manuellement vers une version compatible avec le SDK 1.0.20.`,
+          `Exécution refusée avant tout prompt : confinement des outils non vérifiable. ${errorMessage(error)} SDK 1.0.20 ; MCP sélectionnés : ${input.mcpServers?.length ?? 0}. CLI : ${this.launches.get(client)?.executable ?? 'transport de test'}. Ce refus ne prouve pas que le CLI est trop ancien : conserve ce diagnostic pour identifier l’incompatibilité.`,
         );
       }
       emit(

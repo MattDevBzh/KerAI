@@ -129,12 +129,25 @@ export function verifyMcpCatalog(
   hostTools: Set<string>,
   plan: McpPlan,
 ): void {
-  if (
-    !tools ||
-    tools.length !== hostTools.size + plan.grants.size ||
-    new Set(tools.map((t) => t.name)).size !== tools.length
-  )
-    throw new Error('Catalogue d’outils incomplet, dupliqué ou inattendu.');
+  if (!tools) throw new Error('Catalogue d’outils indisponible : le CLI a renvoyé null.');
+  const expected = new Set([...hostTools, ...plan.grants.keys()]);
+  const counts = new Map<string, number>();
+  for (const tool of tools) counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+  const missing = [...expected].filter((name) => !counts.has(name));
+  const unexpected = [...counts.keys()].filter((name) => !expected.has(name));
+  const duplicates = [...counts.keys()].filter((name) => counts.get(name)! > 1);
+  if (missing.length || unexpected.length || duplicates.length) {
+    const names = (items: string[]) =>
+      items.length
+        ? items
+            .slice(0, 30)
+            .map((name) => JSON.stringify(name.slice(0, 128)))
+            .join(', ') + (items.length > 30 ? ` (+${items.length - 30})` : '')
+        : 'aucun';
+    throw new Error(
+      `Catalogue d’outils incomplet, dupliqué ou inattendu. Attendus : ${expected.size} ; reçus : ${tools.length}. Manquants : ${names(missing)}. Inattendus : ${names(unexpected)}. Doublons : ${names(duplicates)}.`,
+    );
+  }
   for (const tool of tools) {
     if (hostTools.has(tool.name)) {
       if (tool.mcpServerName || tool.mcpToolName || tool.namespacedName)

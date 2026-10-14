@@ -117,6 +117,35 @@ async function invoke(tools: Tool[], name: string, args: unknown) {
 }
 
 describe('DevOps kit integration', () => {
+  it('publishes object parameters while rejecting invalid query combinations before any API call', async () => {
+    const f = await fixture();
+    const tool = f.tools.find((item) => item.name === 'studio_devops_inspect')!;
+    expect(tool.parameters).toMatchObject({
+      type: 'object',
+      required: ['kind'],
+      additionalProperties: false,
+      properties: { kind: { enum: expect.arrayContaining(['pipeline', 'build']) } },
+    });
+    expect(tool.parameters).not.toHaveProperty('oneOf');
+    for (const args of [
+      { kind: 'pipeline' },
+      { kind: 'builds' },
+      { kind: 'timeline', pipelineId: 42 },
+      { kind: 'build', buildId: 1, revision: 2 },
+      { kind: 'pipelines', buildId: 1 },
+      { kind: 'pipeline', pipelineId: -1 },
+      { kind: 'pipeline', pipelineId: 42, url: 'https://example.invalid' },
+    ]) {
+      expect((await invoke(f.tools, tool.name, args)).resultType).toBe('failure');
+    }
+    expect(f.mock.calls).toHaveLength(0);
+    expect(
+      (await invoke(f.tools, tool.name, { kind: 'pipeline', pipelineId: 42, revision: 3 }))
+        .resultType,
+    ).toBe('success');
+    expect(f.mock.calls.length).toBeGreaterThan(0);
+    expect(f.mock.calls.every((call) => call.init?.method === 'GET')).toBe(true);
+  });
   it('loads six steps and installs agents, skills and the runnable script without overwriting personal files', async () => {
     const f = await fixture();
     expect(f.data.notices).toEqual([]);

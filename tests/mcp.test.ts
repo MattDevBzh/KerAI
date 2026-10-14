@@ -39,6 +39,23 @@ const permission = (changes: Record<string, unknown> = {}): PermissionRequest =>
   }) as PermissionRequest;
 
 describe('MCP scope and credentials', () => {
+  it('identifies missing, unexpected and duplicate tools without permitting a prompt', () => {
+    const plan = { servers: {}, grants: new Map(), secrets: new Set<string>() };
+    expect(() =>
+      verifyMcpCatalog(
+        [
+          { name: 'studio_read_file', description: '' },
+          { name: 'bash', description: '' },
+          { name: 'bash', description: '' },
+        ],
+        new Set(['studio_read_file', 'studio_devops_inspect']),
+        plan,
+      ),
+    ).toThrow('Manquants : "studio_devops_inspect". Inattendus : "bash". Doublons : "bash".');
+    expect(() => verifyMcpCatalog(null, new Set(['studio_read_file']), plan)).toThrow(
+      'renvoyé null',
+    );
+  });
   it('resolves secret references only into a transient SDK plan, without changing saved configuration', async () => {
     const config = server({
       transport: 'http',

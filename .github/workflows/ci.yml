@@ -15,6 +15,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.96
+      - run: npx vitest run tests/devops-cli-catalog.test.ts
+        env:
+          FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot.cmd
       - run: npx vitest run tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts
   validate:
     runs-on: ubuntu-latest
@@ -29,6 +33,10 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run check
+      - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.96
+      - run: npx vitest run tests/devops-cli-catalog.test.ts
+        env:
+          FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot
       - run: npm run test:ui
       - run: xvfb-run -a npm run test:extension
       - run: mkdir -p releases && npm run package
