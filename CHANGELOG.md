@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 — 2026-10-14
+
+- Ajoute les corrections ciblées depuis un compte rendu ou une remarque de relecture : choix des étapes de départ, aperçu de l’équipe à rejouer et contexte transmis. Le cycle conserve son historique et respecte les validations, permissions et limites habituelles.
+- Réunit la correction du compte rendu et du besoin initial dans un éditeur avec aperçu, original de l’agent et versions humaines conservées. Les modifications invalident les validations concernées ; une sauvegarde obsolète est refusée.
+- Sépare la validation des étapes de la décision finale : « Valider définitivement » termine la session, « Faire une correction » relance la partie concernée. Le pilote attend cette décision humaine.
+- Ajoute le mode roast par agent, désactivé par défaut, avec trois niveaux : léger, piquant et sans pitié. Le choix est conservé dans les profils et les kits ; les documents professionnels et rapports structurés restent sobres.
+- Célèbre la validation finale avec les personnages de l’équipe dans le style des kits, une animation courte et un replay explicite. Les effets respectent la réduction des mouvements.
+
 ## 1.0.6 — 2026-10-14
 
 - Livraison : boutons « Générer le titre du commit » et « Valider le commit » près du champ titre. La validation accepte un titre saisi ou modifié sans étape de ré-aperçu, vérifie le dépôt et conserve la confirmation VS Code ainsi que la sélection explicite des fichiers. Le push reste une action distincte.

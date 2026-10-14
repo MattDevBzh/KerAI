@@ -147,5 +147,5 @@ export interface MemoryEntry {
   enabled: boolean;
   agentIds: string[];
   updatedAt: string;
-  source?: { featureId: string; stepId: string; attemptId: string };
+  source?: { featureId: string; stepId: string; attemptId: string; revision?: number };
 }

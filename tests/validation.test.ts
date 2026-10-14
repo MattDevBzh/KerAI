@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { featureStateKey } from '../src/shared/collaboration';
 import { WorkflowEngine } from '../src/core/workflow';
 import { approvalBlockers } from '../src/core/validation';
 import type { TestEvidence } from '../src/shared/types';
@@ -114,12 +115,16 @@ describe('validation based on current proofs', () => {
   it('refreshes completion status when acceptance criteria or blocking comments change', () => {
     const f = fixture('read-only');
     f.engine.approveStep(f.feature.id, 'run');
+    expect(f.feature.status).toBe('awaiting_final_validation');
+    f.engine.finalizeFeature(f.feature.id, featureStateKey(f.feature));
     expect(f.feature.status).toBe('completed');
     f.feature.criteria = [{ id: 'criterion', text: 'Behavior', status: 'pending', evidence: '' }];
     f.engine.refreshFeatureStatus(f.feature.id);
     expect(f.feature.status).toBe('attention');
     f.feature.criteria[0] = { ...f.feature.criteria[0], status: 'passed', evidence: 'Observed' };
     f.engine.refreshFeatureStatus(f.feature.id);
+    expect(f.feature.status).toBe('awaiting_final_validation');
+    f.engine.finalizeFeature(f.feature.id, featureStateKey(f.feature));
     expect(f.feature.status).toBe('completed');
     f.feature.reviewComments = [
       {
@@ -136,6 +141,8 @@ describe('validation based on current proofs', () => {
     expect(f.feature.status).toBe('attention');
     f.feature.reviewComments[0].resolved = true;
     f.engine.refreshFeatureStatus(f.feature.id);
+    expect(f.feature.status).toBe('awaiting_final_validation');
+    f.engine.finalizeFeature(f.feature.id, featureStateKey(f.feature));
     expect(f.feature.status).toBe('completed');
   });
   it('preserves live questions and answers, usage and test evidence when completing the artifact', () => {

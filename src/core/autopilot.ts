@@ -22,13 +22,17 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   if (feature.archived) return pause('Cette feature est archivée.');
   if (feature.steps.some((step) => step.status === 'running'))
     return pause('Une tentative est déjà en cours.');
-  const stopped = feature.steps.find((step) =>
+  const correction = feature.corrections?.find((cycle) => cycle.id === feature.activeCorrectionId);
+  const scopedSteps = correction
+    ? feature.steps.filter((step) => correction.impactedStepIds.includes(step.id))
+    : feature.steps;
+  const stopped = scopedSteps.find((step) =>
     ['failed', 'cancelled', 'interrupted'].includes(step.status),
   );
   if (stopped)
     return pause(`La tentative ${stopped.name} est ${stopped.status}. Reprise manuelle requise.`);
   if (
-    feature.steps.some(
+    scopedSteps.some(
       (step) =>
         step.status === 'waiting_input' &&
         step.attempts.at(-1)?.questions.some((q) => !step.attempts.at(-1)!.answers[q.id]?.trim()),
@@ -37,9 +41,22 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
     return pause('Des questions humaines attendent une réponse.');
   if (feature.steps.every((step) => step.status === 'approved')) {
     const blockers = featureCompletionBlockers(feature);
-    return blockers.length ? pause(blockers.join(' ')) : { kind: 'complete' };
+    return blockers.length
+      ? pause(blockers.join(' '))
+      : feature.finalValidation
+        ? { kind: 'complete' }
+        : pause('Parcours validé : attends le clic humain « Valider définitivement ».');
   }
-  const available = feature.steps.filter(
+  if (
+    correction &&
+    feature.steps.find((step) => step.id === correction.sourceStepId)?.status === 'awaiting_review'
+  )
+    return pause('La correction est prête pour une nouvelle relecture humaine.');
+  if (correction && scopedSteps.every((step) => step.status === 'approved'))
+    return pause(
+      'Correction relue : valide les étapes restantes puis confirme la validation définitive.',
+    );
+  const available = scopedSteps.filter(
     (step) =>
       step.status !== 'approved' &&
       step.dependsOn.every((dep) => feature.steps.find((s) => s.id === dep)?.status === 'approved'),
@@ -47,9 +64,12 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   const step =
     available.find((s) => s.status === 'waiting_input') ??
     available.find((s) => s.status === 'awaiting_review') ??
+    correctionRoute(feature, available) ??
     available[0];
   if (!step) return pause('Aucune étape disponible : vérifier les dépendances et validations.');
   const attempt = step.attempts.at(-1);
+  if (step.id === correction?.sourceStepId && step.status === 'awaiting_review')
+    return pause('La correction est prête pour une nouvelle relecture humaine.');
   if (attempt?.questions.some((q) => !attempt.answers[q.id]?.trim()))
     return pause('Des questions humaines attendent une réponse.');
   if (['failed', 'cancelled', 'interrupted'].includes(step.status))
@@ -140,4 +160,14 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
     stepId: step.id,
     ...(step.status === 'waiting_input' && attempt?.sessionId ? { resume: true } : {}),
   };
+}
+
+function correctionRoute(
+  feature: Feature,
+  available: Feature['steps'],
+): Feature['steps'][number] | undefined {
+  const correction = feature.corrections?.find((cycle) => cycle.id === feature.activeCorrectionId);
+  return correction
+    ? available.find((step) => correction.impactedStepIds.includes(step.id))
+    : undefined;
 }

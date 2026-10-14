@@ -216,7 +216,10 @@ describe('pure bounded autopilot decisions', () => {
   it('completes only after approvals and final criteria or comment blockers are resolved', () => {
     const f = fixture();
     for (const id of ['specs', 'dev', 'tests', 'review']) f.finish(id);
-    expect(nextAutopilotAction(f.feature)).toEqual({ kind: 'complete' });
+    expect(nextAutopilotAction(f.feature)).toMatchObject({
+      kind: 'pause',
+      reason: expect.stringMatching(/Valider définitivement/),
+    });
     f.feature.criteria = [
       { id: 'criterion', text: 'Visible path', status: 'pending', evidence: '' },
     ];

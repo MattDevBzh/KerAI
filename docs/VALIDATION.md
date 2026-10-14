@@ -1,18 +1,41 @@
-# Validation et limites — v1.0.0, 13 octobre 2026
+# Validation et limites — v1.1.0, 14 octobre 2026
+
+## Vérifications locales de v1.1.0
+
+Cette version ajoute l’édition des comptes rendus et du besoin, les corrections ciblées, la décision finale humaine, le roast par agent et la célébration d’équipe. Le développement et les validations indépendantes ont été répartis entre trois agents Sol 6.1 avec effort high, puis intégrés et vérifiés sur macOS avec Node 24.1.0.
+
+| Périmètre                   | Résultat observé                                                                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format, TypeScript et build | `npm run check` réussi                                                                                                                                                                 |
+| Métier et intégration       | **412 tests Vitest réussis**, 4 ignorés : 3 propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 exécuté en CI                                                           |
+| Interface Chromium          | **87 scénarios Playwright réussis**, dont 10 nouveaux scénarios de correction, édition, roast et décision finale                                                                       |
+| Validation indépendante     | 9 tests d’intégration et 3 scénarios UI indépendants : branches conservées, ancien contexte écarté, versions éditées, reprise et preuves physiques à la finalisation                   |
+| Vrai hôte VS Code Insiders  | Smoke réussi dans un profil temporaire : activation/CSP, profils roast personnel/projet, refus d’une décision finale prématurée, catalogue, Git, points de restauration et persistance |
+| Rendu                       | Équipe en poses de validation inspectée ; éditeur et contexte de correction contrôlés sur petit écran ; mouvement réduit et préférence d’animation vérifiés                            |
+
+Les tests de service utilisent un adaptateur Copilot simulé et de vrais fichiers temporaires, les messages d’interface sont contrôlés avec un pont hôte simulé. Aucun prompt Copilot payant ni opération Azure DevOps réelle n’est exécuté. La qualité du roast interprété par un modèle et le parcours sur un compte réel restent à éprouver pendant l’utilisation.
+
+Les contre-exemples ont corrigé la reprise depuis un rapport devenu obsolète après édition du besoin, l’entraînement d’une branche indépendante, la réinjection d’anciens rapports décochés ou réponses, la poursuite après une validation intermédiaire et la fermeture d’un cycle terminé. Le contrôle final refuse également une preuve dont les fichiers ont été modifiés en dehors du cockpit.
+
+Le schéma de stockage **4** conserve les versions et les cycles ; les versions 0 à 3 migrent. Les anciennes sessions terminées sans décision finale humaine explicite attendent cette décision. Les anciens binaires refusent ce schéma et ne peuvent pas réécrire silencieusement les nouveaux historiques. Le VSIX est conservé dans `releases/feature-studio-1.1.0.vsix` avec son empreinte dans `releases/SHA256SUMS`.
+
+![Validation finale et célébration de l’équipe — données de recette simulées](images/final-validation.png)
+
+La CI du commit poussé est une preuve distincte de cette recette locale ; son résultat est consultable dans [GitHub Actions](https://github.com/MattDevBzh/KerAI/actions/workflows/ci.yml).
 
 ## Vérifications locales de v1.0.0
 
 Cette version réunit le kit DevOps, ses six avatars et l’écran de composition/import/export des kits. Recette exécutée sur macOS, Node 24.1.0 et VS Code Insiders 1.141.0.
 
-| Périmètre | Résultat observé |
-| --- | --- |
-| Format, TypeScript et build | `npm run check` réussi |
-| Métier et intégration | **374 tests Vitest réussis**, 3 spécifiques à Windows ignorés sur macOS |
-| Interface Chromium | **76 scénarios Playwright réussis**, dont les trois parcours de la bibliothèque de kits et les deux du kit DevOps |
-| Vrai hôte VS Code Insiders | Smoke réussi : activation, CSP, catalogue DevOps, six identités d’avatars et leurs 18 fichiers, installation utilisateur, profils, persistance, Git et restaurations |
-| Rendu | Bibliothèque et composition inspectées à 1440 px ; import avec conflit contrôlé à 390 px sans débordement |
-| Avatars DevOps | Six sprites source inspectés, exports PNG 192×192 et GIF de travail à quatre images vérifiés |
-| Ressources de skills | Huit skills DevOps validées ; licence Microsoft et provenance vérifiées et embarquées |
+| Périmètre                   | Résultat observé                                                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format, TypeScript et build | `npm run check` réussi                                                                                                                                               |
+| Métier et intégration       | **374 tests Vitest réussis**, 3 spécifiques à Windows ignorés sur macOS                                                                                              |
+| Interface Chromium          | **76 scénarios Playwright réussis**, dont les trois parcours de la bibliothèque de kits et les deux du kit DevOps                                                    |
+| Vrai hôte VS Code Insiders  | Smoke réussi : activation, CSP, catalogue DevOps, six identités d’avatars et leurs 18 fichiers, installation utilisateur, profils, persistance, Git et restaurations |
+| Rendu                       | Bibliothèque et composition inspectées à 1440 px ; import avec conflit contrôlé à 390 px sans débordement                                                            |
+| Avatars DevOps              | Six sprites source inspectés, exports PNG 192×192 et GIF de travail à quatre images vérifiés                                                                         |
+| Ressources de skills        | Huit skills DevOps validées ; licence Microsoft et provenance vérifiées et embarquées                                                                                |
 
 La première CI Windows a révélé un défaut de comparaison entre chemins avec `/` et `\` : l’installation des ressources associées ne préservait pas l’exclusion du profil en cours d’édition, provoquant un refus de sauvegarde. La comparaison est normalisée et un test de non-régression vérifie les deux séparateurs. Les assertions des rapports d’installation utilisent les chemins natifs de chaque plateforme.
 
@@ -28,12 +51,12 @@ Les validations des versions antérieures restent ci-dessous comme historique.
 
 Le kit comprend désormais huit skills. `devops-azure-preflight` adapte `azure-validate` 1.2.3 de Microsoft aux étapes de plan, relecture, guide et validation, avec sources figées et licence MIT embarquée.
 
-| Périmètre du complément | Résultat observé |
-| --- | --- |
-| TypeScript | `npm run typecheck` réussi |
+| Périmètre du complément                 | Résultat observé                                                                                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TypeScript                              | `npm run typecheck` réussi                                                                                                                                                                       |
 | Registre, migration, contexte et DevOps | **50 tests Vitest ciblés réussis** ; injection unique de la nouvelle skill dans le contexte des quatre étapes, avant et après installation utilisateur ; copie de sa licence et de sa provenance |
-| Interface du parcours DevOps | **2 scénarios Playwright réussis** : duplication et lancement manuel avec contrat de preuve |
-| Skills | **8 skills validées** avec `quick_validate.py` |
+| Interface du parcours DevOps            | **2 scénarios Playwright réussis** : duplication et lancement manuel avec contrat de preuve                                                                                                      |
+| Skills                                  | **8 skills validées** avec `quick_validate.py`                                                                                                                                                   |
 
 La recette complète de la v0.5.0 figure ci-dessous ; le complément porte sur les ressources du kit et leurs associations. Aucune commande IaC n’a été exécutée pour cette adaptation, et son interprétation par un modèle sur un projet Azure réel reste à éprouver. Les profils utilisateur existants restent prioritaires : les associations à ajouter sont expliquées dans [Kit DevOps](DEVOPS-KIT.md).
 
@@ -41,13 +64,13 @@ La recette complète de la v0.5.0 figure ci-dessous ; le complément porte sur l
 
 Le kit DevOps apporte six agents, sept skills, un parcours et un script autonome partageant le collecteur en lecture seule avec l’extension. Le test hors production est mis en place et exécuté manuellement, puis sa vérification exige des références humaines et des preuves hôte.
 
-| Périmètre | Résultat observé |
-| --- | --- |
-| Format, TypeScript et build | `npm run check` réussi |
-| Métier et intégration | **363 tests Vitest réussis**, 3 ignorés sur cette plateforme ; dont 18 nouveaux scénarios DevOps |
-| Interface | **73 scénarios Playwright réussis**, dont les nouveaux parcours de duplication et de lancement DevOps ; formulaire contrôlé à 390 px |
-| Skills et script | Sept skills validées avec `quick_validate.py` ; copie utilisateur du script réellement exécutée avec `--help`, conflits personnels conservés |
-| Vrai hôte VS Code Insiders | Smoke réussi, avec présence des six étapes DevOps et du validateur dans le catalogue ; installation utilisateur et parcours hôtes existants vérifiés |
+| Périmètre                   | Résultat observé                                                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format, TypeScript et build | `npm run check` réussi                                                                                                                               |
+| Métier et intégration       | **363 tests Vitest réussis**, 3 ignorés sur cette plateforme ; dont 18 nouveaux scénarios DevOps                                                     |
+| Interface                   | **73 scénarios Playwright réussis**, dont les nouveaux parcours de duplication et de lancement DevOps ; formulaire contrôlé à 390 px                 |
+| Skills et script            | Sept skills validées avec `quick_validate.py` ; copie utilisateur du script réellement exécutée avec `--help`, conflits personnels conservés         |
+| Vrai hôte VS Code Insiders  | Smoke réussi, avec présence des six étapes DevOps et du validateur dans le catalogue ; installation utilisateur et parcours hôtes existants vérifiés |
 
 Les fixtures HTTP vérifient les routes GET, le périmètre du dépôt, l’absence des valeurs de variables et des URL de téléchargement, la pagination, les données tronquées et les erreurs de droits. Les cas négatifs couvrent mauvais pipeline/SHA/branche, stage ignoré ou échoué malgré un build vert, reprise de stage échouée, absence d’artefact ou de tests, résultats partiels et incohérence des fichiers locaux. Les tests d’intégration couvrent la persistance, le rattachement de la preuve à la tentative, le contrat de relecture, l’arrêt du pilote et l’invalidation de l’aperçu.
 
@@ -59,13 +82,13 @@ Les anciennes sessions restent lisibles. Les nouveaux champs du parcours et des 
 
 La version 0.4.4 remplace l’avatar frontal par un geek de trois quarts devant un ultrabook. L’illustration en couleur apparaît dans un petit volet local ; sa déclinaison SVG monochrome reste dans la barre d’activité.
 
-| Périmètre | Résultat observé |
-| --- | --- |
-| Format, TypeScript et build | `npm run check` réussi |
-| Métier et intégration | **345 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
-| Volet d’accueil | **16 cas Chromium réussis** sur le HTML réel du provider, avec pont VS Code simulé : 200/320 px, clair/sombre et classes de contraste élevé, avec/sans projet ; image locale chargée sous CSP, absence de débordement, focus et activation clavier/clic |
-| Vrai hôte VS Code Insiders | Vue ouverte, image et script réellement chargés sous CSP nonce, état métier et DevOps non initialisés avant l’ouverture du cockpit ; double ouverture dédupliquée et parcours hôtes existants vérifiés |
-| Assets | Illustration PNG transparente inspectée dans le volet ; icône SVG de trois quarts inspectée à 24, 48 et 192 px sur fonds clair et sombre |
+| Périmètre                   | Résultat observé                                                                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format, TypeScript et build | `npm run check` réussi                                                                                                                                                                                                                                  |
+| Métier et intégration       | **345 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS                                                                                                                                                                             |
+| Volet d’accueil             | **16 cas Chromium réussis** sur le HTML réel du provider, avec pont VS Code simulé : 200/320 px, clair/sombre et classes de contraste élevé, avec/sans projet ; image locale chargée sous CSP, absence de débordement, focus et activation clavier/clic |
+| Vrai hôte VS Code Insiders  | Vue ouverte, image et script réellement chargés sous CSP nonce, état métier et DevOps non initialisés avant l’ouverture du cockpit ; double ouverture dédupliquée et parcours hôtes existants vérifiés                                                  |
+| Assets                      | Illustration PNG transparente inspectée dans le volet ; icône SVG de trois quarts inspectée à 24, 48 et 192 px sur fonds clair et sombre                                                                                                                |
 
 Le pont du volet accepte seulement `ready` et `open`, sans commande, URL ni arguments injectables. Le choix entre ouverture du cockpit et ouverture d’un dossier dépend du workspace courant côté hôte. Les tests couvrent les changements de dossier, la fermeture et la résolution répétée d’une vue, ainsi que l’inactivité des anciens callbacks après remplacement ou destruction. Les ressources sont limitées au dossier local `resources`, avec scripts/styles autorisés uniquement par nonce et connexions réseau interdites.
 
@@ -75,13 +98,13 @@ La source imagegen, son prompt et la provenance de l’adaptation SVG sont conse
 
 La version 0.4.3 ajoute le raccourci **Feature Studio** à la barre d’activité, son icône de geek au portable en pixel art et le volet natif **Cockpit**. La recette locale du 13 octobre 2026 donne les résultats suivants :
 
-| Périmètre | Résultat observé |
-| --- | --- |
-| Format, TypeScript et build | `npm run check` réussi |
-| Métier et intégration | **341 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
-| Vrai hôte VS Code Insiders | Activation par `featureStudio.launcher.focus`, vue native visible, magasin et DevOps non initialisés, cockpit non ouvert à la simple consultation du volet |
-| Ouverture du cockpit | Deux commandes simultanées créent un seul onglet ; une ouverture ultérieure réutilise cet onglet ; les parcours hôtes existants restent vérifiés |
-| Icône | SVG original sur grille 24 × 24, transparent et monochrome ; rendus inspectés sur fonds clair et sombre à 24, 48 et 192 px |
+| Périmètre                   | Résultat observé                                                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format, TypeScript et build | `npm run check` réussi                                                                                                                                     |
+| Métier et intégration       | **341 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS                                                                                |
+| Vrai hôte VS Code Insiders  | Activation par `featureStudio.launcher.focus`, vue native visible, magasin et DevOps non initialisés, cockpit non ouvert à la simple consultation du volet |
+| Ouverture du cockpit        | Deux commandes simultanées créent un seul onglet ; une ouverture ultérieure réutilise cet onglet ; les parcours hôtes existants restent vérifiés           |
+| Icône                       | SVG original sur grille 24 × 24, transparent et monochrome ; rendus inspectés sur fonds clair et sombre à 24, 48 et 192 px                                 |
 
 Le smoke vérifie les contributions et la ressource réellement chargées par l’extension, ainsi que les deux accueils déclarés : **Ouvrir le cockpit** avec un dossier et **Ouvrir un dossier** sans projet. L’affichage réel du volet a été vérifié avec un projet par le test d’hôte. Le Mac s’étant verrouillé avant la recette manuelle, le clic physique dans la barre d’activité et l’accueil sans dossier n’ont pas été inspectés manuellement. Les fichiers React/CSS n’ont pas changé ; la campagne Playwright de v0.4.2 ci-dessous reste la dernière recette du cockpit web.
 
@@ -91,14 +114,14 @@ Aucun prompt Copilot payant ni appel au compte Azure DevOps réel n’a été ef
 
 La version 0.4.2 ajoute les thèmes clairs **Aube, Brume et Sauge**, les thèmes sombres **Minuit et Forêt** et le choix **Suivre VS Code** dans les Réglages. La recette locale du 13 octobre 2026 donne les résultats suivants :
 
-| Périmètre | Résultat observé |
-| --- | --- |
-| Format, TypeScript et build | `npm run format:check`, `npm run typecheck` et `npm run build` réussis |
-| Métier et intégration | **341 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
-| Interface | **71 scénarios Playwright réussis**, dont 8 consacrés aux thèmes |
-| Rendu visuel | Cinq palettes capturées en Réglages et sur le dashboard à 1440 et 390 px ; contrôle visuel et absence de débordement |
-| Accessibilité | Navigation clavier avec sauvegarde différée et focus conservé ; contrastes des paires de texte vérifiées ≥ 4,5:1 et bordures de contrôles ≥ 3:1 ; modes contraste élevé clair/sombre et couleurs forcées couverts |
-| Vrai hôte VS Code Insiders | Six choix enregistrés dans un profil utilisateur isolé, ordre des écritures, modification externe et réouverture vérifiés ; index Git et état des sessions conservés |
+| Périmètre                   | Résultat observé                                                                                                                                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format, TypeScript et build | `npm run format:check`, `npm run typecheck` et `npm run build` réussis                                                                                                                                            |
+| Métier et intégration       | **341 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS                                                                                                                                       |
+| Interface                   | **71 scénarios Playwright réussis**, dont 8 consacrés aux thèmes                                                                                                                                                  |
+| Rendu visuel                | Cinq palettes capturées en Réglages et sur le dashboard à 1440 et 390 px ; contrôle visuel et absence de débordement                                                                                              |
+| Accessibilité               | Navigation clavier avec sauvegarde différée et focus conservé ; contrastes des paires de texte vérifiées ≥ 4,5:1 et bordures de contrôles ≥ 3:1 ; modes contraste élevé clair/sombre et couleurs forcées couverts |
+| Vrai hôte VS Code Insiders  | Six choix enregistrés dans un profil utilisateur isolé, ordre des écritures, modification externe et réouverture vérifiés ; index Git et état des sessions conservés                                              |
 
 Les tests d’interface utilisent les couleurs natives de VS Code dans les deux sens : thème personnel clair avec éditeur sombre, et thème personnel sombre avec éditeur clair. Le contraste élevé garde la priorité sans effacer la préférence. Les erreurs de sauvegarde conservent le choix précédent ; la préférence reste indépendante des brouillons et des agents en cours. Le protocole accepte uniquement les six identifiants et l’écriture cible les réglages personnels, sans fichier de configuration dans le projet. La démonstration ne conserve le choix que pendant sa session.
 
@@ -108,13 +131,13 @@ Les contrôles de contraste portent sur les éléments et paires vérifiés, san
 
 La version 0.4.1 ajoute les sous-menus permanents **PR** et **Tickets** à Azure DevOps, leurs tableaux dédiés et les métadonnées facultatives récupérées dans les appels existants. La recette locale du 13 octobre 2026 donne les résultats suivants :
 
-| Périmètre | Résultat observé |
-| --- | --- |
-| Format, TypeScript et build | `npm run check` réussi |
-| Métier et intégration | **336 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
-| Interface | **63 scénarios Playwright réussis** lors de la campagne complète, dont 8 nouveaux scénarios dédiés aux dashboards ; les 5 anciens parcours Azure DevOps restent inchangés |
-| Rendu visuel | PR et Tickets inspectés dans Chromium à 1440 et 390 px ; thèmes clair et contrastés, mouvement réduit, absence de débordement et navigation clavier à 800×600 couverts par les tests |
-| Vrai hôte VS Code Insiders | Activation React sous CSP, configuration Azure DevOps hors ligne et réouverture, inspection Git, profils, reporter et protections des worktrees vérifiés sur les sources compilées |
+| Périmètre                   | Résultat observé                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Format, TypeScript et build | `npm run check` réussi                                                                                                                                                               |
+| Métier et intégration       | **336 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS                                                                                                          |
+| Interface                   | **63 scénarios Playwright réussis** lors de la campagne complète, dont 8 nouveaux scénarios dédiés aux dashboards ; les 5 anciens parcours Azure DevOps restent inchangés            |
+| Rendu visuel                | PR et Tickets inspectés dans Chromium à 1440 et 390 px ; thèmes clair et contrastés, mouvement réduit, absence de débordement et navigation clavier à 800×600 couverts par les tests |
+| Vrai hôte VS Code Insiders  | Activation React sous CSP, configuration Azure DevOps hors ligne et réouverture, inspection Git, profils, reporter et protections des worktrees vérifiés sur les sources compilées   |
 
 Les scénarios couvrent la navigation persistante, les brouillons conservés, la recherche et le tri, les liens vers les features, les commentaires chargés à la demande, les métadonnées inconnues et les listes partielles. Les compteurs distinguent un tableau non chargé d’un tableau vide. Un filtre dont l’état disparaît après actualisation reste explicite. Les transitions de configuration, de déconnexion et de remplacement de jeton effacent les données de l’ancien compte ; une actualisation ordinaire échouée conserve le dernier tableau reçu.
 
@@ -124,14 +147,14 @@ Les fixtures Azure DevOps sont déterministes : aucun compte réel n’a été c
 
 La recette a été exécutée sur macOS le 13 octobre 2026. Les résultats ci-dessous concernent le lot 0.4.0 ; les preuves historiques v0.3 restent séparées.
 
-| Périmètre | Résultat observé |
-| --- | --- |
-| Format, TypeScript et build | `npm run check` réussi ; vérification de format et reconstruction après les dernières corrections d’interface |
-| Métier et intégration | **312 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS |
-| Interface | **55 scénarios Playwright vérifiés** : 54 lors de la campagne complète, puis le scénario de navigation à 800×600 après correction de son assertion ; recette visuelle des trois nouveaux menus à 1440, 800 et 390 px |
-| Vrai hôte VS Code Insiders | Activation React sous CSP, configuration ADO hors ligne conservée après réouverture, inspection Git et index humain intact, priorité personnel/projet et copies conservées, installation explicite du reporter, worktrees et restauration ciblée |
-| Recette Playwright du produit | Parcours réel Chromium avec formulaire local, capture et trace ZIP ; collecte hôte liée aux critères et refus des rapports inconnus, périmés, incomplets ou du mauvais type |
-| Dépendances de production | `npm audit --omit=dev --audit-level=low` : aucune vulnérabilité signalée à la date du contrôle |
+| Périmètre                     | Résultat observé                                                                                                                                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Format, TypeScript et build   | `npm run check` réussi ; vérification de format et reconstruction après les dernières corrections d’interface                                                                                                                                    |
+| Métier et intégration         | **312 tests Vitest réussis**, 3 tests spécifiques Windows ignorés sur macOS                                                                                                                                                                      |
+| Interface                     | **55 scénarios Playwright vérifiés** : 54 lors de la campagne complète, puis le scénario de navigation à 800×600 après correction de son assertion ; recette visuelle des trois nouveaux menus à 1440, 800 et 390 px                             |
+| Vrai hôte VS Code Insiders    | Activation React sous CSP, configuration ADO hors ligne conservée après réouverture, inspection Git et index humain intact, priorité personnel/projet et copies conservées, installation explicite du reporter, worktrees et restauration ciblée |
+| Recette Playwright du produit | Parcours réel Chromium avec formulaire local, capture et trace ZIP ; collecte hôte liée aux critères et refus des rapports inconnus, périmés, incomplets ou du mauvais type                                                                      |
+| Dépendances de production     | `npm audit --omit=dev --audit-level=low` : aucune vulnérabilité signalée à la date du contrôle                                                                                                                                                   |
 
 Les tests portent notamment sur les alias physiques de chemins (y compris Unicode sur le disque macOS), les réponses liées à leur question exacte, les critères devenus obsolètes, les diffs depuis un sous-dossier Git, la pagination/exclusion, les scopes de profils, les mesures et les preuves qualité. Les tests Azure DevOps utilisent une API simulée et les tests de livraison des dépôts Git temporaires ; ils ne confirment ni droits PAT ni push/PR sur le compte réel. Aucun prompt payant n’a été envoyé. L’organisation et le projet restent à configurer depuis le menu. Aucune nouvelle exécution CI ou Windows ni publication distante n’est attestée par cette recette locale.
 

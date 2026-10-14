@@ -19,6 +19,7 @@ import type {
 import type { AgentProfile, SkillInfo, Workflow } from '../shared/types';
 import { isSensitivePath } from './PolicyEngine';
 import { canonicalCaseless } from './UnicodeCaseFold';
+import { ROAST_LEVELS } from '../shared/roast';
 
 const hash = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);
@@ -31,6 +32,7 @@ const agentSchema = z.object({
   avatar: avatarSchema.optional(),
   nickname: z.string().max(80).optional(),
   emptyContextByDefault: z.boolean().optional(),
+  roastLevel: z.enum(ROAST_LEVELS).optional(),
 });
 const PRESETS: KitMetadata[] = [
   {

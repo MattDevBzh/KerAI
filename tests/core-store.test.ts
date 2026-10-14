@@ -81,7 +81,7 @@ describe('durable versioned store', () => {
     const migrated = await store.load();
     expect(migrated.features).toEqual(engine.features);
     expect(migrated.features[0].worktree).toBeUndefined();
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(3);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(4);
   });
   it('retains worktree identity, per-attempt checkpoints and restored ownership across reload', async () => {
     const { store } = await setup(),
@@ -114,7 +114,7 @@ describe('durable versioned store', () => {
     item.workspaceFileHashes = { 'restored.txt': 'a'.repeat(64), 'deleted.txt': '<missing>' };
     await store.save(engine.features, defaultSettings);
     const restored = await store.load();
-    expect(restored.schemaVersion).toBe(3);
+    expect(restored.schemaVersion).toBe(4);
     expect(restored.features).toEqual(engine.features);
     const invalid = { ...item, worktree: { ...item.worktree, branch: 'wrong-branch' } };
     const original = await readFile(store.path, 'utf8');
@@ -152,16 +152,16 @@ describe('durable versioned store', () => {
     expect((await store.load()).features[0].title).toBe('last');
     expect(await readdir(root)).toEqual(['state.json']);
   });
-  it('migrates v0 settings omissions, persisting v3', async () => {
+  it('migrates v0 settings omissions, persisting v4', async () => {
     const { store } = await setup();
     await writeFile(
       store.path,
       JSON.stringify({ schemaVersion: 0, features: [], settings: { defaultModel: '' } }),
     );
     const state = await store.load();
-    expect(state.schemaVersion).toBe(3);
+    expect(state.schemaVersion).toBe(4);
     expect(state.settings.timeoutMinutes).toBe(20);
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(3);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(4);
   });
   it('rejects unknown versions and corruption without changing the original file', async () => {
     const { store } = await setup();
@@ -225,7 +225,7 @@ describe('durable versioned store', () => {
       }),
     );
     const migrated = await store.load();
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(migrated.features).toEqual(historical);
     expect(migrated.memory).toEqual([]);
     expect(migrated.features[0].autopilot).toBeUndefined();

@@ -6,13 +6,13 @@
 
 Pars d’un besoin, choisis une équipe et avance étape par étape : challenge, plan, code, tests, relecture. Feature Studio rend visibles les instructions, le contexte, les permissions et les preuves de chaque agent. Tu peux personnaliser les parcours et emporter ta méthode dans un kit.
 
-**[Dernière version et téléchargement](https://github.com/MattDevBzh/KerAI/releases/latest)** · [VSIX v1.0.0](https://github.com/MattDevBzh/KerAI/releases/download/v1.0.0/feature-studio-1.0.0.vsix) · [Nouveautés](CHANGELOG.md) · [Guide complet](docs/GUIDE.md)
+**[VSIX v1.1.0](https://github.com/MattDevBzh/KerAI/raw/refs/heads/main/releases/feature-studio-1.1.0.vsix)** · [Releases publiées](https://github.com/MattDevBzh/KerAI/releases/latest) · [Nouveautés](CHANGELOG.md) · [Guide complet](docs/GUIDE.md)
 
 ![La bibliothèque des kits : Atelier Copilot et DevOps](docs/images/kits-library.png)
 
 ## Commencer
 
-1. Télécharge le **[VSIX de la dernière version](https://github.com/MattDevBzh/KerAI/releases/latest)**.
+1. Télécharge le **[VSIX v1.1.0 du dépôt](https://github.com/MattDevBzh/KerAI/raw/refs/heads/main/releases/feature-studio-1.1.0.vsix)**.
 2. Dans VS Code : **Extensions → … → Installer à partir du VSIX…**. Si une ancienne version tourne déjà, recharge la fenêtre.
 3. Ouvre ton dépôt et approuve le workspace. Clique sur le **geek au portable** dans la barre latérale, puis **Ouvrir le cockpit**.
 4. Dans **Réglages**, clique sur **Vérifier la connexion** pour contrôler le CLI, le compte et les modèles disponibles.
@@ -26,10 +26,10 @@ Si le CLI est introuvable, renseigne `featureStudio.cliPath` dans les réglages 
 
 L’écran **Kits** propose deux équipes prêtes à utiliser :
 
-| Kit | Contenu | Usage |
-| --- | --- | --- |
-| **Atelier Copilot** | 4 parcours, 12 agents, 7 skills et leurs ressources | Cadrer, développer, tester, relire et préparer la livraison |
-| **DevOps** | 1 parcours, 6 agents, 8 skills et un script Azure DevOps | Challenger les changements CI/CD et IaC, puis vérifier un test manuel |
+| Kit                 | Contenu                                                  | Usage                                                                 |
+| ------------------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Atelier Copilot** | 4 parcours, 12 agents, 7 skills et leurs ressources      | Cadrer, développer, tester, relire et préparer la livraison           |
+| **DevOps**          | 1 parcours, 6 agents, 8 skills et un script Azure DevOps | Challenger les changements CI/CD et IaC, puis vérifier un test manuel |
 
 Les profils fournis sont immédiatement disponibles dans le cockpit. **Installer ce kit** les copie dans ton catalogue personnel Copilot, accessible depuis tes autres projets.
 
@@ -41,14 +41,14 @@ Le fichier **`.fskit.json`** emporte les profils, parcours, scripts, référence
 
 ## Un parcours DevOps qui va jusqu’aux preuves
 
-| Étape | Agent | Résultat attendu |
-| --- | --- | --- |
-| 1. Challenge | **Éclaireur** | Confronter ta demande au code DevOps du dépôt et proposer des alternatives |
-| 2. Plan technique | **Architecte** | Planifier les changements avec les faits utiles d’Azure DevOps |
-| 3. Modifications locales | **Bâtisseur** | Modifier les fichiers selon le plan approuvé |
-| 4. Relecture | **Vigie** | Examiner le diff, ses risques et les chemins d’échec |
-| 5. Guide de test | **Laborantin** | Décrire le test hors production, ses prérequis, ses résultats attendus et son nettoyage |
-| 6. Vérification | **Contrôleur** | Vérifier le test que tu as exécuté et ses résultats réels |
+| Étape                    | Agent          | Résultat attendu                                                                        |
+| ------------------------ | -------------- | --------------------------------------------------------------------------------------- |
+| 1. Challenge             | **Éclaireur**  | Confronter ta demande au code DevOps du dépôt et proposer des alternatives              |
+| 2. Plan technique        | **Architecte** | Planifier les changements avec les faits utiles d’Azure DevOps                          |
+| 3. Modifications locales | **Bâtisseur**  | Modifier les fichiers selon le plan approuvé                                            |
+| 4. Relecture             | **Vigie**      | Examiner le diff, ses risques et les chemins d’échec                                    |
+| 5. Guide de test         | **Laborantin** | Décrire le test hors production, ses prérequis, ses résultats attendus et son nettoyage |
+| 6. Vérification          | **Contrôleur** | Vérifier le test que tu as exécuté et ses résultats réels                               |
 
 <p>
 <img src="webview/public/avatars/devops-scout/idle.png" width="90" alt="Éclaireur">
@@ -73,6 +73,8 @@ Le collecteur vise **Azure DevOps Services / Azure Repos Git**. Il lit les donn�
 - **Un contexte relisible.** Inspecte et ajuste les blocs envoyés : demande, instructions, skills, livrables, mémoire et réponses humaines. Chaque lancement a son aperçu.
 - **Un espace par feature.** Worktree isolé depuis un commit, branche dédiée et points de restauration. Les changements préexistants nécessitent une sélection explicite pour être repris.
 - **Des validations visibles.** Livrables, questions, verdicts, preuves de tests et critères sont réunis. Le pilote s’arrête aux checkpoints et aux blocages.
+- **Une équipe qui corrige avec toi.** Depuis un compte rendu ou une remarque, choisis où reprendre et inspecte le contexte transmis. L’éditeur conserve l’original, tes versions et les corrections du besoin. En fin de parcours, choisis **Valider définitivement** ou **Faire une correction** ; ta validation réussie déclenche la célébration d’équipe.
+- **Des agents avec du répondant.** Active un roast léger, piquant ou sans pitié sur chaque profil. Les comptes rendus peuvent te taquiner ; les fichiers produits et les preuves restent précis.
 - **Azure DevOps et livraison.** Tableaux PR/tickets, liens aux sessions et préparation de commit, push et PR. Les écritures distantes ont leur confirmation hôte.
 - **Des profils personnalisables.** Agents et skills personnels ou propres au projet, quatorze avatars, modèles découverts via le CLI, MCP et commandes de tests explicitement autorisés.
 - **Un cockpit à ton goût.** Trois thèmes clairs, deux sombres, suivi de VS Code, contraste élevé et navigation adaptée aux petits écrans.
@@ -81,18 +83,18 @@ Les données de session restent dans le stockage local de l’extension. Le PAT 
 
 ## Documentation
 
-| Besoin | Guide |
-| --- | --- |
-| Utiliser le cockpit, les profils et les validations | [Guide complet](docs/GUIDE.md) |
-| Installer, créer, importer ou exporter un kit | [Kits](docs/KITS.md) |
-| Travailler sur les pipelines et l’infrastructure | [Kit DevOps](docs/DEVOPS-KIT.md) |
-| Créer un parcours | [Workflows](docs/WORKFLOWS.md) |
-| Comprendre les worktrees et restaurations | [Espaces Git](docs/WORKSPACES.md) |
-| Configurer Azure DevOps et préparer une livraison | [Livraison](docs/devops-delivery.md) |
-| Connecter Copilot et des MCP | [Copilot](docs/COPILOT.md) · [MCP](docs/MCP.md) |
-| Vérifier une interface avec Playwright | [Kit de recette](defaults/quality/README.md) |
-| Comprendre les mesures de consommation | [Consommation](docs/consumption.md) |
-| Lire l’architecture et les résultats de recette | [Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) |
+| Besoin                                              | Guide                                                                   |
+| --------------------------------------------------- | ----------------------------------------------------------------------- |
+| Utiliser le cockpit, les profils et les validations | [Guide complet](docs/GUIDE.md)                                          |
+| Installer, créer, importer ou exporter un kit       | [Kits](docs/KITS.md)                                                    |
+| Travailler sur les pipelines et l’infrastructure    | [Kit DevOps](docs/DEVOPS-KIT.md)                                        |
+| Créer un parcours                                   | [Workflows](docs/WORKFLOWS.md)                                          |
+| Comprendre les worktrees et restaurations           | [Espaces Git](docs/WORKSPACES.md)                                       |
+| Configurer Azure DevOps et préparer une livraison   | [Livraison](docs/devops-delivery.md)                                    |
+| Connecter Copilot et des MCP                        | [Copilot](docs/COPILOT.md) · [MCP](docs/MCP.md)                         |
+| Vérifier une interface avec Playwright              | [Kit de recette](defaults/quality/README.md)                            |
+| Comprendre les mesures de consommation              | [Consommation](docs/consumption.md)                                     |
+| Lire l’architecture et les résultats de recette     | [Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) |
 
 ## Développer et vérifier
 
@@ -104,12 +106,12 @@ npm run check           # Format, TypeScript, tests et builds
 npx playwright install chromium
 npm run test:ui         # Scénarios du cockpit dans Chromium
 npm run test:extension  # Vrai hôte VS Code, profil temporaire isolé
-npm run package         # releases/feature-studio-1.0.0.vsix
+npm run package         # releases/feature-studio-1.1.0.vsix
 ```
 
 **F5 → Feature Studio** ouvre l’hôte de développement. `npm run dev` fournit le frontend ; `http://127.0.0.1:5173/?demo=1` affiche les données de démonstration. Les opérations de fichiers et l’exécution des agents nécessitent l’extension.
 
-La recette locale de v1 compte **374 tests métier réussis**, **76 scénarios d’interface** et un smoke réussi dans VS Code Insiders. Trois tests spécifiques à Windows sont ignorés sur macOS. Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les VSIX livrés possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
+La recette locale de v1.1 compte **412 tests métier réussis**, **87 scénarios d’interface** et un smoke réussi dans VS Code Insiders. Trois tests spécifiques à Windows et le contrôle explicite du catalogue CLI 1.0.96 sont ignorés dans la suite locale ; ce dernier est exécuté en CI. Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les VSIX livrés possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
 
 ## Licence et provenance
 

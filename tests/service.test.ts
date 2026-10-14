@@ -1,3 +1,4 @@
+import { featureStateKey } from '../src/shared/collaboration';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -149,6 +150,8 @@ describe('StudioService end-to-end workflow with local mocked runtime', () => {
       f.service.engine.approveStep(feature.id, step.id);
       await f.service.persist();
     }
+    expect(feature.status).toBe('awaiting_final_validation');
+    await f.service.finalizeFeature(feature.id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
     expect(await readFile(join(f.workspace, 'src/fixture.ts'), 'utf8')).toContain('42');
     expect(f.inputs.every((input) => input.settings.defaultModel === 'fixture-real-model')).toBe(
@@ -194,6 +197,8 @@ describe('StudioService end-to-end workflow with local mocked runtime', () => {
     await f.service.runStep(feature.id, 'session', 'Garde la réponse courte', true);
     f.service.engine.approveStep(feature.id, 'session');
     await f.service.persist();
+    expect(feature.status).toBe('awaiting_final_validation');
+    await f.service.finalizeFeature(feature.id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
     expect(feature.steps[0].attempts).toHaveLength(2);
     expect(feature.steps[0].attempts[0].questions).toHaveLength(1);
@@ -629,6 +634,8 @@ describe('bounded autopilot and local project memory', () => {
     const plan = feature.steps[1].attempts[0];
     await f.service.approveStep(feature.id, 'plan', plan.id, plan.revision ?? 0);
     await f.service.startAutopilot(feature.id);
+    expect(feature.status).toBe('awaiting_final_validation');
+    await f.service.finalizeFeature(feature.id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
     expect(feature.autopilot?.runs).toBe(5);
     expect(feature.autopilot?.status).toBe('completed');
@@ -665,6 +672,8 @@ describe('bounded autopilot and local project memory', () => {
     expect(feature.steps[0].status).toBe('awaiting_review');
     expect(f.inputs).toHaveLength(1);
     await f.service.startAutopilot(feature.id);
+    expect(feature.status).toBe('awaiting_final_validation');
+    await f.service.finalizeFeature(feature.id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
     expect(f.inputs).toHaveLength(1); // validation is local and allowed even at the call limit
   });
@@ -780,6 +789,8 @@ describe('host approval proofs and revision guards', () => {
     expect(feature.steps[0].status).toBe('awaiting_review');
     await writeFile(join(f.workspace, 'tests/fixture.ts'), 'initial');
     await f.service.approveStep(feature.id, 'session', attempt.id, attempt.revision ?? 0);
+    expect(feature.status).toBe('awaiting_final_validation');
+    await f.service.finalizeFeature(feature.id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
     expect(
       (await f.service.store.load()).features.find((item) => item.id === feature.id)?.status,
@@ -791,6 +802,8 @@ describe('host approval proofs and revision guards', () => {
     await f.service.saveCriteria(feature.id, [
       { id: 'criterion', text: 'Human acceptance', status: 'passed', evidence: 'Verified by Matt' },
     ]);
+    expect(feature.status).toBe('awaiting_final_validation');
+    await f.service.finalizeFeature(feature.id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
   });
 });

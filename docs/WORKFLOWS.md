@@ -1,4 +1,4 @@
-# Parcours, validation et personnalisation — v0.2
+# Parcours, validation et personnalisation
 
 Feature Studio fournit trois parcours : `feature` (specs → plan → dev → tests → review), `code-review` (review seule) et `single` (un seul agent, une conversation, un livrable ; développement par défaut). Le mode manuel reste disponible. Le pilote est local, désactivé tant que vous ne le configurez et ne le démarrez pas.
 
@@ -11,6 +11,28 @@ Les questions finales placent l'étape en `waiting_input`. Enregistrer les répo
 Relancer une étape rend tous ses dépendants transitifs `stale`, sans effacer leurs résultats historiques. Les branches indépendantes restent valides. Modifier un livrable approuvé demande une nouvelle validation. Modifier agent, modèle, effort, skills, contexte initial ou MCP après une tentative invalide aussi l'étape et ses descendants. Modifier seulement le maximum de tentatives ou `askBeforeRun` conserve les livrables.
 
 Le maximum d'une étape est compris entre 1 et 100 et ne peut descendre sous son historique enregistré. Les configurations et livrables ne se modifient pas pendant la tentative concernée ; le pilote doit être en pause avant une action manuelle concurrente. Échec, annulation et interruption conservent leurs états réels.
+
+## Corriger un compte rendu et le besoin
+
+**Modifier le compte rendu** ouvre l’édition avec aperçu, original de l’agent et historique des versions. Le besoin initial peut être corrigé dans le même écran. Une raison facultative explique le changement aux agents suivants. **Enregistrer et valider** conserve la version humaine puis applique les contrôles habituels ; **Faire réviser par l’agent** prépare une correction à partir de cette étape.
+
+Chaque version conserve son auteur et sa date. Restaurer une ancienne version prépare une nouvelle révision, sans effacer l’historique. La sauvegarde est liée à la tentative, à sa révision et à l’état de session relus : si le travail change entre-temps, elle est refusée et le brouillon reste disponible. Les verdicts structurés et les preuves de tests ne se modifient pas avec le texte.
+
+Un compte rendu modifié remet ses dépendants à actualiser. Un besoin modifié remet conservativement le parcours à revoir. Le prochain appel utilise une nouvelle conversation pour éviter de reprendre les anciennes décisions. Les étapes suivantes reçoivent la version actuellement approuvée, avec la provenance de la correction.
+
+## Demander une correction ciblée
+
+Depuis un compte rendu ou une remarque, **Demander une correction** ouvre le choix du point de départ et du retour humain. L’aperçu montre l’équipe à rejouer, les branches conservées et le contexte transmis. Le choix avancé permet plusieurs étapes de départ ; leurs dépendants communs ne sont exécutés qu’une fois par passage. La route doit repasser par l’étape de relecture d’origine.
+
+Le cycle conserve un instantané du besoin, des rapports et des remarques sélectionnées. Les anciens rapports servent à comprendre le problème et ne constituent pas une validation du travail corrigé. Les documents approuvés produits pendant le cycle deviennent le contexte courant des étapes suivantes. Les remarques restent ouvertes jusqu’à leur résolution explicite.
+
+La correction utilise le même moteur que les exécutions ordinaires et respecte les checkpoints, confirmations avant lancement, permissions, preuves et budgets. Elle enchaîne jusqu’au retour en relecture lorsque ces contrôles le permettent. Les questions, échecs, interruptions ou limites suspendent l’exécution ; aucune reprise automatique n’est lancée après un redémarrage.
+
+## Décision finale
+
+Une fois toutes les étapes approuvées et les blocages résolus, la session attend une **validation finale**. Deux actions sont proposées : **Valider définitivement** ou **Faire une correction**. Le pilote attend cette décision humaine ; l’approbation de la dernière étape ne termine pas à elle seule la session.
+
+La validation finale porte sur la version relue et revérifie les preuves contre les fichiers réels. Si les comptes rendus, critères, remarques ou fichiers ont changé, elle est refusée ou doit être refaite. Le clic réussi termine la session et déclenche la célébration avec l’équipe. La célébration peut être rejouée explicitement ; les effets peuvent être désactivés et respectent la réduction des mouvements. Les anciennes sessions sans validation finale explicite attendent cette décision lorsqu’elles sont rouvertes.
 
 ## Lancement manuel et mémoire choisie
 
@@ -34,7 +56,7 @@ Chaque correction relance la cible et invalide ses descendants. Le nombre de cyc
 
 Question, permission MCP humaine, erreur, annulation, interruption, limite atteinte, preuve absente/obsolète ou confirmation requise suspend la progression. « Demander la pause » laisse la tentative en cours terminer ; l'arrêt d'exécution l'annule. Une réponse interactive ne réactive pas le pilote : reprenez-le explicitement après l'échange.
 
-Après redémarrage, le pilote reste en pause et le CLI doit être revérifié. Une tentative `failed`, `cancelled` ou `interrupted` exige une reprise manuelle de l'étape avant de repartir en automatique. L'application ne relance pas une erreur au seul clic de démarrage du pilote. Pour terminer, toutes les étapes doivent être approuvées, les critères présents doivent être satisfaits avec une preuve renseignée et aucun commentaire bloquant ne doit rester ouvert.
+Après redémarrage, le pilote reste en pause et le CLI doit être revérifié. Une tentative `failed`, `cancelled` ou `interrupted` exige une reprise manuelle de l'étape avant de repartir en automatique. L'application ne relance pas une erreur au seul clic de démarrage du pilote. Pour préparer la décision finale, toutes les étapes doivent être approuvées, les critères présents doivent être satisfaits avec une preuve renseignée et aucun commentaire bloquant ne doit rester ouvert. **Valider définitivement** reste une action humaine séparée.
 
 ## Centre de validation et preuves
 
@@ -44,7 +66,7 @@ Une exécution `studio_run_test` conserve une preuve produite par le host : comm
 
 Le profil tests ordinaire exige au moins une vraie preuve hôte réussie pour une approbation automatique. Une validation humaine sans cette preuve reste possible si aucun autre blocage n’existe ; elle n’invente pas un test exécuté. Pour une étape avec `requiredQuality: visual` ou `requiredQuality: counterexample`, un rapport du type demandé est obligatoire pour les validations humaine **et** automatique. Les agents `fs-visual-tests` et `fs-counterexamples` gardent cette exigence même dans un parcours personnalisé. Si le contrat explicite demande un autre type que celui de l’agent, les deux rapports sont requis. Le choix apparaît dans l’éditeur de parcours sous **Rapport qualité requis**. Une simple commande réussie sans collecte qualité ne suffit pas. Le rapport doit être réussi, courant et lié à la même feature, tentative, commande et preuve hôte ; ses références de critères doivent appartenir aux critères de la feature. Une relecture automatique `review` dans `quality-feature` exige aussi le rapport structuré de review. Le rapport de review distingue `pass` et `changes_requested`, avec constats `info`, `warning` ou `blocking`. Les constats de l'agent restent des constats, pas des preuves d'exécution.
 
-Les critères sont saisis et évalués par l'humain : `pending`, `passed` ou `failed`, avec texte de preuve. Tous les critères présents sont requis pour la validation finale. Les commentaires peuvent être bloquants, associés à une tentative et éventuellement à un fichier/une ligne ; ils restent ouverts jusqu'à résolution explicite. Ajouter un critère non satisfait ou rouvrir un commentaire bloquant après complétion remet la feature en `attention` ; résoudre ces blocages rétablit `completed` lorsque toutes les étapes sont approuvées.
+Les critères sont saisis et évalués par l'humain : `pending`, `passed` ou `failed`, avec texte de preuve. Tous les critères présents sont requis pour la validation finale. Les commentaires peuvent être bloquants, associés à une tentative et éventuellement à un fichier/une ligne ; ils restent ouverts jusqu'à résolution explicite. Modifier ces critères ou commentaires après complétion oblige à refaire la validation finale ; résoudre les blocages prépare cette décision sans terminer automatiquement la session.
 
 ## Consommation et profils de modèles
 
@@ -69,12 +91,12 @@ steps:
     description: Relire le diff et les critères fournis
     agentId: fs-review
     policy: read-only
-    model: ""
+    model: ''
     skills: [ai-relecture]
     maxAttempts: 3
     artifact: review.md
     dependsOn: []
-    initialContext: "Critères et fichiers ciblés à préciser"
+    initialContext: 'Critères et fichiers ciblés à préciser'
     mcpServerIds: []
     askBeforeRun: true
 ```

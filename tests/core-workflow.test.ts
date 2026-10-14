@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { featureStateKey } from '../src/shared/collaboration';
 import { WorkflowEngine, validateWorkflow } from '../src/core/workflow';
 import type { RunResult, Workflow } from '../src/shared/types';
 
@@ -124,6 +125,8 @@ describe('workflow transitions', () => {
     complete(engine, id, 'dev');
     expect(feature.status).toBe('attention');
     complete(engine, id, 'parallel');
+    expect(feature.status).toBe('awaiting_final_validation');
+    engine.finalizeFeature(id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
   });
   it('keeps a question unanswered until it receives a real answer and reruns with history', () => {

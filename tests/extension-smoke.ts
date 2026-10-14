@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { ClientMessage, StudioState, CheckpointComparison } from '../src/shared/types';
 import type { DevOpsConfig, DevOpsState } from '../src/shared/devops';
 import { THEME_IDS, type ThemeId } from '../src/shared/themes';
+import { featureStateKey } from '../src/shared/collaboration';
 
 interface Api {
   getState(): StudioState | undefined;
@@ -279,11 +280,13 @@ export async function run(): Promise<void> {
       skills: [],
       nickname: 'Capitaine Test',
       avatar: 'captain',
+      roastLevel: 'spicy',
     },
   });
   state = api.getState()!;
   assert.equal(state.agents.find((a) => a.id === 'smoke-agent')?.nickname, 'Capitaine Test');
   assert.equal(state.agents.find((a) => a.id === 'smoke-agent')?.source, 'user');
+  assert.equal(state.agents.find((a) => a.id === 'smoke-agent')?.roastLevel, 'spicy');
   const userAgent = state.agents.find((agent) => agent.id === 'smoke-agent')!;
   assert.ok(userAgent.revision, 'The user profile has a checked source revision');
   const userAgentContent = await readFile(userAgent.path, 'utf8');
@@ -305,11 +308,17 @@ export async function run(): Promise<void> {
       skills: [],
       nickname: 'Capitaine Projet',
       avatar: 'captain',
+      roastLevel: 'light',
     },
   });
   const projectAgent = api.getState()!.agents.find((agent) => agent.id === 'smoke-agent')!;
   assert.equal(projectAgent.source, 'workspace', 'Project scope has priority over the user copy');
   assert.equal(projectAgent.nickname, 'Capitaine Projet');
+  assert.equal(projectAgent.roastLevel, 'light');
+  assert.equal(
+    projectAgent.versions?.find((version) => version.source === 'user')?.roastLevel,
+    'spicy',
+  );
   assert.equal(projectAgent.path, join(source, '.github', 'agents', 'smoke-agent.agent.md'));
   assert.equal(
     projectAgent.versions?.find((version) => version.source === 'user')?.nickname,
@@ -331,6 +340,19 @@ export async function run(): Promise<void> {
     isolated: true,
   });
   const isolated = api.getState()!.features.at(-1)!;
+  await assert.rejects(
+    api.dispatch({
+      type: 'finalizeFeature',
+      featureId: isolated.id,
+      expectedStateKey: featureStateKey(isolated),
+    }),
+    /étapes|validation|termin|valid/i,
+    'The real host refuses finalization before the work has been reviewed',
+  );
+  assert.equal(
+    api.getState()!.features.find((item) => item.id === isolated.id)?.finalValidation,
+    undefined,
+  );
   assert.ok(isolated.worktree);
   const file = join(isolated.worktree.path, 'story.txt');
   assert.equal(await readFile(file, 'utf8'), 'Committed feature context\n');
@@ -486,6 +508,6 @@ export async function run(): Promise<void> {
     'Smoke extension host',
   );
   console.log(
-    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v3 close/reopen. No paid prompt.',
+    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v4 close/reopen, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );
 }

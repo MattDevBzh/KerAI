@@ -31,7 +31,10 @@ import { runProcess, redact } from './process';
 import { emptyLaunch, previewContext, selectMemory } from '../core/context';
 import { defaultBudget, budgetBlockReason } from '../core/budgets';
 import { nextAutopilotAction } from '../core/autopilot';
-import { currentTestEvidence } from '../core/validation';
+import { currentTestEvidence, approvalBlockers } from '../core/validation';
+import { featureStateKey, finalValidationReady } from '../shared/collaboration';
+import type { CorrectionRequest, EditorialSaveOptions } from '../shared/collaboration';
+import { normalizeRoastLevel } from '../shared/roast';
 import {
   launchSchema,
   autopilotConfigSchema,
@@ -96,7 +99,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -486,7 +489,9 @@ export class StudioService extends EventEmitter {
       if (
         !sourceStep ||
         sourceStep.status !== 'approved' ||
-        sourceStep.attempts.at(-1)?.id !== entry.source.attemptId
+        sourceStep.attempts.at(-1)?.id !== entry.source.attemptId ||
+        entry.source.revision === undefined ||
+        (sourceStep.attempts.at(-1)?.revision ?? 0) !== entry.source.revision
       )
         throw new Error(
           `La mémoire « ${entry.title} » provient d’un livrable qui n’est plus validé. Révise cette entrée avant utilisation.`,
@@ -525,7 +530,12 @@ export class StudioService extends EventEmitter {
           `La mémoire « ${entry.title} » provient d’une étape que cette tentative va invalider. Désélectionne-la avant de continuer.`,
         );
     const previous = originalStep.attempts.at(-1);
-    const answerBindings = boundAnswers(previous, step.id);
+    const answerBindings = boundAnswers(
+      (previous?.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0)
+        ? previous
+        : undefined,
+      step.id,
+    );
     const attempt = {
       id: 'preview',
       startedAt: '',
@@ -538,7 +548,14 @@ export class StudioService extends EventEmitter {
       ),
       answerBindings,
       changedFiles: [],
-      ...(previous?.artifact ? { artifact: structuredClone(previous.artifact) } : {}),
+      roastLevel: normalizeRoastLevel(agent.roastLevel),
+      descriptionRevision: feature.descriptionRevision ?? 0,
+      correctionId: feature.activeCorrectionId,
+      ...(!feature.activeCorrectionId &&
+      previous?.artifact &&
+      (previous.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0)
+        ? { artifact: structuredClone(previous.artifact) }
+        : {}),
       launch: selected,
     };
     return {
@@ -554,6 +571,8 @@ export class StudioService extends EventEmitter {
       // A resumed transcript could reintroduce blocks removed from the new prompt.
       resumeSessionId:
         resume &&
+        (previous?.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0) &&
+        normalizeRoastLevel(previous?.roastLevel) === normalizeRoastLevel(agent.roastLevel) &&
         !agent.emptyContextByDefault &&
         selected.contextMode === undefined &&
         !Object.keys(selected.contextBlocks ?? {}).length
@@ -653,6 +672,7 @@ export class StudioService extends EventEmitter {
     if (blocked) throw new Error(blocked);
     const attempt = this.engine.beginRun(featureId, stepId, feedback, resume);
     if (!input.resumeSessionId) delete attempt.sessionId;
+    attempt.roastLevel = input.attempt.roastLevel;
     attempt.launch = structuredClone(input.launch!);
     attempt.memorySnapshot = structuredClone(input.memory ?? []);
     attempt.promptFingerprint = preview.fingerprint;
@@ -1063,46 +1083,121 @@ export class StudioService extends EventEmitter {
         }
     };
     ancestors(step.id);
-    const proofs = feature.steps
-      .filter((item) => related.has(item.id))
-      .flatMap((item) => {
-        const latest = item.attempts.at(-1);
-        return latest ? currentTestEvidence(latest) : [];
-      });
-    const policy = new PolicyEngine(await this.featurePath(featureId), 'read-only', []);
-    for (const evidence of proofs) {
-      if (evidence.devops) {
-        const head = await gitRead(
-          await this.featurePath(featureId),
-          ['rev-parse', '--verify', 'HEAD^{commit}'],
-          { rawOutput: true },
-        );
-        if (
-          head.code !== 0 ||
-          head.truncated ||
-          head.stdout.trim() !== evidence.devops.target.commit
-        )
-          throw new Error(
-            'Le commit local a changé depuis la vérification du test DevOps. Relance la validation.',
-          );
-      }
-      for (const [file, hash] of Object.entries(evidence.fileHashes)) {
-        let current = '<missing>';
-        try {
-          current = sha256(await readFile(await policy.resolve(file)));
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        }
-        if (current !== hash)
-          throw new Error(
-            `La preuve de test est obsolète : ${file} a changé. Relance les tests avant validation.`,
-          );
-      }
-    }
+    await this.verifyProofFiles(feature, related);
     // Recheck revision after asynchronous reads before touching the approval.
     this.assertTrusted();
+    const correctionId = feature.activeCorrectionId;
     this.engine.approveStep(featureId, stepId, actor, expectedAttemptId, expectedRevision);
+    if (correctionId && !feature.activeCorrectionId && actor === 'autopilot')
+      this.pauseAutopilot(
+        featureId,
+        'Correction relue : reprends explicitement le pilote pour les étapes hors de cette route.',
+      );
     await this.persist();
+  }
+  private async verifyProofFiles(feature: Feature, related: Set<string>): Promise<void> {
+    const root = await this.featurePath(feature.id);
+    const policy = new PolicyEngine(root, 'read-only', []);
+    for (const step of feature.steps.filter((item) => related.has(item.id))) {
+      const attempt = step.attempts.at(-1);
+      if (!attempt) continue;
+      const proofs = currentTestEvidence(attempt);
+      for (const evidence of proofs) {
+        if (evidence.devops) {
+          const head = await gitRead(root, ['rev-parse', '--verify', 'HEAD^{commit}'], {
+            rawOutput: true,
+          });
+          if (
+            head.code !== 0 ||
+            head.truncated ||
+            head.stdout.trim() !== evidence.devops.target.commit
+          )
+            throw new Error(
+              'Le commit local a changé depuis la vérification du test DevOps. Relance la validation.',
+            );
+        }
+      }
+      const snapshots = [attempt.fileHashes ?? {}, ...proofs.map((proof) => proof.fileHashes)];
+      for (const hashes of snapshots)
+        for (const [file, hash] of Object.entries(hashes)) {
+          let current = '<missing>';
+          try {
+            current = sha256(await readFile(await policy.resolve(file)));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+          if (current !== hash)
+            throw new Error(
+              `La preuve de test est obsolète : ${file} a changé. Relance les tests avant validation.`,
+            );
+        }
+    }
+  }
+  async saveArtifact(
+    featureId: string,
+    stepId: string,
+    content: string,
+    options: EditorialSaveOptions,
+  ): Promise<void> {
+    this.assertConfigurable(featureId);
+    this.engine.saveArtifact(featureId, stepId, content, options);
+    await this.persist();
+  }
+  async requestCorrection(featureId: string, request: CorrectionRequest): Promise<string> {
+    this.assertConfigurable(featureId);
+    const feature = this.engine.getFeature(featureId);
+    const cycle = this.engine.requestCorrection(featureId, request);
+    if (!feature.autopilot) {
+      feature.autopilot = {
+        checkpoints: [request.sourceStepId],
+        maxRuns: feature.budget?.maxRuns ?? defaultBudget.maxRuns,
+        maxCorrectionCycles: 3,
+        stepInputs: {},
+        status: 'idle',
+        runs: 0,
+        correctionCycles: 0,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    await this.persist();
+    // The standard pilot retains checkpoints, attempts, budgets and permission gates.
+    void this.startAutopilot(featureId).catch((error) => {
+      this.pauseAutopilot(featureId, (error as Error).message);
+      this.error(error);
+    });
+    return cycle.id;
+  }
+  async finalizeFeature(featureId: string, expectedStateKey: string): Promise<string> {
+    this.assertConfigurable(featureId);
+    return this.workspaceAction(
+      featureId,
+      'Validation définitive des preuves de la feature',
+      async () => {
+        this.assertTrusted();
+        const feature = this.engine.getFeature(featureId);
+        if (expectedStateKey !== featureStateKey(feature))
+          throw new Error(
+            'La session a changé. Relis sa version actuelle avant validation définitive.',
+          );
+        if (!finalValidationReady(feature))
+          throw new Error(
+            'Valide toutes les étapes, les critères et les remarques bloquantes avant de terminer.',
+          );
+        for (const step of feature.steps) {
+          const blockers = approvalBlockers(
+            feature,
+            { ...step, status: 'awaiting_review' },
+            'human',
+          );
+          if (blockers.length) throw new Error(`${step.name} : ${blockers.join(' ')}`);
+        }
+        await this.verifyProofFiles(feature, new Set(feature.steps.map((step) => step.id)));
+        this.assertTrusted();
+        const id = this.engine.finalizeFeature(featureId, expectedStateKey);
+        await this.persist();
+        return id;
+      },
+    );
   }
   async saveBudget(featureId: string, budget: FeatureBudget): Promise<void> {
     this.assertConfigurable(featureId);
@@ -1112,6 +1207,7 @@ export class StudioService extends EventEmitter {
   private revise(featureId: string): void {
     const feature = this.engine.getFeature(featureId);
     feature.updatedAt = new Date().toISOString();
+    delete feature.finalValidation;
     for (const step of feature.steps) {
       const attempt = step.attempts.at(-1);
       if (attempt) attempt.revision = (attempt.revision ?? 0) + 1;
@@ -1166,8 +1262,14 @@ export class StudioService extends EventEmitter {
     const parsed = memorySchema.parse({ ...entry, updatedAt: new Date().toISOString() });
     if (parsed.source) {
       const step = this.engine.getStep(parsed.source.featureId, parsed.source.stepId);
-      if (step.status !== 'approved' || step.attempts.at(-1)?.id !== parsed.source.attemptId)
+      const latest = step.attempts.at(-1);
+      if (
+        step.status !== 'approved' ||
+        latest?.id !== parsed.source.attemptId ||
+        (parsed.source.revision !== undefined && parsed.source.revision !== (latest?.revision ?? 0))
+      )
         throw new Error('Une mémoire issue d’un livrable exige sa dernière version validée.');
+      parsed.source.revision = latest.revision ?? 0;
     }
     const memory = (this.state.memory ??= []);
     const index = memory.findIndex((item) => item.id === parsed.id);

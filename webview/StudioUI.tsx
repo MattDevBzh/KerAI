@@ -68,6 +68,9 @@ const blankLaunch = (step: FeatureStep) => ({
 });
 export function attentionCount(state: StudioState) {
   return new Set([
+    ...state.features
+      .filter((f) => !f.archived && f.status === 'awaiting_final_validation')
+      .map((f) => `${f.id}:final`),
     ...(state.humanRequests ?? []).map((r) => `${r.featureId}:${r.stepId}`),
     ...state.features
       .filter((f) => !f.archived)
@@ -923,6 +926,29 @@ export function ValidationCenter({
         </label>
       </div>
       <div className="validation-grid">
+        {(filter === 'all' || filter === 'review') &&
+          state.features
+            .filter(
+              (feature) => !feature.archived && feature.status === 'awaiting_final_validation',
+            )
+            .map((feature) => (
+              <button
+                className="validation-card"
+                key={`${feature.id}-final`}
+                onClick={() => onOpen(feature.id, feature.activeStepId)}
+              >
+                <span className="validation-kind">
+                  <CheckCircle2 size={17} />
+                  Dernière validation
+                  <ArrowUpRight size={15} />
+                </span>
+                <h3>Bilan final du parcours</h3>
+                <p>{feature.title}</p>
+                <span>
+                  {feature.steps.length} étapes validées · votre décision finale est attendue
+                </span>
+              </button>
+            ))}
         {items.map(({ feature, step }) => {
           const attempt = step.attempts.at(-1);
           const blockers =
@@ -971,16 +997,22 @@ export function ValidationCenter({
           );
         })}
       </div>
-      {!items.length && (
-        <div className="evidence-empty">
-          <CheckCircle2 size={29} />
-          <h3>Le prochain mouvement est ailleurs.</h3>
-          <p>
-            Aucun livrable ne correspond à ce filtre. Les questions en direct restent accessibles
-            au-dessus.
-          </p>
-        </div>
-      )}
+      {!items.length &&
+        !(
+          (filter === 'all' || filter === 'review') &&
+          state.features.some(
+            (feature) => !feature.archived && feature.status === 'awaiting_final_validation',
+          )
+        ) && (
+          <div className="evidence-empty">
+            <CheckCircle2 size={29} />
+            <h3>Le prochain mouvement est ailleurs.</h3>
+            <p>
+              Aucun livrable ne correspond à ce filtre. Les questions en direct restent accessibles
+              au-dessus.
+            </p>
+          </div>
+        )}
     </div>
   );
 }
@@ -990,7 +1022,11 @@ export function ReviewWorkspace({
   attempt,
   state,
   dispatch,
+  onCorrection,
+  correctionDisabled = false,
 }: {
+  onCorrection?: (text: string, commentId?: string, findingId?: string) => void;
+  correctionDisabled?: boolean;
   feature: Feature;
   step: FeatureStep;
   attempt?: Attempt;
@@ -1011,6 +1047,34 @@ export function ReviewWorkspace({
   const criteriaDirty = JSON.stringify(criteria) !== JSON.stringify(feature.criteria ?? []);
   return (
     <div className="review-workspace">
+      {attempt?.review && (
+        <section className="review-report">
+          <h3>Relecture de l’agent</h3>
+          <p>{attempt.review.summary}</p>
+          {attempt.review.findings.map((finding) => (
+            <div className={`review-finding ${finding.severity}`} key={finding.id}>
+              <span>
+                {finding.message}
+                {finding.file && (
+                  <small>
+                    {finding.file}
+                    {finding.line ? `:${finding.line}` : ''}
+                  </small>
+                )}
+              </span>
+              {onCorrection && (
+                <button
+                  className="text-button"
+                  disabled={correctionDisabled}
+                  onClick={() => onCorrection(finding.message, undefined, finding.id)}
+                >
+                  Demander une correction
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
       <section>
         <div className="section-heading">
           <h3>Critères d’acceptation</h3>
@@ -1128,6 +1192,15 @@ export function ReviewWorkspace({
                 </button>
               )}
             </div>
+            {onCorrection && !c.resolved && (
+              <button
+                className="text-button"
+                disabled={correctionDisabled}
+                onClick={() => onCorrection(c.text, c.id)}
+              >
+                Demander une correction
+              </button>
+            )}
             <button
               className="text-button"
               onClick={() =>

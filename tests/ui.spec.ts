@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage, StudioState } from '../src/shared/types';
+import { featureStateKey } from '../src/shared/collaboration';
 const fresh = (): StudioState => ({
   ...structuredClone(demoState),
   runtime: {
@@ -193,31 +194,53 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
 });
-test('la relecture modifiée doit être enregistrée avant validation; confirmation explicite', async ({
+test('le compte rendu modifié est enregistré avant validation de sa révision acquittée', async ({
   page,
 }) => {
-  let state = fresh();
+  const state = fresh();
   await hosted(page, state);
   await page.locator('.session-card').filter({ hasText: 'Une palette de commandes' }).click();
-  await page.getByRole('button', { name: 'Éditer le Markdown' }).click();
-  await page.getByLabel('Contenu Markdown du livrable').fill('# Le livrable revu');
+  await page.getByRole('button', { name: 'Modifier le compte rendu' }).click();
+  await page
+    .getByRole('textbox', { name: 'Compte rendu modifié', exact: true })
+    .fill('# Le livrable revu');
   await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await page.getByRole('button', { name: 'Enregistrer et valider', exact: true }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'saveArtifact',
     content: '# Le livrable revu',
     stepId: 'design',
+    expectedRevision: 0,
   });
-  state.features[0].steps[1].attempts[0].artifact!.content = '# Le livrable revu';
-  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
-  await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Valider cette étape' }).click();
-  await expect(page.getByRole('dialog', { name: 'Valider cette étape ?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  expect((await messages(page)).some((m) => m.type === 'approveStep')).toBe(false);
+  const attempt = state.features[0].steps[1].attempts[0];
+  attempt.artifact!.content = '# Le livrable revu';
+  attempt.revision = 1;
+  await page.evaluate(
+    ({ s, id }) => {
+      window.postMessage(
+        {
+          type: 'artifactSaveResult',
+          featureId: 'command-palette',
+          stepId: 'design',
+          attemptId: id,
+          revision: 1,
+        },
+        '*',
+      );
+      window.postMessage({ type: 'state', state: s }, '*');
+    },
+    { s: state, id: attempt.id },
+  );
+  await expect
+    .poll(async () => (await messages(page)).filter((m) => m.type === 'approveStep'))
+    .toHaveLength(1);
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'approveStep',
     featureId: 'command-palette',
     stepId: 'design',
+    expectedAttemptId: attempt.id,
+    expectedRevision: 1,
   });
   await expect(page.getByText('Prêt pour votre regard.')).toBeVisible();
 });
@@ -1637,10 +1660,33 @@ test('dernière étape : afficher les blocages, un refus hôte et la confirmatio
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   step.status = 'approved';
   step.attempts[0].status = 'approved';
+  feature.status = 'awaiting_final_validation';
+  await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await expect(page.getByRole('button', { name: 'Valider définitivement' })).toBeVisible();
+  await expect(page.locator('.celebration-confetti')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Valider définitivement' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'finalizeFeature',
+    featureId: feature.id,
+  });
+  feature.finalValidation = {
+    id: 'final-legacy-path',
+    at: feature.updatedAt,
+    stateKey: featureStateKey(feature),
+    author: 'human',
+  };
   feature.status = 'completed';
   await page.evaluate((s) => window.postMessage({ type: 'state', state: s }, '*'), state);
+  await page.evaluate(
+    (featureId) =>
+      window.postMessage(
+        { type: 'featureFinalizationResult', featureId, finalizationId: 'final-legacy-path' },
+        '*',
+      ),
+    feature.id,
+  );
   await expect(
-    page.getByText('Parcours entièrement validé — session terminée', { exact: true }),
+    page.getByText('Décision finale enregistrée — session terminée', { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Valider cette étape' })).toHaveCount(0);
 });

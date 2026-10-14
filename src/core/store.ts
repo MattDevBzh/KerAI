@@ -18,6 +18,7 @@ import {
 import { defaultBudget } from './budgets';
 import { checkpointSchema, worktreeSchema } from './workspaceSchemas';
 import { qualityCommandSchema } from './qualitySchemas';
+import { ROAST_LEVELS } from '../shared/roast';
 
 export const defaultSettings: StudioSettings = {
   defaultModel: '',
@@ -41,7 +42,56 @@ const status = z.enum([
   'interrupted',
 ]);
 const artifact = z.object({ name: z.string(), content: z.string(), updatedAt: z.string() });
+const editorialVersion = z.object({
+  revision: z.number().int().nonnegative(),
+  content: z.string(),
+  at: z.string(),
+  author: z.enum(['agent', 'human']),
+  reason: z.string().optional(),
+});
+const correctionCycle = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  status: z.enum(['requested', 'running', 'interrupted', 'awaiting_review', 'completed']),
+  expectedStateKey: z.string(),
+  sourceStepId: z.string(),
+  rootStepIds: z.array(z.string()),
+  impactedStepIds: z.array(z.string()),
+  feedback: z.string(),
+  findingIds: z.array(z.string()),
+  commentIds: z.array(z.string()),
+  initialContext: z.string().optional(),
+  artifactContext: z
+    .record(
+      z.string(),
+      z.object({ enabled: z.boolean().optional(), content: z.string().optional() }),
+    )
+    .optional(),
+  snapshot: z.object({
+    description: z.string(),
+    descriptionRevision: z.number().int().nonnegative(),
+    sourceStepId: z.string(),
+    sourceAttemptId: z.string(),
+    sourceRevision: z.number().int().nonnegative(),
+    review: reviewSchema.optional(),
+    comments: z.array(commentSchema),
+    artifacts: z.array(
+      z.object({
+        stepId: z.string(),
+        stepName: z.string(),
+        attemptId: z.string(),
+        revision: z.number().int().nonnegative(),
+        status: z.string(),
+        artifact,
+      }),
+    ),
+  }),
+});
 const attempt = z.object({
+  roastLevel: z.enum(ROAST_LEVELS).optional(),
+  artifactVersions: z.array(editorialVersion).optional(),
+  descriptionRevision: z.number().int().nonnegative().optional(),
+  correctionId: z.string().optional(),
   id: z.string(),
   startedAt: z.string(),
   finishedAt: z.string().optional(),
@@ -107,6 +157,13 @@ const attempt = z.object({
 const feature = z
   .object({
     id: z.string(),
+    descriptionRevision: z.number().int().nonnegative().optional(),
+    descriptionVersions: z.array(editorialVersion).optional(),
+    corrections: z.array(correctionCycle).optional(),
+    activeCorrectionId: z.string().optional(),
+    finalValidation: z
+      .object({ id: z.string(), at: z.string(), stateKey: z.string(), author: z.literal('human') })
+      .optional(),
     title: z.string(),
     description: z.string(),
     workflowId: z.string(),
@@ -114,7 +171,7 @@ const feature = z
     createdAt: z.string(),
     updatedAt: z.string(),
     branch: z.string(),
-    status: z.enum(['draft', 'running', 'attention', 'completed']),
+    status: z.enum(['draft', 'running', 'attention', 'awaiting_final_validation', 'completed']),
     activeStepId: z.string(),
     archived: z.boolean().optional(),
     autopilot: autopilotStateSchema.optional(),
@@ -231,7 +288,7 @@ export const settingsSchema = z
   .strict();
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -244,7 +301,7 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 3;
+  schemaVersion: 4;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
@@ -265,7 +322,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 3,
+          schemaVersion: 4,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -275,9 +332,9 @@ export class Store {
     if (!raw || typeof raw !== 'object' || !('schemaVersion' in raw))
       throw new Error('Version de stockage absente.');
     const version = (raw as { schemaVersion: unknown }).schemaVersion;
-    if (version !== 0 && version !== 1 && version !== 2 && version !== 3)
+    if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4)
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    const migration = version !== 3;
+    const migration = version !== 4;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -285,7 +342,7 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
@@ -295,6 +352,10 @@ export class Store {
     const engine = new WorkflowEngine(state.features);
     let recovered = false;
     for (const item of state.features) {
+      if (item.status === 'completed' && !item.finalValidation) {
+        engine.refreshFeatureStatus(item.id);
+        recovered = true;
+      }
       if (item.autopilot?.status === 'running') {
         item.autopilot.status = 'paused';
         item.autopilot.reason =
@@ -315,7 +376,7 @@ export class Store {
     const snapshot =
       JSON.stringify(
         persistedSchema.parse({
-          schemaVersion: 3,
+          schemaVersion: 4,
           features: structuredClone(features),
           settings: structuredClone(settings),
           memory: structuredClone(memory),

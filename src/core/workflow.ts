@@ -6,6 +6,17 @@ import { launchSchema, reviewSchema } from './evolutionSchemas';
 import { approvalBlockers, featureCompletionBlockers } from './validation';
 import { defaultBudget } from './budgets';
 import { boundAnswers, sameQuestion } from './questions';
+import {
+  featureStateKey,
+  finalValidationReady,
+  previewCorrection,
+  correctionSnapshot,
+} from '../shared/collaboration';
+import type {
+  CorrectionRequest,
+  EditorialSaveOptions,
+  CorrectionCycle,
+} from '../shared/collaboration';
 
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
 export const workflowSchema = z
@@ -92,6 +103,9 @@ export class WorkflowEngine {
       id: randomUUID(),
       title: input.title.trim(),
       description: input.description,
+      descriptionRevision: 0,
+      descriptionVersions: [{ revision: 0, content: input.description, at: now, author: 'human' }],
+      corrections: [],
       workflowId: validated.id,
       workflowName: validated.name,
       createdAt: now,
@@ -134,16 +148,35 @@ export class WorkflowEngine {
     return attempt;
   }
   private touch(feature: Feature) {
+    if (feature.finalValidation && feature.finalValidation.stateKey !== featureStateKey(feature))
+      delete feature.finalValidation;
     feature.updatedAt = new Date().toISOString();
     feature.status = feature.steps.every((s) => s.status === 'approved')
       ? featureCompletionBlockers(feature).length
         ? 'attention'
-        : 'completed'
+        : feature.finalValidation
+          ? 'completed'
+          : 'awaiting_final_validation'
       : feature.steps.some((s) => s.status === 'running')
         ? 'running'
         : feature.steps.some((s) => !['pending'].includes(s.status))
           ? 'attention'
           : 'draft';
+    const correction = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
+    if (correction) {
+      if (
+        correction.impactedStepIds.every(
+          (id) => feature.steps.find((step) => step.id === id)?.status === 'approved',
+        )
+      ) {
+        correction.status = 'completed';
+        delete feature.activeCorrectionId;
+      } else if (
+        feature.steps.find((step) => step.id === correction.sourceStepId)?.status ===
+        'awaiting_review'
+      )
+        correction.status = 'awaiting_review';
+    }
     const next = feature.steps.find(
       (s) =>
         s.status !== 'approved' &&
@@ -156,6 +189,7 @@ export class WorkflowEngine {
   }
   invalidateAfterRestore(featureId: string): void {
     const feature = this.getFeature(featureId);
+    delete feature.finalValidation;
     if (feature.steps.some((step) => step.status === 'running'))
       throw new Error('Arrête la tentative avant de restaurer les fichiers.');
     for (const step of feature.steps) {
@@ -176,6 +210,7 @@ export class WorkflowEngine {
     this.touch(feature);
   }
   private invalidate(feature: Feature, stepId: string) {
+    delete feature.finalValidation;
     // Acceptance proofs apply to the feature state as a whole, not an old run.
     for (const criterion of feature.criteria ?? []) {
       criterion.status = 'pending';
@@ -207,6 +242,8 @@ export class WorkflowEngine {
     if (step.attempts.length >= step.maxAttempts)
       throw new Error('Nombre maximal de tentatives atteint.');
     const previous = step.attempts.at(-1);
+    if (resume && (previous?.descriptionRevision ?? 0) !== (feature.descriptionRevision ?? 0))
+      throw new Error('Le besoin initial a changé : lance une nouvelle session Copilot.');
     if (
       resume &&
       (!previous?.sessionId ||
@@ -218,7 +255,12 @@ export class WorkflowEngine {
     if (resume && previous!.questions.some((q) => !previous!.answers[q.id]?.trim()))
       throw new Error('Répondre aux questions avant de reprendre.');
     this.invalidate(feature, step.id);
-    const answerBindings = boundAnswers(previous, step.id);
+    const answerBindings = boundAnswers(
+      (previous?.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0)
+        ? previous
+        : undefined,
+      step.id,
+    );
     const attempt: Attempt = {
       id: randomUUID(),
       startedAt: new Date().toISOString(),
@@ -233,9 +275,17 @@ export class WorkflowEngine {
       answerBindings,
       changedFiles: [],
       revision: 0,
-      ...(previous?.artifact ? { artifact: structuredClone(previous.artifact) } : {}),
+      descriptionRevision: feature.descriptionRevision ?? 0,
+      ...(feature.activeCorrectionId ? { correctionId: feature.activeCorrectionId } : {}),
+      ...(!feature.activeCorrectionId &&
+      previous?.artifact &&
+      (previous.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0)
+        ? { artifact: structuredClone(previous.artifact) }
+        : {}),
       ...(resume ? { sessionId: previous!.sessionId } : {}),
     };
+    const correction = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
+    if (correction) correction.status = 'running';
     step.attempts.push(attempt);
     step.status = 'running';
     feature.activeStepId = step.id;
@@ -295,6 +345,14 @@ export class WorkflowEngine {
       },
       revision: (attempt.revision ?? 0) + 1,
     });
+    attempt.artifactVersions = [
+      {
+        revision: attempt.revision ?? 0,
+        content: result.content,
+        at: attempt.finishedAt!,
+        author: 'agent',
+      },
+    ];
     step.status = attempt.status = questions.some((q) => !attempt.answers[q.id]?.trim())
       ? 'waiting_input'
       : 'awaiting_review';
@@ -313,6 +371,8 @@ export class WorkflowEngine {
     step.status = attempt.status = status;
     attempt.error = error;
     attempt.finishedAt = new Date().toISOString();
+    const correction = feature.corrections?.find((item) => item.id === attempt.correctionId);
+    if (correction) correction.status = 'interrupted';
     this.touch(feature);
   }
   failRun(featureId: string, stepId: string, error: string) {
@@ -348,22 +408,142 @@ export class WorkflowEngine {
     attempt.approvedBy = actor;
     this.touch(feature);
   }
-  saveArtifact(featureId: string, stepId: string, content: string) {
+  saveArtifact(featureId: string, stepId: string, content: string, options?: EditorialSaveOptions) {
     const [feature, step] = this.pair(featureId, stepId),
       attempt = this.latest(step);
+    if (feature.archived) throw new Error('La session est archivée.');
     if (feature.steps.some((s) => s.status === 'running'))
       throw new Error('Arrêter la tentative avant de modifier un livrable.');
-    if (!['awaiting_review', 'waiting_input', 'approved'].includes(step.status))
+    if (!['awaiting_review', 'waiting_input', 'approved', 'stale'].includes(step.status))
       throw new Error('Ce livrable ne peut pas être modifié dans cet état.');
-    attempt.artifact = { name: step.artifact, content, updatedAt: new Date().toISOString() };
-    attempt.revision = (attempt.revision ?? 0) + 1;
-    this.invalidate(feature, step.id);
-    if (step.status === 'approved') {
-      step.status = attempt.status = 'awaiting_review';
-      delete attempt.approvedAt;
-      delete attempt.approvedBy;
+    if (
+      options &&
+      (options.expectedAttemptId !== attempt.id ||
+        options.expectedRevision !== (attempt.revision ?? 0) ||
+        options.expectedStateKey !== featureStateKey(feature))
+    )
+      throw new Error(
+        'Enregistrement obsolète : la session ou le compte rendu a changé. Recharge sa version actuelle.',
+      );
+    const now = new Date().toISOString();
+    const descriptionChanged =
+      options?.description !== undefined && options.description !== feature.description;
+    const contentChanged = content !== attempt.artifact?.content;
+    if (!descriptionChanged && !contentChanged) return;
+    if (!attempt.artifactVersions?.length && attempt.artifact)
+      attempt.artifactVersions = [
+        {
+          revision: attempt.revision ?? 0,
+          content: attempt.artifact.content,
+          at: attempt.artifact.updatedAt,
+          author: 'agent',
+        },
+      ];
+    if (contentChanged) {
+      attempt.revision = (attempt.revision ?? 0) + 1;
+      attempt.artifact = { name: step.artifact, content, updatedAt: now };
+      attempt.artifactVersions ??= [];
+      attempt.artifactVersions.push({
+        revision: attempt.revision,
+        content,
+        at: now,
+        author: 'human',
+        reason: options?.reason,
+      });
+      this.invalidate(feature, step.id);
+      if (step.status === 'approved') {
+        step.status = attempt.status = 'awaiting_review';
+        delete attempt.approvedAt;
+        delete attempt.approvedBy;
+      }
+    }
+    if (descriptionChanged) {
+      feature.descriptionVersions ??= [
+        {
+          revision: feature.descriptionRevision ?? 0,
+          content: feature.description,
+          at: feature.createdAt,
+          author: 'human',
+        },
+      ];
+      feature.descriptionRevision = (feature.descriptionRevision ?? 0) + 1;
+      feature.description = options!.description!;
+      feature.descriptionVersions.push({
+        revision: feature.descriptionRevision,
+        content: feature.description,
+        at: now,
+        author: 'human',
+        reason: options?.reason,
+      });
+      for (const candidate of feature.steps) {
+        this.invalidate(feature, candidate.id);
+        if (candidate.attempts.length) candidate.status = 'stale';
+      }
+      if (feature.activeCorrectionId) {
+        const cycle = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
+        if (cycle) cycle.status = 'interrupted';
+        delete feature.activeCorrectionId;
+      }
+      if (feature.autopilot) {
+        feature.autopilot.status = 'paused';
+        feature.autopilot.reason =
+          'Besoin initial révisé : nouvelles sessions Copilot et revalidation du parcours requises.';
+        feature.autopilot.updatedAt = now;
+      }
     }
     this.touch(feature);
+  }
+  requestCorrection(featureId: string, request: CorrectionRequest): CorrectionCycle {
+    const feature = this.getFeature(featureId);
+    const preview = previewCorrection(feature, request);
+    if (preview.errors.length) throw new Error(preview.errors.join(' '));
+    const cycle: CorrectionCycle = {
+      ...structuredClone(request),
+      rootStepIds: preview.rootStepIds,
+      id: randomUUID(),
+      createdAt: new Date().toISOString(),
+      status: 'requested',
+      impactedStepIds: preview.impactedStepIds,
+      snapshot: correctionSnapshot(feature, request.sourceStepId)!,
+    };
+    for (const root of cycle.rootStepIds) this.invalidate(feature, root);
+    for (const step of feature.steps)
+      if (cycle.impactedStepIds.includes(step.id) && step.attempts.length) step.status = 'stale';
+    feature.corrections ??= [];
+    feature.corrections.push(cycle);
+    feature.activeCorrectionId = cycle.id;
+    this.touch(feature);
+    return cycle;
+  }
+  finalizeFeature(featureId: string, expectedStateKey: string): string {
+    const feature = this.getFeature(featureId);
+    if (expectedStateKey !== featureStateKey(feature))
+      throw new Error(
+        'La session a changé. Relis sa version actuelle avant validation définitive.',
+      );
+    if (feature.finalValidation) throw new Error('Cette session est déjà validée définitivement.');
+    if (!finalValidationReady(feature))
+      throw new Error(
+        'Valide toutes les étapes, les critères et les remarques bloquantes avant de terminer.',
+      );
+    const id = randomUUID();
+    feature.finalValidation = {
+      id,
+      at: new Date().toISOString(),
+      stateKey: expectedStateKey,
+      author: 'human',
+    };
+    const correction = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
+    if (correction) correction.status = 'completed';
+    delete feature.activeCorrectionId;
+    if (feature.autopilot) {
+      feature.autopilot.status = 'completed';
+      feature.autopilot.reason = 'Validation définitive humaine enregistrée.';
+      feature.autopilot.updatedAt = new Date().toISOString();
+    }
+    feature.finalValidation.stateKey = featureStateKey(feature);
+    this.touch(feature);
+    return id;
   }
   answerQuestions(featureId: string, stepId: string, answers: Record<string, string>) {
     const [feature, step] = this.pair(featureId, stepId),

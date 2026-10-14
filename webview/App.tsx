@@ -1,9 +1,18 @@
 import { usageCredits } from '../src/shared/credits';
+import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
+import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
 import { ThemePicker } from './ThemePicker';
 import { KitsUI } from './KitsUI';
 import { UsageDashboard } from './UsageDashboard';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
 import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
+import {
+  ROAST_LEVELS,
+  normalizeRoastLevel,
+  roastInstructions,
+  roastLabel,
+  type RoastLevel,
+} from '../src/shared/roast';
 import { DevOpsUI, DevOpsFeatureLinks } from './DevOpsUI';
 import { DevOpsDashboard } from './DevOpsDashboard';
 import type { DevOpsState } from '../src/shared/devops';
@@ -121,6 +130,7 @@ const featureStatus: Record<Feature['status'], { label: string; tone: string }> 
   draft: { label: 'À démarrer', tone: 'neutral' },
   running: { label: 'En cours', tone: 'lavender' },
   attention: { label: 'À votre tour', tone: 'apricot' },
+  awaiting_final_validation: { label: 'Dernière validation', tone: 'apricot' },
   completed: { label: 'Terminée', tone: 'green' },
 };
 const policyLabels = {
@@ -286,6 +296,12 @@ export default function App() {
   const [featureId, setFeatureId] = useState(initialView.featureId ?? '');
   const [stepId, setStepId] = useState(initialView.stepId ?? '');
   const [create, setCreate] = useState(false);
+  const [draftDirty, setDraftDirty] = useState(false);
+  const draftDirtyRef = useRef(false);
+  const updateDraftDirty = (value: boolean) => {
+    draftDirtyRef.current = value;
+    setDraftDirty(value);
+  };
   const [workflowId, setWorkflowId] = useState('');
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [confirm, setConfirm] = useState<{
@@ -302,6 +318,13 @@ export default function App() {
       else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
       else if (message.type === 'navigate') {
+        if (draftDirtyRef.current) {
+          setNotice({
+            text: 'Enregistrez le brouillon du compte rendu avant de changer de page.',
+            error: true,
+          });
+          return;
+        }
         setView('dashboard');
         setFeatureId(message.featureId ?? '');
         setCreate(message.view === 'create');
@@ -322,6 +345,8 @@ export default function App() {
         'startAutopilot',
         'configureStep',
         'saveArtifact',
+        'requestCorrection',
+        'finalizeFeature',
         'approveStep',
         'archiveFeature',
         'deliveryExecute',
@@ -336,6 +361,26 @@ export default function App() {
       return;
     }
     if (isDemo) {
+      if (
+        ['saveArtifact', 'requestCorrection', 'finalizeFeature'].includes(message.type) &&
+        'featureId' in message
+      ) {
+        window.postMessage(
+          {
+            type:
+              message.type === 'saveArtifact'
+                ? 'artifactSaveResult'
+                : message.type === 'requestCorrection'
+                  ? 'correctionResult'
+                  : 'featureFinalizationResult',
+            featureId: message.featureId,
+            ...('stepId' in message ? { stepId: message.stepId } : {}),
+            error:
+              'Mode démonstration : ouvrez le cockpit dans VS Code pour enregistrer cette décision.',
+          },
+          '*',
+        );
+      }
       if (message.type.startsWith('kit') && 'requestId' in message) {
         window.postMessage(
           {
@@ -372,6 +417,13 @@ export default function App() {
     setCreate(true);
   };
   const chooseView = (id: View) => {
+    if (draftDirty) {
+      setNotice({
+        text: 'Enregistrez le brouillon du compte rendu avant de changer de page.',
+        error: true,
+      });
+      return;
+    }
     setView(id);
     setFeatureId('');
   };
@@ -583,9 +635,14 @@ export default function App() {
                 devops={devops}
                 openDevOps={() => chooseView('devops')}
                 stepId={stepId}
-                selectStep={setStepId}
+                selectStep={(id) => {
+                  if (!draftDirty) setStepId(id);
+                }}
+                onDirtyChange={updateDraftDirty}
                 dispatch={dispatch}
-                back={() => setFeatureId('')}
+                back={() => {
+                  if (!draftDirty) setFeatureId('');
+                }}
                 confirm={(title, description, action) => setConfirm({ title, description, action })}
               />
             ) : (
@@ -675,6 +732,9 @@ export default function App() {
                       <ArrowUpRight size={16} />
                     </span>
                     <h3>{a.nickname || a.name}</h3>
+                    {normalizeRoastLevel(a.roastLevel) !== 'off' && (
+                      <span className="profile-role">Roast · {roastLabel(a.roastLevel)}</span>
+                    )}
                     <p>
                       {a.nickname && <span className="profile-role">{a.name}</span>}
                       {a.description}
@@ -850,7 +910,9 @@ function Dashboard({
         `${f.title} ${f.description} ${f.branch}`.toLowerCase().includes(search.toLowerCase())) &&
       (filter === 'all' || f.status === filter),
   );
-  const waiting = live.filter((f) => f.status === 'attention').length;
+  const waiting = live.filter((f) =>
+    ['attention', 'awaiting_final_validation'].includes(f.status),
+  ).length;
   const approved = live.filter((f) => f.status === 'completed').length;
   return (
     <div className="page dashboard-page">
@@ -940,6 +1002,7 @@ function Dashboard({
               >
                 <option value="all">Tous les états</option>
                 <option value="attention">À votre tour</option>
+                <option value="awaiting_final_validation">Dernière validation</option>
                 <option value="running">En cours</option>
                 <option value="draft">À démarrer</option>
                 <option value="completed">Terminées</option>
@@ -954,7 +1017,7 @@ function Dashboard({
               const active = f.steps.find((s) => s.id === f.activeStepId);
               return (
                 <button
-                  className={`session-card ${f.status === 'attention' ? 'needs-attention' : ''}`}
+                  className={`session-card ${['attention', 'awaiting_final_validation'].includes(f.status) ? 'needs-attention' : ''}`}
                   onClick={() => onOpen(f.id)}
                   key={f.id}
                 >
@@ -989,7 +1052,9 @@ function Dashboard({
                     <span>
                       {f.status === 'completed'
                         ? `${approved} / ${f.steps.length} étapes`
-                        : (active?.name ?? 'Préparation')}
+                        : f.status === 'awaiting_final_validation'
+                          ? 'Valider le bilan final'
+                          : (active?.name ?? 'Préparation')}
                       <ArrowRight size={16} />
                     </span>
                   </div>
@@ -1303,7 +1368,9 @@ function FeatureDetail({
   dispatch,
   back,
   confirm,
+  onDirtyChange,
 }: {
+  onDirtyChange: (dirty: boolean) => void;
   feature: Feature;
   state: StudioState;
   devops: DevOpsState;
@@ -1319,10 +1386,77 @@ function FeatureDetail({
     feature.steps.find((s) => s.id === feature.activeStepId) ??
     feature.steps[0];
   const done = feature.steps.filter((s) => s.status === 'approved').length;
+  const [correction, setCorrection] = useState<{
+    sourceStepId: string;
+    feedback: string;
+    findingIds?: string[];
+    commentIds?: string[];
+    rootStepIds?: string[];
+  } | null>(null);
+  const [finalPending, setFinalPending] = useState(false),
+    [finalError, setFinalError] = useState(''),
+    [finalAck, setFinalAck] = useState('');
+  const finalRequested = useRef(false);
+  const [celebrationToken, setCelebrationToken] = useState('');
+  const [detailDirty, setDetailDirty] = useState(false);
+  const finalKey = useRef('');
+  const busy =
+    hasActiveRun(state) ||
+    Boolean(state.workspaceOperation) ||
+    state.features.some((item) => item.autopilot?.status === 'running');
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (
+          message.type !== 'featureFinalizationResult' ||
+          message.featureId !== feature.id ||
+          !finalRequested.current
+        )
+          return;
+        finalRequested.current = false;
+        if (message.error) {
+          setFinalPending(false);
+          setFinalError(message.error);
+        } else if (message.finalizationId) setFinalAck(message.finalizationId);
+      }),
+    [feature.id],
+  );
+  useEffect(() => {
+    if (finalAck && feature.finalValidation?.id === finalAck) {
+      setFinalPending(false);
+      setCelebrationToken(finalAck);
+      setFinalAck('');
+    }
+  }, [finalAck, feature.finalValidation?.id]);
+  const openCorrection = (
+    sourceStepId: string,
+    feedback = '',
+    findingIds?: string[],
+    commentIds?: string[],
+    rootStepIds?: string[],
+  ) => setCorrection({ sourceStepId, feedback, findingIds, commentIds, rootStepIds });
+
   return (
     <div className="page feature-page">
+      {correction && (
+        <Modal
+          title="Demander une correction"
+          subtitle="Choisissez les étapes et le contexte pour guider l’équipe."
+          wide
+          onClose={() => setCorrection(null)}
+        >
+          <CorrectionPanel
+            feature={feature}
+            state={state}
+            {...correction}
+            initialFeedback={correction.feedback}
+            dispatch={dispatch}
+            onClose={() => setCorrection(null)}
+          />
+        </Modal>
+      )}
       <div className="breadcrumb">
-        <button onClick={back}>
+        <button onClick={back} disabled={detailDirty}>
           <ArrowLeft size={14} /> Vos sessions
         </button>
         <ChevronRight size={12} />
@@ -1389,6 +1523,7 @@ function FeatureDetail({
         {feature.steps.map((s, i) => (
           <button
             key={s.id}
+            disabled={detailDirty}
             onClick={() => selectStep(s.id)}
             className={`journey-step ${s.status} ${s.id === step?.id ? 'current' : ''}`}
             aria-current={s.id === step?.id ? 'step' : undefined}
@@ -1415,6 +1550,38 @@ function FeatureDetail({
           </button>
         ))}
       </div>
+      {done === feature.steps.length && feature.steps.length > 0 && (
+        <FinalSummary
+          feature={feature}
+          state={state}
+          busy={busy || finalPending || detailDirty}
+          error={finalError}
+          finalized={feature.status === 'completed' && Boolean(feature.finalValidation)}
+          token={feature.finalValidation?.id === celebrationToken ? celebrationToken : ''}
+          onFinalize={() => {
+            if (!finalValidationReady(feature)) return;
+            finalKey.current = featureStateKey(feature);
+            finalRequested.current = true;
+            setFinalPending(true);
+            setFinalError('');
+            dispatch({
+              type: 'finalizeFeature',
+              featureId: feature.id,
+              expectedStateKey: finalKey.current,
+            });
+          }}
+          onCorrection={() => {
+            const source = [...feature.steps]
+              .reverse()
+              .find((item) => item.attempts.at(-1)?.artifact);
+            if (source) openCorrection(source.id);
+            else
+              setFinalError(
+                'Aucun compte rendu conservé dans cette ancienne session. Ouvrez une nouvelle session pour poursuivre.',
+              );
+          }}
+        />
+      )}
       {step ? (
         <StepPanel
           key={`${feature.id}-${step.id}`}
@@ -1423,6 +1590,11 @@ function FeatureDetail({
           state={state}
           dispatch={dispatch}
           selectStep={selectStep}
+          onDirtyChange={(value) => {
+            setDetailDirty(value);
+            onDirtyChange(value);
+          }}
+          onCorrection={openCorrection}
           confirm={confirm}
         />
       ) : (
@@ -1438,7 +1610,17 @@ function StepPanel({
   dispatch,
   selectStep,
   confirm,
+  onDirtyChange,
+  onCorrection,
 }: {
+  onDirtyChange: (dirty: boolean) => void;
+  onCorrection: (
+    sourceStepId: string,
+    feedback?: string,
+    findingIds?: string[],
+    commentIds?: string[],
+    rootStepIds?: string[],
+  ) => void;
   feature: Feature;
   step: FeatureStep;
   state: StudioState;
@@ -1456,7 +1638,99 @@ function StepPanel({
   const [edit, setEdit] = useState(false);
   const [content, setContent] = useState(latest?.artifact?.content ?? '');
   const [savedContent, setSavedContent] = useState(latest?.artifact?.content ?? '');
-  const dirty = content !== savedContent;
+  const [reason, setReason] = useState(''),
+    [description, setDescription] = useState(feature.description),
+    [descriptionChanged, setDescriptionChanged] = useState(false);
+  const editStateKey = useRef(featureStateKey(feature));
+  const editAttemptId = useRef(latest?.id);
+  const editRevision = useRef(latest?.revision ?? 0);
+  const dirty =
+    content !== savedContent || (descriptionChanged && description !== feature.description);
+  const [savePending, setSavePending] = useState(false),
+    [saveError, setSaveError] = useState('');
+  const [saveAck, setSaveAck] = useState<{ revision: number; action: 'approve' | 'review' } | null>(
+    null,
+  );
+  const saveAction = useRef<'approve' | 'review' | null>(null);
+  const savedBriefChanged = useRef(false);
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [dirty]);
+  useEffect(() => {
+    onDirtyChange(dirty || savePending);
+    return () => onDirtyChange(false);
+  }, [dirty, savePending]);
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (
+          message.type !== 'artifactSaveResult' ||
+          message.featureId !== feature.id ||
+          message.stepId !== step.id ||
+          !saveAction.current
+        )
+          return;
+        const action = saveAction.current;
+        saveAction.current = null;
+        if (message.error) {
+          setSavePending(false);
+          setSaveError(message.error);
+        } else if (message.attemptId === latest?.id && message.revision !== undefined)
+          setSaveAck({ revision: message.revision, action });
+      }),
+    [feature.id, step.id, latest?.id],
+  );
+  useEffect(() => {
+    if (!saveAck || latest?.revision !== saveAck.revision) return;
+    setSavePending(false);
+    setSaveAck(null);
+    setSavedContent(latest.artifact?.content ?? '');
+    setDescriptionChanged(false);
+    setEdit(false);
+    if (saveAck.action === 'review')
+      onCorrection(
+        step.id,
+        reason.trim() || 'Relire et prendre en compte le compte rendu corrigé par Matt.',
+        [],
+        [],
+        savedBriefChanged.current
+          ? feature.steps.filter((item) => item.dependsOn.length === 0).map((item) => item.id)
+          : [step.id],
+      );
+    else {
+      setApprovalPending(true);
+      dispatch({
+        type: 'approveStep',
+        featureId: feature.id,
+        stepId: step.id,
+        expectedAttemptId: latest.id,
+        expectedRevision: latest.revision,
+      });
+    }
+  }, [saveAck, latest?.revision]);
+  const saveReport = (action: 'approve' | 'review') => {
+    if (!latest) return;
+    setSavePending(true);
+    setSaveError('');
+    saveAction.current = action;
+    savedBriefChanged.current = descriptionChanged && description !== feature.description;
+    dispatch({
+      type: 'saveArtifact',
+      featureId: feature.id,
+      stepId: step.id,
+      content,
+      expectedAttemptId: editAttemptId.current,
+      expectedRevision: editRevision.current,
+      expectedStateKey: editStateKey.current,
+      ...(descriptionChanged ? { description } : {}),
+      ...(reason.trim() ? { reason: reason.trim() } : {}),
+    });
+  };
   const [feedback, setFeedback] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [config, setConfig] = useState(false);
@@ -1492,7 +1766,10 @@ function StepPanel({
       setSavedContent(received);
     }
   }, [latest?.artifact?.content, dirty, content]);
-  const running = hasActiveRun(state) || Boolean(state.workspaceOperation);
+  const running =
+    hasActiveRun(state) ||
+    Boolean(state.workspaceOperation) ||
+    state.features.some((item) => item.autopilot?.status === 'running');
   const unlocked = step.dependsOn.every(
     (id) => feature.steps.find((s) => s.id === id)?.status === 'approved',
   );
@@ -1565,7 +1842,7 @@ function StepPanel({
           </div>
           <button
             className="text-button"
-            disabled={running || Boolean(feature.archived)}
+            disabled={running || dirty || Boolean(feature.archived)}
             onClick={() => setConfig(!config)}
             aria-expanded={config}
           >
@@ -1672,6 +1949,15 @@ function StepPanel({
               attempt={attempt}
               state={state}
               dispatch={dispatch}
+              onCorrection={(text, commentId, findingId) =>
+                onCorrection(
+                  step.id,
+                  text,
+                  findingId ? [findingId] : [],
+                  commentId ? [commentId] : [],
+                )
+              }
+              correctionDisabled={running || dirty || historic || Boolean(feature.archived)}
             />
           )}
           {tab === 'artifact' &&
@@ -1686,46 +1972,112 @@ function StepPanel({
                   {!historic && (
                     <button
                       className="text-button"
-                      disabled={running}
-                      onClick={() => setEdit(!edit)}
+                      disabled={running || savePending || Boolean(feature.archived)}
+                      onClick={() => {
+                        if (!edit && !dirty) {
+                          editStateKey.current = featureStateKey(feature);
+                          editAttemptId.current = latest?.id;
+                          editRevision.current = latest?.revision ?? 0;
+                          setDescription(feature.description);
+                          setSaveError('');
+                        }
+                        setEdit(!edit);
+                      }}
                     >
-                      {edit ? 'Aperçu' : 'Éditer le Markdown'} <Code2 size={13} />
+                      {edit ? 'Fermer l’éditeur' : 'Modifier le compte rendu'} <Code2 size={13} />
                     </button>
                   )}
                 </div>
+                {!historic && (
+                  <button
+                    className="text-button report-correction-button"
+                    disabled={
+                      running ||
+                      dirty ||
+                      Boolean(feature.archived) ||
+                      !['approved', 'awaiting_review', 'stale'].includes(step.status)
+                    }
+                    onClick={() => onCorrection(step.id, feedback || latest?.review?.summary || '')}
+                  >
+                    <RefreshCw size={14} />
+                    Demander une correction
+                  </button>
+                )}
                 {edit && !historic ? (
-                  <div className="artifact-editor">
-                    <label className="sr-only" htmlFor="artifact-content">
-                      Contenu Markdown du livrable
-                    </label>
-                    <textarea
-                      id="artifact-content"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      spellCheck={false}
-                    />
-                    <div className="editor-footer">
-                      <span>
-                        {dirty
-                          ? 'Modifications non enregistrées'
-                          : 'Contenu enregistré dans le livrable'}
-                      </span>
-                      <button
-                        className="button primary small"
-                        disabled={!dirty || running}
-                        onClick={() =>
-                          dispatch({
-                            type: 'saveArtifact',
-                            featureId: feature.id,
-                            stepId: step.id,
-                            content,
-                          })
-                        }
-                      >
-                        Enregistrer
-                      </button>
-                    </div>
-                  </div>
+                  <ReportEditor
+                    content={content}
+                    onChange={setContent}
+                    reason={reason}
+                    onReason={setReason}
+                    original={
+                      latest?.artifactVersions?.find((v) => v.author === 'agent')?.content ??
+                      latest?.artifact?.content ??
+                      ''
+                    }
+                    descriptionVersions={feature.descriptionVersions}
+                    description={description}
+                    onDescription={setDescription}
+                    descriptionChanged={descriptionChanged}
+                    onDescriptionChanged={setDescriptionChanged}
+                    versions={(latest?.artifactVersions ?? [])
+                      .filter((v) => v.author === 'human')
+                      .map((version) => {
+                        const previous = latest?.artifactVersions
+                          ?.filter((v) => v.revision < version.revision)
+                          .at(-1);
+                        return {
+                          id: String(version.revision),
+                          label: `Version ${version.revision + 1} · ${date(version.at)}`,
+                          before: previous?.content ?? '',
+                          after: version.content,
+                          reason: version.reason,
+                        };
+                      })}
+                    busy={running || savePending}
+                    error={saveError}
+                    dirty={dirty}
+                    currentContent={latest?.artifact?.content ?? ''}
+                    refreshBaseline={() => {
+                      editStateKey.current = featureStateKey(feature);
+                      editAttemptId.current = latest?.id;
+                      editRevision.current = latest?.revision ?? 0;
+                      setSavedContent(latest?.artifact?.content ?? '');
+                      setSaveError('');
+                    }}
+                    discard={() =>
+                      confirm(
+                        'Abandonner ce brouillon ?',
+                        'Les modifications non enregistrées de ce compte rendu et du besoin seront abandonnées.',
+                        () => {
+                          setContent(latest?.artifact?.content ?? '');
+                          setSavedContent(latest?.artifact?.content ?? '');
+                          setDescription(feature.description);
+                          setDescriptionChanged(false);
+                          setSaveError('');
+                          setEdit(false);
+                        },
+                      )
+                    }
+                    blockers={[
+                      ...approvalBlockers(feature, { ...step, status: 'awaiting_review' }, 'human'),
+                      ...(running
+                        ? [
+                            state.workspaceOperation?.label ??
+                              (state.features.some((item) => item.autopilot?.status === 'running')
+                                ? 'Arrêtez le pilote avant de modifier le compte rendu.'
+                                : 'Attendez la fin de l’exécution en cours.'),
+                          ]
+                        : []),
+                      ...(!content.trim() ? ['Un compte rendu non vide est nécessaire.'] : []),
+                      ...(descriptionChanged && description !== feature.description
+                        ? [
+                            'Le besoin modifié rend les étapes précédentes à revoir. Faites réviser par l’agent pour reprendre le parcours depuis le début.',
+                          ]
+                        : []),
+                    ]}
+                    save={() => saveReport('approve')}
+                    review={() => saveReport('review')}
+                  />
                 ) : (
                   <article className="markdown">
                     <Markdown
@@ -1955,8 +2307,8 @@ function StepPanel({
                   <div className="completion-note">
                     <CheckCircle2 size={18} />{' '}
                     {feature.status === 'completed'
-                      ? 'Parcours entièrement validé — session terminée'
-                      : `Étape validée. ${featureCompletionBlockers(feature).join(' ') || 'D’autres étapes restent à valider.'}`}
+                      ? 'Décision finale enregistrée — session terminée'
+                      : `Étape validée. ${featureCompletionBlockers(feature).join(' ') || (feature.steps.every((item) => item.status === 'approved') ? 'Le bilan final attend votre décision.' : 'D’autres étapes restent à valider.')}`}
                   </div>
                 )}
                 <button
@@ -2032,7 +2384,7 @@ function StepPanel({
                   ['failed', 'cancelled', 'interrupted', 'waiting_input'].includes(step.status) && (
                     <button
                       className="button secondary"
-                      disabled={!canRun || unanswered.length > 0}
+                      disabled={!canRun || dirty || unanswered.length > 0}
                       onClick={() => run(true)}
                     >
                       <RefreshCw size={15} /> Reprendre la session
@@ -2087,6 +2439,7 @@ function StepPanel({
                 <button
                   key={a.id}
                   className={a.id === attempt?.id ? 'active' : ''}
+                  disabled={dirty || savePending}
                   onClick={() => {
                     setAttemptId(a.id);
                     setEdit(false);
@@ -2386,6 +2739,7 @@ function AgentEditor({
   const [emptyContextByDefault, setEmptyContextByDefault] = useState(
     source?.emptyContextByDefault ?? false,
   );
+  const [roastLevel, setRoastLevel] = useState<RoastLevel>(normalizeRoastLevel(source?.roastLevel));
   const [scope, setScope] = useState<ProfileScope>(
     source?.source === 'workspace' ? 'workspace' : 'user',
   );
@@ -2406,6 +2760,7 @@ function AgentEditor({
             model: string;
             skills: string[];
             emptyContextByDefault: boolean;
+            roastLevel: RoastLevel;
           };
           origin: typeof source;
         }
@@ -2434,6 +2789,7 @@ function AgentEditor({
         model,
         skills,
         emptyContextByDefault,
+        roastLevel,
       },
       origin,
     };
@@ -2448,6 +2804,7 @@ function AgentEditor({
         tools: existing.tools.join(', '),
         model: existing.model ?? '',
         emptyContextByDefault: existing.emptyContextByDefault ?? false,
+        roastLevel: normalizeRoastLevel(existing.roastLevel),
       });
     if (chosen) {
       setId(chosen.id);
@@ -2460,6 +2817,7 @@ function AgentEditor({
       setModel(chosen.model);
       setSkills(chosen.skills);
       setEmptyContextByDefault(chosen.emptyContextByDefault);
+      setRoastLevel(chosen.roastLevel);
     }
     setOrigin(cached ? cached.origin : (existing ?? origin));
     setScope(next);
@@ -2501,6 +2859,7 @@ function AgentEditor({
                 nickname: nickname.trim() || undefined,
                 avatar,
                 emptyContextByDefault,
+                roastLevel,
               },
               profileOptions(scope, target, origin ?? undefined),
               requestId,
@@ -2617,6 +2976,31 @@ function AgentEditor({
             </label>
             <ModelSelect state={state} value={model} onChange={setModel} />
           </div>
+          <label className="field">
+            <span>Mode roast</span>
+            <select
+              aria-label="Mode roast"
+              value={roastLevel}
+              onChange={(e) => setRoastLevel(e.target.value as RoastLevel)}
+            >
+              {ROAST_LEVELS.map((level) => (
+                <option value={level} key={level}>
+                  {roastLabel(level)}
+                </option>
+              ))}
+            </select>
+            <small>
+              Un ton complice pour ses comptes rendus : les piques visent les choix et le code. Les
+              documents du projet restent professionnels. Le niveau est fixé au lancement ; les
+              anciens rapports restent tels quels.
+            </small>
+          </label>
+          {roastLevel !== 'off' && (
+            <details>
+              <summary>Aperçu des consignes roast · {roastLabel(roastLevel)}</summary>
+              <pre style={{ whiteSpace: 'pre-wrap' }}>{roastInstructions(roastLevel)}</pre>
+            </details>
+          )}
           <label className="context-default-option">
             <input
               type="checkbox"

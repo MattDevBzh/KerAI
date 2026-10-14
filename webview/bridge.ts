@@ -3,6 +3,7 @@ interface PersistedView {
   view?: string;
   featureId?: string;
   stepId?: string;
+  celebrationEnabled?: boolean;
 }
 interface VsCodeApi {
   postMessage(message: ClientMessage): void;
@@ -17,9 +18,18 @@ declare global {
 const vscode = window.acquireVsCodeApi?.();
 export const isHosted = Boolean(vscode);
 export const isDemo = !isHosted && new URLSearchParams(window.location.search).get('demo') === '1';
-export const initialView = vscode?.getState() ?? {};
+let persistedView = vscode?.getState() ?? {};
+export const initialView = persistedView;
+export function celebrationEnabled() {
+  return persistedView.celebrationEnabled !== false;
+}
+export function saveCelebrationEnabled(enabled: boolean) {
+  persistedView = { ...persistedView, celebrationEnabled: enabled };
+  vscode?.setState(persistedView);
+}
 export function persistView(state: PersistedView) {
-  vscode?.setState(state);
+  persistedView = { ...persistedView, ...state };
+  vscode?.setState(persistedView);
 }
 export function send(message: ClientMessage) {
   vscode?.postMessage(message);
@@ -37,6 +47,9 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'runPreview',
         'checkpointComparison',
         'stepApprovalResult',
+        'artifactSaveResult',
+        'correctionResult',
+        'featureFinalizationResult',
         'profileSaveResult',
         'kitResult',
         'themeState',

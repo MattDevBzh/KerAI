@@ -19,6 +19,7 @@ import type {
   ModelProfile,
 } from './evolutions';
 export * from './evolutions';
+export * from './collaboration';
 import type { FeatureWorktree, FeatureCheckpoint, CheckpointComparison } from './workspaces';
 export * from './workspaces';
 export type PolicyProfile = 'read-only' | 'workspace-write' | 'tests';
@@ -32,7 +33,12 @@ export type StepStatus =
   | 'cancelled'
   | 'stale'
   | 'interrupted';
-export type FeatureStatus = 'draft' | 'running' | 'attention' | 'completed';
+export type FeatureStatus =
+  | 'draft'
+  | 'running'
+  | 'attention'
+  | 'awaiting_final_validation'
+  | 'completed';
 export interface WorkflowStep {
   requiredDevOpsEvidence?: boolean;
   requiredQuality?: import('./quality').QualityKind;
@@ -91,6 +97,11 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  /** Tone captured at launch; older attempts had roast disabled. */
+  roastLevel?: import('./roast').RoastLevel;
+  artifactVersions?: import('./collaboration').EditorialVersion[];
+  descriptionRevision?: number;
+  correctionId?: string;
   id: string;
   startedAt: string;
   finishedAt?: string;
@@ -126,6 +137,11 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  descriptionRevision?: number;
+  descriptionVersions?: import('./collaboration').EditorialVersion[];
+  corrections?: import('./collaboration').CorrectionCycle[];
+  activeCorrectionId?: string;
+  finalValidation?: { id: string; at: string; stateKey: string; author: 'human' };
   id: string;
   title: string;
   description: string;
@@ -163,6 +179,7 @@ export interface AgentProfile {
   nickname?: string;
   avatar?: string;
   emptyContextByDefault?: boolean;
+  roastLevel?: import('./roast').RoastLevel;
 }
 export interface SkillInfo {
   revision?: string;
@@ -218,7 +235,7 @@ export interface RuntimeStatus {
 }
 export interface StudioState {
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3;
+  schemaVersion: 1 | 2 | 3 | 4;
   workspace: {
     name: string;
     path: string;
@@ -240,6 +257,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./collaboration').CollaborationClientMessage
   | import('./kits').KitClientMessage
   | DevOpsClientMessage
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
@@ -287,7 +305,9 @@ export type ClientMessage =
       expectedRevision?: number;
     }
   | { type: 'answerQuestions'; featureId: string; stepId: string; answers: Record<string, string> }
-  | { type: 'saveArtifact'; featureId: string; stepId: string; content: string }
+  | ({ type: 'saveArtifact'; featureId: string; stepId: string; content: string } & Partial<
+      import('./collaboration').EditorialSaveOptions
+    >)
   | {
       type: 'configureStep';
       featureId: string;
@@ -343,6 +363,7 @@ export type ClientMessage =
         nickname?: string;
         avatar?: string;
         emptyContextByDefault?: boolean;
+        roastLevel?: import('./roast').RoastLevel;
       };
     }
   | {
@@ -368,6 +389,21 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'correctionResult'; featureId: string; correctionId?: string; error?: string }
+  | {
+      type: 'artifactSaveResult';
+      featureId: string;
+      stepId: string;
+      attemptId?: string;
+      revision?: number;
+      error?: string;
+    }
+  | {
+      type: 'featureFinalizationResult';
+      featureId: string;
+      finalizationId?: string;
+      error?: string;
+    }
   | import('./kits').KitHostMessage
   | { type: 'themeState'; theme: ThemeId; requestId?: string; error?: string }
   | ({ type: 'profileSaveResult'; requestId: string; error?: string } & Partial<

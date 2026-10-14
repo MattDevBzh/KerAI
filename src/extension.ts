@@ -1,3 +1,4 @@
+import { sessionMarkdown } from './shared/sessionExport';
 import { DevOpsController } from './host/DevOpsController';
 import { devOpsMessageSchema } from './core/devopsSchemas';
 import { devOpsPlainText } from './shared/devopsText';
@@ -18,7 +19,6 @@ import { readHeadFile } from './host/GitFileContent';
 import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 import { normalizeTheme } from './shared/themes';
-import { usageCredits } from './shared/credits';
 
 let panel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
@@ -487,8 +487,8 @@ export async function activate(context: vscode.ExtensionContext) {
             attemptId: message.expectedAttemptId,
           });
           notice(
-            current.engine.getFeature(message.featureId).status === 'completed'
-              ? 'Dernière étape validée : session terminée.'
+            current.engine.getFeature(message.featureId).status === 'awaiting_final_validation'
+              ? 'Parcours relu : la validation définitive reste à confirmer.'
               : 'Étape validée.',
           );
         } catch (error) {
@@ -507,12 +507,76 @@ export async function activate(context: vscode.ExtensionContext) {
         current.engine.answerQuestions(message.featureId, message.stepId, message.answers);
         await current.persist();
         return;
-      case 'saveArtifact':
-        current.assertConfigurable(message.featureId);
-        current.engine.saveArtifact(message.featureId, message.stepId, message.content);
-        await current.persist();
-        notice('Livrable enregistré.');
+      case 'saveArtifact': {
+        try {
+          if (
+            !message.expectedAttemptId ||
+            message.expectedRevision === undefined ||
+            !message.expectedStateKey
+          )
+            throw new Error('Recharge le compte rendu avant de l’enregistrer.');
+          await current.saveArtifact(message.featureId, message.stepId, message.content, {
+            expectedAttemptId: message.expectedAttemptId,
+            expectedRevision: message.expectedRevision,
+            expectedStateKey: message.expectedStateKey,
+            description: message.description,
+            reason: message.reason,
+          });
+          const attempt = current.engine
+            .getStep(message.featureId, message.stepId)
+            .attempts.at(-1)!;
+          send({
+            type: 'artifactSaveResult',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            attemptId: attempt.id,
+            revision: attempt.revision ?? 0,
+          });
+          notice('Révision du compte rendu enregistrée.');
+        } catch (error) {
+          send({
+            type: 'artifactSaveResult',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            error: redact((error as Error).message),
+          });
+          throw error;
+        }
         return;
+      }
+      case 'requestCorrection': {
+        try {
+          const correctionId = await current.requestCorrection(message.featureId, message);
+          send({ type: 'correctionResult', featureId: message.featureId, correctionId });
+          notice('Correction enregistrée. Le pilote reprend avec les validations habituelles.');
+        } catch (error) {
+          send({
+            type: 'correctionResult',
+            featureId: message.featureId,
+            error: redact((error as Error).message),
+          });
+          throw error;
+        }
+        return;
+      }
+      case 'finalizeFeature': {
+        try {
+          const finalizationId = await current.finalizeFeature(
+            message.featureId,
+            message.expectedStateKey,
+          );
+          send({ type: 'featureFinalizationResult', featureId: message.featureId, finalizationId });
+          notice('Validation définitive enregistrée : session terminée.');
+        } catch (error) {
+          send({
+            type: 'featureFinalizationResult',
+            featureId: message.featureId,
+            error: redact((error as Error).message),
+          });
+          throw error;
+        }
+        return;
+      }
       case 'configureStep': {
         current.assertConfigurable(message.featureId);
         if (
@@ -800,41 +864,10 @@ export async function activate(context: vscode.ExtensionContext) {
           title: 'Exporter la session Feature Studio',
         });
         if (!destination) return;
-        const parts = [
-          `# ${feature.title}`,
-          feature.description,
-          `Branche : ${feature.branch}\nWorkflow : ${feature.workflowName}`,
-          `Espace : ${feature.worktree?.path ?? current.workspacePath}`,
-        ];
-        for (const checkpoint of feature.checkpoints ?? [])
-          parts.push(
-            `Point de restauration : ${checkpoint.label} · ${checkpoint.kind} · ${checkpoint.createdAt} · ${checkpoint.fileCount} fichiers · ${checkpoint.excludedCount} exclusions · ${checkpoint.id}`,
-          );
-        for (const step of feature.steps) {
-          parts.push(`## ${step.name} — ${step.status}`);
-          for (const [i, attempt] of step.attempts.entries()) {
-            parts.push(
-              `### Tentative ${i + 1}\n${attempt.startedAt} · ${attempt.model || 'modèle non communiqué'} · ${attempt.status}`,
-              attempt.artifact?.content ?? attempt.error ?? 'Aucun livrable.',
-            );
-            if (attempt.feedback) parts.push(`Feedback : ${attempt.feedback}`);
-            if (attempt.launch?.initialContext)
-              parts.push(`Contexte initial :\n${attempt.launch.initialContext}`);
-            if (attempt.usage)
-              parts.push(
-                `Consommation : ${usageCredits(attempt.usage)}. Tokens entrée : ${attempt.usage.inputTokens ?? 'inconnus'} ; sortie : ${attempt.usage.outputTokens ?? 'inconnus'}.`,
-              );
-            for (const proof of attempt.evidence ?? [])
-              parts.push(
-                `#### Preuve hôte · ${proof.name}\n${proof.command} ${proof.args.join(' ')}\n${proof.startedAt} → ${proof.finishedAt}\nCode : ${proof.exitCode ?? 'inconnu'}${proof.truncated ? ' · sortie tronquée' : ''}\n\n\`\`\`text\n${proof.stdout}\n${proof.stderr}\n\`\`\``,
-              );
-            for (const question of attempt.questions)
-              parts.push(
-                `- ${question.text}\n  Réponse : ${attempt.answers[question.id] ?? 'En attente'}`,
-              );
-          }
-        }
-        await vscode.workspace.fs.writeFile(destination, Buffer.from(parts.join('\n\n')));
+        await vscode.workspace.fs.writeFile(
+          destination,
+          Buffer.from(sessionMarkdown(feature, current.workspacePath)),
+        );
         await vscode.window.showTextDocument(destination);
         return;
       }

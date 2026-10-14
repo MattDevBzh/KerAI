@@ -6,6 +6,7 @@ import type { ClientMessage } from '../shared/types';
 import { THEME_IDS } from '../shared/themes';
 import { workflowSchema } from '../core/workflow';
 import { kitMessageVariants } from '../core/kitSchemas';
+import { ROAST_LEVELS } from '../shared/roast';
 import {
   launchSchema,
   autopilotConfigSchema,
@@ -105,7 +106,44 @@ export const messageSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('answerQuestions'), ...step, answers: z.record(id, text) }).strict(),
-  z.object({ type: z.literal('saveArtifact'), ...step, content: text }).strict(),
+  z
+    .object({
+      type: z.literal('saveArtifact'),
+      ...step,
+      content: text,
+      expectedAttemptId: id.optional(),
+      expectedRevision: z.number().int().nonnegative().optional(),
+      expectedStateKey: z.string().min(1).max(1_000_000).optional(),
+      description: text.optional(),
+      reason: z.string().max(5000).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('requestCorrection'),
+      featureId: id,
+      expectedStateKey: z.string().min(1).max(1_000_000),
+      sourceStepId: id,
+      rootStepIds: z.array(id).min(1).max(100),
+      feedback: z.string().trim().min(1).max(30000),
+      findingIds: z.array(id).max(1000),
+      commentIds: z.array(id).max(1000),
+      initialContext: z.string().max(60000).optional(),
+      artifactContext: z
+        .record(
+          id,
+          z.object({ enabled: z.boolean().optional(), content: text.optional() }).strict(),
+        )
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('finalizeFeature'),
+      featureId: id,
+      expectedStateKey: z.string().min(1).max(1_000_000),
+    })
+    .strict(),
   z
     .object({
       type: z.literal('configureStep'),
@@ -193,6 +231,7 @@ export const messageSchema = z.discriminatedUnion('type', [
           nickname: z.string().max(80).optional(),
           avatar: avatarSchema.optional(),
           emptyContextByDefault: z.boolean().optional(),
+          roastLevel: z.enum(ROAST_LEVELS).optional(),
         })
         .strict(),
     })

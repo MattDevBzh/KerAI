@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { boundAnswers } from './questions';
+import { correctionContext } from '../shared/collaboration';
+import { roastInstructions } from '../shared/roast';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 import type {
   MemoryEntry,
@@ -56,6 +58,36 @@ export function promptSections(input: RunInput): PromptSection[] {
     'agent',
     `Instructions de l'agent ${input.agent.name} :\n${input.agent.instructions}`,
   );
+  add(
+    'roast',
+    'Ton de l’agent',
+    'system',
+    roastInstructions(input.attempt.roastLevel ?? input.agent.roastLevel),
+  );
+  const correction = input.feature.corrections?.find(
+    (cycle) => cycle.id === (input.attempt.correctionId ?? input.feature.activeCorrectionId),
+  );
+  if (
+    correction &&
+    correction.snapshot.descriptionRevision === (input.feature.descriptionRevision ?? 0)
+  ) {
+    add(
+      'correction',
+      'Retour humain et constats de la correction demandée',
+      'system',
+      correctionContext({ ...correction, snapshot: { ...correction.snapshot, artifacts: [] } }),
+    );
+    const copies = correction.snapshot.artifacts.filter(
+      (source) => correction.artifactContext?.[source.stepId]?.enabled !== false,
+    );
+    for (const source of copies)
+      add(
+        `correction-artifact:${source.stepId}`,
+        `Historique avant correction · ${source.stepName}`,
+        'artifact',
+        `Rapport historique avant correction · ${source.stepName} (tentative ${source.attemptId}, révision ${source.revision}, état avant correction ${source.status}) :\n${correction.artifactContext?.[source.stepId]?.content ?? source.artifact.content}`,
+      );
+  }
   for (const skill of input.skills)
     add(`skill:${skill.id}`, skill.name, 'skill', `Compétence ${skill.name} :\n${skill.content}`);
   const launch = input.launch ?? input.attempt.launch;
@@ -94,7 +126,13 @@ export function promptSections(input: RunInput): PromptSection[] {
       step.id !== input.step.id &&
       step.status === 'approved' &&
       attempt?.status === 'approved' &&
-      attempt.artifact
+      attempt.artifact &&
+      !correction?.snapshot.artifacts.some(
+        (source) =>
+          source.stepId === step.id &&
+          source.attemptId === attempt.id &&
+          source.revision === (attempt.revision ?? 0),
+      )
     )
       add(
         `artifact:${step.id}`,
@@ -198,7 +236,9 @@ export function promptSections(input: RunInput): PromptSection[] {
       ...section,
       originalContent: section.content,
       content: override?.content ?? section.content,
-      enabled: !editable || (override?.enabled ?? mode === 'all'),
+      enabled:
+        !editable ||
+        (override?.enabled ?? (section.id.startsWith('correction-artifact:') || mode === 'all')),
       editable,
     };
   });

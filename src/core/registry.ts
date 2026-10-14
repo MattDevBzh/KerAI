@@ -12,6 +12,7 @@ import { parse, parseDocument, stringify } from 'yaml';
 import { z } from 'zod';
 import type { AgentProfile, SkillInfo, Workflow } from '../shared/types';
 import { validateWorkflow } from './workflow';
+import { ROAST_LEVELS } from '../shared/roast';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
 export const avatarSchema = z.enum([
@@ -39,6 +40,7 @@ const agentMetadata = z.object({
   nickname: z.string().max(80).optional(),
   avatar: avatarSchema.optional(),
   emptyContextByDefault: z.boolean().optional(),
+  roastLevel: z.enum(ROAST_LEVELS).optional(),
 });
 const skillMetadata = z.object({ name: z.string().min(1), description: z.string() });
 export interface RegistryData {
@@ -367,6 +369,7 @@ export class AgentRegistry {
       | 'nickname'
       | 'avatar'
       | 'emptyContextByDefault'
+      | 'roastLevel'
       | 'targets'
       | 'revision'
     > & { source?: AgentProfile['source'] },
@@ -386,6 +389,8 @@ export class AgentRegistry {
       const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(original)![1];
       const document = parseDocument(frontmatter, { uniqueKeys: true });
       for (const key of Object.keys(agentMetadata.shape)) {
+        // Older editors cannot clear a tone they do not know about; the current UI sends off explicitly.
+        if (key === 'roastLevel' && input.roastLevel === undefined) continue;
         const value = meta[key as keyof typeof meta];
         if (value === undefined) document.delete(key);
         else document.set(key, value);

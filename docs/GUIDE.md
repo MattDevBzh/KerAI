@@ -55,7 +55,11 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 
 ![Parcours et livrable — données de démonstration](../docs/images/feature.png)
 
-**Une correction après la relecture ?** Retourne sur Développement, précise ton feedback dans **Votre retour**, utilise **Rejouer cette étape**, puis fais revalider Tests et Relecture. Les anciens essais restent visibles. Une spécification ou un plan modifié rend également les étapes dépendantes **à actualiser**.
+**Une correction après la relecture ?** Clique **Demander une correction** sur le compte rendu ou sur une remarque. Décris le souci, choisis où l’équipe reprend et consulte les étapes ainsi que le contexte à transmettre. La correction enchaîne jusqu’à la relecture en respectant les validations habituelles ; les anciennes tentatives et les branches indépendantes restent visibles. Le choix avancé permet de repartir de plusieurs étapes.
+
+**Une coquille dans ta demande ou dans un compte rendu ?** Ouvre **Modifier le compte rendu**. Le même écran réunit le texte, son aperçu, l’original de l’agent, l’historique des versions et le besoin initial. Tu peux **Enregistrer et valider** ta correction ou **Faire réviser par l’agent**. Modifier un rapport remet ses dépendants à actualiser ; modifier le besoin remet conservativement le parcours à revoir. Les agents suivants utilisent la version corrigée et approuvée. Une édition du texte ne change ni un résultat de tests ni un verdict structuré.
+
+**À la fin du parcours**, choisis **Valider définitivement** ou **Faire une correction**. Seule la validation finale réussie termine la session et affiche la célébration d’équipe. Les fichiers liés aux preuves sont revérifiés avant ce choix. Tu peux rejouer la célébration ou désactiver ses effets ; la réduction des animations est respectée. [Historique, corrections et décision finale](WORKFLOWS.md).
 
 **Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Une reprise consomme elle aussi une tentative. Si la limite est atteinte, **Configurer → Limite de tentatives** permet de la relever explicitement.
 
@@ -265,6 +269,12 @@ Depuis la version 0.3.4, un agent disposant de l’outil `read` peut comparer la
 Chaque comparaison indique la base résolue, son SHA, le SHA de HEAD et le SHA réellement utilisé pour le départ du diff. Les branches absentes ou ambiguës provoquent une erreur explicite ; il n’y a pas de remplacement silencieux par HEAD. Les renommages sont présentés comme suppression/ajout, les sous-modules sont exclus et les fichiers binaires restent signalés par Git. L’accès aux chemins sensibles reste interdit. Les modèles n’ont pas besoin de permissions d’écriture ou d’exécution pour utiliser ces outils.
 
 Les réponses de diff sont limitées à 64 000 octets par page. Un diff global de plus de 100 fichiers ou de 12 000 caractères de chemins doit être parcouru fichier par fichier. La collecte Git est plafonnée à 16 millions de caractères pour un diff et 4 millions pour une liste ; au-delà, une erreur explicite remplace tout résultat tronqué. Une ligne dépassant 64 000 octets ne peut pas être paginée par lignes. Les empreintes détectent les modifications entre pages ; elles ne verrouillent pas les fichiers contre des modifications externes pendant la lecture.
+
+### Donner du piquant aux comptes rendus d’un agent
+
+Dans **Agents**, ouvre sa fiche puis choisis **Mode roast** : **Désactivé** (par défaut), **Léger**, **Piquant** ou **Sans pitié**. La fiche affiche le niveau actif et l’éditeur propose un aperçu des consignes. Enregistre-le dans la portée **Utilisateur** pour tes projets, ou **Projet** pour ce dépôt ; chaque portée conserve son propre niveau et son brouillon. Les kits exportés/importés transportent ce réglage avec le profil.
+
+Le roast concerne le compte rendu conversationnel en français affiché dans le cockpit, y compris la réponse finale : l’agent chambre les choix et le code avec un diagnostic précis et une action utile. Les documents du projet, specs et plans formels, code, documentation, commits et descriptions de PR restent professionnels ; les rapports structurés gardent leur format. Si le compte rendu contient une spec ou un plan, les taquineries restent dans un commentaire clairement séparé. Le niveau est fixé au lancement d’une tentative, sans réécrire les rapports précédents ni ajouter d’appel au modèle. Les anciens profils restent désactivés tant que tu ne choisis pas un niveau.
 
 ### Choisir et éditer le contexte avant lancement
 

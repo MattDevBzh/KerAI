@@ -160,7 +160,12 @@ export const memorySchema = z
     agentIds: uniqueIds,
     updatedAt: timestamp,
     source: z
-      .object({ featureId: boundedId, stepId: boundedId, attemptId: boundedId })
+      .object({
+        featureId: boundedId,
+        stepId: boundedId,
+        attemptId: boundedId,
+        revision: z.number().int().nonnegative().optional(),
+      })
       .strict()
       .optional(),
   })

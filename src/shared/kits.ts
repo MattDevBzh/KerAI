@@ -17,6 +17,7 @@ export interface KitNode {
   dependencies: KitRef[];
   avatar?: string;
   tools?: string[];
+  roastLevel?: import('./roast').RoastLevel;
   content?: string;
 }
 export interface KitSelection {
@@ -110,6 +111,7 @@ export function kitNodes(data: {
         description: a.description,
         avatar: a.avatar,
         tools: a.tools,
+        roastLevel: a.roastLevel,
         content: a.instructions,
         dependencies: [
           ...new Set([

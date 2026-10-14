@@ -22,6 +22,7 @@ function state(): StudioState {
     nickname: 'Personal friend',
     instructions: 'PERSONAL_BODY',
     description: 'Personal metadata',
+    roastLevel: 'light' as const,
   };
   const project = {
     ...initial,
@@ -31,6 +32,7 @@ function state(): StudioState {
     nickname: 'Project friend',
     instructions: 'PROJECT_BODY\n\n```delivery-rules\ntypes: [fix]\n```',
     description: 'Project metadata',
+    roastLevel: 'ruthless' as const,
   };
   data.agents[0] = {
     ...project,
@@ -211,4 +213,41 @@ test('nouveaux profils : collision visible et cible projet explicite', async ({ 
     options: { scope: 'workspace', expectedRevision: null },
     agent: { id: 'safe-copy', instructions: 'Draft' },
   });
+});
+
+test('roast : niveau par portée, aperçu professionnel et brouillons conservés', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  const card = page.locator('.library-card').filter({ hasText: 'Project friend' });
+  await expect(card).toContainText('Roast · Sans pitié');
+  await card.click();
+  const tone = page.getByLabel('Mode roast', { exact: true });
+  await expect(tone).toHaveValue('ruthless');
+  await tone.selectOption('spicy');
+  await page.getByText('Aperçu des consignes roast · Piquant', { exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('diagnostic précis et une action utile');
+  await expect(page.getByRole('dialog')).toContainText('messages de commit');
+  await expect(page.getByRole('dialog')).toContainText('professionnels et sobres');
+  await page.getByLabel('Portée du profil').selectOption('user');
+  await expect(tone).toHaveValue('light');
+  await tone.selectOption('off');
+  await expect(page.getByText('Aperçu des consignes roast', { exact: false })).toHaveCount(0);
+  await page.getByLabel('Portée du profil').selectOption('workspace');
+  await expect(tone).toHaveValue('spicy');
+  await page.getByLabel('Portée du profil').selectOption('user');
+  await expect(tone).toHaveValue('off');
+  await page.getByRole('button', { name: 'Enregistrer le profil' }).click();
+  const save = await request(page);
+  expect(save).toMatchObject({
+    options: { scope: 'user', expectedRevision: 'b'.repeat(64) },
+    agent: { roastLevel: 'off', instructions: 'PERSONAL_BODY' },
+  });
+  await page.evaluate(
+    (requestId) =>
+      window.postMessage({ type: 'profileSaveResult', requestId, error: 'Révision obsolète' }, '*'),
+    save.requestId,
+  );
+  await expect(tone).toHaveValue('off');
 });

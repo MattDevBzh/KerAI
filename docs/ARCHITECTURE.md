@@ -1,13 +1,13 @@
-# Architecture — évolution v0.4
+# Architecture — évolution v1.1
 
-Feature Studio est une extension locale VS Code : un webview React transmet des intentions validées à un hôte Node. Le moteur métier ne dépend ni de VS Code ni du CLI. Les contrats sont définis dans `src/shared/types.ts`, `src/shared/evolutions.ts` et `src/shared/workspaces.ts`, `src/shared/profiles.ts`, `src/shared/quality.ts` et `src/shared/devops.ts` ; le host conserve l'autorité sur les exécutions, permissions et écritures.
+Feature Studio est une extension locale VS Code : un webview React transmet des intentions validées à un hôte Node. Le moteur métier ne dépend ni de VS Code ni du CLI. Les contrats sont définis dans `src/shared/types.ts`, `src/shared/evolutions.ts`, `src/shared/collaboration.ts`, `src/shared/workspaces.ts`, `src/shared/profiles.ts`, `src/shared/quality.ts` et `src/shared/devops.ts` ; le host conserve l'autorité sur les exécutions, permissions et écritures.
 
 ```mermaid
 flowchart LR
     UI[Webview React] -->|messages validés| VS[Extension VS Code]
     VS --> Service[StudioService]
     Service --> Core[Moteur, contexte, budgets, validation, autopilote]
-    Service --> Store[Store JSON v3]
+    Service --> Store[Store JSON v4]
     Service --> GitSpace[FeatureWorkspace]
     GitSpace --> Git[Git local / worktree frère]
     GitSpace --> Points[Objets SHA-256 et manifestes privés]
@@ -39,7 +39,7 @@ flowchart LR
 | `src/core/budgets.ts`           | Agrégats de consommation mesurée et blocage entre tentatives                                                                                       |
 | `src/core/validation.ts`        | Critères, commentaires et preuves nécessaires à une approbation                                                                                    |
 | `src/core/store.ts`             | État v3 validé, migrations v0/v1/v2, sauvegarde atomique et récupération                                                                           |
-| `src/core/registry.ts`          | Catalogue embarqué/utilisateur/projet, priorités, versions, sauvegardes avec révision attendue, YAML strict, installation additive du kit                                                                            |
+| `src/core/registry.ts`          | Catalogue embarqué/utilisateur/projet, priorités, versions, sauvegardes avec révision attendue, YAML strict, installation additive du kit          |
 | `src/core/evolutionSchemas.ts`  | Schémas des contextes, MCP, budgets, pilote, preuves, relectures et mémoire                                                                        |
 | `src/core/workspaceSchemas.ts`  | Schémas des liaisons worktree et métadonnées des points de restauration                                                                            |
 | `src/host/CopilotCliAdapter.ts` | Diagnostic CLI, sessions, catalogue effectif, événements et résultats structurés                                                                   |
@@ -70,7 +70,11 @@ Une question peut suspendre l'agent en cours via une demande humaine. Le pilote 
 
 ## Persistance et reprise
 
-`state.json` utilise le schéma **3**. Il conserve features, historiques, contextes de lancement, empreintes, mesures, preuves, relectures, critères, commentaires, réglages, mémoire locale, liaisons de worktree et métadonnées des points. Les versions 0, 1 et 2 migrent vers 3 en conservant leurs données connues et en ajoutant les valeurs manquantes. Une ancienne feature sans configuration d’autopilote reste manuelle et, sans métadonnée de worktree, conserve le dossier source. La v0.2 refuse le schéma 3 : aucune migration inverse ne permet de rouvrir ces données en perdant silencieusement l’isolation. Une version inconnue ou un JSON invalide est rejeté en préservant le fichier original.
+`state.json` utilise le schéma **4**. Il conserve features, historiques, contextes de lancement, empreintes, mesures, preuves, relectures, critères, commentaires, réglages, mémoire locale, liaisons de worktree et métadonnées des points, ainsi que les révisions éditoriales, les cycles de correction et la décision finale humaine. Les versions 0 à 3 migrent vers 4 en conservant leurs données connues et en ajoutant les valeurs manquantes. Une ancienne feature sans configuration d’autopilote reste manuelle et, sans métadonnée de worktree, conserve le dossier source. Les anciennes sessions terminées sans décision finale explicite passent par cette validation. Les anciens binaires refusent le schéma 4, ce qui protège l’historique ajouté contre une réécriture par un client qui ne le connaît pas. Une version inconnue ou un JSON invalide est rejeté en préservant le fichier original.
+
+`src/shared/collaboration.ts` calcule la fermeture des corrections et une clé d’état relu, utilisables dans le webview et le host. Cette clé sert à refuser les sauvegardes et décisions obsolètes ; elle ne constitue pas une preuve d’exécution. Les anciennes versions et remarques d’un cycle sont des instantanés de diagnostic, séparés des livrables actuellement approuvés. Une modification du besoin coupe la reprise de l’ancienne conversation et des anciennes réponses. Les notes issues d’un compte rendu sont liées à sa révision.
+
+Le moteur place le parcours en `awaiting_final_validation` une fois les étapes approuvées et les blocages résolus. Seul le message humain `finalizeFeature`, vérifié contre l’état relu et les empreintes actuelles des fichiers, enregistre `finalValidation` et passe à `completed`. Le webview attend l’accusé hôte et l’état correspondant avant l’animation. Le choix de roast est conservé avec la tentative ; il n’ajoute aucun appel modèle.
 
 Le fichier se trouve sous `ExtensionContext.storageUri`, dans un sous-dossier dérivé de l'empreinte du chemin réel du workspace. Les sauvegardes capturent leur instantané à l'appel, sont sérialisées par chemin dans le processus, écrivent un temporaire privé synchronisé puis le renomment atomiquement. Le verrou `WorkspaceLease` complète cette protection entre fenêtres/processus. Les agents et skills du catalogue se sauvegardent explicitement dans la portée utilisateur (`~/.copilot` ou `COPILOT_HOME`) ou projet (`.github/agents` et `.github/skills`). La priorité est projet, utilisateur, puis profils embarqués. Une révision attendue et un verrou par fichier protègent la sauvegarde ; la migration vers le compte utilisateur demeure explicite avec sauvegarde. Les workflows personnalisés sont enregistrés sous `~/.copilot/feature-studio/workflows` (ou `COPILOT_HOME`). Les anciens YAML du projet restent lisibles pour compatibilité ; leur migration est manuelle.
 
