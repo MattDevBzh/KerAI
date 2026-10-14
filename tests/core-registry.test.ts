@@ -176,8 +176,8 @@ describe('agent, skill and workflow registry', () => {
       true,
     );
   });
-  it('saves strict workspace workflows without changing feature snapshots or following symlinks', async () => {
-    const { root, registry } = await setup(),
+  it('saves strict user workflows shared across projects without changing snapshots or following symlinks', async () => {
+    const { root, userPath, registry } = await setup(),
       original = (await registry.load()).workflows.find((w) => w.id === 'single')!;
     const { WorkflowEngine } = await import('../src/core/workflow');
     const engine = new WorkflowEngine(),
@@ -194,6 +194,16 @@ describe('agent, skill and workflow registry', () => {
     });
     const reloaded = (await registry.load()).workflows.find((w) => w.id === 'single')!;
     expect(reloaded.name).toBe('Customized');
+    expect(reloaded.source).toBe(join(userPath, 'feature-studio/workflows/single.yaml'));
+    await expect(readdir(join(root, '.feature-studio'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const otherProject = new AgentRegistry(
+      join(root, 'other-project'),
+      resolve('defaults'),
+      userPath,
+    );
+    expect((await otherProject.load()).workflows.find((w) => w.id === 'single')?.name).toBe(
+      'Customized',
+    );
     expect(reloaded.steps[0].initialContext).toBe('Manual context');
     expect(feature.workflowName).toBe(original.name);
     expect(feature.steps[0].initialContext).toBeUndefined();
@@ -213,7 +223,7 @@ describe('agent, skill and workflow registry', () => {
     roots.push(outside);
     await symlink(
       join(outside, 'target.yaml'),
-      join(root, '.feature-studio/workflows/linked.yaml'),
+      join(userPath, 'feature-studio/workflows/linked.yaml'),
     );
     await expect(registry.saveWorkflow({ ...original, id: 'linked' })).rejects.toThrow(
       /symbolique/,

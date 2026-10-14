@@ -1709,7 +1709,7 @@ function WorkflowEditor({
   return (
     <StudioDialog
       title={existingId ? workflow.name || 'Votre parcours' : 'Dessiner un nouveau parcours.'}
-      subtitle="Les changements du modèle s’appliquent aux futures sessions. Les parcours déjà créés conservent leurs étapes."
+      subtitle="Enregistré au niveau utilisateur, disponible dans tous vos projets. Les sessions existantes conservent leurs étapes."
       onClose={onClose}
       className="workflow-editor-dialog"
     >

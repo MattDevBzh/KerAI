@@ -56,7 +56,7 @@ Les profils `economy`, `balanced` et `quality` nécessitent votre correspondance
 
 ## Éditeur de workflows et catalogue
 
-L'éditeur visuel construit les étapes, dépendances, agents, profils, skills, livrables, limites et options de contexte. L'enregistrement passe par le host et produit un YAML dans `.feature-studio/workflows/<id>.yaml`. Le document suit le même validateur strict qu'un fichier édité à la main : étapes uniques, dépendances existantes, absence de cycle, agents et skills disponibles, valeurs et livrables valides. Une définition workspace remplace son homologue embarqué par identifiant. Les sessions existantes conservent leur copie ; modifier un template ne réécrit ni leurs étapes ni leurs historiques.
+L'éditeur visuel construit les étapes, dépendances, agents, profils, skills, livrables, limites et options de contexte. L'enregistrement passe par le host et produit un YAML au niveau utilisateur dans `~/.copilot/feature-studio/workflows/<id>.yaml` (ou sous `COPILOT_HOME` si configuré). Le document suit le même validateur strict qu'un fichier édité à la main : étapes uniques, dépendances existantes, absence de cycle, agents et skills disponibles, valeurs et livrables valides. Les anciens YAML dans `.feature-studio/workflows` restent lisibles et prioritaires tant qu’ils n’ont pas été déplacés manuellement. Aucun fichier du projet n’est déplacé ou supprimé automatiquement. Les sessions existantes conservent leur copie ; modifier un template ne réécrit ni leurs étapes ni leurs historiques.
 
 ```yaml
 id: custom-review

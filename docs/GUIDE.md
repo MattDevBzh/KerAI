@@ -143,7 +143,7 @@ Le parcours **DevOps — du besoin au test vérifié** fournit six agents : chal
 
 L’éditeur visuel de **Parcours** permet d’ajouter, dupliquer, retirer et réordonner les étapes, de relier leurs dépendances, puis de choisir agents, modèles, skills, permissions et contexte initial. Le graphe montre les liens ; les cycles et références invalides sont refusés. Les boutons de déplacement offrent une alternative au glisser-déposer.
 
-L’enregistrement produit un YAML dans `.feature-studio/workflows/`. Les sessions existantes conservent leur définition ; le nouveau parcours s’applique aux sessions créées ensuite. **Demander avant de lancer** impose une pause avant l’étape, même avec le pilote. [Détails et format de workflow](../docs/WORKFLOWS.md).
+L’enregistrement produit un YAML au niveau utilisateur, dans `~/.copilot/feature-studio/workflows/` (ou `COPILOT_HOME/feature-studio/workflows/` si configuré). Les anciens YAML du projet peuvent être déplacés manuellement vers ce dossier ; aucune migration automatique n’est effectuée. Les sessions existantes conservent leur définition ; le nouveau parcours s’applique aux sessions créées ensuite. **Demander avant de lancer** impose une pause avant l’étape, même avec le pilote. [Détails et format de workflow](../docs/WORKFLOWS.md).
 
 ![Éditeur visuel de parcours — données de démonstration](../docs/images/workflow-editor.png)
 

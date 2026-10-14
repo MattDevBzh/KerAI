@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5 — 2026-10-14
+
+- Corrige la sauvegarde des parcours : les YAML sont désormais enregistrés au niveau utilisateur avec les agents et les skills, sous `~/.copilot/feature-studio/workflows` (ou `COPILOT_HOME`). Les anciens fichiers du projet ne sont ni déplacés ni supprimés automatiquement.
+
 ## 1.0.4
 
 - Encadré de crédits du compte Copilot dans le lanceur, actualisé toutes les 10 secondes lorsqu’il est visible, sans appel au modèle. Les quotas absents ou non exprimés en crédits restent indisponibles.

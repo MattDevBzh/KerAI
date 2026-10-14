@@ -486,10 +486,11 @@ export class AgentRegistry {
     )
       throw new Error('Agent ou skill inconnu dans le workflow.');
     const path = await safePath(
-      this.workspacePath,
-      `.feature-studio/workflows/${identifier.parse(workflow.id)}.yaml`,
+      this.userPath,
+      `feature-studio/workflows/${identifier.parse(workflow.id)}.yaml`,
     );
     await mkdir(dirname(path), { recursive: true });
+    await safePath(this.userPath, `feature-studio/workflows/${workflow.id}.yaml`);
     await writeFile(path, stringify(workflow), 'utf8');
   }
 }

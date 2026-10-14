@@ -850,7 +850,9 @@ export async function activate(context: vscode.ExtensionContext) {
           throw new Error('Un agent ou une skill du parcours n’existe pas.');
         await current.registry.saveWorkflow(message.workflow);
         await current.refresh();
-        notice('Parcours enregistré. Les sessions existantes conservent leur définition.');
+        notice(
+          'Parcours enregistré au niveau utilisateur. Les sessions existantes conservent leur définition.',
+        );
         return;
       case 'saveAutopilot':
         await current.saveAutopilot(message.featureId, message.config);
