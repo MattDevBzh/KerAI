@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2 — 2026-10-14
+
+- Corrige le faux refus « Chemin hors du dépôt » dans le menu Azure DevOps sous Windows : l’inspection Git compare désormais les chemins canoniques, y compris lorsqu’un alias de dossier est utilisé. Les chemins réellement extérieurs au dépôt restent refusés.
+- Le message d’aide ne présente plus systématiquement une erreur locale Git comme une erreur de connexion ou de formulaire.
+
 ## 1.0.1 — 2026-10-14
 
 - Corrige le lancement de la team DevOps avec Copilot CLI 1.0.96 : le schéma de paramètres de `studio_devops_inspect` est désormais un objet accepté par le CLI. Les combinaisons de paramètres restent strictement validées avant toute lecture Azure DevOps.

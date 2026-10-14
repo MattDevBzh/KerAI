@@ -152,9 +152,10 @@ export class DeliveryService {
   }
   async inspect(remote = 'origin'): Promise<DeliverySnapshot> {
     const filters = await this.filters();
-    const top = (await this.git(['rev-parse', '--show-toplevel'])).trim();
-    if ((await realpath(top)) !== (await realpath(this.root)))
-      throw new Error('Ouvre la racine du dépôt Git.');
+    // Git uses forward slashes on Windows; compare canonical filesystem paths
+    // throughout, including when Git or the workspace is reached through an alias.
+    const top = await realpath((await this.git(['rev-parse', '--show-toplevel'])).trim());
+    if (top !== (await realpath(this.root))) throw new Error('Ouvre la racine du dépôt Git.');
     const branchResult = await this.run(['symbolic-ref', '--quiet', '--short', 'HEAD']);
     if (branchResult.code)
       throw new Error('HEAD détachée : choisis une branche dans Git avant la livraison.');
@@ -196,7 +197,12 @@ export class DeliveryService {
               'Fichiers trop volumineux pour un aperçu vérifiable (8 Mo/fichier, 64 Mo au total).',
             );
           const resolved = await realpath(path.dirname(absolute));
-          if (resolved !== top && !resolved.startsWith(top + path.sep))
+          const relative = path.relative(top, resolved);
+          if (
+            relative === '..' ||
+            relative.startsWith('..' + path.sep) ||
+            path.isAbsolute(relative)
+          )
             throw new Error('Chemin hors du dépôt refusé.');
           const contents = await readFile(absolute);
           contentHashes.push(file + ':' + digest(contents) + ':' + stat.mode);

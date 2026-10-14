@@ -507,7 +507,7 @@ export function DevOpsUI({
       {state.error && (
         <div className="devops-error" role="alert">
           {state.error}
-          <p>Corrige les champs ou la connexion, puis réessaie.</p>
+          <p>Consulte le détail ci-dessus, puis réessaie l’opération.</p>
         </div>
       )}
       {state.notices.map((n, i) => (

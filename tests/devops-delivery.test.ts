@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, writeFile, readFile, rm, unlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, unlink, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -18,6 +18,7 @@ async function fixture() {
   await git('init', '-b', 'main');
   await git('config', 'user.email', 'test@example.com');
   await git('config', 'user.name', 'Delivery Test');
+  await git('config', 'core.autocrlf', 'false');
   for (const name of ['selected.txt', 'other.txt', 'delete.txt'])
     await writeFile(path.join(root, name), 'base\n');
   await git('add', '.');
@@ -28,6 +29,51 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 describe('delivery private index commits', () => {
+  it('inspects root and nested changes with the real Git path syntax without changing the index', async () => {
+    const { root, service } = await fixture();
+    await writeFile(path.join(root, 'selected.txt'), 'changed\n');
+    await mkdir(path.join(root, '..notes'));
+    await writeFile(path.join(root, '..notes', 'new.txt'), 'nested\n');
+    const before = await readFile(path.join(root, '.git', 'index'));
+    const snapshot = await service.inspect();
+    expect(snapshot.files.map((file) => file.path).sort()).toEqual([
+      '..notes/new.txt',
+      'selected.txt',
+    ]);
+    expect(await readFile(path.join(root, '.git', 'index'))).toEqual(before);
+  });
+  it('uses the canonical root when Git reports an equivalent directory alias', async () => {
+    const { root, service } = await fixture();
+    const container = await mkdtemp(path.join(tmpdir(), 'delivery-alias-'));
+    roots.push(container);
+    const alias = path.join(container, 'repo');
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    await writeFile(path.join(root, 'selected.txt'), 'changed\n');
+    const wrapped = new DeliveryService(root, (args, options) =>
+      args.includes('--show-toplevel')
+        ? Promise.resolve({ code: 0, stdout: alias.replaceAll('\\', '/') + '\n', stderr: '' })
+        : service.run(args, options),
+    );
+    expect((await wrapped.inspect()).files.map((file) => file.path)).toEqual(['selected.txt']);
+  });
+  it('still refuses a file reached through a directory link outside the repository', async () => {
+    const { root, service } = await fixture();
+    const outside = root + '-outside';
+    await mkdir(outside);
+    roots.push(outside);
+    await writeFile(path.join(outside, 'private.txt'), 'outside content');
+    await symlink(
+      outside,
+      path.join(root, 'escape'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    const wrapped = new DeliveryService(root, (args, options) =>
+      args.includes('status')
+        ? Promise.resolve({ code: 0, stdout: '?? escape/private.txt\0', stderr: '' })
+        : service.run(args, options),
+    );
+    await expect(wrapped.inspect()).rejects.toThrow('Chemin hors du dépôt refusé.');
+  });
   it('commits selected full files, deletion and untracked while preserving unrelated staged bytes', async () => {
     const { root, git, service } = await fixture();
     await writeFile(path.join(root, 'other.txt'), 'unrelated staged\n');
