@@ -10,7 +10,12 @@ import type {
   StudioState,
 } from '../src/shared/types';
 import { DEFAULT_TRACE_BYTES } from '../src/shared/observation';
-import { featureUsage, observerUsage, sumUsage } from '../src/shared/observationReport';
+import {
+  featureUsage,
+  observerUsage,
+  observationModels,
+  sumUsage,
+} from '../src/shared/observationReport';
 import { usageCredits, toNanoAiu } from '../src/shared/credits';
 import { subscribe } from './bridge';
 import { featureStateKey } from '../src/shared/collaboration';
@@ -435,13 +440,7 @@ function ObservationReport({
   const currentReview = observerUsage(review),
     allReviews = sumUsage((feature.observations ?? []).flatMap((r) => r.calls.map((c) => c.usage)));
   const total = sumUsage([featureUsage(feature), allReviews]);
-  const effectiveModels = [
-    ...new Set(
-      review.calls.flatMap((c) =>
-        c.usage?.byModel ? Object.keys(c.usage.byModel) : [c.model || 'Non communiqué'],
-      ),
-    ),
-  ];
+  const effectiveModels = observationModels(review);
   return (
     <div className="observation-report">
       <header className="observation-report-cover">

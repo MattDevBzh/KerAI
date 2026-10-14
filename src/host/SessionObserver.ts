@@ -192,6 +192,7 @@ export async function prepareObservation(
       trace.attemptId,
     );
   }
+  if (!archive.info.complete) warnings.push(archive.info.reason ?? 'Journal de session incomplet.');
   for (const step of feature.steps) {
     for (const attempt of step.attempts)
       if (
@@ -211,6 +212,7 @@ export async function prepareObservation(
   for (const phase of phases)
     phase.totalParts = parts.filter((part) => part.stepId === phase.stepId).length;
   hash.update(JSON.stringify(phases));
+  hash.update(JSON.stringify([...new Set(warnings)]));
   const fingerprint = hash.digest('hex');
   const preview: ObservationPreview = {
     featureId: feature.id,

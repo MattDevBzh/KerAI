@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 — 2026-10-14 (préparée localement)
+
+- Récupère les événements intacts lorsqu’un journal se termine par une ligne coupée. La reprise sauvegarde les octets incomplets avant nettoyage, puis permet de continuer la session ; les rapports et le stockage signalent durablement la couverture partielle. Une corruption sur une ligne terminée reste refusée.
+- Aligne les exports HTML et Markdown sur le cockpit : modèle demandé, ensemble des modèles mesurés et consommation par modèle, avec prise en charge des anciennes mesures.
+
 ## 1.2.0 — 2026-10-14 (préparée localement)
 
 - Ajoute l’Observateur d’une seule session feature : aperçu local, modèle et budget explicites, analyse de toutes les phases, améliorations sourcées, commentaires globaux, consommation par phase et bilan des appels de l’Observateur. Les rapports versionnés s’exportent en HTML autonome ou Markdown.

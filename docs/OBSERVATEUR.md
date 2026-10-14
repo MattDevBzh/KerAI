@@ -20,7 +20,7 @@ Les remarques distinguent **fait observé**, **interprétation** et **améliorat
 
 Les commentaires globaux identifient les améliorations prioritaires de la session. Le bilan de l’Observateur rappelle le modèle demandé, les modèles réellement communiqués, tous ses appels, ses tokens, ses crédits et sa durée. Le sélecteur conserve les versions précédentes. Si la session change après une revue, le rapport le signale.
 
-**Exporter en HTML** produit un document autonome, mis en forme, navigable et imprimable sans script ni ressource externe. **Markdown** fournit une version textuelle. Les sources détaillées se consultent dans le cockpit ; les exports affichent leurs identifiants.
+**Exporter en HTML** produit un document autonome, mis en forme, navigable et imprimable sans script ni ressource externe. **Markdown** fournit une version textuelle. Les exports rappellent le modèle demandé, tous les modèles mesurés et leur consommation. Les sources détaillées se consultent dans le cockpit ; les exports affichent leurs identifiants.
 
 ## Coûts et couverture
 
@@ -38,7 +38,7 @@ Le journal principal conserve les contextes effectivement envoyés, profils et i
 
 Les traces ne sont plus limitées à 3 000 événements. Les messages longs sont découpés sans suppression de contenu. **Réglages → Archives de session** définit leur limite : **256 Mio** initialement, réglable de **1 à 4 096 Mio**. Le cockpit affiche l’espace propre, les objets associés ou partagés, le nombre d’événements et un avertissement à 80 % de la limite. Les dossiers figés des revues, leurs entrées/sorties, pièces jointes et checkpoints occupent de l’espace supplémentaire, inclus dans les catégories affichées.
 
-L’activité montre les 500 événements récents et un aperçu borné de leurs messages. **Consulter le journal complet** parcourt l’archive par pages de 100 événements ou 100 000 caractères, une fois la tentative terminée. Les limites d’archive ou d’écriture provoquent un arrêt visible, sans effacer le début de la session.
+L’activité montre les 500 événements récents et un aperçu borné de leurs messages. **Consulter le journal complet** parcourt l’archive par pages de 100 événements ou 100 000 caractères, une fois la tentative terminée. Les limites d’archive ou d’écriture provoquent un arrêt visible, sans effacer le début de la session. Si un crash coupe la dernière ligne du journal, les événements intacts restent analysables. La reprise conserve le fragment incomplet dans le stockage privé avant de reprendre l’écriture ; le journal, le stockage et le rapport gardent un avertissement de couverture partielle, même après redémarrage. Une ligne terminée mais corrompue reste refusée.
 
 ## Supprimer définitivement
 

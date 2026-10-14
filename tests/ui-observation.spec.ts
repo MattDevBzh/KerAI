@@ -77,6 +77,10 @@ function scenario(): StudioState {
           outputTokens: 800,
           cost: 200000000,
           unit: 'nano-AIU',
+          byModel: {
+            'Modèle réellement utilisé': { inputTokens: 3000, outputTokens: 600, cost: 100000000 },
+            'Autre modèle observé': { inputTokens: 1000, outputTokens: 200, cost: 100000000 },
+          },
         },
       },
     ],
@@ -173,6 +177,8 @@ test('observateur : rapport par phase, modèles et coûts, sources et exports', 
   ).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Bilan de l’Observateur' })).toBeVisible();
   await expect(panel).toContainText('Modèle réellement utilisé');
+  await expect(panel).toContainText('Autre modèle observé');
+  await expect(panel).toContainText('Modèle demandé : fixture-model');
   await expect(panel).toContainText('0,2 crédits');
   await panel.getByRole('button', { name: 'Voir la preuve 1' }).first().click();
   await expect(panel.getByRole('region', { name: 'Preuve de l’analyse' })).toContainText(

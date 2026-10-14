@@ -1,4 +1,13 @@
-# Validation et limites — v1.2.0 locale, 14 octobre 2026
+# Validation et limites — v1.2.1 locale, 14 octobre 2026
+
+## Vérifications locales de v1.2.1
+
+- Format, TypeScript, tests et builds réussis : **446 tests métier**, 4 ignorés selon les mêmes conditions que v1.2.0.
+- **26 tests de l’Observateur et du stockage**, dont 7 régressions nouvelles : reprise après une coupure UTF-8, avertissement conservé après redémarrage, sauvegarde du fragment avant réécriture et reprise après interruption du nettoyage, refus des lignes terminées corrompues, conservation d’un dernier événement sans saut de ligne, exports avec plusieurs modèles et modèle demandé.
+- Les **4 scénarios Chromium de l’Observateur** passent avec le rappel de plusieurs modèles dans le cockpit.
+- Le **VSIX final extrait** passe le smoke dans un vrai hôte VS Code Insiders, avec un profil temporaire et sans prompt payant.
+
+Le package local est `releases/feature-studio-1.2.1.vsix`, avec son empreinte dans `releases/SHA256SUMS`. La v1.2.0 et son empreinte sont conservées. Aucun appel Copilot payant ni publication n’a été exécuté ; les mesures de revue dans les tests restent simulées.
 
 ## Vérifications locales de v1.2.0
 

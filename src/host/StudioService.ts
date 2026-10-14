@@ -1494,7 +1494,10 @@ export class StudioService extends EventEmitter {
       featureId,
       this.state.settings.traceLimitBytes ?? DEFAULT_TRACE_BYTES,
     );
-    return archive.page(attemptId, offset);
+    return {
+      ...(await archive.page(attemptId, offset)),
+      ...(!archive.info.complete ? { error: archive.info.reason } : {}),
+    };
   }
   async sessionStorage(featureId: string): Promise<SessionStorageInfo> {
     const feature = this.engine.getFeature(featureId);
@@ -1507,7 +1510,9 @@ export class StudioService extends EventEmitter {
       );
       traces = {
         ...archive.info,
-        complete: feature.steps.every((s) => s.attempts.every((a) => a.traceArchive?.complete)),
+        complete:
+          archive.info.complete &&
+          feature.steps.every((s) => s.attempts.every((a) => a.traceArchive?.complete)),
       };
     } catch (error) {
       traces = {

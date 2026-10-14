@@ -22,11 +22,11 @@ Pars d’un besoin, choisis une équipe et avance étape par étape : challenge,
 
 Si le CLI est introuvable, renseigne `featureStudio.cliPath` dans les réglages VS Code. [Installation et diagnostic du CLI](docs/COPILOT.md). Les appels aux modèles utilisent ton quota Copilot ; consulter, configurer et exporter un kit ne lance aucun agent.
 
-## Observateur de session — v1.2.0 locale
+## Observateur de session — v1.2.1 locale
 
 **Analyser cette session** relit une feature entière, phase par phase : améliorations sourcées, coûts et modèles, commentaires globaux et bilan de l’Observateur. Le rapport se consulte dans le cockpit et s’exporte en HTML autonome ou Markdown. Les traces complètes disposent d’une limite initiale de 256 Mio configurable ; **Supprimer définitivement la session** nettoie ses archives, rapports et sauvegardes tout en préservant les objets partagés. [Mode d’emploi et limites](docs/OBSERVATEUR.md).
 
-Le package local est [feature-studio-1.2.0.vsix](releases/feature-studio-1.2.0.vsix). Les liens publics ci-dessus concernent la dernière release publiée.
+Le package local est [feature-studio-1.2.1.vsix](releases/feature-studio-1.2.1.vsix). Les liens publics ci-dessus concernent la dernière release publiée.
 
 ## Une bibliothèque pour tes équipes
 
@@ -113,12 +113,12 @@ npm run check           # Format, TypeScript, tests et builds
 npx playwright install chromium
 npm run test:ui         # Scénarios du cockpit dans Chromium
 npm run test:extension  # Vrai hôte VS Code, profil temporaire isolé
-npm run package         # releases/feature-studio-1.2.0.vsix
+npm run package         # releases/feature-studio-1.2.1.vsix
 ```
 
 **F5 → Feature Studio** ouvre l’hôte de développement. `npm run dev` fournit le frontend ; `http://127.0.0.1:5173/?demo=1` affiche les données de démonstration. Les opérations de fichiers et l’exécution des agents nécessitent l’extension.
 
-La recette locale de v1.2.0 compte **439 tests métier réussis**, **91 scénarios d’interface** et un smoke réussi dans VS Code Insiders. Trois tests propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 sont ignorés localement ; ce dernier est exécuté en CI. Les tests automatiques n’envoient aucun prompt Copilot payant. L’analyse de session et Azure DevOps sont contrôlés avec des réponses simulées, sans validation sur ton compte réel. Les résultats et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les packages possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
+La recette locale de v1.2.1 compte **446 tests métier réussis**, les **4 scénarios d’interface de l’Observateur** et un smoke réussi du VSIX final dans VS Code Insiders. La suite complète de 91 scénarios d’interface a été validée pour la v1.2.0. Trois tests propres à Windows et le contrôle explicite du catalogue CLI 1.0.96 sont ignorés localement ; ce dernier est exécuté en CI. Les tests automatiques n’envoient aucun prompt Copilot payant. L’analyse de session et Azure DevOps sont contrôlés avec des réponses simulées, sans validation sur ton compte réel. Les résultats et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Les packages possèdent leurs empreintes dans [SHA256SUMS](releases/SHA256SUMS).
 
 ## Licence et provenance
 

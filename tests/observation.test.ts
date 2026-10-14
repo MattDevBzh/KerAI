@@ -22,6 +22,7 @@ import {
   observerUsage,
   observationHtml,
   observationMarkdown,
+  observationModels,
 } from '../src/shared/observationReport';
 import { runProcess } from '../src/host/process';
 
@@ -284,6 +285,33 @@ describe('complete, sourced single-session observations', () => {
     expect(observationMarkdown(review)).toContain('observed-model');
     expect(observationMarkdown(review)).toContain('Commentaires globaux');
   });
+  it('exports the requested model, every measured model and its cost, with legacy fallback', async () => {
+    const f = await fixture();
+    const review = await run(f);
+    review.requestedModel = '<requested-model>';
+    for (const call of review.calls) {
+      call.model = 'last-model';
+      call.usage = {
+        ...usage,
+        model: 'last-model',
+        byModel: {
+          '<first-model>': { inputTokens: 50, outputTokens: 10, cost: 50000000 },
+          'last-model': { inputTokens: 50, outputTokens: 10, cost: 50000000 },
+        },
+      };
+    }
+    expect(observationModels(review)).toEqual(['<first-model>', 'last-model']);
+    const html = observationHtml(review),
+      markdown = observationMarkdown(review);
+    expect(html).toContain('Modèle demandé : &lt;requested-model&gt;');
+    expect(html).toContain('&lt;first-model&gt; · 0,15 crédits');
+    expect(html).not.toContain('<first-model>');
+    expect(markdown).toContain('Modèle demandé : <requested-model>');
+    expect(markdown).toContain('<first-model> · 0,15 crédits');
+    for (const content of [html, markdown]) expect(content).toContain('last-model · 0,15 crédits');
+    for (const call of review.calls) call.usage = { ...usage, byModel: {} };
+    expect(observationModels(review)).toEqual(['last-model']);
+  });
 });
 
 describe('durable archives and deletion', () => {
@@ -293,9 +321,128 @@ describe('durable archives and deletion', () => {
     await writeFile(join(directory, 'traces.jsonl'), '{"id":"partial');
     const storage = await f.service.sessionStorage(f.feature.id);
     expect(storage.traces.complete).toBe(false);
-    expect(storage.traces.reason).toContain('suppression reste disponible');
+    expect(storage.traces.reason).toContain('couverture reste partielle');
     expect(await f.service.deleteFeature(f.feature.id)).toBeGreaterThan(0);
     expect(await readFile(join(f.workspace, 'app.txt'), 'utf8')).toBe('protected project content');
+  });
+  it('recovers a torn UTF-8 tail, resumes phases and preserves partial coverage after restart', async () => {
+    const f = await fixture();
+    const directory = join(f.storage, sessionDirectory(f.feature.id));
+    const archive = await SessionArchive.create(f.storage, f.feature.id, 100000);
+    archive.append({
+      id: 'intact',
+      at: 'now',
+      stepId: 'plan',
+      type: 'message',
+      data: 'Earlier intact proof',
+    });
+    await archive.flush();
+    const file = join(directory, 'traces.jsonl');
+    const prefix = await readFile(file);
+    const tail = Buffer.concat([Buffer.from('{"data":"'), Buffer.from('🙂').subarray(0, 2)]);
+    const damaged = Buffer.concat([prefix, tail]);
+    await writeFile(file, damaged);
+    const preview = await f.service.previewObservation(f.feature.id, options);
+    expect(preview.warnings.join(' ')).toContain('couverture reste partielle');
+    expect(await readFile(file)).toEqual(damaged); // Reading a preview never rewrites the journal.
+    expect((await f.service.sessionStorage(f.feature.id)).traces.complete).toBe(false);
+    await f.service.runStep(f.feature.id, 'plan');
+    expect(f.feature.steps[0].attempts.at(-1)?.status).toBe('awaiting_review');
+    const saved = await readdir(join(directory, 'trace-recovery'));
+    expect(saved).toHaveLength(1);
+    const recovery = JSON.parse(
+      await readFile(join(directory, 'trace-recovery', saved[0]), 'utf8'),
+    );
+    expect(recovery.offset).toBe(prefix.length);
+    expect(Buffer.from(recovery.dataBase64, 'base64')).toEqual(tail);
+    const report = await run(f);
+    expect(report.status).toBe('completed');
+    expect(report.coverage.complete).toBe(false);
+    expect(report.coverage.warnings.join(' ')).toContain('couverture reste partielle');
+    const source = report.sourceIndex.find((s) => s.label.includes('intact'))!;
+    expect((await f.service.observationSource(f.feature.id, report.id, source.id)).content).toBe(
+      'Earlier intact proof',
+    );
+    const restarted = new StudioService(
+      f.workspace,
+      resolve('defaults'),
+      new Store(f.storage),
+      () => true,
+    );
+    services.push(restarted);
+    await restarted.initialize();
+    expect(
+      (await restarted.previewObservation(f.feature.id, options)).warnings.join(' '),
+    ).toContain('couverture reste partielle');
+    await f.service.deleteFeature(f.feature.id);
+    await expect(readFile(join(directory, 'trace-recovery', saved[0]))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+  it('preserves a complete final JSON record without newline before appending', async () => {
+    const f = await fixture();
+    const file = join(f.storage, sessionDirectory(f.feature.id), 'traces.jsonl');
+    await writeFile(
+      file,
+      JSON.stringify({ id: 'first', at: 'now', type: 'message', data: '🙂 intact' }),
+    );
+    const archive = await SessionArchive.create(f.storage, f.feature.id, 100000);
+    archive.append({ id: 'second', at: 'now', type: 'message', data: 'Next event' });
+    await archive.flush();
+    const traces = [];
+    for await (const trace of archive.read()) traces.push(trace);
+    expect(traces.map((t) => t.id)).toEqual(['first', 'second']);
+    expect(traces[0].data).toBe('🙂 intact');
+    expect((await SessionArchive.create(f.storage, f.feature.id, 100000)).info.complete).toBe(true);
+  });
+  it.each(['{broken}\n', '{broken}\n{"id":"later","at":"now","type":"message","data":"valid"}\n'])(
+    'refuses corruption in a terminated line without rewriting the original',
+    async (content) => {
+      const f = await fixture();
+      const file = join(f.storage, sessionDirectory(f.feature.id), 'traces.jsonl');
+      await writeFile(file, content);
+      await expect(SessionArchive.create(f.storage, f.feature.id, 100000)).rejects.toThrow(
+        'Journal incomplet ou altéré',
+      );
+      expect(await readFile(file, 'utf8')).toBe(content);
+    },
+  );
+  it('keeps the original tail when its recovery backup cannot be stored', async () => {
+    const f = await fixture();
+    const directory = join(f.storage, sessionDirectory(f.feature.id));
+    const file = join(directory, 'traces.jsonl');
+    await writeFile(file, '{"id":"partial');
+    const archive = await SessionArchive.create(f.storage, f.feature.id, 100000);
+    await symlink(f.workspace, join(directory, 'trace-recovery'), 'dir');
+    archive.append({
+      id: 'next',
+      at: 'now',
+      type: 'message',
+      data: 'Must not replace the original',
+    });
+    await expect(archive.flush()).rejects.toThrow('Lien privé refusé');
+    expect(await readFile(file, 'utf8')).toBe('{"id":"partial');
+    expect(await readdir(f.workspace)).not.toContain('traces.jsonl');
+  });
+  it('retries safely after the recovery backup was saved but the original tail still exists', async () => {
+    const f = await fixture();
+    const directory = join(f.storage, sessionDirectory(f.feature.id));
+    const file = join(directory, 'traces.jsonl');
+    const damaged = '{"id":"partial';
+    await writeFile(file, damaged);
+    const archive = await SessionArchive.create(f.storage, f.feature.id, 100000);
+    archive.append({ id: 'next', at: 'now', type: 'message', data: 'First recovery' });
+    await archive.flush();
+    await writeFile(file, damaged); // On-disk state of a crash between backup and truncation.
+    const retry = await SessionArchive.create(f.storage, f.feature.id, 100000);
+    retry.append({ id: 'retry', at: 'now', type: 'message', data: 'Recovered again' });
+    await retry.flush();
+    expect(await readdir(join(directory, 'trace-recovery'))).toHaveLength(1);
+    expect((await SessionArchive.create(f.storage, f.feature.id, 100000)).info).toMatchObject({
+      complete: false,
+      records: 1,
+    });
+    expect(JSON.parse((await readFile(file, 'utf8')).trim()).id).toBe('retry');
   });
   it('anchors source manifests in the persisted report and rejects tampering', async () => {
     const f = await fixture();
