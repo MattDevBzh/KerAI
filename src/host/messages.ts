@@ -22,6 +22,23 @@ const id = z.string().min(1).max(150),
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
   ...kitMessageVariants,
+  z
+    .object({
+      type: z.literal('saveFeatureTeam'),
+      featureId: id,
+      requestId: id,
+      expectedRevision: z.number().int().nonnegative(),
+      steps: z.array(workflowSchema.shape.steps.element),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('setAgentFavorite'),
+      agentId: id,
+      favorite: z.boolean(),
+      requestId: id,
+    })
+    .strict(),
   ...devOpsMessageVariants,
   z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
   z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),
@@ -51,7 +68,7 @@ export const messageSchema = z.discriminatedUnion('type', [
       type: z.literal('createFeature'),
       title: short.min(1),
       description: text,
-      workflowId: id,
+      workflowId: id.optional(),
       agentId: id.optional(),
       model: short.optional(),
       isolated: z.boolean().optional(),

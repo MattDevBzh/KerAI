@@ -87,7 +87,7 @@ export class WorkflowEngine {
   constructor(public readonly features: Feature[] = []) {}
 
   createFeature(
-    workflow: Workflow,
+    workflow: Workflow | undefined,
     input: {
       title: string;
       description: string;
@@ -96,7 +96,7 @@ export class WorkflowEngine {
       model?: string;
     },
   ): Feature {
-    const validated = validateWorkflow(workflow);
+    const validated = workflow ? validateWorkflow(workflow) : undefined;
     if (!input.title.trim()) throw new Error('Le titre est obligatoire.');
     const now = new Date().toISOString();
     const feature: Feature = {
@@ -106,8 +106,9 @@ export class WorkflowEngine {
       descriptionRevision: 0,
       descriptionVersions: [{ revision: 0, content: input.description, at: now, author: 'human' }],
       corrections: [],
-      workflowId: validated.id,
-      workflowName: validated.name,
+      workflowId: validated?.id ?? 'custom',
+      workflowName: validated?.name ?? 'Équipe personnalisée',
+      teamRevision: 0,
       createdAt: now,
       updatedAt: now,
       branch: input.branch ?? '',
@@ -115,8 +116,8 @@ export class WorkflowEngine {
       budget: structuredClone(defaultBudget),
       criteria: [],
       reviewComments: [],
-      activeStepId: validated.steps.find((s) => !s.dependsOn.length)!.id,
-      steps: validated.steps.map((step) => ({
+      activeStepId: validated?.steps.find((s) => !s.dependsOn.length)?.id ?? '',
+      steps: (validated?.steps ?? []).map((step) => ({
         ...structuredClone(step),
         agentId: input.agentId ?? step.agentId,
         model: input.model ?? step.model,
@@ -151,17 +152,19 @@ export class WorkflowEngine {
     if (feature.finalValidation && feature.finalValidation.stateKey !== featureStateKey(feature))
       delete feature.finalValidation;
     feature.updatedAt = new Date().toISOString();
-    feature.status = feature.steps.every((s) => s.status === 'approved')
-      ? featureCompletionBlockers(feature).length
-        ? 'attention'
-        : feature.finalValidation
-          ? 'completed'
-          : 'awaiting_final_validation'
-      : feature.steps.some((s) => s.status === 'running')
-        ? 'running'
-        : feature.steps.some((s) => !['pending'].includes(s.status))
+    feature.status = !feature.steps.length
+      ? 'draft'
+      : feature.steps.every((s) => s.status === 'approved')
+        ? featureCompletionBlockers(feature).length
           ? 'attention'
-          : 'draft';
+          : feature.finalValidation
+            ? 'completed'
+            : 'awaiting_final_validation'
+        : feature.steps.some((s) => s.status === 'running')
+          ? 'running'
+          : feature.steps.some((s) => !['pending'].includes(s.status))
+            ? 'attention'
+            : 'draft';
     const correction = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
     if (correction) {
       if (
@@ -286,6 +289,7 @@ export class WorkflowEngine {
     };
     const correction = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
     if (correction) correction.status = 'running';
+    feature.teamLockedAt ??= attempt.startedAt;
     step.attempts.push(attempt);
     step.status = 'running';
     feature.activeStepId = step.id;

@@ -173,7 +173,7 @@ test('le navigateur affiche un accès VS Code, la démo nécessite un choix expl
   await expect(page.getByText('Démonstration — aucune exécution Copilot')).toBeVisible();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Une feature de démo');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   await expect(page.getByRole('status')).toContainText('aucune commande, écriture ou exécution');
 });
 test('recherche, filtres et création transmettent le contrat exact sans lancer Copilot', async ({
@@ -185,20 +185,14 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
   await page.getByLabel('Filtrer les sessions').selectOption('completed');
   await expect(page.getByText('Aucune session ne correspond')).toBeVisible();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  await page.getByRole('radio', { name: 'Session libre' }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Analyser un composant');
   await page.getByLabel('Le contexte et le résultat souhaité').fill('Comprendre les contraintes.');
-  await page.getByLabel('Agent de la première étape').selectOption('reviewer');
-  await page.getByLabel('Modèle', { exact: true }).selectOption('real-model');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   expect((await messages(page)).at(-1)).toEqual({
     type: 'createFeature',
     title: 'Analyser un composant',
     description: 'Comprendre les contraintes.',
-    workflowId: 'single',
     isolated: false,
-    agentId: 'reviewer',
-    model: 'real-model',
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
 });
@@ -492,10 +486,8 @@ test('les cartes de parcours gardent leur identité malgré un registry trié pa
   const feature = page.locator('.template-list button').filter({ hasText: 'Feature complète' });
   await expect(feature).toContainText('De l’idée aux tests');
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Feature complète' })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(page.getByRole('dialog', { name: 'Une nouvelle feature' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Feature complète' })).toHaveCount(0);
 });
 test('augmenter le budget de tentatives exige une sauvegarde explicite et permet la configuration épuisée', async ({
   page,
@@ -1120,7 +1112,7 @@ async function openCheckpoints(page: Page) {
     page.getByRole('dialog', { name: 'Le code garde des points de repère.' }),
   ).toBeVisible();
 }
-test('création Git : worktree par défaut feature/session libre, relecture dans le dossier courant', async ({
+test('création Git sans équipe : worktree par défaut et choix explicite du dossier courant', async ({
   page,
 }) => {
   const state = checkpointState();
@@ -1130,23 +1122,20 @@ test('création Git : worktree par défaut feature/session libre, relecture dans
   await expect(
     page.getByText('Les changements non commités restent dans le dossier source', { exact: false }),
   ).toBeVisible();
-  await page.getByRole('radio', { name: 'Session libre' }).click();
   await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeChecked();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Une session isolée');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'createFeature',
-    workflowId: 'single',
     isolated: true,
   });
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  await page.getByRole('radio', { name: 'Relecture de code' }).click();
+  await page.getByRole('radio', { name: 'Dossier courant' }).click();
   await expect(page.getByRole('radio', { name: 'Dossier courant' })).toBeChecked();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Relire les changements existants');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'createFeature',
-    workflowId: 'code-review',
     isolated: false,
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);

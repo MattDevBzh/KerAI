@@ -20,11 +20,13 @@ import type {
   AcceptanceCriterion,
   FeatureCheckpoint,
   CheckpointComparison,
+  WorkflowStep,
 } from '../shared/types';
 import { AgentRegistry } from '../core/registry';
 import { installQualityKit, resolveQualityAttachment } from './QualityRunner';
 import { Store, settingsSchema } from '../core/store';
-import { WorkflowEngine } from '../core/workflow';
+import { WorkflowEngine, validateWorkflow } from '../core/workflow';
+import { assertTeamOrder, teamLocked } from '../shared/team';
 import { boundAnswers } from '../core/questions';
 import { gitInfo, ToolHost } from './ToolHost';
 import { runProcess, redact } from './process';
@@ -191,14 +193,14 @@ export class StudioService extends EventEmitter {
   async createFeature(input: {
     title: string;
     description: string;
-    workflowId: string;
+    workflowId?: string;
     agentId?: string;
     model?: string;
     isolated?: boolean;
   }): Promise<Feature> {
     return this.workspaceAction(undefined, 'Création de l’espace de la feature', async () => {
       const workflow = this.state.workflows.find((item) => item.id === input.workflowId);
-      if (!workflow) throw new Error('Workflow inconnu.');
+      if (input.workflowId && !workflow) throw new Error('Workflow inconnu.');
       if (input.agentId && !this.state.agents.some((agent) => agent.id === input.agentId))
         throw new Error('Agent inconnu.');
       const info = await gitInfo(this.workspacePath);
@@ -217,6 +219,64 @@ export class StudioService extends EventEmitter {
       this.engine.features.push(feature);
       await this.persist();
       return feature;
+    });
+  }
+  async saveFeatureTeam(
+    featureId: string,
+    expectedRevision: number,
+    steps: WorkflowStep[],
+  ): Promise<number> {
+    return this.workspaceAction(featureId, 'Enregistrement de l’équipe', async () => {
+      Object.assign(this.state, await this.registry.load());
+      this.assertTrusted();
+      const feature = this.engine.getFeature(featureId);
+      if (feature.archived) throw new Error('Réactive la feature avant de modifier son équipe.');
+      if (teamLocked(feature))
+        throw new Error('L’équipe est verrouillée : une première exécution a déjà commencé.');
+      if ((feature.teamRevision ?? 0) !== expectedRevision)
+        throw new Error('L’équipe a changé. Ferme le panneau puis rouvre la composition actuelle.');
+      const validated = steps.length
+        ? validateWorkflow({
+            id: 'custom',
+            name: 'Équipe personnalisée',
+            description: '',
+            icon: 'users',
+            steps,
+          }).steps
+        : [];
+      assertTeamOrder(validated);
+      const artifacts = new Set<string>();
+      for (const step of validated) {
+        if (!this.state.agents.some((agent) => agent.id === step.agentId))
+          throw new Error(`Agent introuvable pour « ${step.name} » : ${step.agentId}.`);
+        const artifact = step.artifact.toLowerCase();
+        if (artifacts.has(artifact))
+          throw new Error(`Deux interventions utilisent le même livrable : ${step.artifact}.`);
+        artifacts.add(artifact);
+      }
+      const previous = structuredClone(feature);
+      feature.steps = validated.map((step) => ({
+        ...structuredClone(step),
+        status: 'pending',
+        attempts: [],
+      }));
+      feature.activeStepId = feature.steps[0]?.id ?? '';
+      feature.workflowId = 'custom';
+      feature.workflowName = 'Équipe personnalisée';
+      feature.teamRevision = expectedRevision + 1;
+      feature.status = 'draft';
+      feature.updatedAt = new Date().toISOString();
+      delete feature.autopilot;
+      delete feature.finalValidation;
+      try {
+        await this.persist();
+      } catch (error) {
+        for (const key of Object.keys(feature))
+          delete (feature as unknown as Record<string, unknown>)[key];
+        Object.assign(feature, previous);
+        throw error;
+      }
+      return feature.teamRevision!;
     });
   }
   /** Dedicated delivery uses the same reservation, trust checks and source workspace lease. */
@@ -922,6 +982,7 @@ export class StudioService extends EventEmitter {
     this.assertConfigurable(featureId);
     const feature = this.engine.getFeature(featureId),
       parsed = autopilotConfigSchema.parse(config);
+    if (!feature.steps.length) throw new Error('Compose une équipe avant de configurer le pilote.');
     const ids = new Set(feature.steps.map((step) => step.id));
     if (
       [
@@ -977,6 +1038,7 @@ export class StudioService extends EventEmitter {
     if (this.active || this.automation || this.workspaceTask)
       throw new Error('Une exécution ou un pilote est déjà actif.');
     const feature = this.engine.getFeature(featureId);
+    if (!feature.steps.length) throw new Error('Compose une équipe avant de lancer le pilote.');
     if (!feature.autopilot)
       throw new Error('Configure le pilote et ses limites avant de le lancer.');
     if (feature.archived) throw new Error('La session est archivée.');

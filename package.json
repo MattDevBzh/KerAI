@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.1.2",
+  "version": "1.2.1",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -132,6 +132,15 @@
           "minimum": 1,
           "maximum": 120,
           "description": "Durée maximale d’une tentative."
+        },
+        "featureStudio.favoriteAgentIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "application",
+          "description": "Agents favoris, affichés en premier dans les catalogues et sélecteurs de Feature Studio."
         }
       }
     }
@@ -145,7 +154,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.1.2.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.2.1.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",

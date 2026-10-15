@@ -64,6 +64,9 @@ export async function activate(context: vscode.ExtensionContext) {
     send({ type: 'themeState', theme: getTheme(), requestId, error });
   // Theme writes share a queue so fast successive choices keep their requested order.
   let themeWrites = Promise.resolve();
+  let favoriteWrites = Promise.resolve();
+  const favorites = () =>
+    vscode.workspace.getConfiguration('featureStudio').get<string[]>('favoriteAgentIds', []);
   const report = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     output.appendLine(message);
@@ -80,6 +83,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('featureStudio.launcher', launcher),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
+      if (event.affectsConfiguration('featureStudio.favoriteAgentIds')) service?.publish();
     }),
     vscode.workspace.registerTextDocumentContentProvider('feature-studio-diff', {
       provideTextDocumentContent: (uri) => diffContents.get(uri.toString()) ?? '',
@@ -142,7 +146,9 @@ export async function activate(context: vscode.ExtensionContext) {
           resolveMcpSecret: (serverId, key) =>
             context.secrets.get(`studio-mcp:${sha256(root)}:${serverId}:${key}`),
         });
-        next.on('state', (state) => send({ type: 'state', state }));
+        next.on('state', (state) =>
+          send({ type: 'state', state: { ...state, favoriteAgentIds: favorites() } }),
+        );
         next.on('errorNotice', (message) => report(new Error(message)));
         service = next;
         lease = newLease;
@@ -206,10 +212,6 @@ export async function activate(context: vscode.ExtensionContext) {
           },
           features: () => next.state.features,
           createFeature: async (ticket) => {
-            const workflow =
-              next.state.workflows.find((entry) => entry.id === 'feature') ??
-              next.state.workflows[0];
-            if (!workflow) throw new Error('Aucun parcours disponible pour créer la feature.');
             const feature = await next.createFeature({
               title: `#${ticket.id} — ${ticket.title}`,
               description: [
@@ -218,7 +220,6 @@ export async function activate(context: vscode.ExtensionContext) {
                 devOpsPlainText(ticket.acceptanceCriteria) || 'Non renseignés.',
                 `Source Azure DevOps : ${ticket.url}`,
               ].join('\n\n'),
-              workflowId: workflow.id,
               isolated: false,
             });
             return feature.id;
@@ -328,6 +329,53 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'openSettings':
         await vscode.commands.executeCommand('workbench.action.openSettings', 'featureStudio');
         return;
+      case 'setAgentFavorite': {
+        favoriteWrites = favoriteWrites
+          .catch(() => undefined)
+          .then(async () => {
+            try {
+              const ids = new Set(favorites());
+              if (message.favorite) ids.add(message.agentId);
+              else ids.delete(message.agentId);
+              await vscode.workspace
+                .getConfiguration('featureStudio')
+                .update('favoriteAgentIds', [...ids], vscode.ConfigurationTarget.Global);
+              current.publish();
+              send({ type: 'agentFavoriteResult', requestId: message.requestId });
+            } catch (error) {
+              send({
+                type: 'agentFavoriteResult',
+                requestId: message.requestId,
+                error: (error as Error).message,
+              });
+            }
+          });
+        await favoriteWrites;
+        return;
+      }
+      case 'saveFeatureTeam': {
+        try {
+          const revision = await current.saveFeatureTeam(
+            message.featureId,
+            message.expectedRevision,
+            message.steps,
+          );
+          send({
+            type: 'featureTeamResult',
+            featureId: message.featureId,
+            requestId: message.requestId,
+            revision,
+          });
+        } catch (error) {
+          send({
+            type: 'featureTeamResult',
+            featureId: message.featureId,
+            requestId: message.requestId,
+            error: (error as Error).message,
+          });
+        }
+        return;
+      }
       case 'createFeature': {
         const created = await current.createFeature(message);
         send({ type: 'navigate', view: 'dashboard', featureId: created.id });
