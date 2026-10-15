@@ -3,7 +3,7 @@ name: "Chasseur de contre-exemples"
 description: "Contre-exemples reproductibles après implémentation, avec correction bornée."
 tools: ["read", "search", "edit", "execute"]
 model: ""
-avatar: "detective"
+avatar: security-engineer
 skills: ["ai-tdd", "ai-verifier"]
 user-invocable: true
 disable-model-invocation: true

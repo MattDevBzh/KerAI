@@ -3,7 +3,7 @@ name: "DevOps · Validation du test"
 description: "Vérifier le test manuel Azure DevOps et produire un verdict fondé sur les preuves hôte."
 tools: ["read", "search", "studio_devops_inspect", "studio_devops_verify_test"]
 model: ""
-avatar: "devops-controller"
+avatar: sre-engineer
 nickname: "Contrôleur"
 skills: ["devops-validate", "devops-inspect", "devops-azure-preflight"]
 user-invocable: true

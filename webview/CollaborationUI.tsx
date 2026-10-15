@@ -15,21 +15,12 @@ import { hasActiveRun } from './GitWorkspaceUI';
 import { subscribe, celebrationEnabled, saveCelebrationEnabled } from './bridge';
 import './collaboration.css';
 
-const defaultAvatars: Record<string, string> = {
-  'fs-specs': 'detective',
-  analyst: 'detective',
-  'fs-plan': 'wizard',
-  architect: 'wizard',
-  'fs-dev': 'hacker',
-  builder: 'hacker',
-  'fs-tests': 'scientist',
-  tester: 'scientist',
-  'fs-review': 'ninja',
-  reviewer: 'ninja',
-};
+import { resolveAvatar } from '../src/shared/avatars';
+
 function Portrait({ agent, approved = false }: { agent?: AgentProfile; approved?: boolean }) {
   const [failed, setFailed] = useState(false);
-  const avatar = agent?.avatar || defaultAvatars[agent?.id ?? ''] || 'robot';
+  const avatar = resolveAvatar(agent?.avatar, agent?.id);
+  useEffect(() => setFailed(false), [avatar]);
   return failed ? (
     <span className="collaboration-portrait-fallback">✦</span>
   ) : (

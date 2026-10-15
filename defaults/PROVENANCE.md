@@ -22,3 +22,7 @@ Depuis la v0.5.1, `devops-azure-preflight` est une adaptation française ciblée
 L’écran Kits expose séparément Atelier Copilot (quatre parcours, les huit profils Feature Studio et les quatre agents originaux, sept skills) et DevOps. Le format portable inclut les ressources passives et les dépendances choisies, sans consignes utilisateur globales, connexion MCP ni automatisation active. Le kit original et son manifeste restent inchangés.
 
 Les six avatars DevOps ont été générés individuellement avec imagegen, puis exportés mécaniquement par `scripts/pack-avatars.mjs --devops`. Les images source et directions artistiques sont dans `design/avatars`. Les identifiants sont `devops-scout`, `devops-architect`, `devops-builder`, `devops-sentinel`, `devops-lab` et `devops-controller`.
+
+## Collection de métiers — v1.4.0
+
+Vingt portraits générés individuellement avec imagegen remplacent le catalogue précédent : style pixel art commun, vue de face et alpha transparent. Le premier architecte a été validé par l’utilisateur puis utilisé comme référence des dix-neuf autres. Sources et prompts : `design/avatars/professions/`. `npm run avatars:pack` exporte les PNG et GIF de 256 × 256 pixels sans redessiner les images. Chaque planche contient une pose de repos, quatre images de travail et une pose de réussite ; la réduction des mouvements est respectée. Les anciens identifiants restent acceptés et sont associés aux nouveaux portraits par `src/shared/avatar-catalog.json`, sans migration automatique des fichiers personnels.

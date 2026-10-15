@@ -51,15 +51,15 @@ Le fichier **`.fskit.json`** emporte les profils, parcours, scripts, référence
 | 6. Vérification          | **Contrôleur** | Vérifier le test que tu as exécuté et ses résultats réels                               |
 
 <p>
-<img src="webview/public/avatars/devops-scout/idle.png" width="90" alt="Éclaireur">
-<img src="webview/public/avatars/devops-architect/working.gif" width="90" alt="Architecte au travail">
-<img src="webview/public/avatars/devops-builder/idle.png" width="90" alt="Bâtisseur">
-<img src="webview/public/avatars/devops-sentinel/idle.png" width="90" alt="Vigie">
-<img src="webview/public/avatars/devops-lab/working.gif" width="90" alt="Laborantin au travail">
-<img src="webview/public/avatars/devops-controller/approved.png" width="90" alt="Contrôleur après validation">
+<img src="webview/public/avatars/business-analyst/idle.png" width="90" alt="Éclaireur">
+<img src="webview/public/avatars/cloud-architect/idle.png" width="90" alt="Architecte au travail">
+<img src="webview/public/avatars/devops-engineer/idle.png" width="90" alt="Bâtisseur">
+<img src="webview/public/avatars/security-engineer/idle.png" width="90" alt="Vigie">
+<img src="webview/public/avatars/qa-automation/idle.png" width="90" alt="Laborantin au travail">
+<img src="webview/public/avatars/sre-engineer/idle.png" width="90" alt="Contrôleur après validation">
 </p>
 
-Chaque nouvel avatar possède trois états : repos, travail animé et validation. Les animations respectent la réduction des mouvements.
+Les portraits sont transparents et cohérents dans tous les écrans. Chaque personnage dispose d’une pose de repos, d’un GIF de travail à quatre images et d’une pose de réussite. Les animations respectent la réduction des mouvements.
 
 Le pilote s’arrête avant la dernière étape. **Tu mets en place et exécutes le test hors production**, puis fournis les références exactes : pipeline, build, commit, branche et résultats attendus. Le host contrôle ces références, les stages, les artefacts demandés et les tests publiés. Une affirmation de l’agent ne remplace pas ces preuves.
 
@@ -76,7 +76,7 @@ Le collecteur vise **Azure DevOps Services / Azure Repos Git**. Il lit les donn�
 - **Une équipe qui corrige avec toi.** Depuis un compte rendu ou une remarque, choisis où reprendre et inspecte le contexte transmis. L’éditeur conserve l’original, tes versions et les corrections du besoin. En fin de parcours, choisis **Valider définitivement** ou **Faire une correction** ; ta validation réussie déclenche la célébration d’équipe.
 - **Des agents avec du répondant.** Active un roast léger, piquant ou sans pitié sur chaque profil. Les comptes rendus peuvent te taquiner ; les fichiers produits et les preuves restent précis.
 - **Azure DevOps et livraison.** Tableaux PR/tickets, liens aux sessions et préparation de commit, push et PR. Les écritures distantes ont leur confirmation hôte.
-- **Des profils personnalisables.** Agents et skills personnels ou propres au projet, quatorze avatars, modèles découverts via le CLI, MCP et commandes de tests explicitement autorisés.
+- **Des profils personnalisables.** Agents et skills personnels ou propres au projet, vingt avatars de métiers, modèles découverts via le CLI, MCP et commandes de tests explicitement autorisés.
 - **Un cockpit à ton goût.** Trois thèmes clairs, deux sombres, suivi de VS Code, contraste élevé et navigation adaptée aux petits écrans.
 
 Les données de session restent dans le stockage local de l’extension. Le PAT Azure DevOps est conservé dans SecretStorage. Les capacités effectives dépendent des permissions de l’étape et de l’agent ; les commandes de tests autorisées s’exécutent sous ton compte. La consommation affiche uniquement les mesures fournies par le SDK, avec les données manquantes signalées. [Détails d’utilisation](docs/GUIDE.md).
@@ -115,7 +115,7 @@ La recette locale de v1.1.1 compte **419 tests métier réussis**, **87 scénari
 
 ## Licence et provenance
 
-Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est conservé avec son [inventaire et sa provenance](defaults/PROVENANCE.md). Les dépendances sont documentées dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), et les sources des avatars dans [design/avatars](design/avatars/PROMPTS.md).
+Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est conservé avec son [inventaire et sa provenance](defaults/PROVENANCE.md). Les dépendances sont documentées dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), et les sources des avatars dans [design/avatars](design/avatars/professions/PROMPTS.md).
 
 
 ## Fenêtre dédiée et espaces de travail

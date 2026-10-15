@@ -13,24 +13,10 @@ import { z } from 'zod';
 import type { AgentProfile, SkillInfo, Workflow } from '../shared/types';
 import { validateWorkflow } from './workflow';
 import { ROAST_LEVELS } from '../shared/roast';
+import { acceptedAvatarIds } from '../shared/avatars';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
-export const avatarSchema = z.enum([
-  'wizard',
-  'hacker',
-  'detective',
-  'lumberjack',
-  'scientist',
-  'robot',
-  'ninja',
-  'captain',
-  'devops-scout',
-  'devops-architect',
-  'devops-builder',
-  'devops-sentinel',
-  'devops-lab',
-  'devops-controller',
-]);
+export const avatarSchema = z.enum(acceptedAvatarIds);
 const agentMetadata = z.object({
   name: z.string().min(1),
   description: z.string(),

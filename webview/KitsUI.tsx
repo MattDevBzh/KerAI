@@ -32,6 +32,7 @@ import type {
 import { kitNodes, resolveKitSelection } from '../src/shared/kits';
 import { subscribe } from './bridge';
 import './kits.css';
+import { resolveAvatar } from '../src/shared/avatars';
 
 const kinds: KitKind[] = ['workflow', 'agent', 'skill'];
 const labels: Record<KitKind, string> = { workflow: 'Parcours', agent: 'Agents', skill: 'Skills' };
@@ -43,7 +44,7 @@ function Portrait({ node }: { node: KitNode }) {
   return node.kind === 'agent' && node.avatar ? (
     <img
       className="kit-portrait"
-      src={`${import.meta.env.BASE_URL}avatars/${node.avatar}/idle.png`}
+      src={`${import.meta.env.BASE_URL}avatars/${resolveAvatar(node.avatar, node.id)}/idle.png`}
       alt=""
     />
   ) : (

@@ -3,7 +3,7 @@ name: "Plan technique"
 description: "Préparer une tranche cohérente et vérifiable."
 tools: ["read", "search"]
 model: ""
-avatar: "wizard"
+avatar: software-architect
 nickname: ""
 skills: ["ai-plan"]
 user-invocable: true

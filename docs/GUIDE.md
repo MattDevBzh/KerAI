@@ -153,20 +153,20 @@ L’enregistrement produit un YAML au niveau utilisateur, dans `~/.copilot/featu
 
 ## Donner une personnalité aux agents
 
-Dans **Agents**, ouvre un profil et change **Son petit nom**. Choisis l’un des quatorze personnages : le mage architecte, le hacker au café, le détective, le bûcheron, le scientifique, le robot, le ninja ou le capitaine.
+Dans **Agents**, ouvre un profil et change **Son petit nom**. Choisis l’un des vingt portraits de métiers : architecture, développement, tests, documentation, infrastructure, DevOps, sécurité, données, design, produit, support ou livraison. Ils partagent le même style pixel art, une vue de face et un fond transparent.
 
 <p>
-<img src="../webview/public/avatars/wizard/idle.png" width="82" alt="Mage">
-<img src="../webview/public/avatars/hacker/working.gif" width="82" alt="Hacker au travail">
-<img src="../webview/public/avatars/detective/idle.png" width="82" alt="Détective">
-<img src="../webview/public/avatars/lumberjack/idle.png" width="82" alt="Bûcheron">
-<img src="../webview/public/avatars/scientist/working.gif" width="82" alt="Scientifique au travail">
-<img src="../webview/public/avatars/robot/idle.png" width="82" alt="Robot">
-<img src="../webview/public/avatars/ninja/approved.png" width="82" alt="Ninja satisfait">
-<img src="../webview/public/avatars/captain/approved.png" width="82" alt="Capitaine satisfait">
+<img src="../webview/public/avatars/software-architect/idle.png" width="82" alt="Architecte logiciel">
+<img src="../webview/public/avatars/backend-developer/idle.png" width="82" alt="Développeur backend">
+<img src="../webview/public/avatars/business-analyst/idle.png" width="82" alt="Analyste métier">
+<img src="../webview/public/avatars/infrastructure-engineer/idle.png" width="82" alt="Ingénieur infrastructure">
+<img src="../webview/public/avatars/qa-tester/idle.png" width="82" alt="Testeur">
+<img src="../webview/public/avatars/qa-automation/idle.png" width="82" alt="Automaticien QA">
+<img src="../webview/public/avatars/code-reviewer/idle.png" width="82" alt="Relectrice de code">
+<img src="../webview/public/avatars/release-manager/idle.png" width="82" alt="Responsable des livraisons">
 </p>
 
-Chaque avatar possède une image de repos, un **vrai GIF de travail à quatre images**, puis une pose de validation. Les animations respectent la préférence système de réduction des mouvements. Le pseudo et le personnage sont sauvegardés dans la portée choisie du profil ; le rôle technique reste indépendant du petit nom.
+Chaque avatar utilise son portrait transparent. Un GIF à quatre images montre le geste de travail ; une pose distincte célèbre la réussite. Les animations respectent la préférence système de réduction des mouvements. Les anciens identifiants d’avatars sont reconnus à l’affichage sans réécrire automatiquement les fichiers personnels. Le pseudo et le personnage sont sauvegardés dans la portée choisie du profil ; le rôle technique reste indépendant du petit nom.
 
 Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. L’éditeur propose **PERSONNEL**, dans `~/.copilot/agents/` et `~/.copilot/skills/` (ou `COPILOT_HOME`), ou **PROJET**, dans `.github/agents/` et `.github/skills/`. Un profil du kit fourni commence en portée personnelle ; un profil personnalisé commence dans sa portée active. Le chemin et la révision attendue sont affichés avant sauvegarde. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
 
@@ -241,7 +241,7 @@ npm run package       # Produit releases/feature-studio-1.0.0.vsix
 
 Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développement. `npm run dev` ouvre le frontend de développement ; `http://127.0.0.1:5173/?demo=1` affiche des données d’exemple avec un bandeau explicite. Sans ce paramètre et hors VS Code, aucune exécution n’est simulée.
 
-Le test réel facultatif est séparé dans `scripts/smoke-copilot.ts` et exige `FEATURE_STUDIO_LIVE_TEST=1`. Il consomme du quota Copilot. Il ne fait partie ni de `npm test` ni de la CI. Les sources des avatars et leurs prompts sont dans [design/avatars](../design/avatars/PROMPTS.md) ; `node scripts/pack-avatars.mjs` reconstruit leurs PNG/GIF.
+Le test réel facultatif est séparé dans `scripts/smoke-copilot.ts` et exige `FEATURE_STUDIO_LIVE_TEST=1`. Il consomme du quota Copilot. Il ne fait partie ni de `npm test` ni de la CI. Les sources des avatars et leurs prompts sont dans [design/avatars](../design/avatars/professions/PROMPTS.md) ; `node scripts/pack-avatars.mjs` reconstruit leurs PNG et GIF transparents.
 
 Voir [la validation livrée et les limites connues](../docs/VALIDATION.md) pour distinguer tests automatiques, test du CLI réel, versions testées et plateformes non vérifiées.
 

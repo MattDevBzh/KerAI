@@ -3,7 +3,7 @@ name: "Développement"
 description: "Implémenter la tranche définie dans le plan validé."
 tools: ["read", "search", "edit"]
 model: ""
-avatar: "hacker"
+avatar: backend-developer
 nickname: ""
 skills: ["ai-implement"]
 user-invocable: true

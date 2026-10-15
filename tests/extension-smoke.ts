@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { ClientMessage, StudioState, CheckpointComparison } from '../src/shared/types';
 import type { DevOpsConfig, DevOpsState } from '../src/shared/devops';
 import { THEME_IDS, type ThemeId } from '../src/shared/themes';
+import { resolveAvatar } from '../src/shared/avatars';
 import { featureStateKey } from '../src/shared/collaboration';
 
 interface Api {
@@ -106,7 +107,14 @@ async function smokeRun(): Promise<void> {
   for (const agent of devopsAgents) {
     for (const asset of ['idle.png', 'working.gif', 'approved.png'])
       assert.ok(
-        await readFile(join(extension.extensionPath, 'dist/webview/avatars', agent.avatar!, asset)),
+        await readFile(
+          join(
+            extension.extensionPath,
+            'dist/webview/avatars',
+            resolveAvatar(agent.avatar, agent.id),
+            asset,
+          ),
+        ),
       );
   }
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-counterexamples'));

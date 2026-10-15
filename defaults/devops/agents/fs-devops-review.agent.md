@@ -3,7 +3,7 @@ name: "DevOps · Relecture indépendante"
 description: "Relire les changements CI/CD et IaC, leurs effets et leurs chemins d’échec."
 tools: ["read", "search", "studio_devops_inspect"]
 model: ""
-avatar: "devops-sentinel"
+avatar: security-engineer
 nickname: "Vigie"
 skills: ["devops-review", "devops-inspect", "devops-azure-preflight"]
 user-invocable: true
