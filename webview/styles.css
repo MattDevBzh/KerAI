@@ -343,13 +343,22 @@ svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--coral);
-  color: var(--on-accent);
+  background: transparent;
   width: 37px;
   height: 37px;
   border-radius: 10px;
   flex-shrink: 0;
-  box-shadow: inset 0 0 0 1px #ffffff26;
+}
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.brand-inline {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 .workspace-card {
   display: flex;

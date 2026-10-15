@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -45,7 +45,7 @@
         {
           "id": "featureStudio",
           "title": "Feature Studio",
-          "icon": "resources/cockpit-geek.svg"
+          "icon": "resources/team.svg"
         }
       ]
     },
@@ -163,12 +163,13 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.4.0.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.4.1.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "smoke:mcp": "node scripts/run-mcp-smoke.mjs",
-    "avatars:pack": "node scripts/pack-avatars.mjs"
+    "avatars:pack": "node scripts/pack-avatars.mjs",
+    "logo:pack": "node scripts/pack-logo.mjs"
   },
   "dependencies": {
     "@github/copilot-sdk": "1.0.20",

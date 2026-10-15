@@ -317,7 +317,10 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         if (message.type === 'openDedicatedWindow') await openDedicated();
         else if (message.type === 'createWindowsShortcut') {
-          const destination = await dedicatedWindow.shortcut(process.execPath);
+          const destination = await dedicatedWindow.shortcut(
+            process.execPath,
+            path.join(context.extensionPath, 'resources', 'feature-studio.ico'),
+          );
           send({
             type: 'projectResult',
             requestId: message.requestId,
@@ -461,7 +464,10 @@ export async function activate(context: vscode.ExtensionContext) {
                 .getConfiguration('featureStudio')
                 .update('favoriteAgentIds', [...ids], vscode.ConfigurationTarget.Global);
               current.publish();
-              send({ type: 'agentFavoriteResult', requestId: message.requestId });
+              send({
+                type: 'agentFavoriteResult',
+                requestId: message.requestId,
+              });
             } catch (error) {
               send({
                 type: 'agentFavoriteResult',
@@ -715,7 +721,11 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'requestCorrection': {
         try {
           const correctionId = await current.requestCorrection(message.featureId, message);
-          send({ type: 'correctionResult', featureId: message.featureId, correctionId });
+          send({
+            type: 'correctionResult',
+            featureId: message.featureId,
+            correctionId,
+          });
           notice('Correction enregistrée. Le pilote reprend avec les validations habituelles.');
         } catch (error) {
           send({
@@ -733,7 +743,11 @@ export async function activate(context: vscode.ExtensionContext) {
             message.featureId,
             message.expectedStateKey,
           );
-          send({ type: 'featureFinalizationResult', featureId: message.featureId, finalizationId });
+          send({
+            type: 'featureFinalizationResult',
+            featureId: message.featureId,
+            finalizationId,
+          });
           notice('Validation définitive enregistrée : session terminée.');
         } catch (error) {
           send({
@@ -779,7 +793,11 @@ export async function activate(context: vscode.ExtensionContext) {
               ? await current.registry.saveAgent(message.agent, message.options)
               : await current.registry.saveSkill(message.id, message.content, message.options);
           await current.refresh();
-          send({ type: 'profileSaveResult', requestId: message.requestId, ...result });
+          send({
+            type: 'profileSaveResult',
+            requestId: message.requestId,
+            ...result,
+          });
           notice(`Profil enregistré dans ${result.path}.`);
         } catch (error) {
           send({
@@ -917,7 +935,11 @@ export async function activate(context: vscode.ExtensionContext) {
               title: 'Choisir un kit .fskit.json',
             });
             if (!selected?.[0])
-              send({ type: 'kitResult', requestId: message.requestId, cancelled: true });
+              send({
+                type: 'kitResult',
+                requestId: message.requestId,
+                cancelled: true,
+              });
             else
               send({
                 type: 'kitResult',
@@ -936,7 +958,11 @@ export async function activate(context: vscode.ExtensionContext) {
               title: 'Exporter le kit',
             });
             if (!destination)
-              send({ type: 'kitResult', requestId: message.requestId, cancelled: true });
+              send({
+                type: 'kitResult',
+                requestId: message.requestId,
+                cancelled: true,
+              });
             else {
               current.assertConfigurable();
               await writeFile(destination.fsPath, JSON.stringify(bundle, null, 2) + '\n');
@@ -1122,6 +1148,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const mount = async (target: vscode.WebviewPanel): Promise<void> => {
     webviewReady = false;
     panel = target;
+    target.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
     target.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')],
@@ -1279,7 +1306,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('featureStudio.openDedicated', () => openDedicated()),
     vscode.commands.registerCommand('featureStudio.createWindowsShortcut', async () => {
       try {
-        const destination = await dedicatedWindow.shortcut(process.execPath);
+        const destination = await dedicatedWindow.shortcut(
+          process.execPath,
+          path.join(context.extensionPath, 'resources', 'feature-studio.ico'),
+        );
         void vscode.window.showInformationMessage(`Raccourci Feature Studio créé : ${destination}`);
       } catch (error) {
         report(error);

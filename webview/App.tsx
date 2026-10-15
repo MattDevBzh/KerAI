@@ -86,6 +86,7 @@ import type {
 import { initialView, isDemo, isHosted, persistView, send, subscribe } from './bridge';
 import { demoState } from './demo';
 import { QualityCommandFields, QualitySetup } from './QualityUI';
+import brandIcon from '../resources/icon.png';
 import { LaunchDialog, HumanRequests, McpSettings, McpPicker } from './ExecutionUI';
 import './evolution.css';
 import {
@@ -308,7 +309,10 @@ export default function App() {
     draftDirtyRef.current = value;
     setDraftDirty(value);
   };
-  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const [notice, setNotice] = useState<{
+    text: string;
+    error?: boolean;
+  } | null>(null);
   const [confirm, setConfirm] = useState<{
     title: string;
     description: string;
@@ -437,7 +441,7 @@ export default function App() {
     return (
       <div className="launch-screen">
         <div className="brand-mark">
-          <Command size={28} />
+          <img src={brandIcon} alt="" />
         </div>
         <span className="eyebrow">VOTRE ATELIER DE DÉVELOPPEMENT</span>
         <h1>Feature Studio</h1>
@@ -470,7 +474,7 @@ export default function App() {
           aria-label="Feature Studio, accueil"
         >
           <span className="brand-mark">
-            <Command size={23} />
+            <img src={brandIcon} alt="" />
           </span>
           <span>
             Feature<span>Studio</span>
@@ -616,8 +620,9 @@ export default function App() {
             <div className="human-global-banner">
               <MessageSquare size={15} />
               <span>
-                {state.humanRequests!.length} demande{state.humanRequests!.length > 1 ? 's' : ''}{' '}
-                humaine{state.humanRequests!.length > 1 ? 's' : ''} en attente
+                {state.humanRequests!.length} demande
+                {state.humanRequests!.length > 1 ? 's' : ''} humaine
+                {state.humanRequests!.length > 1 ? 's' : ''} en attente
               </span>
               <button
                 className="text-button"
@@ -757,7 +762,8 @@ export default function App() {
                       </p>
                       <div className="card-footer">
                         <span>
-                          {a.skills.length} skill{a.skills.length > 1 ? 's' : ''}
+                          {a.skills.length} skill
+                          {a.skills.length > 1 ? 's' : ''}
                         </span>
                         <span>{a.model || 'Modèle automatique'}</span>
                       </div>
@@ -837,7 +843,7 @@ export default function App() {
         </main>
         <footer className="app-footer">
           <span>
-            <Command size={12} /> FEATURE STUDIO
+            <img className="brand-inline" src={brandIcon} alt="" /> FEATURE STUDIO
           </span>
           <span>Un espace pour avancer avec intention.</span>
           <span>
@@ -1420,7 +1426,14 @@ function FeatureDetail({
     findingIds?: string[],
     commentIds?: string[],
     rootStepIds?: string[],
-  ) => setCorrection({ sourceStepId, feedback, findingIds, commentIds, rootStepIds });
+  ) =>
+    setCorrection({
+      sourceStepId,
+      feedback,
+      findingIds,
+      commentIds,
+      rootStepIds,
+    });
 
   return (
     <div className="page feature-page">
@@ -1703,9 +1716,10 @@ function StepPanel({
     content !== savedContent || (descriptionChanged && description !== feature.description);
   const [savePending, setSavePending] = useState(false),
     [saveError, setSaveError] = useState('');
-  const [saveAck, setSaveAck] = useState<{ revision: number; action: 'approve' | 'review' } | null>(
-    null,
-  );
+  const [saveAck, setSaveAck] = useState<{
+    revision: number;
+    action: 'approve' | 'review';
+  } | null>(null);
   const saveAction = useRef<'approve' | 'review' | null>(null);
   const savedBriefChanged = useRef(false);
   useEffect(() => {
@@ -2217,13 +2231,25 @@ function StepPanel({
                     <span title={path}>{path}</span>
                     <button
                       className="text-button"
-                      onClick={() => dispatch({ type: 'openFile', path, featureId: feature.id })}
+                      onClick={() =>
+                        dispatch({
+                          type: 'openFile',
+                          path,
+                          featureId: feature.id,
+                        })
+                      }
                     >
                       Ouvrir
                     </button>
                     <button
                       className="button secondary small"
-                      onClick={() => dispatch({ type: 'openDiff', path, featureId: feature.id })}
+                      onClick={() =>
+                        dispatch({
+                          type: 'openDiff',
+                          path,
+                          featureId: feature.id,
+                        })
+                      }
                     >
                       Voir le diff <ArrowUpRight size={13} />
                     </button>
@@ -3232,7 +3258,10 @@ function SettingsView({
           ...c,
           args: c.args.filter((a) => a.length > 0),
         })),
-        hooks: draft.hooks.map((h) => ({ ...h, args: h.args.filter((a) => a.length > 0) })),
+        hooks: draft.hooks.map((h) => ({
+          ...h,
+          args: h.args.filter((a) => a.length > 0),
+        })),
       },
     });
   };
@@ -3475,7 +3504,12 @@ function SettingsView({
                   set({
                     testCommands: [
                       ...draft.testCommands,
-                      { id: crypto.randomUUID(), name: '', command: '', args: [] },
+                      {
+                        id: crypto.randomUUID(),
+                        name: '',
+                        command: '',
+                        args: [],
+                      },
                     ],
                   })
                 }
@@ -3545,7 +3579,11 @@ function SettingsView({
                     type="button"
                     className="icon-button"
                     aria-label={`Supprimer ${hook.name || 'le hook ' + (i + 1)}`}
-                    onClick={() => set({ hooks: draft.hooks.filter((h) => h.id !== hook.id) })}
+                    onClick={() =>
+                      set({
+                        hooks: draft.hooks.filter((h) => h.id !== hook.id),
+                      })
+                    }
                   >
                     <X size={15} />
                   </button>
@@ -3574,7 +3612,10 @@ function SettingsView({
                         set({
                           hooks: draft.hooks.map((h) =>
                             h.id === hook.id
-                              ? { ...h, event: e.target.value as 'beforeRun' | 'afterRun' }
+                              ? {
+                                  ...h,
+                                  event: e.target.value as 'beforeRun' | 'afterRun',
+                                }
                               : h,
                           ),
                         })

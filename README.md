@@ -6,21 +6,21 @@
 
 Pars d’un besoin, choisis une équipe et avance étape par étape : challenge, plan, code, tests, relecture. Feature Studio rend visibles les instructions, le contexte, les permissions et les preuves de chaque agent. Tu peux personnaliser les parcours et emporter ta méthode dans un kit.
 
-**[Dernière version et téléchargement](https://github.com/MattDevBzh/KerAI/releases/latest)** · [VSIX v1.4.0](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.0/feature-studio-1.4.0.vsix) · [Nouveautés](CHANGELOG.md) · [Guide complet](docs/GUIDE.md)
+**[Dernière version et téléchargement](https://github.com/MattDevBzh/KerAI/releases/latest)** · [VSIX v1.4.1](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.1/feature-studio-1.4.1.vsix) · [Nouveautés](CHANGELOG.md) · [Guide complet](docs/GUIDE.md)
 
-**Version actuelle : 1.4.0.** Vingt avatars pixel art avec repos, travail animé et réussite, une fenêtre dédiée avec raccourci Windows, des sessions multi-projets et une équipe composable par glisser-déposer. [Toutes les nouveautés depuis la v1.1.1](docs/releases/v1.4.0.md).
+**Version actuelle : 1.4.1.** Le logo **L’équipe** accompagne désormais l’extension, le cockpit et le raccourci Windows. Retrouve les vingt avatars pixel art, la fenêtre dédiée, les sessions multi-projets et les équipes composables par glisser-déposer. [Nouveau logo et raccourci](docs/releases/v1.4.1.md) · [Nouveautés fonctionnelles de v1.4.0](docs/releases/v1.4.0.md).
 
 ![La bibliothèque des kits : Atelier Copilot et DevOps](docs/images/kits-library.png)
 
 ## Commencer
 
-1. Télécharge le **[VSIX v1.4.0 de la release GitHub](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.0/feature-studio-1.4.0.vsix)**.
+1. Télécharge le **[VSIX v1.4.1 de la release GitHub](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.1/feature-studio-1.4.1.vsix)**.
 2. Dans VS Code : **Extensions → … → Installer à partir du VSIX…**. Si une ancienne version tourne déjà, recharge la fenêtre.
-3. Ouvre ton dépôt et approuve le workspace. Clique sur le **geek au portable** dans la barre latérale, puis **Ouvrir le cockpit** : Feature Studio s’ouvre dans sa fenêtre dédiée et enregistre ton projet.
+3. Ouvre ton dépôt et approuve le workspace. Clique sur l’icône **L’équipe** (trois agents) dans la barre latérale, puis **Ouvrir le cockpit** : Feature Studio s’ouvre dans sa fenêtre dédiée et enregistre ton projet.
 4. Dans **Réglages**, clique sur **Vérifier la connexion** pour contrôler le CLI, le compte et les modèles disponibles.
 5. Ouvre **Nouvelle session**, sélectionne tes projets et décris ton besoin. Compose ton équipe avec les avatars ou les équipes disponibles, puis prépare l’aperçu du contexte avant de lancer le premier agent.
 
-Après mise à jour, la fiche **Feature Studio** dans Extensions doit afficher **1.4.0**. Pour contrôler le téléchargement, compare `Get-FileHash .\feature-studio-1.4.0.vsix -Algorithm SHA256` avec le fichier [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.0/SHA256SUMS). Installe le fichier `.vsix` des assets de la release, sans le décompresser.
+Après mise à jour, la fiche **Feature Studio** dans Extensions doit afficher **1.4.1**. Pour contrôler le téléchargement, compare `Get-FileHash .\feature-studio-1.4.1.vsix -Algorithm SHA256` avec le fichier [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.1/SHA256SUMS). Installe le fichier `.vsix` des assets de la release, sans le décompresser.
 
 **Prérequis :** VS Code **1.110+**, Git et GitHub Copilot CLI installé et authentifié avec un accès au CLI. Le VSIX utilise le moteur Node de VS Code ; il ne nécessite pas une installation séparée de npm. L’extension utilise le CLI local et ton authentification Copilot. Elle possède son propre cockpit et peut coexister avec la vue Chat de GitHub Copilot.
 
@@ -110,18 +110,18 @@ npm run check           # Format, TypeScript, tests et builds
 npx playwright install chromium
 npm run test:ui         # Scénarios du cockpit dans Chromium
 npm run test:extension  # Vrai hôte VS Code, profil temporaire isolé
-npm run package         # releases/feature-studio-1.4.0.vsix
+npm run package         # releases/feature-studio-1.4.1.vsix
 ```
 
 **F5 → Feature Studio** ouvre l’hôte de développement. `npm run dev` fournit le frontend ; `http://127.0.0.1:5173/?demo=1` affiche les données de démonstration. Les opérations de fichiers et l’exécution des agents nécessitent l’extension.
 
 La [CI Linux et Windows](https://github.com/MattDevBzh/KerAI/actions/workflows/ci.yml) vérifie le code, l’interface, l’hôte VS Code et le packaging. La publication d’une nouvelle version depuis `main` attend la réussite des deux jobs ; elle vérifie l’intégrité ZIP, les versions du manifeste et du paquet, puis charge le contenu extrait du VSIX dans un vrai hôte VS Code. Le fichier publié est téléchargé à nouveau et son SHA-256 est contrôlé avant de rendre la release visible. Chaque nouvelle version doit fournir ses notes dans `docs/releases/v<version>.md` ; une release déjà publiée reste inchangée.
 
-Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Le VSIX actuel et son [SHA256SUMS](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.0/SHA256SUMS) sont joints à la release ; le dossier [releases](releases/README.md) conserve les anciens paquets.
+Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Le VSIX actuel et son [SHA256SUMS](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.1/SHA256SUMS) sont joints à la release ; le dossier [releases](releases/README.md) conserve les anciens paquets.
 
 ## Licence et provenance
 
-Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est conservé avec son [inventaire et sa provenance](defaults/PROVENANCE.md). Les dépendances sont documentées dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), et les sources des avatars dans [design/avatars](design/avatars/professions/PROMPTS.md).
+Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est conservé avec son [inventaire et sa provenance](defaults/PROVENANCE.md). Les dépendances sont documentées dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), les sources des avatars dans [design/avatars](design/avatars/professions/PROMPTS.md), et le logo approuvé dans [design/logo-team](design/logo-team/PROMPT.md).
 
 
 ## Fenêtre dédiée et espaces de travail
@@ -129,7 +129,7 @@ Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est c
 Depuis la version 1.3.0, **Feature Studio : ouvrir le cockpit** ouvre directement toute l’interface dans un espace de travail personnel « Feature Studio ». Les autres dossiers ouverts dans VS Code restent indépendants. Rouvrir ce même espace retrouve sa fenêtre ; les barres latérales, onglets et panneau sont masqués uniquement dans cette fenêtre. Le moteur reste VS Code, avec sa barre de titre et ses dialogues natifs.
 
 1. Dans **Réglages → Espaces de travail**, ajoutez vos dossiers de projets. Donnez-leur des noms distincts si nécessaire. Masquer un dossier le retire des prochaines sélections sans supprimer ses fichiers ni ses sessions.
-2. Sous Windows, cliquez sur **Créer le raccourci Windows**. Le raccourci `Feature Studio.lnk` est créé sur le Bureau avec l’exécutable de l’édition en cours (Code ou Code Insiders). Il ouvre le cockpit complet. La commande du même nom est aussi disponible dans la palette.
+2. Sous Windows, cliquez sur **Créer le raccourci Windows**. Le raccourci `Feature Studio.lnk` est créé sur le Bureau avec l’exécutable de l’édition en cours (Code ou Code Insiders). Il ouvre le cockpit complet et utilise automatiquement le logo **L’équipe**. Relancer cette commande actualise aussi un raccourci déjà créé. L’icône est conservée dans les données du cockpit, indépendamment du dossier versionné de l’extension. La commande du même nom est aussi disponible dans la palette.
 3. À la création d’une session, cochez un ou plusieurs projets dans **Projets de la session**. La sélection et son ordre sont mémorisés. L’étoile désigne le projet principal, dont les profils, skills et connexions MCP complètent le catalogue utilisateur.
 4. Une session à plusieurs projets travaille dans leurs dossiers d’origine. Les sessions à un seul projet peuvent conserver l’isolation en worktree. Les racines imbriquées ne peuvent pas être sélectionnées ensemble.
 5. **Projet actif** change le projet affiché dans les réglages et les menus Azure DevOps / Livraison. Ouvrir une session retrouve automatiquement son projet principal. Chaque dépôt conserve ses propres réglages de tests, scripts et connexion Azure DevOps.
@@ -138,4 +138,4 @@ Les outils d’une session multi-projets demandent un `projectId` explicite. Les
 
 Le catalogue est conservé dans les données utilisateur de l’extension. En ouvrant le cockpit depuis une fenêtre de projet existante, ses dossiers sont enregistrés et son stockage de sessions existant est réutilisé. Si un dossier a d’abord été ajouté manuellement au nouveau catalogue, il conserve ce nouveau stockage. Aucun workflow, agent ou skill du projet n’est déplacé automatiquement.
 
-Le menu natif du clic droit sur VS Code reste géré par Windows et VS Code. Vous pouvez épingler l’espace de travail « Feature Studio » lorsqu’il apparaît dans les éléments récents ; le raccourci du Bureau fonctionne indépendamment de cette liste. La réutilisation vise la même édition de VS Code et les mêmes données utilisateur. Une autre édition, un autre profil ou un environnement distant conserve son propre contexte. Le lancement natif Windows doit être vérifié sur le poste Windows ; les tests Linux couvrent le script généré et la configuration du cockpit.
+Pour changer l’icône à la main, télécharge [feature-studio.ico](https://github.com/MattDevBzh/KerAI/releases/download/v1.4.1/feature-studio.ico), puis utilise **Propriétés → Raccourci → Changer d’icône**. Le menu natif du clic droit sur VS Code reste géré par Windows et VS Code. Vous pouvez épingler l’espace de travail « Feature Studio » lorsqu’il apparaît dans les éléments récents ; le raccourci du Bureau fonctionne indépendamment de cette liste. La réutilisation vise la même édition de VS Code et les mêmes données utilisateur. Une autre édition, un autre profil ou un environnement distant conserve son propre contexte. Le lancement natif Windows doit être vérifié sur le poste Windows ; les tests Linux couvrent le script généré et la configuration du cockpit.

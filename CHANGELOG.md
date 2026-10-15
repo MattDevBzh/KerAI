@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1 — 2026-10-15
+
+- Adopte le logo « L’équipe » dans la fiche de l’extension, le lanceur, l’onglet et le cockpit. Ajoute une déclinaison monochrome pour la barre d’activité VS Code.
+- Applique automatiquement une icône Windows contenant sept tailles lors de la création ou recréation du raccourci. Sa copie dans le stockage du cockpit reste indépendante du dossier versionné de l’extension.
+- Joint l’ICO à la release avec le VSIX et vérifie les deux empreintes après téléchargement. Conserve le rendu source approuvé et le script de génération des formats d’icône.
+
 ## 1.4.0 — 2026-10-15
 
 - Remplace les portraits par une collection de vingt métiers, dans le style pixel art validé : vue de face, silhouettes et accessoires distincts et fond réellement transparent.
@@ -210,4 +216,3 @@
 - Catalogue agents/skills, kit Copilot 2.0.0 intégré et installation sans écrasement.
 - Pseudos et huit personnages pixel art : repos, GIF de travail et validation.
 - Hooks locaux facultatifs, export Markdown, diffs Git et persistance atomique.
-

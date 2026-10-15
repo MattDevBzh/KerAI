@@ -1,4 +1,13 @@
-import { mkdir, writeFile, readFile, rename, readdir, unlink, lstat } from 'node:fs/promises';
+import {
+  mkdir,
+  writeFile,
+  readFile,
+  rename,
+  readdir,
+  unlink,
+  lstat,
+  copyFile,
+} from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import path from 'node:path';
@@ -38,7 +47,10 @@ export class DedicatedWindow {
     await mkdir(this.requests, { recursive: true });
     const content =
       JSON.stringify(
-        { folders: [{ path: this.home, name: 'Feature Studio' }], settings: cockpitSettings },
+        {
+          folders: [{ path: this.home, name: 'Feature Studio' }],
+          settings: cockpitSettings,
+        },
         null,
         2,
       ) + '\n';
@@ -52,9 +64,16 @@ export class DedicatedWindow {
   }
   async enqueue(action: WindowRequest['action'], projectId?: string): Promise<void> {
     await this.prepare();
-    const request = requestSchema.parse({ action, projectId, createdAt: Date.now() });
+    const request = requestSchema.parse({
+      action,
+      projectId,
+      createdAt: Date.now(),
+    });
     const destination = path.join(this.requests, `${randomUUID()}.json`);
-    await writeFile(destination + '.tmp', JSON.stringify(request), { flag: 'wx', mode: 0o600 });
+    await writeFile(destination + '.tmp', JSON.stringify(request), {
+      flag: 'wx',
+      mode: 0o600,
+    });
     await rename(destination + '.tmp', destination);
   }
   async takeRequests(): Promise<WindowRequest[]> {
@@ -93,13 +112,27 @@ export class DedicatedWindow {
       b = path.resolve(this.workspace);
     return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
   }
-  async shortcut(executable: string): Promise<string> {
+  async installShortcutIcon(source: string): Promise<string> {
+    await mkdir(this.directory, { recursive: true });
+    // Keep shortcut icons outside the versioned extension folder, which VS Code may remove.
+    const icon = path.join(this.directory, 'feature-studio.ico');
+    const temporary = icon + `.${randomUUID()}.tmp`;
+    try {
+      await copyFile(source, temporary);
+      await rename(temporary, icon);
+    } finally {
+      await unlink(temporary).catch(() => undefined);
+    }
+    return icon;
+  }
+  async shortcut(executable: string, iconSource: string): Promise<string> {
     if (process.platform !== 'win32')
       throw new Error(
         'La création du raccourci se fait depuis VS Code exécuté localement sous Windows.',
       );
     await this.prepare();
-    const script = windowsShortcutScript(executable, this.workspace);
+    const icon = await this.installShortcutIcon(iconSource);
+    const script = windowsShortcutScript(executable, this.workspace, icon);
     const result = await runProcess(
       'powershell.exe',
       [
@@ -115,8 +148,9 @@ export class DedicatedWindow {
     return result.stdout.trim();
   }
 }
-export function windowsShortcutScript(executable: string, workspace: string): string {
-  if (/["\r\n]/.test(executable + workspace)) throw new Error('Chemin de lancement invalide.');
+export function windowsShortcutScript(executable: string, workspace: string, icon: string): string {
+  if (/["\r\n]/.test(executable + workspace + icon))
+    throw new Error('Chemin de lancement invalide.');
   const literal = (value: string) => `'${value.replace(/'/g, "''")}'`;
   return `$ErrorActionPreference = 'Stop'
 $desktop = [Environment]::GetFolderPath('Desktop')
@@ -126,7 +160,7 @@ $shortcut = $shell.CreateShortcut($destination)
 $shortcut.TargetPath = ${literal(executable)}
 $shortcut.Arguments = ${literal(`--new-window "${workspace}"`)}
 $shortcut.Description = 'Ouvrir le cockpit Feature Studio'
-$shortcut.IconLocation = ${literal(executable + ',0')}
+$shortcut.IconLocation = ${literal(icon + ',0')}
 $shortcut.Save()
 Write-Output $destination
 `;

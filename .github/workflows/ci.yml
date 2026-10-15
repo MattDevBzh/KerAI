@@ -19,7 +19,7 @@ jobs:
       - run: npx vitest run tests/devops-cli-catalog.test.ts
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot.cmd
-      - run: npx vitest run tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts tests/devops-delivery.test.ts tests/explorer.test.ts tests/credits.test.ts tests/cockpit-launcher.test.ts
+      - run: npx vitest run tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts tests/devops-delivery.test.ts tests/explorer.test.ts tests/credits.test.ts tests/cockpit-launcher.test.ts tests/shortcut-icon.test.ts
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -139,8 +139,11 @@ jobs:
           output = Path(os.environ['RUNNER_TEMP']) / 'feature-studio-release'
           output.mkdir(exist_ok=True)
           shutil.copy2(vsix, output / vsix.name)
+          icon = Path('resources/feature-studio.ico')
+          shutil.copy2(icon, output / icon.name)
           digest = hashlib.sha256(vsix.read_bytes()).hexdigest()
-          (output / 'SHA256SUMS').write_text(f'{digest}  {vsix.name}\n')
+          icon_digest = hashlib.sha256(icon.read_bytes()).hexdigest()
+          (output / 'SHA256SUMS').write_text(f'{digest}  {vsix.name}\n{icon_digest}  {icon.name}\n')
           print(f'Verified {vsix.name}: {vsix.stat().st_size} bytes, SHA-256 {digest}')
           PY
       - name: Load the packaged extension in VS Code
@@ -168,10 +171,10 @@ jobs:
           else
             gh release create "$tag" --target "$GITHUB_SHA" --title "Feature Studio $tag" --notes-file "$notes" --draft
           fi
-          gh release upload "$tag" "$output/feature-studio-$VERSION.vsix" "$output/SHA256SUMS" --clobber
+          gh release upload "$tag" "$output/feature-studio-$VERSION.vsix" "$output/feature-studio.ico" "$output/SHA256SUMS" --clobber
           downloaded="$RUNNER_TEMP/feature-studio-downloaded"
           mkdir -p "$downloaded"
-          gh release download "$tag" --pattern "feature-studio-$VERSION.vsix" --pattern SHA256SUMS --dir "$downloaded"
+          gh release download "$tag" --pattern "feature-studio-$VERSION.vsix" --pattern feature-studio.ico --pattern SHA256SUMS --dir "$downloaded"
           cmp "$output/SHA256SUMS" "$downloaded/SHA256SUMS"
           (cd "$downloaded" && sha256sum -c SHA256SUMS)
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"

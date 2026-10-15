@@ -129,7 +129,10 @@ async function inputFixture(policy: 'workspace-write' | 'tests' = 'workspace-wri
     attempt,
     settings,
     launch: emptyLaunch(),
-    projects: f.projects.map((project) => ({ ...project, settings: structuredClone(settings) })),
+    projects: f.projects.map((project) => ({
+      ...project,
+      settings: structuredClone(settings),
+    })),
   };
   return { ...f, input };
 }
@@ -192,10 +195,15 @@ describe('user project catalog and dedicated window', () => {
     const script = windowsShortcutScript(
       "C:\\O'Brien\\Code - Insiders.exe",
       'C:\\$value\\Feature Studio.code-workspace',
+      "C:\\O'Brien\\Feature Studio\\feature-studio.ico",
     );
     expect(script).toContain("'C:\\O''Brien\\Code - Insiders.exe'");
     expect(script).toContain('--new-window "C:\\$value\\Feature Studio.code-workspace"');
-    expect(() => windowsShortcutScript('code.exe', 'unsafe\ncommand')).toThrow();
+    expect(script).toContain(
+      "$shortcut.IconLocation = 'C:\\O''Brien\\Feature Studio\\feature-studio.ico,0'",
+    );
+    expect(() => windowsShortcutScript('code.exe', 'unsafe\ncommand', 'icon.ico')).toThrow();
+    expect(() => windowsShortcutScript('code.exe', 'workspace', 'unsafe\nicon.ico')).toThrow();
   });
 });
 
@@ -223,12 +231,20 @@ describe('explicit multi-project execution', () => {
       'failure',
     );
     expect(
-      (await invoke(tools, 'studio_read_file', { projectId: 'unknown', path: 'same.txt' }))
-        .resultType,
+      (
+        await invoke(tools, 'studio_read_file', {
+          projectId: 'unknown',
+          path: 'same.txt',
+        })
+      ).resultType,
     ).toBe('failure');
     expect(
-      (await invoke(tools, 'studio_read_file', { projectId: a.id, path: '../web/same.txt' }))
-        .resultType,
+      (
+        await invoke(tools, 'studio_read_file', {
+          projectId: a.id,
+          path: '../web/same.txt',
+        })
+      ).resultType,
     ).toBe('failure');
     expect(
       (
@@ -242,7 +258,9 @@ describe('explicit multi-project execution', () => {
     expect(await readFile(join(a.path, 'same.txt'), 'utf8')).toBe('api\n');
     expect(await readFile(join(b.path, 'same.txt'), 'utf8')).toBe('changed\n');
     expect([...host.changedFiles]).toEqual([`@${b.id}/same.txt`]);
-    expect(host.fileHashes).toEqual({ [`@${b.id}/same.txt`]: sha256('changed\n') });
+    expect(host.fileHashes).toEqual({
+      [`@${b.id}/same.txt`]: sha256('changed\n'),
+    });
   });
   it('grants and backs up human changes only in the explicitly selected project', async () => {
     const f = await inputFixture(),
@@ -255,7 +273,9 @@ describe('explicit multi-project execution', () => {
       `@${a.id}/same.txt`,
       `@${b.id}/same.txt`,
     ]);
-    expect(f.input.existingChangeGrants).toEqual({ [`@${b.id}/same.txt`]: sha256('human web\n') });
+    expect(f.input.existingChangeGrants).toEqual({
+      [`@${b.id}/same.txt`]: sha256('human web\n'),
+    });
     const backup = await backupProjectChanges(
       f.input,
       join(f.root, 'backup'),
@@ -269,7 +289,10 @@ describe('explicit multi-project execution', () => {
       ),
       tools = await host.createTools();
     for (const project of f.projects)
-      await invoke(tools, 'studio_read_file', { projectId: project.id, path: 'same.txt' });
+      await invoke(tools, 'studio_read_file', {
+        projectId: project.id,
+        path: 'same.txt',
+      });
     expect(
       (
         await invoke(tools, 'studio_write_file', {
@@ -306,9 +329,17 @@ describe('explicit multi-project execution', () => {
       ),
       tools = await host.createTools();
     for (const project of f.projects) {
-      await invoke(tools, 'studio_read_file', { projectId: project.id, path: 'same.txt' });
+      await invoke(tools, 'studio_read_file', {
+        projectId: project.id,
+        path: 'same.txt',
+      });
       expect(
-        (await invoke(tools, 'studio_run_test', { projectId: project.id, id: 'unit' })).resultType,
+        (
+          await invoke(tools, 'studio_run_test', {
+            projectId: project.id,
+            id: 'unit',
+          })
+        ).resultType,
       ).toBe('success');
     }
     expect(proofs).toHaveLength(2);
@@ -384,8 +415,12 @@ describe('explicit multi-project execution', () => {
         const tools = await service.getTools(input, callbacks, signal);
         for (const project of f.projects) {
           expect(
-            (await invoke(tools, 'studio_read_file', { projectId: project.id, path: 'same.txt' }))
-              .resultType,
+            (
+              await invoke(tools, 'studio_read_file', {
+                projectId: project.id,
+                path: 'same.txt',
+              })
+            ).resultType,
           ).toBe('success');
           expect(
             (
@@ -397,7 +432,11 @@ describe('explicit multi-project execution', () => {
             ).resultType,
           ).toBe('success');
         }
-        return { content: 'Both projects updated', questions: [], changedFiles: [] };
+        return {
+          content: 'Both projects updated',
+          questions: [],
+          changedFiles: [],
+        };
       },
     );
     service.adapter = {
@@ -456,7 +495,9 @@ describe('explicit multi-project execution', () => {
         return {
           project,
           service,
-          devops: { dispose: vi.fn(async () => {}) } as unknown as DevOpsController,
+          devops: {
+            dispose: vi.fn(async () => {}),
+          } as unknown as DevOpsController,
         };
       },
       true,
@@ -466,7 +507,10 @@ describe('explicit multi-project execution', () => {
     await hub.initialize();
     const a = await hub.entry(projects[0].id),
       b = await hub.entry(projects[1].id);
-    const first = await a.service.createFeature({ title: 'API', description: '' }),
+    const first = await a.service.createFeature({
+        title: 'API',
+        description: '',
+      }),
       second = await b.service.createFeature({ title: 'Web', description: '' });
     await hub.activateFeature(second.id);
     expect((await hub.current()).service).toBe(b.service);

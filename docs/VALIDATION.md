@@ -1,4 +1,12 @@
-# Validation et limites — v1.4.0, 15 octobre 2026
+# Validation et limites — v1.4.1, 15 octobre 2026
+
+## Identité visuelle de v1.4.1
+
+Le logo « L’équipe » est partagé par la fiche de l’extension, le lanceur, l’onglet et le cockpit. Une adaptation SVG monochrome sert à la barre d’activité. L’ICO Windows contient les tailles 16, 24, 32, 48, 64, 128 et 256 px, issues du même rendu source approuvé.
+
+Le test de conservation de l’icône vérifie la suppression du fichier source, le remplacement de la copie stable et la préservation de l’ancienne icône si l’actualisation échoue. Il est exécuté sous Linux et Windows. Le smoke du contenu du VSIX contrôle la présence du PNG, du SVG et de l’ICO à sept tailles. Le SHA-256 couvre le VSIX et l’ICO, téléchargés de nouveau avant publication. Le run exact figure dans les [notes de release](https://github.com/MattDevBzh/KerAI/releases/tag/v1.4.1).
+
+Le raccourci utilise la copie de l’ICO dans les données du cockpit, sans dépendre du dossier de l’extension. Le clic natif et le rafraîchissement du cache d’icônes Windows restent à vérifier sur le poste utilisateur ; l’icône native du processus VS Code reste gérée par VS Code.
 
 ## Publication de v1.4.0
 
