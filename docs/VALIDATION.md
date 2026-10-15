@@ -1,4 +1,14 @@
-# Validation et limites — v1.1.1, 14 octobre 2026
+# Validation et limites — v1.4.0, 15 octobre 2026
+
+## Publication de v1.4.0
+
+La version des sources et du lockfile est **1.4.0**. La CI de publication attend les validations Linux et Windows du même commit de `main` : format, TypeScript, tests métier, scénarios Chromium, catalogue CLI et hôte VS Code selon les jobs définis dans [ci.yml](../.github/workflows/ci.yml).
+
+Le job de publication reconstruit le VSIX depuis ce commit, contrôle l’intégrité ZIP et les versions de `extension/package.json` et `extension.vsixmanifest`, puis exécute le smoke VS Code sur le contenu extrait. Après téléversement, le fichier est téléchargé de la release brouillon et vérifié contre `SHA256SUMS` avant publication. Les paquets sont attachés aux releases GitHub ; les binaires présents dans le dépôt restent historiques.
+
+Les résultats effectifs sont consultables dans la [CI](https://github.com/MattDevBzh/KerAI/actions/workflows/ci.yml) et le lien vers le run du commit livré est ajouté aux [notes de release](https://github.com/MattDevBzh/KerAI/releases/tag/v1.4.0). Les contrôles ciblés des nouveaux avatars sont détaillés en fin de document. Les comptes rendus ci-dessous conservent leur version et leur plateforme d’origine.
+
+La CI Windows couvre les tests prévus par le job `windows-cli` ; elle ne simule pas le clic sur le raccourci du Bureau. Le lancement natif et les échanges avec ton compte Copilot/Azure DevOps restent à vérifier sur ton poste. Aucun prompt Copilot payant n’est envoyé par cette chaîne.
 
 ## Vérifications locales de v1.1.1
 

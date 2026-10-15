@@ -46,3 +46,133 @@ jobs:
           name: feature-studio-vsix
           path: releases/*.vsix
           retention-days: 7
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [validate, windows-cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: feature-studio-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare versioned release
+        id: release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const version = pkg.version;
+            if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Expected a stable version');
+            const tag = `v${version}`;
+            const repo = context.repo;
+            const main = await github.rest.git.getRef({ ...repo, ref: 'heads/main' });
+            if (main.data.object.sha !== context.sha) {
+              core.info('A newer main commit will publish the next release');
+              return;
+            }
+            let release;
+            try {
+              release = (await github.rest.repos.getReleaseByTag({ ...repo, tag })).data;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            if (release && !release.draft) {
+              core.info(`${tag} is already published; its assets remain unchanged`);
+              return;
+            }
+            if (release && release.target_commitish !== context.sha) {
+              throw new Error('Existing draft targets another commit');
+            }
+            let tagged;
+            try {
+              tagged = (await github.rest.git.getRef({ ...repo, ref: `tags/${tag}` })).data.object;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            while (tagged?.type === 'tag') {
+              tagged = (await github.rest.git.getTag({ ...repo, tag_sha: tagged.sha })).data.object;
+            }
+            if (tagged && tagged.sha !== context.sha) throw new Error('Release tag targets another commit');
+            fs.accessSync(`docs/releases/${tag}.md`);
+            core.setOutput('publish', 'true');
+            core.setOutput('version', version);
+            core.setOutput('draft-exists', release ? 'true' : 'false');
+      - uses: actions/setup-node@v4
+        if: steps.release.outputs.publish == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.release.outputs.publish == 'true'
+      - run: npm run package
+        if: steps.release.outputs.publish == 'true'
+      - name: Verify and extract the delivered VSIX
+        if: steps.release.outputs.publish == 'true'
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, shutil, zipfile
+          from pathlib import Path, PurePosixPath
+          from xml.etree import ElementTree
+
+          package = json.loads(Path('package.json').read_text())
+          lock = json.loads(Path('package-lock.json').read_text())
+          version = package['version']
+          assert lock['version'] == lock['packages']['']['version'] == version
+          vsix = Path(f'releases/feature-studio-{version}.vsix')
+          extracted = Path(os.environ['RUNNER_TEMP']) / 'feature-studio-vsix'
+          with zipfile.ZipFile(vsix) as archive:
+              assert archive.testzip() is None, 'Corrupt VSIX archive'
+              for name in archive.namelist():
+                  assert not PurePosixPath(name).is_absolute() and '..' not in PurePosixPath(name).parts
+              embedded = json.loads(archive.read('extension/package.json'))
+              assert (embedded['name'], embedded['publisher'], embedded['version']) == (package['name'], package['publisher'], version)
+              manifest = ElementTree.fromstring(archive.read('extension.vsixmanifest'))
+              identity = manifest.find('.//{*}Identity')
+              assert identity is not None and identity.attrib['Version'] == version
+              assert archive.read('extension/' + embedded['main'].removeprefix('./')), 'Missing extension entry point'
+              archive.extractall(extracted)
+          output = Path(os.environ['RUNNER_TEMP']) / 'feature-studio-release'
+          output.mkdir(exist_ok=True)
+          shutil.copy2(vsix, output / vsix.name)
+          digest = hashlib.sha256(vsix.read_bytes()).hexdigest()
+          (output / 'SHA256SUMS').write_text(f'{digest}  {vsix.name}\n')
+          print(f'Verified {vsix.name}: {vsix.stat().st_size} bytes, SHA-256 {digest}')
+          PY
+      - name: Load the packaged extension in VS Code
+        if: steps.release.outputs.publish == 'true'
+        run: xvfb-run -a npm run test:extension
+        env:
+          FEATURE_STUDIO_EXTENSION_PATH: ${{ runner.temp }}/feature-studio-vsix/extension
+      - name: Publish and verify release assets
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          DRAFT_EXISTS: ${{ steps.release.outputs.draft-exists }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          tag="v$VERSION"
+          output="$RUNNER_TEMP/feature-studio-release"
+          notes="$RUNNER_TEMP/feature-studio-release-notes.md"
+          cp "docs/releases/$tag.md" "$notes"
+          printf '\n[CI du commit livré](%s/%s/actions/runs/%s) · Commit `%s`\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_SHA" >> "$notes"
+          if [ "$DRAFT_EXISTS" = 'true' ]; then
+            test "$(gh release view "$tag" --json isDraft --jq .isDraft)" = 'true'
+            gh release edit "$tag" --notes-file "$notes"
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Feature Studio $tag" --notes-file "$notes" --draft
+          fi
+          gh release upload "$tag" "$output/feature-studio-$VERSION.vsix" "$output/SHA256SUMS" --clobber
+          downloaded="$RUNNER_TEMP/feature-studio-downloaded"
+          mkdir -p "$downloaded"
+          gh release download "$tag" --pattern "feature-studio-$VERSION.vsix" --pattern SHA256SUMS --dir "$downloaded"
+          cmp "$output/SHA256SUMS" "$downloaded/SHA256SUMS"
+          (cd "$downloaded" && sha256sum -c SHA256SUMS)
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          gh release edit "$tag" --draft=false --latest
