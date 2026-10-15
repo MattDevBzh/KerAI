@@ -93,7 +93,13 @@ async function hosted(page: Page, state = fresh()) {
               ?.steps.find((s) => s.id === m.stepId);
             const agent = data.agents.find((a) => a.id === step?.agentId);
             const supplied = Reflect.get(window, 'previewSections') as
-              | { id: string; label: string; source: string; content: string }[]
+              | {
+                  id: string;
+                  label: string;
+                  source: string;
+                  content: string;
+                  unavailable?: boolean;
+                }[]
               | undefined;
             const sections = (
               supplied ?? [{ id: 'human', label: 'Votre contexte', source: 'human', content }]
@@ -127,7 +133,9 @@ async function hosted(page: Page, state = fresh()) {
                       characters: prompt.length,
                       estimatedTokens: Math.ceil(prompt.length / 4),
                       maxCharacters: 60000,
-                      errors: [],
+                      errors: sections
+                        .filter((s) => s.unavailable && s.enabled)
+                        .map((s) => s.content),
                       existingChanges: Reflect.get(window, 'existingChanges'),
                     },
                   },
@@ -1537,6 +1545,35 @@ test('contexte : décocher la spec, modifier le plan et actualiser avant lanceme
         'artifact:plan': { content: 'PLAN_ADAPTÉ' },
       },
     },
+  });
+});
+
+test('contexte : skill absente visible et décochable avant de lancer', async ({ page }) => {
+  await hosted(page);
+  await page.evaluate(() =>
+    Reflect.set(window, 'previewSections', [
+      {
+        id: 'skill:missing-custom',
+        label: 'Skill introuvable · missing-custom',
+        source: 'skill',
+        content: 'La skill missing-custom est absente.',
+        unavailable: true,
+      },
+    ]),
+  );
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await page.getByRole('checkbox', { name: /Skill introuvable · missing-custom/ }).uncheck();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Lancer cette étape' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    launch: { contextBlocks: { 'skill:missing-custom': { enabled: false } } },
   });
 });
 

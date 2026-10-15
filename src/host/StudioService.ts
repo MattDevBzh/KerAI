@@ -448,10 +448,6 @@ export class StudioService extends EventEmitter {
     const agent = this.state.agents.find((item) => item.id === step.agentId);
     if (!agent) throw new Error('Agent introuvable.');
     const skillIds = [...new Set([...agent.skills, ...step.skills])];
-    if (skillIds.some((id) => !this.state.skills.some((skill) => skill.id === id)))
-      throw new Error(
-        'Une skill configurée est absente. Corrige la configuration avant de lancer cette étape.',
-      );
     const selected = launchSchema.parse(
       launch ?? {
         ...emptyLaunch(),
@@ -599,6 +595,7 @@ export class StudioService extends EventEmitter {
   ): Promise<RunPreview> {
     this.assertTrusted();
     await this.featurePath(featureId);
+    Object.assign(this.state, await this.registry.load());
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     const blocked = budgetBlockReason(input.feature);
     const existingChanges = await inspectExistingChanges(
@@ -657,6 +654,8 @@ export class StudioService extends EventEmitter {
       throw new Error(
         `Cette session est liée à la branche ${feature.branch}. Reviens sur cette branche avant de la lancer.`,
       );
+    Object.assign(this.state, await this.registry.load());
+    this.assertTrusted();
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     if (input.launch?.editableExistingFiles?.length && !previewFingerprint)
       throw new Error(

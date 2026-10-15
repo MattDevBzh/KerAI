@@ -271,6 +271,13 @@ describe('host collaboration persistence and final decision', () => {
       skills: [],
       tools: ['read'],
     }));
+    const agentFolder = join(service.workspacePath, '.github/agents');
+    await mkdir(agentFolder, { recursive: true });
+    for (const agent of service.state.agents)
+      await writeFile(
+        join(agentFolder, `${agent.id}.agent.md`),
+        `---\nname: ${agent.id}\ndescription: Fixture agent\ntools: [read]\nskills: []\n---\nUse selected context\n`,
+      );
     const inputs: RunInput[] = [];
     service.adapter.run = async (input) => {
       inputs.push(structuredClone(input));

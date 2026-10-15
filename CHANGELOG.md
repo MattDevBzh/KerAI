@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2 — 2026-10-15
+
+- Permet de préparer l’aperçu du contexte lorsqu’une skill configurée est absente : son identifiant et son origine sont affichés dans un bloc décochable. Le lancement reste bloqué si une skill absente est incluse ; une exclusion explicite permet de continuer sans cette compétence.
+- Recharge le catalogue lors de l’aperçu et du lancement afin de prendre en compte les skills installées ou retirées manuellement.
+
 ## 1.1.1 — 2026-10-14
 
 - Corrige la validation d’un fichier repris légitimement par une étape suivante : les empreintes des écritures historiques sont distinguées de l’état courant, avec contrôle des preuves de tests et des modifications extérieures conservé.
@@ -174,3 +179,4 @@
 - Catalogue agents/skills, kit Copilot 2.0.0 intégré et installation sans écrasement.
 - Pseudos et huit personnages pixel art : repos, GIF de travail et validation.
 - Hooks locaux facultatifs, export Markdown, diffs Git et persistance atomique.
+
