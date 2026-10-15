@@ -123,8 +123,12 @@ export function GitWorkspacePanel({
   dispatch: Dispatch;
 }) {
   const [open, setOpen] = useState(false);
-  const path = feature.worktree?.path ?? state.workspace.path;
-  const branch = feature.worktree?.branch ?? feature.branch ?? state.workspace.branch;
+  const [projectId, setProjectId] = useState(feature.projects?.[0]?.id ?? '');
+  const project = feature.projects?.find((item) => item.id === projectId);
+  const multi = (feature.projects?.length ?? 0) > 1;
+  const path = feature.worktree?.path ?? project?.path ?? state.workspace.path;
+  const branch =
+    feature.worktree?.branch ?? project?.branch ?? feature.branch ?? state.workspace.branch;
   const count = feature.checkpoints?.length ?? 0;
   return (
     <>
@@ -136,9 +140,26 @@ export function GitWorkspacePanel({
           <div>
             <span className="eyebrow">ESPACE GIT</span>
             <span className="workspace-mode">
-              {feature.worktree ? 'Worktree isolé' : 'Dossier courant'}
+              {feature.worktree
+                ? 'Worktree isolé'
+                : multi
+                  ? 'Projets de la session'
+                  : 'Dossier courant'}
             </span>
           </div>
+          {multi && (
+            <select
+              aria-label="Projet Git"
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+            >
+              {feature.projects!.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          )}
           <strong title={path}>{path}</strong>
           <span className="workspace-band-meta">
             <GitBranch size={12} />
@@ -157,7 +178,13 @@ export function GitWorkspacePanel({
         <div className="workspace-band-actions">
           <button
             className="text-button"
-            onClick={() => dispatch({ type: 'openFeatureWorkspace', featureId: feature.id })}
+            onClick={() =>
+              dispatch({
+                type: 'openFeatureWorkspace',
+                featureId: feature.id,
+                ...(multi ? { projectId } : {}),
+              })
+            }
           >
             <FolderOpen size={13} /> Ouvrir le dossier <ArrowRight size={12} />
           </button>
@@ -172,6 +199,7 @@ export function GitWorkspacePanel({
           state={state}
           dispatch={dispatch}
           onClose={() => setOpen(false)}
+          initialProjectId={multi ? projectId : undefined}
         />
       )}
     </>
@@ -184,6 +212,7 @@ function CheckpointPanel({
   onClose,
   initialCheckpointId,
   initialTargetCheckpointId,
+  initialProjectId,
 }: {
   feature: Feature;
   state: StudioState;
@@ -191,10 +220,18 @@ function CheckpointPanel({
   onClose: () => void;
   initialCheckpointId?: string;
   initialTargetCheckpointId?: string;
+  initialProjectId?: string;
 }) {
-  const snapshots = [...(feature.checkpoints ?? [])].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
+  const multi = (feature.projects?.length ?? 0) > 1;
+  const [projectId, setProjectId] = useState(
+    initialProjectId ??
+      feature.checkpoints?.find((point) => point.id === initialCheckpointId)?.projectId ??
+      feature.projects?.[0]?.id ??
+      '',
   );
+  const snapshots = [...(feature.checkpoints ?? [])]
+    .filter((point) => !multi || point.projectId === projectId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const attemptLabel = (snapshot: FeatureCheckpoint) => {
     const index =
       feature.steps
@@ -229,6 +266,7 @@ function CheckpointPanel({
     setConfirmRestore(false);
   };
   const revision = JSON.stringify({
+    projectId,
     path: feature.worktree?.path ?? state.workspace.path,
     checkpoints: feature.checkpoints,
     operation: state.workspaceOperation?.readOnly ? undefined : state.workspaceOperation,
@@ -328,6 +366,26 @@ function CheckpointPanel({
           {resultNotice}
         </div>
       )}
+      {multi && (
+        <label className="field">
+          <span>Projet du point de restauration</span>
+          <select
+            aria-label="Projet du point de restauration"
+            value={projectId}
+            disabled={busy}
+            onChange={(event) => {
+              setProjectId(event.target.value);
+              invalidate();
+            }}
+          >
+            {feature.projects!.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="checkpoint-grid">
         <section className="checkpoint-history">
           <div className="section-heading">
@@ -367,6 +425,7 @@ function CheckpointPanel({
                     type: 'createCheckpoint',
                     featureId: feature.id,
                     label: label.trim(),
+                    ...(multi ? { projectId } : {}),
                   });
                   setCreating(false);
                   setLabel('');

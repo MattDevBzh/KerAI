@@ -15,6 +15,7 @@ export const worktreeSchema = z
 export const checkpointSchema = z
   .object({
     id: z.string().uuid(),
+    projectId: short.optional(),
     label: z.string().min(1).max(200),
     kind: z.enum(['before-run', 'after-run', 'manual', 'recovery']),
     createdAt: z.string().min(1).max(64),

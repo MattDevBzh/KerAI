@@ -1,0 +1,194 @@
+.project-picker {
+  margin: 10px 0 20px;
+  display: grid;
+  gap: 8px;
+}
+.project-picker > label {
+  font-weight: 600;
+}
+.project-picker details {
+  border: 1px solid var(--input-border);
+  border-radius: 9px;
+  background: var(--panel-soft);
+}
+.project-picker summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 12px;
+  list-style: none;
+}
+.project-picker summary span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.project-options {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+  max-height: 260px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+.project-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.project-option > label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.project-option > label span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.project-option small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
+.project-option button[aria-pressed='true'] {
+  color: var(--apricot);
+  opacity: 1;
+}
+.project-settings {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 12px;
+}
+.project-settings .section-heading {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.project-settings h2 {
+  margin-bottom: 6px;
+}
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.project-row-body {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.project-row input {
+  width: 100%;
+  padding: 8px;
+}
+.project-row code {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  color: var(--muted);
+}
+.project-row-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+.hidden-project {
+  opacity: 0.7;
+}
+.project-window-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.project-window-actions > div {
+  flex: 1;
+  min-width: 180px;
+}
+.project-window-actions p {
+  margin-top: 5px;
+}
+.project-current-settings {
+  padding: 12px;
+  background: var(--panel-soft);
+  border-radius: 8px;
+}
+.project-error {
+  color: var(--error);
+}
+.feature-projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.feature-projects span {
+  padding: 7px 10px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.session-projects {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 8px;
+}
+@media (max-width: 650px) {
+  .project-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .project-row-actions {
+    width: 100%;
+    justify-items: start;
+  }
+  .project-settings {
+    padding: 12px;
+  }
+}
+
+.project-switcher {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 1430px;
+  padding: 18px 38px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+main:has(.settings-page) > .project-switcher {
+  max-width: 1100px;
+}
+.project-switcher > span {
+  flex-shrink: 0;
+}
+.project-switcher select {
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg);
+  background: var(--panel);
+}
+
+@media (max-width: 650px) {
+  .project-switcher {
+    padding: 16px 18px 0;
+  }
+}

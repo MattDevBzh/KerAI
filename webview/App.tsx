@@ -1,3 +1,4 @@
+import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
 import { TeamComposer } from './TeamComposer';
 import { AgentFavorite } from './AgentFavorite';
 import { orderedAgents, teamLocked } from '../src/shared/team';
@@ -337,6 +338,11 @@ export default function App() {
     return cleanup;
   }, []);
   useEffect(() => persistView({ view, featureId, stepId }), [view, featureId, stepId]);
+  const loaded = Boolean(state);
+  useEffect(() => {
+    if (loaded && featureId && view === 'dashboard' && !create && !isDemo)
+      send({ type: 'activateFeature', featureId });
+  }, [loaded, featureId, view, create]);
   const dispatch = (message: ClientMessage) => {
     if (
       state?.workspaceOperation &&
@@ -625,6 +631,13 @@ export default function App() {
               </button>
             </div>
           )}
+          {!(view === 'dashboard' && selected) && (
+            <ProjectSwitcher
+              state={state}
+              dispatch={dispatch}
+              disabled={draftDirty || hasActiveRun(state)}
+            />
+          )}
           {view === 'dashboard' &&
             (selected ? (
               <FeatureDetail
@@ -656,6 +669,7 @@ export default function App() {
             ))}
           <div hidden={view !== 'devops' && view !== 'delivery'}>
             <DevOpsUI
+              key={state.projectCatalog?.activeProjectId ?? 'default'}
               state={devops}
               visible={view === 'devops' || view === 'delivery'}
               features={state.features}
@@ -835,6 +849,7 @@ export default function App() {
         <CreateModal
           state={state}
           onClose={() => setCreate(false)}
+          dispatch={dispatch}
           onCreate={(message) => {
             dispatch(message);
             setCreate(false);
@@ -1028,6 +1043,11 @@ function Dashboard({
                         <Workflow size={15} />
                       </span>
                       {f.workflowName}
+                      {!!f.projects?.length && (
+                        <span className="session-projects">
+                          {f.projects.map((project) => project.name).join(' + ')}
+                        </span>
+                      )}
                     </span>
                     <Badge {...status} />
                   </div>
@@ -1230,15 +1250,21 @@ function CreateModal({
   state,
   onClose,
   onCreate,
+  dispatch,
 }: {
   state: StudioState;
+  dispatch: (message: ClientMessage) => void;
   onClose: () => void;
   onCreate: (message: Extract<ClientMessage, { type: 'createFeature' }>) => void;
 }) {
   const [title, setTitle] = useState(''),
     [description, setDescription] = useState('');
   const [isolated, setIsolated] = useState(Boolean(state.workspace.canIsolate));
-  const busy = Boolean(state.workspaceOperation) || hasActiveRun(state);
+  const [projectPending, setProjectPending] = useState(false);
+  const ids = state.projectCatalog?.selectedProjectIds;
+  const multiple = (ids?.length ?? 0) > 1;
+  const missing = Boolean(state.projectCatalog && !ids?.length);
+  const busy = Boolean(state.workspaceOperation) || hasActiveRun(state) || projectPending;
   return (
     <Modal
       title="Une nouvelle feature"
@@ -1248,15 +1274,17 @@ function CreateModal({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (title.trim() && !busy)
+          if (title.trim() && !busy && !missing)
             onCreate({
               type: 'createFeature',
               title: title.trim(),
               description: description.trim(),
-              isolated: isolated && Boolean(state.workspace.canIsolate),
+              isolated: !multiple && isolated && Boolean(state.workspace.canIsolate),
+              ...(ids ? { projectIds: ids } : {}),
             });
         }}
       >
+        <ProjectPicker state={state} dispatch={dispatch} onPendingChange={setProjectPending} />
         <label className="field">
           <span>
             Qu’allons-nous faire ? <em>*</em>
@@ -1278,17 +1306,28 @@ function CreateModal({
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        <WorkspaceChoice
-          state={state}
-          isolated={isolated && Boolean(state.workspace.canIsolate)}
-          onChange={setIsolated}
-        />
+        {multiple ? (
+          <p className="muted">
+            Cette session travaille dans les dossiers sélectionnés. L’isolation en worktree est
+            disponible avec un seul projet.
+          </p>
+        ) : (
+          <WorkspaceChoice
+            state={state}
+            isolated={isolated && Boolean(state.workspace.canIsolate)}
+            onChange={setIsolated}
+          />
+        )}
         <div className="modal-actions">
           <span className="muted">Créer ne lance aucune exécution.</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
-          <button type="submit" className="button primary" disabled={!title.trim() || busy}>
+          <button
+            type="submit"
+            className="button primary"
+            disabled={!title.trim() || busy || missing}
+          >
             Créer la feature <ArrowRight size={16} />
           </button>
         </div>
@@ -1473,6 +1512,16 @@ function FeatureDetail({
           </button>
         </div>
       </div>
+      {!!feature.projects?.length && (
+        <div className="feature-projects" aria-label="Projets de cette session">
+          {feature.projects.map((project) => (
+            <span key={project.id} title={project.path}>
+              {project.name} ·{' '}
+              {project.id === feature.projects![0].id ? feature.branch : project.branch}
+            </span>
+          ))}
+        </div>
+      )}
       <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
       <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <div className="feature-control-band">
@@ -3207,6 +3256,7 @@ function SettingsView({
           </p>
         </div>
       </div>
+      {!automation && <ProjectSettings state={state} dispatch={dispatch} dirty={dirty} />}
       {!automation && <ThemePicker />}
       <form onSubmit={submit}>
         {!automation && (

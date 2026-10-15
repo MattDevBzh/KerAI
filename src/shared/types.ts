@@ -137,6 +137,7 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  projects?: import('./projects').FeatureProject[];
   teamRevision?: number;
   teamLockedAt?: string;
   descriptionRevision?: number;
@@ -236,6 +237,7 @@ export interface RuntimeStatus {
   error?: string;
 }
 export interface StudioState {
+  projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
   schemaVersion: 1 | 2 | 3 | 4;
@@ -260,6 +262,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./projects').ProjectClientMessage
   | import('./collaboration').CollaborationClientMessage
   | import('./kits').KitClientMessage
   | DevOpsClientMessage
@@ -279,6 +282,7 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      projectIds?: string[];
       title: string;
       description: string;
       workflowId?: string;
@@ -335,8 +339,8 @@ export type ClientMessage =
   | { type: 'archiveFeature'; featureId: string; archived: boolean }
   | { type: 'openDiff'; path: string; featureId?: string }
   | { type: 'openFile'; path: string; featureId?: string }
-  | { type: 'openFeatureWorkspace'; featureId: string }
-  | { type: 'createCheckpoint'; featureId: string; label: string }
+  | { type: 'openFeatureWorkspace'; featureId: string; projectId?: string }
+  | { type: 'createCheckpoint'; featureId: string; label: string; projectId?: string }
   | {
       type: 'compareCheckpoint';
       requestId: string;
@@ -400,6 +404,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'projectResult'; requestId: string; error?: string; message?: string }
   | {
       type: 'featureTeamResult';
       requestId: string;
@@ -443,6 +448,7 @@ export type HostMessage =
   | { type: 'checkpointComparison'; requestId: string; comparison: CheckpointComparison }
   | { type: 'navigate'; view: 'create' | 'dashboard'; featureId?: string };
 export interface RunInput {
+  projects?: import('./projects').RunProject[];
   devopsProjectKey?: string;
   feature: Feature;
   step: FeatureStep;

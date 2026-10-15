@@ -7,6 +7,7 @@ export interface FeatureWorktree {
 }
 
 export interface FeatureCheckpoint {
+  projectId?: string;
   id: string;
   label: string;
   kind: 'before-run' | 'after-run' | 'manual' | 'recovery';

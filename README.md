@@ -116,3 +116,20 @@ La recette locale de v1.1.1 compte **419 tests métier réussis**, **87 scénari
 ## Licence et provenance
 
 Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est conservé avec son [inventaire et sa provenance](defaults/PROVENANCE.md). Les dépendances sont documentées dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), et les sources des avatars dans [design/avatars](design/avatars/PROMPTS.md).
+
+
+## Fenêtre dédiée et espaces de travail
+
+Après installation de la version 1.3.0, **Feature Studio : ouvrir le cockpit** ouvre directement toute l’interface dans un espace de travail personnel « Feature Studio ». Les autres dossiers ouverts dans VS Code restent indépendants. Rouvrir ce même espace retrouve sa fenêtre ; les barres latérales, onglets et panneau sont masqués uniquement dans cette fenêtre. Le moteur reste VS Code, avec sa barre de titre et ses dialogues natifs.
+
+1. Dans **Réglages → Espaces de travail**, ajoutez vos dossiers de projets. Donnez-leur des noms distincts si nécessaire. Masquer un dossier le retire des prochaines sélections sans supprimer ses fichiers ni ses sessions.
+2. Sous Windows, cliquez sur **Créer le raccourci Windows**. Le raccourci `Feature Studio.lnk` est créé sur le Bureau avec l’exécutable de l’édition en cours (Code ou Code Insiders). Il ouvre le cockpit complet. La commande du même nom est aussi disponible dans la palette.
+3. À la création d’une session, cochez un ou plusieurs projets dans **Projets de la session**. La sélection et son ordre sont mémorisés. L’étoile désigne le projet principal, dont les profils, skills et connexions MCP complètent le catalogue utilisateur.
+4. Une session à plusieurs projets travaille dans leurs dossiers d’origine. Les sessions à un seul projet peuvent conserver l’isolation en worktree. Les racines imbriquées ne peuvent pas être sélectionnées ensemble.
+5. **Projet actif** change le projet affiché dans les réglages et les menus Azure DevOps / Livraison. Ouvrir une session retrouve automatiquement son projet principal. Chaque dépôt conserve ses propres réglages de tests, scripts et connexion Azure DevOps.
+
+Les outils d’une session multi-projets demandent un `projectId` explicite. Les rapports et preuves distinguent les fichiers avec `@projectId/chemin`. Le panneau Git et les points de restauration proposent un choix de dépôt ; restaurer un point ne modifie que ce dépôt. Les branches enregistrées sont vérifiées avant exécution. Une opération à la fois réserve les dossiers concernés pour éviter les écritures concurrentes par plusieurs cockpits.
+
+Le catalogue est conservé dans les données utilisateur de l’extension. En ouvrant le cockpit depuis une fenêtre de projet existante, ses dossiers sont enregistrés et son stockage de sessions existant est réutilisé. Si un dossier a d’abord été ajouté manuellement au nouveau catalogue, il conserve ce nouveau stockage. Aucun workflow, agent ou skill du projet n’est déplacé automatiquement.
+
+Le menu natif du clic droit sur VS Code reste géré par Windows et VS Code. Vous pouvez épingler l’espace de travail « Feature Studio » lorsqu’il apparaît dans les éléments récents ; le raccourci du Bureau fonctionne indépendamment de cette liste. La réutilisation vise la même édition de VS Code et les mêmes données utilisateur. Une autre édition, un autre profil ou un environnement distant conserve son propre contexte. Le lancement natif Windows doit être vérifié sur le poste Windows ; les tests Linux couvrent le script généré et la configuration du cockpit.

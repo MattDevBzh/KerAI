@@ -157,6 +157,20 @@ const attempt = z.object({
 const feature = z
   .object({
     id: z.string(),
+    projects: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(150),
+            name: z.string().min(1).max(100),
+            path: z.string().min(1).max(4000),
+            branch: z.string(),
+            hidden: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .optional(),
     teamRevision: z.number().int().nonnegative().optional(),
     teamLockedAt: z.string().optional(),
     descriptionRevision: z.number().int().nonnegative().optional(),
@@ -189,6 +203,17 @@ const feature = z
   })
   .superRefine((value, context) => {
     const { steps } = value;
+    if (
+      value.projects &&
+      (new Set(value.projects.map((project) => project.id)).size !== value.projects.length ||
+        new Set(value.projects.map((project) => project.path)).size !== value.projects.length)
+    )
+      context.addIssue({ code: 'custom', message: 'Projets de session dupliqués.' });
+    if ((value.projects?.length ?? 0) > 1 && value.worktree)
+      context.addIssue({
+        code: 'custom',
+        message: 'Le worktree isolé est disponible pour une session à un seul projet.',
+      });
     const parsed = workflowSchema.safeParse({
       id: value.workflowId,
       name: value.workflowName,

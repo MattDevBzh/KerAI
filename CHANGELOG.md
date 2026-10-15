@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.1 — 2026-10-15
+
+- Synchronise le projet actif avec la sélection mémorisée lors de l’ouverture du formulaire de création ; affiche l’enregistrement en cours et aligne le sélecteur sur les pages.
+- Affiche le nom personnalisé du projet dans la barre latérale.
+
+## 1.3.0 — 2026-10-15
+
+- Ouvre le cockpit complet dans une fenêtre dédiée réutilisable, indépendante du dossier ouvert dans les autres fenêtres VS Code. Ajoute la création d’un raccourci Windows sur le Bureau.
+- Ajoute un catalogue personnel d’espaces de travail dans les réglages : ajout de dossiers, renommage, masquage du sélecteur et choix du projet actif. Les dossiers et personnalisations restent en place.
+- Permet de choisir plusieurs projets par session et mémorise la dernière sélection. L’historique réunit les sessions des projets enregistrés ; chaque session conserve ses racines et branches.
+- Route explicitement les lectures, éditions, diff Git, tests, scripts, preuves et sauvegardes vers le projet choisi. Les modifications locales restent protégées et les points de restauration portent sur un dépôt identifié.
+- Conserve le worktree isolé pour les sessions à un seul projet. Les sessions multi-projets travaillent dans les dossiers sélectionnés.
+
 ## 1.2.1 — 2026-10-15
 
 - Corrige la largeur du panneau de composition pour afficher davantage d’agents côte à côte sur grand écran.

@@ -95,6 +95,7 @@ export interface AutopilotState extends AutopilotConfig {
   updatedAt: string;
 }
 export interface TestEvidence {
+  projectId?: string;
   devops?: import('./devopsKit').DevOpsEvidence;
   quality?: import('./quality').QualityEvidence;
   id: string;
