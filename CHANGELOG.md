@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.0 — 2026-10-16
+
+- Un écran Quêtes avec 100 missions : 16 séries de 5 paliers et 20 défis uniques, répartis entre premiers pas, composition, collaboration, maîtrise et exploration.
+- Récompenses de 1 à 10 trophées, compteur dans le menu, progression, aide et accès à l’écran utile. La mission suivante remplace celle terminée ; les réussites restent dans la collection.
+- Progression personnelle partagée entre projets, conservée après redémarrage et suppression d’une session. Attribution atomique et unique, fondée sur les actions enregistrées par l’hôte ; aucune demande de récompense envoyée par l’interface n’est acceptée.
+- Identité d’exécution figée pour les nouveaux lancements : changer un agent, un modèle ou une skill après coup ne transforme pas les anciennes interventions en nouvelles preuves.
+- Pas de dépense ni de bonus pour l’instant ; les trophées s’accumulent. Les missions n’exécutent aucune action à votre place.
+
+
 ## 1.7.0 — 2026-10-16
 
 - Trois univers complets, chacun en clair et sombre : Jardin des idées, Papier vivant et Guilde pixel, avec décors, matières et cartes dédiés.

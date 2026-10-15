@@ -24,6 +24,8 @@ import { readHeadFile } from './host/GitFileContent';
 import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 import { normalizeTheme } from './shared/themes';
+import { QuestService, type QuestFact } from './host/QuestService';
+import { studioQuestFacts, discussionQuestFacts } from './host/questFacts';
 
 let panel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
@@ -96,6 +98,10 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
   );
   const hubDirectory = path.join(context.globalStorageUri.fsPath, 'cockpit');
+  const quests = new QuestService(hubDirectory);
+  quests.on('state', (state, earned: string[]) => send({ type: 'questState', state, earned }));
+  const recordQuest = (metric: QuestFact['metric'], key: string) =>
+    quests.record([{ metric, key }]);
   const dedicatedWindow = new DedicatedWindow(hubDirectory);
   const dedicated = dedicatedWindow.isDedicated(vscode.workspace.workspaceFile?.fsPath);
   const catalog = new ProjectCatalog(hubDirectory);
@@ -121,6 +127,9 @@ export async function activate(context: vscode.ExtensionContext) {
         () => vscode.workspace.isTrusted,
       );
       await next.initialize();
+      next.on('persisted', (state) => {
+        void quests.record(studioQuestFacts(state));
+      });
       const config = vscode.workspace.getConfiguration('featureStudio');
       if (isNew) {
         next.state.settings.defaultModel = config.get('defaultModel', '');
@@ -282,9 +291,13 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   });
   discussions.on('state', (state) => send({ type: 'discussionState', state }));
+  discussions.on('persisted', (state) => {
+    void quests.record(discussionQuestFacts(state));
+  });
   disposeHub = async () => {
     await discussions.dispose();
     await hub.dispose();
+    await quests.flush();
     initialized = false;
   };
   const bootstrap = async (): Promise<void> => {
@@ -318,8 +331,13 @@ export async function activate(context: vscode.ExtensionContext) {
           );
         }
       }
+      await quests.initialize();
       await hub.initialize();
       await discussions.initialize();
+      for (const entry of hub.entries.values())
+        await quests.record(studioQuestFacts(entry.service.snapshot()));
+      await quests.record(discussionQuestFacts(discussions.snapshot()));
+      if (getTheme() !== 'auto') await recordQuest('theme', getTheme());
       initialized = true;
     })();
     try {
@@ -346,6 +364,7 @@ export async function activate(context: vscode.ExtensionContext) {
             .getConfiguration('featureStudio')
             .update('appearance.theme', message.theme, vscode.ConfigurationTarget.Global);
           sendTheme(message.requestId);
+          if (initialized && message.theme !== 'auto') await recordQuest('theme', message.theme);
         } catch (error) {
           sendTheme(
             message.requestId,
@@ -542,6 +561,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'ready':
+        quests.publish();
         discussions.publish();
         webviewReady = true;
         if (dedicated) void drainRequests();
@@ -552,6 +572,12 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'refresh':
         await discussions.refreshProfiles();
         await current.refresh();
+        return;
+      case 'refreshQuests':
+        await quests.initialize();
+        for (const entry of hub.entries.values())
+          await quests.record(studioQuestFacts(entry.service.snapshot()));
+        await quests.record(discussionQuestFacts(discussions.snapshot()));
         return;
       case 'checkRuntime':
         await current.checkRuntime();
@@ -571,6 +597,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 .getConfiguration('featureStudio')
                 .update('favoriteAgentIds', [...ids], vscode.ConfigurationTarget.Global);
               current.publish();
+              if (message.favorite) await recordQuest('favorite', message.agentId);
               send({
                 type: 'agentFavoriteResult',
                 requestId: message.requestId,
@@ -1020,6 +1047,7 @@ export async function activate(context: vscode.ExtensionContext) {
               ? await current.registry.saveAgent(message.agent, message.options)
               : await current.registry.saveSkill(message.id, message.content, message.options);
           await hub.refreshProfiles();
+          await quests.record(studioQuestFacts(current.snapshot()));
           await discussions.refreshProfiles().catch(report);
           send({
             type: 'profileSaveResult',
@@ -1195,6 +1223,7 @@ export async function activate(context: vscode.ExtensionContext) {
               current.assertConfigurable();
               await writeFile(destination.fsPath, JSON.stringify(bundle, null, 2) + '\n');
               await current.kits.remember(bundle);
+              await recordQuest('kitExport', bundle.metadata.id);
               send({
                 type: 'kitResult',
                 requestId: message.requestId,
@@ -1206,6 +1235,8 @@ export async function activate(context: vscode.ExtensionContext) {
             current.assertConfigurable();
             const result = await current.kits.install(message.token);
             await current.refresh();
+            await recordQuest('kitImport', current.kits.bundle(message.token).metadata.id);
+            await quests.record(studioQuestFacts(current.snapshot()));
             send({
               type: 'kitResult',
               requestId: message.requestId,
@@ -1288,10 +1319,11 @@ export async function activate(context: vscode.ExtensionContext) {
           destination,
           Buffer.from(sessionMarkdown(feature, current.workspacePath)),
         );
+        await recordQuest('export', feature.id);
         await vscode.window.showTextDocument(destination);
         return;
       }
-      case 'saveWorkflow':
+      case 'saveWorkflow': {
         current.assertTrusted();
         if (
           message.workflow.steps.some(
@@ -1301,12 +1333,17 @@ export async function activate(context: vscode.ExtensionContext) {
           )
         )
           throw new Error('Un agent ou une skill du parcours n’existe pas.');
+        const isNew = !current.state.workflows.some(
+          (workflow) => workflow.id === message.workflow.id,
+        );
         await current.registry.saveWorkflow(message.workflow);
         await current.refresh();
+        if (isNew) await recordQuest('workflowsCreated', message.workflow.id);
         notice(
           'Parcours enregistré au niveau utilisateur. Les sessions existantes conservent leur définition.',
         );
         return;
+      }
       case 'deleteWorkflow': {
         try {
           current.assertConfigurable();
@@ -1352,6 +1389,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       case 'saveBudget':
         await current.saveBudget(message.featureId, message.budget);
+        await recordQuest('budget', message.featureId);
         return;
       case 'saveCriteria':
         await current.saveCriteria(message.featureId, message.criteria);
@@ -1664,6 +1702,7 @@ export async function activate(context: vscode.ExtensionContext) {
     getLauncherVisible: () => launcher.visible,
     getLauncherReady: () => launcher.isReady,
     getTheme,
+    getQuestState: () => quests.snapshot(),
     getDevOpsState: () => devops?.getState(),
     dispatch: (message: ClientMessage) => dispatch(message),
   };

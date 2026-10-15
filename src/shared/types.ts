@@ -108,6 +108,13 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  /** Execution identity frozen at launch, independent from later step edits. */
+  profileSnapshot?: {
+    agentId: string;
+    policy: PolicyProfile;
+    skillIds: string[];
+    modelOverride: boolean;
+  };
   agentName?: string;
   traceArchive?: import('./observation').TraceArchiveInfo;
   /** Tone captured at launch; older attempts had roast disabled. */
@@ -279,6 +286,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | { type: 'refreshQuests' }
   | import('./observation').ObservationClientMessage
   | import('./projects').ProjectClientMessage
   | import('./collaboration').CollaborationClientMessage
@@ -425,6 +433,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'questState'; state: import('./quests').QuestState; earned?: string[] }
   | import('./observation').ObservationHostMessage
   | import('./discussions').DiscussionHostMessage
   | { type: 'workflowDeleteResult'; requestId: string; error?: string; cancelled?: boolean }

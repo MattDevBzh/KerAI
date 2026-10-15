@@ -28,6 +28,20 @@ En haut de **Réglages**, **L’ambiance du cockpit** propose **Suivre VS Code**
 
 Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
 
+## Quêtes et trophées
+
+Le menu **Quêtes** affiche ton total de trophées. Le carnet propose **100 quêtes**, chacune valant **1 à 10 trophées** : 80 missions réparties en 16 séries de cinq paliers, et 20 défis uniques.
+
+**À jouer** montre les missions disponibles. Réussir une mission de série révèle la suivante : créer un agent, puis deux, cinq, dix et vingt ; composer une équipe, puis trois, cinq, dix et vingt compositions différentes. **Accomplies** garde les réussites. **Collection** montre les 100 missions, y compris celles encore verrouillées. Filtre par famille ou cherche une action ; **Comment la réussir** précise les conditions. Le bouton d’une quête ouvre l’écran utile, sans lancer d’agent automatiquement.
+
+Les premières missions couvrent la création et le lancement d’une feature. D’autres invitent à répondre aux questions, relire et valider les rapports, les modifier, commenter, créer des checkpoints, écrire des skills, enrichir la mémoire ou utiliser l’Observateur. **Les six fantastiques** exige six agents différents qui terminent leurs interventions avec succès, de suite, dans une même feature : un échec ou une annulation interrompt la série. Des relances du même agent ne suffisent pas.
+
+Les récompenses sont automatiques, une seule fois par quête. Une réponse d’agent en échec, un aperçu de lancement ou une sauvegarde répétée ne simulent pas une action réussie. Les checkpoints automatiques ne remplacent pas les checkpoints manuels demandés. Les trophées sont conservés même si tu archives ou supprimes ensuite une session.
+
+La progression est personnelle, commune aux projets et enregistrée localement dans le stockage du cockpit (`quests.json`). Les sessions encore présentes et les profils personnels disponibles peuvent compléter des quêtes à l’installation. L’historique ne permet pas de reconstruire toutes les actions anciennes (par exemple les exports et les créations de parcours) ; celles-ci sont comptées à partir de cette version. Les identités d’exécution des nouveaux lancements sont figées pour éviter de réinterpréter une ancienne intervention après modification de l’étape.
+
+Si le fichier de progression est illisible, le carnet le signale et le conserve. **Relire la progression** retente sa lecture ; le compteur affiche un tiret au lieu d’inventer un total. Les trophées ne sont ni dépensés ni associés à des bonus dans cette version. La démo présente le carnet sans enregistrer de récompense personnelle.
+
 ## Discuter avec ses agents
 
 **Discussion**, juste après Dashboard, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.

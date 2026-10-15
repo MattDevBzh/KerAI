@@ -41,6 +41,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
       event.data &&
       [
         'state',
+        'questState',
         'discussionState',
         'discussionResult',
         'workflowDeleteResult',

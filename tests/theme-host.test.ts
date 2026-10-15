@@ -43,6 +43,19 @@ const host = vi.hoisted(() => {
   };
 });
 
+vi.mock('../src/host/QuestService', () => ({
+  QuestService: class {
+    on() {}
+    async initialize() {}
+    async record() {}
+    async flush() {}
+    publish() {}
+  },
+}));
+vi.mock('../src/host/questFacts', () => ({
+  studioQuestFacts: () => [],
+  discussionQuestFacts: () => [],
+}));
 vi.mock('vscode', () => ({
   ConfigurationTarget: { Global: 1 },
   ExtensionMode: { Test: 3 },

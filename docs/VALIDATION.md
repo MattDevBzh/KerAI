@@ -1,4 +1,16 @@
-# Validation et limites — v1.7.0, 16 octobre 2026
+# Validation et limites — v1.8.0, 16 octobre 2026
+
+## Quêtes et trophées — v1.8.0
+
+- `npm run check` réussi : format, TypeScript, 556 tests métier réussis, 4 ignorés, puis build. Le test supplémentaire de rechargement du profil d’exécution dans le Store réel a été rejoué dans les 11 tests de quêtes, tous réussis.
+- 125 scénarios Chromium réussis. Le carnet et les récompenses ont été inspectés sur bureau et à 390 px ; clavier, filtrage, progression, erreur de stockage, réapparition des missions, contraste élevé et réduction des mouvements sont couverts.
+- Catalogue de 100 quêtes validé : 80 en séries, 20 uniques, identifiants distincts et récompenses de 1 à 10. Les preuves hôte couvrent notamment les six agents distincts, les échecs, les validations humaines, les réponses héritées, les profils personnels et les checkpoints manuels.
+- Le journal atomique est testé avec rechargement, appels répétés, deux instances concurrentes, plafonnement du stockage et données illisibles conservées. Une sauvegarde échouée ne publie aucune preuve ; une modification en mémoire pendant une écriture n’altère pas le snapshot durable observé.
+- Smoke réussi dans VS Code Insiders sur macOS : premières quêtes de feature et d’équipe, budget, agents, parcours non recompté après réenregistrement, refus d’un faux lancement, fermeture et réouverture avec total inchangé. Aucun prompt Copilot payant.
+- Les tests de quêtes sont ajoutés à la CI Windows. La publication requiert les jobs Linux et Windows, puis un smoke du VSIX extrait. Les checksums de la release vérifient le paquet réellement publié.
+
+La v1.7.0 a été publiée depuis `5eeb363d91cac68b4e96f8e766b7d84eaf645c9e` après [CI réussie](https://github.com/MattDevBzh/KerAI/actions/runs/38820001893). Son VSIX et son icône ont été téléchargés depuis la release et leurs SHA-256 vérifiés.
+
 
 ## Sept ambiances et Halloween — v1.7.0
 

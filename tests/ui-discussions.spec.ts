@@ -191,6 +191,7 @@ test('navigation order and project selector match each page; common settings pre
     'Discussion',
     'Validation',
     'Consommation',
+    'Quêtes—',
     'Parcours',
     'Agents',
     'Skills',

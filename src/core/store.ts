@@ -98,6 +98,14 @@ const correctionCycle = z.object({
   }),
 });
 const attempt = z.object({
+  profileSnapshot: z
+    .object({
+      agentId: z.string(),
+      policy: z.enum(['read-only', 'workspace-write', 'tests']),
+      skillIds: z.array(z.string()),
+      modelOverride: z.boolean(),
+    })
+    .optional(),
   agentName: z.string().optional(),
   traceArchive: traceInfoSchema.optional(),
   roastLevel: z.enum(ROAST_LEVELS).optional(),

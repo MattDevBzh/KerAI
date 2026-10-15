@@ -255,7 +255,9 @@ export class StudioService extends EventEmitter {
   async persist(): Promise<void> {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
+    const persisted = this.listenerCount('persisted') ? this.snapshot() : undefined;
     await this.store.save(this.engine.features, this.state.settings, this.state.memory ?? []);
+    if (persisted) this.emit('persisted', persisted);
     this.publish();
   }
   private schedule(): void {
@@ -978,6 +980,12 @@ export class StudioService extends EventEmitter {
     if (!input.resumeSessionId) delete attempt.sessionId;
     attempt.roastLevel = input.attempt.roastLevel;
     attempt.agentName = input.agent.nickname || input.agent.name;
+    attempt.profileSnapshot = {
+      agentId: input.agent.id,
+      policy: input.step.policy,
+      skillIds: input.skills.map((skill) => skill.id),
+      modelOverride: Boolean(step.model),
+    };
     attempt.launch = structuredClone(input.launch!);
     attempt.memorySnapshot = structuredClone(input.memory ?? []);
     attempt.promptFingerprint = preview.fingerprint;

@@ -15,6 +15,9 @@ import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
 import { ThemePicker } from './ThemePicker';
 import { ThemeScenery } from './ThemeScenery';
+import { QuestCelebration, QuestsUI } from './QuestsUI';
+import { emptyQuestState, type QuestState } from '../src/shared/quests';
+import { Trophy } from 'lucide-react';
 import { KitsUI } from './KitsUI';
 import { UsageDashboard } from './UsageDashboard';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
@@ -120,6 +123,7 @@ import { DiscussionUI } from './DiscussionUI';
 import type { DiscussionState } from '../src/shared/discussions';
 
 type View =
+  | 'quests'
   | 'kits'
   | 'usage'
   | 'devops'
@@ -170,6 +174,7 @@ const nav = [
   { id: 'discussion', label: 'Discussion', icon: MessageSquare },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
   { id: 'usage', label: 'Consommation', icon: BarChart3 },
+  { id: 'quests', label: 'Quêtes', icon: Trophy },
   { id: 'workflows', label: 'Parcours', icon: Workflow },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'skills', label: 'Skills', icon: BookOpen },
@@ -311,6 +316,10 @@ function Modal({
   );
 }
 export default function App() {
+  const [questState, setQuestState] = useState<QuestState | undefined>(
+    isDemo ? emptyQuestState() : undefined,
+  );
+  const [earnedQuests, setEarnedQuests] = useState<string[]>([]);
   const [devops, setDevops] = useState<DevOpsState>({
     authenticated: false,
     busy: false,
@@ -355,7 +364,11 @@ export default function App() {
   useEffect(() => {
     const cleanup = subscribe((message) => {
       if (message.type === 'state') setState(message.state);
-      else if (message.type === 'discussionState') setDiscussionState(message.state);
+      else if (message.type === 'questState') {
+        setQuestState(message.state);
+        if (message.earned?.length)
+          setEarnedQuests((ids) => [...new Set([...ids, ...message.earned!])]);
+      } else if (message.type === 'discussionState') setDiscussionState(message.state);
       else if (message.type === 'devopsState') setDevops(message.state);
       else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
@@ -567,6 +580,11 @@ export default function App() {
             >
               <n.icon size={18} />
               <span>{n.label}</span>
+              {n.id === 'quests' && (
+                <small className="quest-menu-count" title="Trophées remportés">
+                  {questState && !questState.error ? questState.trophies : '—'}
+                </small>
+              )}
               {n.id === 'dashboard' && activeFeatures.length > 0 && (
                 <small>{activeFeatures.length}</small>
               )}
@@ -673,6 +691,15 @@ export default function App() {
           </div>
         )}
         <main>
+          <QuestCelebration
+            ids={earnedQuests}
+            onClose={() => setEarnedQuests([])}
+            onOpen={() => {
+              chooseView('quests');
+              setEarnedQuests([]);
+            }}
+          />
+          {view === 'quests' && <QuestsUI state={questState} navigate={chooseView} />}
           {state.workspaceOperation && (
             <div className="workspace-operation global-workspace-operation" role="status">
               <LoaderCircle className="spin" size={14} />

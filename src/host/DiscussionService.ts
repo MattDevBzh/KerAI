@@ -96,6 +96,7 @@ export class DiscussionService extends EventEmitter {
       try {
         await writeFile(temporary, content, { flag: 'wx', mode: 0o600 });
         await rename(temporary, target);
+        this.emit('persisted', { discussions: JSON.parse(content).discussions, agents: [] });
       } finally {
         await unlink(temporary).catch(() => {});
       }

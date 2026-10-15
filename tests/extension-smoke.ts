@@ -7,6 +7,8 @@ import type { DevOpsConfig, DevOpsState } from '../src/shared/devops';
 import { THEME_IDS, type ThemeId } from '../src/shared/themes';
 import { resolveAvatar } from '../src/shared/avatars';
 import { featureStateKey } from '../src/shared/collaboration';
+import { teamSteps } from '../src/shared/team';
+import type { QuestState } from '../src/shared/quests';
 
 interface Api {
   getState(): StudioState | undefined;
@@ -14,6 +16,7 @@ interface Api {
   getLauncherVisible(): boolean;
   getLauncherReady(): boolean;
   getTheme(): ThemeId;
+  getQuestState(): QuestState;
   getDevOpsState(): DevOpsState | undefined;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
 }
@@ -191,6 +194,25 @@ async function smokeRun(): Promise<void> {
     workflowId: 'feature',
   });
   const beforeThemeChange = api.getState();
+  await api.dispatch({ type: 'refreshQuests' });
+  assert.equal(api.getQuestState().error, undefined);
+  assert.equal(
+    api.getQuestState().counts.featuresCreated,
+    1,
+    'A durable feature earns the first creation quest',
+  );
+  assert.equal(
+    api.getQuestState().counts.featuresLaunched,
+    0,
+    'Creating a session does not invent an agent launch',
+  );
+  const creationTrophies = api.getQuestState().trophies;
+  await api.dispatch({ type: 'refreshQuests' });
+  assert.equal(
+    api.getQuestState().trophies,
+    creationTrophies,
+    'Reloading facts cannot reward twice',
+  );
   const beforeThemeIndex = await readFile(join(source, '.git', 'index'));
   await Promise.all([
     api.dispatch({
@@ -222,6 +244,19 @@ async function smokeRun(): Promise<void> {
   let state = api.getState()!;
   const feature = state.features.at(-1)!;
   assert.equal(feature.steps.length, 5);
+  await api.dispatch({
+    type: 'saveFeatureTeam',
+    featureId: feature.id,
+    expectedRevision: feature.teamRevision ?? 0,
+    steps: teamSteps(feature),
+    requestId: 'quest-team',
+  });
+  await api.dispatch({ type: 'refreshQuests' });
+  assert.equal(
+    api.getQuestState().counts.teamsCreated,
+    1,
+    'A saved composition advances the team series',
+  );
   await api.dispatch({
     type: 'configureStep',
     featureId: feature.id,
@@ -378,6 +413,26 @@ async function smokeRun(): Promise<void> {
   assert.equal(await readFile(userAgent.path, 'utf8'), userAgentContent);
   const projectAgentContent = await readFile(projectAgent.path, 'utf8');
 
+  const questWorkflow = {
+    ...api.getState()!.workflows[0],
+    id: 'smoke-quest-route',
+    name: 'Parcours quêtes',
+  };
+  await api.dispatch({ type: 'saveWorkflow', workflow: questWorkflow });
+  await api.dispatch({ type: 'saveWorkflow', workflow: questWorkflow });
+  await api.dispatch({ type: 'refreshQuests' });
+  assert.equal(
+    api.getQuestState().counts.workflowsCreated,
+    1,
+    'Updating the same workflow does not create another quest reward',
+  );
+  assert.equal(api.getQuestState().counts.budget, 1);
+  assert.ok((api.getQuestState().counts.agentsCreated ?? 0) >= 1);
+  assert.equal(
+    api.getQuestState().counts.featuresLaunched,
+    0,
+    'A refused launch and previews do not earn launch trophies',
+  );
   await api.dispatch({ type: 'installKit' });
   assert.ok(api.getState()!.agents.length >= 9);
   const sourceIndex = await readFile(join(source, '.git', 'index'));
@@ -529,7 +584,15 @@ async function smokeRun(): Promise<void> {
   assert.equal(await readFile(join(source, 'story.txt'), 'utf8'), 'Human unstaged source\n');
   assert.deepEqual(await readFile(join(source, '.git', 'index')), sourceIndex);
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  const beforeQuestReopen = api.getQuestState();
   await vscode.commands.executeCommand('featureStudio.open');
+  await api.dispatch({ type: 'refreshQuests' });
+  assert.equal(api.getQuestState().error, undefined);
+  assert.deepEqual(
+    api.getQuestState(),
+    beforeQuestReopen,
+    'The personal trophy ledger survives cockpit reload with no duplicate rewards',
+  );
   assert.equal(
     api.getTheme(),
     'jardin-sombre',
@@ -584,7 +647,7 @@ async function smokeRun(): Promise<void> {
     'Preparation and storage consultation never start a paid model',
   );
   console.log(
-    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
+    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );
 }
 
