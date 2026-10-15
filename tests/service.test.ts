@@ -1014,16 +1014,20 @@ describe('editable feature teams', () => {
     cycle[0].dependsOn = [cycle.at(-1)!.id];
     await expect(f.service.saveFeatureTeam(feature.id, 0, cycle)).rejects.toThrow();
     expect(teamSteps(feature)).toEqual(original);
-    let release!: () => void;
+    let release!: () => void, enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
     const operation = f.service.withWorkspaceMutation(
       'Launching',
       () =>
         new Promise<void>((resolve) => {
           release = resolve;
+          enter();
         }),
     );
     await expect(f.service.saveFeatureTeam(feature.id, 0, [])).rejects.toThrow('opération');
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await entered;
     release();
     await operation;
   });

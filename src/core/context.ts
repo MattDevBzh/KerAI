@@ -40,6 +40,13 @@ export function promptSections(input: RunInput): PromptSection[] {
   const add = (id: string, label: string, source: PromptSection['source'], content: string) => {
     if (content.trim()) sections.push({ id, label, source, content });
   };
+  if (input.projects?.length)
+    add(
+      'projects',
+      'Projets de la session',
+      'system',
+      `Projets autorisés pour cette session :\n${input.projects.map((project) => `${project.id} — ${project.name} — ${project.path} — branche ${project.branch}`).join('\n')}\n${input.projects.length > 1 ? 'Chaque outil de dépôt exige projectId. Choisis uniquement un identifiant de cette liste. Les chemins des outils sont relatifs au projet choisi. Dans les comptes rendus et références de fichiers, utilise @projectId/chemin pour identifier le dépôt. Aucune racine parente ou projet voisin n’est autorisé.' : 'Les chemins des outils sont relatifs au dossier de travail de cette session.'}`,
+    );
   add(
     'feature',
     'Besoin de la feature',
@@ -321,6 +328,7 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
         budget: input.feature.budget,
         comments: input.feature.reviewComments,
         criteria: input.feature.criteria,
+        projects: input.projects,
         workspacePath: input.workspacePath,
         worktree: input.feature.worktree,
       }),

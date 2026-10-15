@@ -24,6 +24,26 @@ export const messageSchema = z.discriminatedUnion('type', [
   ...kitMessageVariants,
   z
     .object({
+      type: z.enum(['addProjects', 'openDedicatedWindow', 'createWindowsShortcut']),
+      requestId: id,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('renameProject'),
+      projectId: id,
+      name: z.string().trim().min(1).max(100),
+      requestId: id,
+    })
+    .strict(),
+  z
+    .object({ type: z.literal('hideProject'), projectId: id, hidden: z.boolean(), requestId: id })
+    .strict(),
+  z.object({ type: z.literal('selectProjects'), projectIds: z.array(id), requestId: id }).strict(),
+  z.object({ type: z.literal('activateFeature'), featureId: id }).strict(),
+  z.object({ type: z.literal('activateProject'), projectId: id }).strict(),
+  z
+    .object({
       type: z.literal('saveFeatureTeam'),
       featureId: id,
       requestId: id,
@@ -66,6 +86,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('createFeature'),
+      projectIds: z.array(id).min(1).optional(),
       title: short.min(1),
       description: text,
       workflowId: id.optional(),
@@ -178,11 +199,14 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('archiveFeature'), featureId: id, archived: z.boolean() }).strict(),
   z.object({ type: z.literal('openDiff'), path: short, featureId: id.optional() }).strict(),
   z.object({ type: z.literal('openFile'), path: short, featureId: id.optional() }).strict(),
-  z.object({ type: z.literal('openFeatureWorkspace'), featureId: id }).strict(),
+  z
+    .object({ type: z.literal('openFeatureWorkspace'), featureId: id, projectId: id.optional() })
+    .strict(),
   z
     .object({
       type: z.literal('createCheckpoint'),
       featureId: id,
+      projectId: id.optional(),
       label: z.string().trim().min(1).max(200),
     })
     .strict(),

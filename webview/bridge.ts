@@ -40,6 +40,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
       event.data &&
       [
         'state',
+        'projectResult',
         'featureTeamResult',
         'agentFavoriteResult',
         'devopsState',

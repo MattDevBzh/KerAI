@@ -3,11 +3,20 @@ import type { Attempt, Feature, FeatureStep, TestEvidence } from '../shared/type
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 
 export function currentTestEvidence(attempt: Attempt): TestEvidence[] {
-  return [...new Map((attempt.evidence ?? []).map((proof) => [proof.commandId, proof])).values()];
+  return [
+    ...new Map(
+      (attempt.evidence ?? []).map((proof) => [
+        `${proof.projectId ?? ''}:${proof.commandId}`,
+        proof,
+      ]),
+    ).values(),
+  ];
 }
 export function evidenceIsCurrent(attempt: Attempt, proof: TestEvidence): boolean {
   return Object.entries(attempt.fileHashes ?? {}).every(
-    ([path, hash]) => proof.fileHashes[path] === hash,
+    ([path, hash]) =>
+      (proof.projectId && !path.startsWith(`@${proof.projectId}/`)) ||
+      proof.fileHashes[path] === hash,
   );
 }
 /** Standard quality agents retain their contract even in a customized step. */

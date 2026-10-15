@@ -489,7 +489,7 @@ describe('StudioService isolated workspaces with real local Git and a fake agent
       feature = await isolated(f),
       other = await isolated(f, 'Other feature'),
       entered = deferred<void>();
-    // extension.ensure owns the source lease for the entire cockpit lifetime, before initialize.
+    // Simulate an external operation owning the source; isolated execution reserves its own root.
     const sourceLease = new WorkspaceLease(f.workspace);
     const sameSourceWindow = new WorkspaceLease(f.workspace);
     const targetWindow = new WorkspaceLease(feature.worktree!.path);
@@ -520,12 +520,16 @@ describe('StudioService isolated workspaces with real local Git and a fake agent
       );
       services.push(secondary);
       await secondary.initialize();
+      await expect(
+        secondary.createFeature({ title: 'Reserved root', description: '' }),
+      ).rejects.toThrow('autre fenêtre');
+      await expect(f.service.runStep(feature.id, 'session')).rejects.toThrow('autre fenêtre');
+      await targetWindow.release();
       const secondFeature = await secondary.createFeature({
         title: 'Other window session',
         description: '',
         workflowId: 'single',
       });
-      await expect(f.service.runStep(feature.id, 'session')).rejects.toThrow('autre fenêtre');
       await secondary.createCheckpoint(secondFeature.id, 'Lease released after cancellation');
       expect(secondFeature.checkpoints!.at(-1)!.label).toBe('Lease released after cancellation');
       const persisted = (await new Store(f.storage).load()).features.find(
