@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0 — 2026-10-16
+
+- Trois univers complets, chacun en clair et sombre : Jardin des idées, Papier vivant et Guilde pixel, avec décors, matières et cartes dédiés.
+- Halloween, un septième thème événement : vingt costumes dérivés des portraits existants, avec poses de repos, travail animé et réussite.
+- Les costumes suivent le thème sur les cartes, les discussions, les kits et le choix d’avatar ; les profils restent compatibles et les portraits originaux sont conservés.
+- Migration des cinq anciennes préférences, repli vers le portrait habituel si un asset manque, contraste élevé prioritaire et réduction des animations respectée.
+
+
 ## 1.6.0 — 2026-10-15
 
 - Anime le scan de l’Observateur sur la session : avatar, balayage, phase active, progression réelle et synthèse. Le bandeau reste accessible lorsque le rapport est fermé et respecte la réduction des mouvements.

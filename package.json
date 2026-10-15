@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -104,19 +104,23 @@
           "type": "string",
           "enum": [
             "auto",
-            "aube",
-            "brume",
-            "sauge",
-            "minuit",
-            "foret"
+            "jardin-clair",
+            "jardin-sombre",
+            "papier-clair",
+            "papier-sombre",
+            "guilde-clair",
+            "guilde-sombre",
+            "halloween"
           ],
           "enumDescriptions": [
-            "Suivre le thème de VS Code, y compris son mode contraste élevé.",
-            "Thème clair Aube, aux tons chauds.",
-            "Thème clair Brume, aux tons bleutés.",
-            "Thème clair Sauge, aux tons verts.",
-            "Thème sombre Minuit, aux tons bleus.",
-            "Thème sombre Forêt, aux tons verts."
+            "Suivre VS Code, avec priorité au contraste élevé.",
+            "Jardin des idées — clair, porcelaine et feuillage.",
+            "Jardin des idées — sombre, pin et lumière dorée.",
+            "Papier vivant — clair, papier crème et cobalt.",
+            "Papier vivant — sombre, ardoise et pervenche.",
+            "Guilde pixel — clair, ivoire et menthe.",
+            "Guilde pixel — sombre, indigo et lavande.",
+            "Halloween — événement sombre, avec vingt costumes d’agents."
           ],
           "default": "auto",
           "scope": "application",
@@ -167,7 +171,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.6.0.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.7.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",

@@ -1,0 +1,102 @@
+[
+  {
+    "id": "frontend-developer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-562f5aba-d4f0-4f54-a7a3-044ea08bf428.png",
+    "ok": true
+  },
+  {
+    "id": "qa-automation",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-a7f33c22-4a40-4186-86ee-6fe1394ce88b.png",
+    "ok": true
+  },
+  {
+    "id": "backend-developer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-1bf3868d-ea5b-4a2b-8305-5866ca8929eb.png",
+    "ok": true
+  },
+  {
+    "id": "software-architect",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-1b3062ae-7b2c-4739-ab1d-6c606869ac99.png",
+    "ok": true
+  },
+  {
+    "id": "qa-tester",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-90f760d6-a5d0-4b87-b49b-91b6c60ec79c.png",
+    "ok": true
+  },
+  {
+    "id": "infrastructure-engineer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-55ec7e0b-c357-4e60-a20a-2c738609bc14.png",
+    "ok": true
+  },
+  {
+    "id": "security-engineer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-6b70715c-cfb2-41d0-b465-e57c9642659c.png",
+    "ok": true
+  },
+  {
+    "id": "technical-writer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-ef057eae-0379-4eb8-bf25-719331d1ce2d.png",
+    "ok": true
+  },
+  {
+    "id": "devops-engineer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-b68b40c2-731f-4a6c-bfe9-e79fddba15ab.png",
+    "ok": true
+  },
+  {
+    "id": "data-engineer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-6e6c0be9-f4ce-4209-9713-b2c6eae6243f.png",
+    "ok": true
+  },
+  {
+    "id": "database-administrator",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-4f47170d-fe1c-45d5-b49b-5ce116e82d21.png",
+    "ok": true
+  },
+  {
+    "id": "sre-engineer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-7e17e142-7ce9-4607-87b3-859555b3302a.png",
+    "ok": true
+  },
+  {
+    "id": "cloud-architect",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-6b6d57cf-a44d-4253-80af-d5eb56de0e9a.png",
+    "ok": true
+  },
+  {
+    "id": "data-scientist",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-f686c79c-8454-4072-b1ca-b6e8e3e10101.png",
+    "ok": true
+  },
+  {
+    "id": "ux-designer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-db02818b-0ae6-4c55-a34c-54cd545a6b69.png",
+    "ok": true
+  },
+  {
+    "id": "code-reviewer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-f2efd063-4be1-4bcb-bfbf-f250e85b2ea8.png",
+    "ok": true
+  },
+  {
+    "id": "product-owner",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-7c6f2d2c-4854-477a-aa87-af175e7058de.png",
+    "ok": true
+  },
+  {
+    "id": "support-engineer",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-49f51480-55d6-4887-932f-9ed4d4ecc4f1.png",
+    "ok": true
+  },
+  {
+    "id": "business-analyst",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-01352bb1-09f7-42fb-b6e8-b026efa04a63.png",
+    "ok": true
+  },
+  {
+    "id": "release-manager",
+    "path": "/Users/matthieu/.codex/generated_images/01a1405a-e002-7d01-9cc0-cd34c9400c69/exec-85e75824-528d-4b78-8cc6-2176d73de08f.png",
+    "ok": true
+  }
+]

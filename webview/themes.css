@@ -24,114 +24,164 @@ html[data-studio-theme-effective='auto']:has(body.vscode-light),
 html[data-studio-theme-effective='auto']:has(body.vscode-high-contrast-light) {
   color-scheme: light;
 }
-html[data-studio-theme-effective='aube'],
-html[data-studio-theme='aube']:not([data-studio-theme-effective]):not(
+html[data-studio-theme-effective='jardin-clair'],
+html[data-studio-theme='jardin-clair']:not([data-studio-theme-effective]):not(
     :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
   ),
-.theme-preview-aube {
-  --bg: #faf5ee;
-  --side: #eee4d8;
-  --panel: #fffaf4;
-  --panel-soft: #f0e5d9;
-  --fg: #302823;
-  --muted: #665549;
-  --border: #c4b4a4;
-  --input-border: #8b7766;
-  --coral: #a33e2c;
-  --error: #a12e32;
-  --apricot: #80501a;
-  --lavender: #704b88;
-  --green: #376247;
-  --on-accent: #fffaf4;
-  --accent-hover: #893121;
-  color-scheme: light;
-}
-html[data-studio-theme-effective='brume'],
-html[data-studio-theme='brume']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
-.theme-preview-brume {
-  --bg: #f1f5fb;
-  --side: #e0e8f3;
-  --panel: #f9fbff;
-  --panel-soft: #e6edf7;
-  --fg: #1d2d42;
-  --muted: #4d6179;
-  --border: #b4c1d2;
-  --input-border: #71839c;
-  --coral: #275aa3;
-  --error: #a12e32;
-  --apricot: #785320;
-  --lavender: #624596;
-  --green: #28614e;
+.theme-preview-jardin-clair {
+  --bg: #f1f5ec;
+  --side: #e9efe4;
+  --panel: #fcfdf6;
+  --panel-soft: #e2edda;
+  --fg: #233e30;
+  --muted: #4a6047;
+  --border: #bdcdb5;
+  --input-border: #657e5b;
+  --coral: #3d6c51;
   --on-accent: #ffffff;
-  --accent-hover: #204984;
-  color-scheme: light;
-}
-html[data-studio-theme-effective='sauge'],
-html[data-studio-theme='sauge']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
-.theme-preview-sauge {
-  --bg: #f2f6ee;
-  --side: #e2e9d9;
-  --panel: #fafcf6;
-  --panel-soft: #e8eedf;
-  --fg: #28352a;
-  --muted: #52624b;
-  --border: #b5c2aa;
-  --input-border: #76896c;
-  --coral: #38623f;
+  --accent-hover: #30573f;
+  --apricot: #755017;
+  --lavender: #684c86;
+  --green: #31603e;
   --error: #a12e32;
-  --apricot: #805029;
-  --lavender: #6d4e83;
-  --green: #285f45;
-  --on-accent: #ffffff;
-  --accent-hover: #294b2e;
   color-scheme: light;
 }
-html[data-studio-theme-effective='minuit'],
-html[data-studio-theme='minuit']:not([data-studio-theme-effective]):not(
+
+html[data-studio-theme-effective='jardin-sombre'],
+html[data-studio-theme='jardin-sombre']:not([data-studio-theme-effective]):not(
     :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
   ),
-.theme-preview-minuit {
-  --bg: #111725;
-  --side: #171f33;
-  --panel: #1c263d;
-  --panel-soft: #26324b;
-  --fg: #eef2ff;
-  --muted: #b7c4e0;
-  --border: #465774;
-  --input-border: #7b8eb1;
-  --coral: #b8b5ff;
-  --error: #ffb1ad;
-  --apricot: #efc58c;
-  --lavender: #b8c6ff;
-  --green: #9bd4bb;
-  --on-accent: #182039;
-  --accent-hover: #cecbff;
-  color-scheme: dark;
-}
-html[data-studio-theme-effective='foret'],
-html[data-studio-theme='foret']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
-.theme-preview-foret {
-  --bg: #13201c;
-  --side: #182b24;
-  --panel: #20362d;
-  --panel-soft: #2a4438;
-  --fg: #f1f6ed;
-  --muted: #c0cebb;
+.theme-preview-jardin-sombre {
+  --bg: #132b26;
+  --side: #122620;
+  --panel: #1c3930;
+  --panel-soft: #244236;
+  --fg: #edf4e8;
+  --muted: #b9cebe;
   --border: #4c6b59;
   --input-border: #819f85;
-  --coral: #f4bd96;
+  --coral: #c7d58a;
+  --on-accent: #243020;
+  --accent-hover: #d9e8a3;
+  --apricot: #edca8b;
+  --lavender: #d2bfed;
+  --green: #b6dba5;
   --error: #ffb1ad;
-  --apricot: #e8ce94;
-  --lavender: #cec1ef;
-  --green: #afdbb1;
-  --on-accent: #253428;
-  --accent-hover: #ffd0b0;
+  color-scheme: dark;
+}
+
+html[data-studio-theme-effective='papier-clair'],
+html[data-studio-theme='papier-clair']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-papier-clair {
+  --bg: #f1ece2;
+  --side: #eee8dc;
+  --panel: #fffaf0;
+  --panel-soft: #e9e1d0;
+  --fg: #253046;
+  --muted: #5f5c52;
+  --border: #c2b69e;
+  --input-border: #82735c;
+  --coral: #3156ad;
+  --on-accent: #ffffff;
+  --accent-hover: #25448f;
+  --apricot: #755017;
+  --lavender: #684c86;
+  --green: #31603e;
+  --error: #a12e32;
+  color-scheme: light;
+}
+
+html[data-studio-theme-effective='papier-sombre'],
+html[data-studio-theme='papier-sombre']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-papier-sombre {
+  --bg: #20242b;
+  --side: #24282e;
+  --panel: #2c3139;
+  --panel-soft: #343a42;
+  --fg: #f3eee4;
+  --muted: #bdc0bd;
+  --border: #515862;
+  --input-border: #8e95a1;
+  --coral: #aab8fa;
+  --on-accent: #1f2740;
+  --accent-hover: #c3cdff;
+  --apricot: #edca8b;
+  --lavender: #d2bfed;
+  --green: #aed7ba;
+  --error: #ffb1ad;
+  color-scheme: dark;
+}
+
+html[data-studio-theme-effective='guilde-clair'],
+html[data-studio-theme='guilde-clair']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-guilde-clair {
+  --bg: #f0f3ed;
+  --side: #e8eee5;
+  --panel: #fbfdf6;
+  --panel-soft: #dce9df;
+  --fg: #29334b;
+  --muted: #4e5c70;
+  --border: #b3c5b9;
+  --input-border: #657a6f;
+  --coral: #4c5db0;
+  --on-accent: #ffffff;
+  --accent-hover: #3c4c94;
+  --apricot: #755017;
+  --lavender: #684c86;
+  --green: #31603e;
+  --error: #a12e32;
+  color-scheme: light;
+}
+
+html[data-studio-theme-effective='guilde-sombre'],
+html[data-studio-theme='guilde-sombre']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-guilde-sombre {
+  --bg: #171a30;
+  --side: #17182c;
+  --panel: #222741;
+  --panel-soft: #2d334e;
+  --fg: #e8e8ff;
+  --muted: #b7bddd;
+  --border: #505b7d;
+  --input-border: #8492b8;
+  --coral: #b3a6f5;
+  --on-accent: #242039;
+  --accent-hover: #cdc3ff;
+  --apricot: #edca8b;
+  --lavender: #c1b2ff;
+  --green: #8ad9b7;
+  --error: #ffb1ad;
+  color-scheme: dark;
+}
+
+html[data-studio-theme-effective='halloween'],
+html[data-studio-theme='halloween']:not([data-studio-theme-effective]):not(
+    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
+  ),
+.theme-preview-halloween {
+  --bg: #170f24;
+  --side: #21152f;
+  --panel: #291b39;
+  --panel-soft: #352345;
+  --fg: #fff0dc;
+  --muted: #d1b4d7;
+  --border: #715185;
+  --input-border: #a887b3;
+  --coral: #ffb26b;
+  --on-accent: #2b1536;
+  --accent-hover: #ffc68e;
+  --apricot: #ffcf8b;
+  --lavender: #c7a4ff;
+  --green: #c5e586;
+  --error: #ffb1ad;
   color-scheme: dark;
 }
 html[data-studio-theme-effective]:not([data-studio-theme-effective='auto']),
@@ -358,4 +408,201 @@ blockquote {
 }
 body.vscode-light .theme-preview-auto {
   --green: #296446;
+}
+
+/* Each universe changes the scenery and materials around the original agent cards. */
+.main-shell {
+  position: relative;
+  isolation: isolate;
+}
+.theme-scenery {
+  position: absolute;
+  top: 55px;
+  right: 0;
+  width: min(550px, 60%);
+  height: 270px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+  color: var(--coral);
+  opacity: 0.22;
+}
+.theme-scenery svg {
+  width: 100%;
+  height: 100%;
+}
+.theme-collection-note {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0 0 18px;
+}
+.theme-event-note {
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 18px;
+  background: var(--panel-soft);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.6;
+}
+html[data-studio-theme-family='jardin'] {
+  --radius: 20px;
+}
+html[data-studio-theme-family='jardin'] .page-heading h1,
+html[data-studio-theme-family='papier'] .page-heading h1 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+}
+html[data-studio-theme-family='jardin'] :is(.library-card, .settings-card, .session-card) {
+  border-radius: 18px 18px 28px 18px;
+  box-shadow: 0 7px 24px color-mix(in srgb, var(--green) 6%, transparent);
+}
+html[data-studio-theme-family='jardin'] .nav-item.active {
+  border-radius: 6px 18px 6px 18px;
+}
+html[data-studio-theme-family='jardin'] .library-card {
+  background-image: radial-gradient(
+    ellipse at 100% 0,
+    color-mix(in srgb, var(--green) 9%, transparent),
+    transparent 65%
+  );
+}
+html[data-studio-theme-family='papier'] {
+  --radius: 5px;
+}
+html[data-studio-theme-family='papier'] .main-shell {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0 31px,
+    color-mix(in srgb, var(--border) 16%, transparent) 31px 32px
+  );
+}
+html[data-studio-theme-family='papier'] :is(.library-card, .settings-card, .session-card) {
+  border-radius: 5px;
+  box-shadow: 3px 4px 0 color-mix(in srgb, var(--border) 30%, transparent);
+}
+html[data-studio-theme-family='papier'] .nav-item.active {
+  border-radius: 0;
+  box-shadow: inset 3px 0 var(--coral);
+}
+.paper-sheet {
+  position: absolute;
+  width: 150px;
+  height: 190px;
+  background: var(--panel);
+  border: 1px solid currentColor;
+  right: 0;
+  top: -60px;
+  transform: rotate(24deg);
+}
+.paper-sheet.second {
+  right: 14px;
+  transform: rotate(13deg);
+}
+.paper-stamp {
+  position: absolute;
+  right: 150px;
+  top: 25px;
+  padding: 9px 16px;
+  border: 2px solid currentColor;
+  transform: rotate(-9deg);
+  font:
+    11px/1.6 ui-monospace,
+    monospace;
+  letter-spacing: 2px;
+}
+html[data-studio-theme-family='guilde'] {
+  --radius: 3px;
+}
+html[data-studio-theme-family='guilde'] .main-shell {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--border) 14%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 14%, transparent) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+html[data-studio-theme-family='guilde'] :is(.library-card, .settings-card, .session-card) {
+  border-radius: 3px;
+  border-width: 2px;
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--border) 30%, transparent);
+}
+html[data-studio-theme-family='guilde'] :is(.button, .nav-item, .workspace-card) {
+  border-radius: 3px;
+}
+html[data-studio-theme-family='guilde'] :is(.eyebrow, .nav-heading) {
+  font-family: ui-monospace, monospace;
+  letter-spacing: 1px;
+}
+.pixel-mountain {
+  position: absolute;
+  width: 220px;
+  height: 140px;
+  right: 30px;
+  top: 0;
+  background: currentColor;
+  clip-path: polygon(
+    0 100%,
+    0 60%,
+    15% 60%,
+    15% 40%,
+    35% 40%,
+    35% 20%,
+    50% 20%,
+    50% 0,
+    65% 0,
+    65% 35%,
+    80% 35%,
+    80% 65%,
+    100% 65%,
+    100% 100%
+  );
+}
+.pixel-mountain.second {
+  right: 200px;
+  transform: scale(0.65);
+  color: var(--green);
+}
+.pixel-stars {
+  position: absolute;
+  right: 290px;
+  top: 20px;
+  font: 24px/1.5 monospace;
+}
+html[data-studio-theme-family='event'] {
+  --radius: 14px;
+}
+html[data-studio-theme-family='event'] .main-shell {
+  background-image: radial-gradient(ellipse at 100% 0, #a1553429, transparent 55%);
+}
+html[data-studio-theme-family='event'] .page-heading h1 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+}
+html[data-studio-theme-family='event'] :is(.library-card, .settings-card, .session-card) {
+  border-radius: 14px 14px 6px 6px;
+  box-shadow:
+    0 5px 0 #0c081533,
+    0 0 25px #a76ce610;
+  background-image: radial-gradient(ellipse at 100% 0, #824aa31a, transparent 60%);
+}
+html[data-studio-theme-family='event'] .library-card {
+  border-top: 3px solid var(--coral);
+}
+html[data-studio-theme-family='event'] .brand-mark {
+  filter: drop-shadow(0 0 8px #ffb26b44);
+}
+html[data-studio-theme-family='event'] .nav-item.active {
+  box-shadow:
+    inset 3px 0 var(--coral),
+    0 0 14px #ffb26b12;
+}
+@media (max-width: 650px) {
+  .theme-scenery {
+    opacity: 0.12;
+    width: 60%;
+    height: 160px;
+  }
+  .paper-stamp {
+    display: none;
+  }
 }

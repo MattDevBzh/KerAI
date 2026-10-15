@@ -3,7 +3,7 @@ import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
 import type { DiscussionState } from '../src/shared/discussions';
 
-async function hosted(page: Page, theme = 'minuit', preferred = true) {
+async function hosted(page: Page, theme = 'guilde-sombre', preferred = true) {
   const studio = structuredClone(demoState);
   studio.features = [];
   studio.agents[0].nickname = 'Ada';
@@ -318,7 +318,7 @@ test('late acknowledgements keep the active draft and clear only the submitted c
 test('marking an existing profile as a discussion agent immediately makes it selectable', async ({
   page,
 }) => {
-  await hosted(page, 'minuit', false);
+  await hosted(page, 'guilde-sombre', false);
   const agents = page.getByLabel('Agent de discussion', { exact: true });
   await expect(agents.locator('option')).toHaveText(['Choisir un agent']);
   await page.evaluate(() => {
@@ -417,7 +417,13 @@ test('agent creation and editing expose the discussion marker', async ({ page })
     .toMatchObject({ type: 'saveAgent', agent: { discussionAgent: true } });
 });
 
-for (const theme of ['aube', 'brume', 'sauge', 'minuit', 'foret'])
+for (const theme of [
+  'papier-clair',
+  'guilde-clair',
+  'jardin-clair',
+  'guilde-sombre',
+  'jardin-sombre',
+])
   test(`discussion bubbles remain distinct and readable in ${theme}`, async ({
     page,
   }, testInfo) => {

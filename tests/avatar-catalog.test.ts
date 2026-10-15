@@ -67,3 +67,38 @@ describe('professional avatar compatibility and packaged artwork', () => {
     },
   );
 });
+
+describe('Halloween seasonal pack', () => {
+  it('covers every original without introducing new profile identities', async () => {
+    expect((await readdir('webview/public/avatar-events/halloween')).sort()).toEqual(
+      [...avatarIds].sort(),
+    );
+  });
+  it.each(avatarIds)('%s keeps transparent poses and four distinct animated frames', async (id) => {
+    const root = `webview/public/avatar-events/halloween/${id}`;
+    for (const file of ['idle.png', 'approved.png', 'working.gif']) {
+      const image = sharp(`${root}/${file}`, { animated: true });
+      const meta = await image.metadata();
+      expect([meta.width, meta.pageHeight ?? meta.height, meta.hasAlpha]).toEqual([256, 256, true]);
+      const original = await sharp(`webview/public/avatars/${id}/${file}`, { animated: true })
+        .raw()
+        .toBuffer();
+      const raw = await image.ensureAlpha().raw().toBuffer();
+      expect(raw.equals(original)).toBe(false);
+      const frames = file.endsWith('gif') ? 4 : 1;
+      if (frames === 4) {
+        expect(meta.pages).toBe(4);
+        expect(meta.loop).toBe(0);
+        expect(meta.delay).toEqual([320, 320, 320, 320]);
+      }
+      const hashes = [];
+      for (let frame = 0; frame < frames; frame++) {
+        const pixels = raw.subarray(frame * 256 * 256 * 4, (frame + 1) * 256 * 256 * 4);
+        for (const pixel of [0, 255, 256 * 255, 256 * 256 - 1])
+          expect(pixels[pixel * 4 + 3]).toBe(0);
+        hashes.push(createHash('sha256').update(pixels).digest('hex'));
+      }
+      expect(new Set(hashes).size).toBe(frames);
+    }
+  });
+});

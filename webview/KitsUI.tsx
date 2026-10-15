@@ -32,7 +32,7 @@ import type {
 import { kitNodes, resolveKitSelection } from '../src/shared/kits';
 import { subscribe } from './bridge';
 import './kits.css';
-import { resolveAvatar } from '../src/shared/avatars';
+import { AgentImage } from './Avatar';
 
 const kinds: KitKind[] = ['workflow', 'agent', 'skill'];
 const labels: Record<KitKind, string> = { workflow: 'Parcours', agent: 'Agents', skill: 'Skills' };
@@ -42,11 +42,7 @@ type Action<T = KitClientMessage> = T extends KitClientMessage ? Omit<T, 'reques
 function Portrait({ node }: { node: KitNode }) {
   const Icon = icons[node.kind];
   return node.kind === 'agent' && node.avatar ? (
-    <img
-      className="kit-portrait"
-      src={`${import.meta.env.BASE_URL}avatars/${resolveAvatar(node.avatar, node.id)}/idle.png`}
-      alt=""
-    />
+    <AgentImage className="kit-portrait" avatar={node.avatar} agentId={node.id} />
   ) : (
     <span className={`kit-node-icon ${node.kind}`}>
       <Icon size={20} />

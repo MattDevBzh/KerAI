@@ -95,12 +95,12 @@ async function smokeRun(): Promise<void> {
   await assert.rejects(
     api.dispatch({
       type: 'setTheme',
-      theme: 'aube',
+      theme: 'papier-clair',
       requestId: 'bad-key',
       key: 'cliPath',
     } as unknown as ClientMessage),
   );
-  assert.equal(api.getTheme(), 'foret', 'Invalid requests preserve the recorded choice');
+  assert.equal(api.getTheme(), 'halloween', 'Invalid requests preserve the recorded choice');
   await Promise.all([
     vscode.commands.executeCommand('featureStudio.open'),
     vscode.commands.executeCommand('featureStudio.open'),
@@ -195,16 +195,16 @@ async function smokeRun(): Promise<void> {
   await Promise.all([
     api.dispatch({
       type: 'setTheme',
-      theme: 'aube',
+      theme: 'papier-clair',
       requestId: 'theme-fast-first',
     }),
     api.dispatch({
       type: 'setTheme',
-      theme: 'minuit',
+      theme: 'guilde-sombre',
       requestId: 'theme-fast-last',
     }),
   ]);
-  assert.equal(api.getTheme(), 'minuit', 'Successive changes persist in requested order');
+  assert.equal(api.getTheme(), 'guilde-sombre', 'Successive changes persist in requested order');
   assert.deepEqual(
     api.getState(),
     beforeThemeChange,
@@ -213,8 +213,12 @@ async function smokeRun(): Promise<void> {
   assert.deepEqual(await readFile(join(source, '.git', 'index')), beforeThemeIndex);
   await vscode.workspace
     .getConfiguration('featureStudio')
-    .update('appearance.theme', 'foret', vscode.ConfigurationTarget.Global);
-  assert.equal(api.getTheme(), 'foret', 'External user setting changes are read authoritatively');
+    .update('appearance.theme', 'jardin-sombre', vscode.ConfigurationTarget.Global);
+  assert.equal(
+    api.getTheme(),
+    'jardin-sombre',
+    'External user setting changes are read authoritatively',
+  );
   let state = api.getState()!;
   const feature = state.features.at(-1)!;
   assert.equal(feature.steps.length, 5);
@@ -528,7 +532,7 @@ async function smokeRun(): Promise<void> {
   await vscode.commands.executeCommand('featureStudio.open');
   assert.equal(
     api.getTheme(),
-    'foret',
+    'jardin-sombre',
     'The user theme survives closing and reopening the cockpit',
   );
   assert.equal(

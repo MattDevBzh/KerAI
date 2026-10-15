@@ -1,16 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Monitor, Palette } from 'lucide-react';
-import { normalizeTheme, THEME_IDS, type ThemeId } from '../src/shared/themes';
+import {
+  normalizeTheme,
+  THEME_IDS,
+  themeDefinitions as themes,
+  type ThemeId,
+} from '../src/shared/themes';
 import { isDemo, isHosted, send, subscribe } from './bridge';
 
-const themes: Record<ThemeId, { name: string; kind: string; description: string }> = {
-  auto: { name: 'Suivre VS Code', kind: 'Automatique', description: 'Votre thème de l’éditeur' },
-  aube: { name: 'Aube', kind: 'Clair', description: 'Crème & corail' },
-  brume: { name: 'Brume', kind: 'Clair', description: 'Bleu & ardoise' },
-  sauge: { name: 'Sauge', kind: 'Clair', description: 'Vert & lin' },
-  minuit: { name: 'Minuit', kind: 'Sombre', description: 'Bleu & indigo' },
-  foret: { name: 'Forêt', kind: 'Sombre', description: 'Vert & cuivre' },
-};
 interface ThemeContextValue {
   theme: ThemeId;
   pending: ThemeId | null;
@@ -20,6 +17,12 @@ interface ThemeContextValue {
   choose: (theme: ThemeId) => void;
 }
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+export function useThemeAppearance() {
+  const value = useContext(ThemeContext);
+  const effective = value?.highContrast ? 'auto' : (value?.theme ?? 'auto');
+  return { theme: effective, ...themes[effective] };
+}
+
 const contrastMode = () =>
   document.body.classList.contains('vscode-high-contrast') ||
   document.body.classList.contains('vscode-high-contrast-light') ||
@@ -49,7 +52,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => {
     document.documentElement.dataset.studioTheme = theme;
-    document.documentElement.dataset.studioThemeEffective = highContrast ? 'auto' : theme;
+    const effective = highContrast ? 'auto' : theme;
+    document.documentElement.dataset.studioThemeEffective = effective;
+    document.documentElement.dataset.studioThemeFamily = themes[effective].family;
+    document.documentElement.dataset.studioAvatarPack = themes[effective].avatarPack ?? '';
   }, [theme, highContrast]);
   useEffect(() => {
     const unsubscribe = subscribe((message) => {
@@ -124,6 +130,9 @@ export function ThemePicker() {
           </p>
         </div>
       </div>
+      <p className="theme-collection-note">
+        Trois univers en clair et sombre, et un événement à choisir quand vous en avez envie.
+      </p>
       <fieldset
         className="theme-grid"
         disabled={value.pending !== null}
@@ -167,6 +176,10 @@ export function ThemePicker() {
           </label>
         ))}
       </fieldset>
+      <p className="theme-event-note">
+        🎃 Halloween habille les vingt agents et le cockpit. Les portraits habituels reviennent dès
+        que vous choisissez un autre thème.
+      </p>
       <p className="theme-help" id="theme-help">
         {isDemo
           ? 'Aperçu uniquement : aucun thème n’est enregistré.'

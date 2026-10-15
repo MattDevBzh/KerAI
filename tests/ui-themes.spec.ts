@@ -4,13 +4,11 @@ import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
 import type { ThemeId } from '../src/shared/themes';
 
-const palettes = [
-  { id: 'aube', name: 'Aube', kind: 'Clair', scheme: 'light' },
-  { id: 'brume', name: 'Brume', kind: 'Clair', scheme: 'light' },
-  { id: 'sauge', name: 'Sauge', kind: 'Clair', scheme: 'light' },
-  { id: 'minuit', name: 'Minuit', kind: 'Sombre', scheme: 'dark' },
-  { id: 'foret', name: 'Forêt', kind: 'Sombre', scheme: 'dark' },
-] as const;
+import { THEME_IDS, themeDefinitions } from '../src/shared/themes';
+const palettes = THEME_IDS.filter((id) => id !== 'auto').map((id) => ({
+  id,
+  ...themeDefinitions[id],
+}));
 const nativeColors = {
   dark: {
     background: '#141414',
@@ -101,40 +99,40 @@ async function themeState(page: Page, theme: string, requestId?: string, error?:
   );
 }
 
-test('six choix accessibles : ack, erreur corrélée et brouillon de réglages préservé pendant un run', async ({
+test('huit choix accessibles : ack, erreur corrélée et brouillon de réglages préservé pendant un run', async ({
   page,
 }) => {
   await hosted(page, 'auto', 'dark', true);
-  await expect(page.getByRole('radio')).toHaveCount(6);
+  await expect(page.getByRole('radio')).toHaveCount(8);
   const draft = page.getByLabel('Durée maximale d’une tentative');
   await draft.fill('37');
   await page.getByRole('radio', { name: 'Suivre VS Code — Automatique' }).focus();
   await page.keyboard.press('ArrowRight');
   const request = await lastThemeRequest(page);
-  expect(request).toMatchObject({ type: 'setTheme', theme: 'aube' });
+  expect(request).toMatchObject({ type: 'setTheme', theme: 'jardin-clair' });
   expect(request.requestId).toBeTruthy();
-  await expect(page.getByRole('radio', { name: 'Minuit — Sombre' })).toBeDisabled();
+  await expect(page.getByRole('radio', { name: 'Guilde pixel — Sombre' })).toBeDisabled();
   await expect(page.getByText('Préférence personnelle enregistrée.', { exact: true })).toHaveCount(
     0,
   );
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
-  await themeState(page, 'minuit', 'unrelated');
+  await themeState(page, 'guilde-sombre', 'unrelated');
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
-  await themeState(page, 'aube', request.requestId);
-  await expect(page.getByRole('radio', { name: 'Aube — Clair' })).toBeChecked();
+  await themeState(page, 'jardin-clair', request.requestId);
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Clair' })).toBeChecked();
   await expect(
     page.getByText('Préférence personnelle enregistrée.', { exact: true }),
   ).toBeVisible();
   await expect(draft).toHaveValue('37');
-  await expect(page.getByRole('radio', { name: 'Aube — Clair' })).toBeFocused();
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Clair' })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   const rejected = await lastThemeRequest(page);
-  expect(rejected.theme).toBe('brume');
-  await themeState(page, 'aube', rejected.requestId, 'Écriture refusée par VS Code.');
+  expect(rejected.theme).toBe('jardin-sombre');
+  await themeState(page, 'jardin-clair', rejected.requestId, 'Écriture refusée par VS Code.');
   await expect(page.getByRole('alert')).toContainText('Écriture refusée');
-  await expect(page.getByRole('radio', { name: 'Aube — Clair' })).toBeChecked();
-  await expect(page.getByRole('radio', { name: 'Brume — Clair' })).toBeEnabled();
-  await expect(page.getByRole('radio', { name: 'Brume — Clair' })).toBeFocused();
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Clair' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeEnabled();
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeFocused();
   await expect(draft).toHaveValue('37');
   const messages = await page.evaluate(
     () => Reflect.get(window, 'themeMessages') as ClientMessage[],
@@ -145,20 +143,23 @@ test('six choix accessibles : ack, erreur corrélée et brouillon de réglages p
 test('config externe, valeur invalide, navigation et contraste élevé conservent la préférence', async ({
   page,
 }) => {
-  await hosted(page, 'brume');
-  await themeState(page, 'foret');
-  await expect(page.getByRole('radio', { name: 'Forêt — Sombre' })).toBeChecked();
+  await hosted(page, 'jardin-sombre');
+  await themeState(page, 'jardin-sombre');
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
   await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'foret');
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-studio-theme-effective',
+    'jardin-sombre',
+  );
   expect(await page.evaluate(() => Reflect.get(window, 'persistedThemeView'))).toMatchObject({
     view: 'dashboard',
   });
   await page.getByRole('button', { name: 'Réglages', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Forêt — Sombre' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
   for (const native of ['vscode-high-contrast', 'vscode-high-contrast-light']) {
     await page.evaluate((native) => (document.body.className = native), native);
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
-    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'foret');
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'jardin-sombre');
     await expect(
       page.getByText('Le contraste élevé de VS Code est prioritaire.', { exact: false }),
     ).toBeVisible();
@@ -175,11 +176,17 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
     expect(colors.accent).toBe(colors.nativeAccent);
   }
   await page.evaluate(() => (document.body.className = 'vscode-light'));
-  await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'foret');
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-studio-theme-effective',
+    'jardin-sombre',
+  );
   await page.emulateMedia({ forcedColors: 'active' });
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
   await page.emulateMedia({ forcedColors: 'none' });
-  await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'foret');
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-studio-theme-effective',
+    'jardin-sombre',
+  );
   await themeState(page, 'invalid-theme');
   await expect(page.getByRole('radio', { name: 'Suivre VS Code — Automatique' })).toBeChecked();
 });
@@ -192,9 +199,9 @@ test('le mode automatique suit le thème natif et les radios sont utilisables au
   const auto = page.getByRole('radio', { name: 'Suivre VS Code — Automatique' });
   await auto.focus();
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: 'Aube — Clair' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Clair' })).toBeChecked();
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: 'Brume — Clair' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
   await expect(
     page.getByText('Aperçu pour cette session de démonstration.', { exact: true }),
   ).toBeVisible();
@@ -209,7 +216,7 @@ test('le mode automatique suit le thème natif et les radios sont utilisables au
 });
 
 for (const palette of palettes) {
-  test(`${palette.name} : surfaces et contrastes sous VS Code clair et sombre, vues 1440 et 390`, async ({
+  test(`${palette.name} ${palette.kind} : surfaces et contrastes sous VS Code clair et sombre, vues 1440 et 390`, async ({
     page,
   }) => {
     await hosted(page, palette.id);
@@ -234,7 +241,7 @@ for (const palette of palettes) {
         { native, colors: nativeColors[native] },
       );
       await expect(page.locator('body')).toHaveClass(`vscode-${native}`);
-      await expect(page.locator('html')).toHaveCSS('color-scheme', palette.scheme);
+      await expect(page.locator('html')).toHaveCSS('color-scheme', palette.scheme!);
       const initialPalette = await page.evaluate(() => {
         const root = document.documentElement;
         const saved = root.dataset.studioThemeEffective!;
@@ -329,7 +336,10 @@ for (const palette of palettes) {
       await page.getByRole('button', { name: 'Réglages', exact: true }).click();
       await page
         .getByRole('radio', {
-          name: palette.id === 'aube' ? 'Brume — Clair' : 'Aube — Clair',
+          name:
+            palette.id === 'jardin-clair'
+              ? 'Jardin des idées — Sombre'
+              : 'Jardin des idées — Clair',
           exact: true,
         })
         .click();
@@ -372,3 +382,28 @@ for (const palette of palettes) {
     }
   });
 }
+
+test('Halloween habille les agents seulement quand choisi, avec repli et contraste élevé', async ({
+  page,
+}) => {
+  await hosted(page, 'halloween', 'dark', true);
+  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  const portrait = page.locator('.pixel-avatar img').first();
+  await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
+  await expect(portrait).toHaveJSProperty('complete', true);
+  await expect(portrait).not.toHaveJSProperty('naturalWidth', 0);
+  await themeState(page, 'jardin-clair');
+  await expect(portrait).toHaveAttribute('src', /^\/avatars\//);
+  await themeState(page, 'halloween');
+  await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
+  await page.evaluate(() => (document.body.className = 'vscode-high-contrast'));
+  await expect(portrait).toHaveAttribute('src', /^\/avatars\//);
+  await page.evaluate(() => (document.body.className = 'vscode-dark'));
+  await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
+  await portrait.dispatchEvent('error');
+  await expect(portrait).toHaveAttribute('src', /^\/avatars\//);
+  await themeState(page, 'papier-sombre');
+  await expect(portrait).toHaveAttribute('src', /^\/avatars\//);
+  await themeState(page, 'halloween');
+  await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
+});

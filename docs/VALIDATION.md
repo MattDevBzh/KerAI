@@ -1,4 +1,13 @@
-# Validation et limites — v1.6.0, 15 octobre 2026
+# Validation et limites — v1.7.0, 16 octobre 2026
+
+## Sept ambiances et Halloween — v1.7.0
+
+- `npm run check` réussi : format, TypeScript, 545 tests réussis et 4 ignorés, puis build. Deux délais dépassés lors d’un premier passage simultané avec Chromium ont disparu lors de la relance complète sans concurrence.
+- 119 scénarios Chromium réussis. Sept palettes vérifiées sous les thèmes natifs clair et sombre, contrastes de texte et contrôles, clavier, persistance et vues de 1440 et 390 px.
+- Vingt costumes : transparence, dimensions, quatre images animées distinctes et boucle ; changement de thème, contraste élevé et repli sur le portrait original testés. Planches et rendus bureau inspectés visuellement.
+- VSIX 1.7.0 local vérifié : ZIP intègre, version exacte et 60 assets saisonniers inclus. Smoke réussi du paquet extrait dans VS Code Insiders sur macOS, sans prompt Copilot payant.
+- La CI Linux et Windows et le smoke du paquet construit en CI précèdent la publication. La release contient le commit exact, le VSIX et son SHA256SUMS.
+
 
 ## Observateur intégré à la v1.5.0 et animation de scan
 

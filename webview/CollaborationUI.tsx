@@ -15,20 +15,15 @@ import { hasActiveRun } from './GitWorkspaceUI';
 import { subscribe, celebrationEnabled, saveCelebrationEnabled } from './bridge';
 import './collaboration.css';
 
-import { resolveAvatar } from '../src/shared/avatars';
+import { AgentImage } from './Avatar';
 
 function Portrait({ agent, approved = false }: { agent?: AgentProfile; approved?: boolean }) {
-  const [failed, setFailed] = useState(false);
-  const avatar = resolveAvatar(agent?.avatar, agent?.id);
-  useEffect(() => setFailed(false), [avatar]);
-  return failed ? (
-    <span className="collaboration-portrait-fallback">✦</span>
-  ) : (
-    <img
+  return (
+    <AgentImage
       className="collaboration-portrait"
-      alt=""
-      onError={() => setFailed(true)}
-      src={`${import.meta.env.BASE_URL}avatars/${avatar}/${approved ? 'approved' : 'idle'}.png`}
+      avatar={agent?.avatar}
+      agentId={agent?.id}
+      pose={approved ? 'approved.png' : 'idle.png'}
     />
   );
 }

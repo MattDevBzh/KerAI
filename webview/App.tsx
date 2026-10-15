@@ -8,12 +8,13 @@ import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
 import { TeamComposer } from './TeamComposer';
 import { AgentFavorite } from './AgentFavorite';
 import { orderedAgents, teamLocked } from '../src/shared/team';
-import { Avatar, avatarOptions } from './Avatar';
+import { Avatar, AgentImage, avatarOptions } from './Avatar';
 import { resolveAvatar } from '../src/shared/avatars';
 import { usageCredits } from '../src/shared/credits';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
 import { ThemePicker } from './ThemePicker';
+import { ThemeScenery } from './ThemeScenery';
 import { KitsUI } from './KitsUI';
 import { UsageDashboard } from './UsageDashboard';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
@@ -612,6 +613,7 @@ export default function App() {
         </div>
       </aside>
       <div className="main-shell">
+        <ThemeScenery />
         <header className="topbar">
           <div className="topbar-context">
             <span className="context-dot" /> ATELIER <ChevronRight size={12} />
@@ -3056,7 +3058,7 @@ function AgentEditor({
                 aria-pressed={avatar === a.id}
                 onClick={() => setAvatar(a.id)}
               >
-                <img src={`${import.meta.env.BASE_URL}avatars/${a.id}/idle.png`} alt="" />
+                <AgentImage avatar={a.id} />
                 <span>{a.name}</span>
                 {avatar === a.id && <Check size={12} />}
               </button>

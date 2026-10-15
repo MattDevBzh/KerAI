@@ -11,11 +11,11 @@ describe('webview protocol boundary', () => {
     }
     for (const invalid of [
       { type: 'setTheme', theme: 'dark', requestId: 'theme-change' },
-      { type: 'setTheme', theme: 'aube' },
-      { type: 'setTheme', theme: 'aube', requestId: '' },
-      { type: 'setTheme', theme: 'aube', requestId: 'x'.repeat(151) },
-      { type: 'setTheme', theme: 'aube', requestId: 'theme-change', key: 'cliPath' },
-      { type: 'setTheme', theme: 'aube', requestId: 'theme-change', target: 'workspace' },
+      { type: 'setTheme', theme: 'papier-clair' },
+      { type: 'setTheme', theme: 'papier-clair', requestId: '' },
+      { type: 'setTheme', theme: 'papier-clair', requestId: 'x'.repeat(151) },
+      { type: 'setTheme', theme: 'papier-clair', requestId: 'theme-change', key: 'cliPath' },
+      { type: 'setTheme', theme: 'papier-clair', requestId: 'theme-change', target: 'workspace' },
     ])
       expect(() => parseMessage(invalid)).toThrow();
     for (const value of [undefined, null, {}, 0, 'dark', 'aube" onload="arbitrary'])

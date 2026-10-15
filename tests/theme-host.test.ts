@@ -245,26 +245,26 @@ describe('personal theme host boundary', () => {
   });
   it('writes globally without initializing business state or requiring trust', async () => {
     const api = await activate();
-    await api.dispatch({ type: 'setTheme', theme: 'aube', requestId: 'personal' });
-    expect(host.writes).toEqual([['appearance.theme', 'aube', 1]]);
-    expect(api.getTheme()).toBe('aube');
+    await api.dispatch({ type: 'setTheme', theme: 'papier-clair', requestId: 'personal' });
+    expect(host.writes).toEqual([['appearance.theme', 'papier-clair', 1]]);
+    expect(api.getTheme()).toBe('papier-clair');
     expect(host.initialize).not.toHaveBeenCalled();
   });
   it('correlates acknowledgements, preserves busy read-only state and reports failed saves honestly', async () => {
     const api = await activate();
     await host.commands.get('featureStudio.open')!();
     const before = api.getState();
-    await api.dispatch({ type: 'setTheme', theme: 'brume', requestId: 'success' });
+    await api.dispatch({ type: 'setTheme', theme: 'guilde-clair', requestId: 'success' });
     expect(host.messages.at(-1)).toMatchObject({
       type: 'themeState',
-      theme: 'brume',
+      theme: 'guilde-clair',
       requestId: 'success',
     });
     host.failWrite = true;
-    await api.dispatch({ type: 'setTheme', theme: 'foret', requestId: 'failure' });
+    await api.dispatch({ type: 'setTheme', theme: 'jardin-sombre', requestId: 'failure' });
     expect(host.messages.at(-1)).toMatchObject({
       type: 'themeState',
-      theme: 'brume',
+      theme: 'guilde-clair',
       requestId: 'failure',
       error: 'Le profil est en lecture seule.',
     });
@@ -273,16 +273,16 @@ describe('personal theme host boundary', () => {
   it('serializes requests and remains usable after a rejected profile write', async () => {
     const api = await activate();
     await Promise.all([
-      api.dispatch({ type: 'setTheme', theme: 'aube', requestId: 'first' }),
-      api.dispatch({ type: 'setTheme', theme: 'sauge', requestId: 'last' }),
+      api.dispatch({ type: 'setTheme', theme: 'papier-clair', requestId: 'first' }),
+      api.dispatch({ type: 'setTheme', theme: 'jardin-clair', requestId: 'last' }),
     ]);
-    expect(host.writes.map((args) => args[1])).toEqual(['aube', 'sauge']);
-    expect(api.getTheme()).toBe('sauge');
+    expect(host.writes.map((args) => args[1])).toEqual(['papier-clair', 'jardin-clair']);
+    expect(api.getTheme()).toBe('jardin-clair');
     host.failWrite = true;
-    await api.dispatch({ type: 'setTheme', theme: 'brume', requestId: 'failed' });
+    await api.dispatch({ type: 'setTheme', theme: 'guilde-clair', requestId: 'failed' });
     host.failWrite = false;
-    await api.dispatch({ type: 'setTheme', theme: 'minuit', requestId: 'recovered' });
-    expect(api.getTheme()).toBe('minuit');
+    await api.dispatch({ type: 'setTheme', theme: 'guilde-sombre', requestId: 'recovered' });
+    expect(api.getTheme()).toBe('guilde-sombre');
   });
   it('injects only allowed initial values and announces external changes and readiness', async () => {
     const api = await activate();
@@ -294,9 +294,9 @@ describe('personal theme host boundary', () => {
     expect(host.messages).toContainEqual(
       expect.objectContaining({ type: 'themeState', theme: 'auto' }),
     );
-    host.theme = 'foret';
+    host.theme = 'jardin-sombre';
     host.configurationChanged?.({ affectsConfiguration: () => true });
-    expect(host.messages.at(-1)).toMatchObject({ type: 'themeState', theme: 'foret' });
+    expect(host.messages.at(-1)).toMatchObject({ type: 'themeState', theme: 'jardin-sombre' });
     const count = host.messages.length;
     host.configurationChanged?.({ affectsConfiguration: () => false });
     expect(host.messages).toHaveLength(count);

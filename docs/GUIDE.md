@@ -24,7 +24,7 @@ Afficher le volet seul ne démarre aucune session et n’appelle aucun modèle. 
 
 ## Choisir l’apparence du cockpit
 
-En haut de **Réglages**, la section **L’ambiance du cockpit** propose six cartes : **Suivre VS Code** (automatique), trois thèmes clairs — **Aube** (crème et corail), **Brume** (bleu et ardoise), **Sauge** (vert et lin) — et deux thèmes sombres — **Minuit** (bleu et indigo), **Forêt** (vert et cuivre).
+En haut de **Réglages**, **L’ambiance du cockpit** propose **Suivre VS Code**, puis **Jardin des idées**, **Papier vivant** et **Guilde pixel**, chacun en clair et sombre. Le septième thème, **Halloween**, transforme le décor et habille les vingt personnages (repos, travail animé et réussite). Ce thème événement est entièrement facultatif, sans activation automatique à une date donnée. Les portraits habituels reviennent dès que tu choisis une autre ambiance. Si un costume ne se charge pas, le portrait original prend le relais.
 
 Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
 

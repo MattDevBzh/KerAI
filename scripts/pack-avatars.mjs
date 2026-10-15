@@ -4,7 +4,11 @@ import gifenc from 'gifenc';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 const { GIFEncoder, quantize, applyPalette } = gifenc;
 const { avatars } = JSON.parse(await readFile('src/shared/avatar-catalog.json', 'utf8'));
-const selected = process.argv.slice(2);
+const args = process.argv.slice(2);
+const eventIndex = args.indexOf('--event');
+const event = eventIndex >= 0 ? args.splice(eventIndex, 2)[1] : undefined;
+if (eventIndex >= 0 && event !== 'halloween') throw new Error('Unknown bundled event pack');
+const selected = args;
 const size = 256;
 async function writePng(pipeline, path) {
   const { data, info } = await pipeline.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -14,11 +18,13 @@ async function writePng(pipeline, path) {
   await sharp(data, { raw: info }).png({ compressionLevel: 9 }).toFile(path);
 }
 for (const { id } of avatars.filter(({ id }) => !selected.length || selected.includes(id))) {
-  const source = await readFile(`design/avatars/professions/${id}.png`);
+  const source = await readFile(
+    `design/avatars/${event ? `events/${event}` : 'professions'}/${id}.png`,
+  );
   const meta = await sharp(source).metadata();
   if (meta.width !== 1536 || meta.height !== 1024 || !meta.hasAlpha)
     throw new Error(`Expected transparent 3×2 sprite sheet for ${id}`);
-  const out = `webview/public/avatars/${id}`;
+  const out = `webview/public/${event ? `avatar-events/${event}` : 'avatars'}/${id}`;
   await mkdir(out, { recursive: true });
   const cell = (index) =>
     sharp(source)
@@ -31,7 +37,7 @@ for (const { id } of avatars.filter(({ id }) => !selected.length || selected.inc
       .resize(size, size, { kernel: 'nearest' });
   // Keep the exact first portrait approved by the user as the architect's idle pose.
   const idle =
-    id === 'software-architect'
+    !event && id === 'software-architect'
       ? sharp('design/avatars/professions/software-architect-idle.png').resize(size, size, {
           kernel: 'nearest',
         })

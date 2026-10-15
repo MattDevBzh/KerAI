@@ -1,8 +1,43 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ImgHTMLAttributes } from 'react';
 import { Bot } from 'lucide-react';
 import type { AgentProfile, StepStatus } from '../src/shared/types';
 import { resolveAvatar } from '../src/shared/avatars';
+import { useThemeAppearance } from './ThemePicker';
 export { avatarOptions } from '../src/shared/avatars';
+export type AvatarPose = 'idle.png' | 'working.gif' | 'approved.png';
+
+/** Shared by every portrait surface; missing seasonal art falls back to the original. */
+export function AgentImage({
+  avatar,
+  agentId,
+  pose = 'idle.png',
+  ...props
+}: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError'> & {
+  avatar?: string;
+  agentId?: string;
+  pose?: AvatarPose;
+}) {
+  const { avatarPack } = useThemeAppearance();
+  const id = resolveAvatar(avatar, agentId);
+  const base = `${import.meta.env.BASE_URL}avatars/${id}/${pose}`;
+  const primary = avatarPack
+    ? `${import.meta.env.BASE_URL}avatar-events/${avatarPack}/${id}/${pose}`
+    : base;
+  const [failed, setFailed] = useState<string[]>([]);
+  useEffect(() => setFailed([]), [primary]);
+  const src = [primary, base].find((path) => !failed.includes(path));
+  return src ? (
+    <img
+      {...props}
+      src={src}
+      alt={props.alt ?? ''}
+      draggable={false}
+      onError={() => setFailed((paths) => [...paths, src])}
+    />
+  ) : (
+    <Bot className={props.className} size={24} aria-hidden="true" />
+  );
+}
 export function Avatar({
   agent,
   status = 'pending',
@@ -15,8 +50,6 @@ export function Avatar({
   const [reduced, setReduced] = useState(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
-  const [failed, setFailed] = useState(false);
-  const id = resolveAvatar(agent?.avatar, agent?.id);
   useEffect(() => {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setReduced(query.matches);
@@ -29,19 +62,9 @@ export function Avatar({
       : status === 'running' && !reduced
         ? 'working.gif'
         : 'idle.png';
-  useEffect(() => setFailed(false), [id, pose]);
   return (
     <span className={`pixel-avatar ${small ? 'small' : ''} ${status}`} aria-hidden="true">
-      {failed ? (
-        <Bot size={small ? 21 : 30} />
-      ) : (
-        <img
-          src={`${import.meta.env.BASE_URL}avatars/${id}/${pose}`}
-          alt=""
-          draggable={false}
-          onError={() => setFailed(true)}
-        />
-      )}
+      <AgentImage avatar={agent?.avatar} agentId={agent?.id} pose={pose} />
     </span>
   );
 }
