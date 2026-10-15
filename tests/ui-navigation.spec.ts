@@ -19,7 +19,7 @@ test('navigation à 800×600 : atteindre Réglages au clavier sans faire défile
   }, structuredClone(demoState));
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
-  await nav.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
+  await nav.getByRole('button', { name: 'Dashboard', exact: true }).click();
   const settings = nav.getByRole('button', { name: 'Réglages', exact: true });
   for (let i = 0; i < (await nav.getByRole('button').count()); i++) {
     if (await settings.evaluate((element) => element === document.activeElement)) break;
@@ -35,7 +35,7 @@ test('navigation à 800×600 : atteindre Réglages au clavier sans faire défile
   await expect(
     page.getByRole('heading', { name: 'Les détails qui vous ressemblent.', exact: true }),
   ).toBeVisible();
-  const first = nav.getByRole('button', { name: 'Azure DevOps', exact: true });
+  const first = nav.getByRole('button', { name: 'Dashboard', exact: true });
   await first.focus();
   const firstPosition = await first.boundingBox();
   expect(firstPosition!.y).toBeGreaterThanOrEqual(0);

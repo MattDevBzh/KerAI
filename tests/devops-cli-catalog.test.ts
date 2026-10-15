@@ -12,7 +12,7 @@ import { verifyMcpCatalog } from '../src/host/McpRuntime';
 // CI pins the external CLI to 1.0.96 on both Linux and Windows.
 const cliPath = process.env.FEATURE_STUDIO_CATALOG_CLI;
 it.skipIf(!cliPath)(
-  'CLI 1.0.96 retains the DevOps tool with object parameters (original union was silently omitted)',
+  'CLI 1.0.96 retains the DevOps tool and enforces the empty Discussion tool catalogue',
   async () => {
     const root = await mkdtemp(join(tmpdir(), 'studio-devops-catalog-'));
     const launch = await CopilotLaunch.create(cliPath!, root);
@@ -34,11 +34,12 @@ it.skipIf(!cliPath)(
     try {
       await client.start();
       expect((await client.getStatus()).version).toBe('1.0.96');
-      for (const [schema, included] of [
-        [devOpsQuerySchema, false],
-        [devOpsQueryToolSchema, true],
+      for (const [schema, included, discussion] of [
+        [devOpsQuerySchema, false, false],
+        [devOpsQueryToolSchema, true, false],
+        [devOpsQueryToolSchema, true, true],
       ] as const) {
-        const names = ['studio_read_file', 'studio_devops_inspect'];
+        const names = discussion ? [] : ['studio_read_file', 'studio_devops_inspect'];
         const session = await client.createSession({
           model: 'gpt-5-mini',
           provider: { type: 'openai', baseUrl: 'http://127.0.0.1:1', apiKey: 'unused-local-probe' },

@@ -107,6 +107,9 @@ import {
   attentionCount,
 } from './StudioUI';
 
+import { DiscussionUI } from './DiscussionUI';
+import type { DiscussionState } from '../src/shared/discussions';
+
 type View =
   | 'kits'
   | 'usage'
@@ -115,6 +118,7 @@ type View =
   | 'devops-tickets'
   | 'delivery'
   | 'dashboard'
+  | 'discussion'
   | 'validation'
   | 'workflows'
   | 'memory'
@@ -153,21 +157,34 @@ const date = (value: string) =>
     minute: '2-digit',
   }).format(new Date(value));
 const nav = [
-  { id: 'devops', label: 'Azure DevOps', icon: FolderGit2 },
-  { id: 'devops-prs', label: 'PR', icon: GitPullRequest },
-  { id: 'devops-tickets', label: 'Tickets', icon: Tickets },
-  { id: 'delivery', label: 'Livraison', icon: GitBranch },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'usage', label: 'Consommation', icon: BarChart3 },
+  { id: 'discussion', label: 'Discussion', icon: MessageSquare },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
+  { id: 'usage', label: 'Consommation', icon: BarChart3 },
   { id: 'workflows', label: 'Parcours', icon: Workflow },
-  { id: 'kits', label: 'Kits', icon: Package },
-  { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'skills', label: 'Skills', icon: BookOpen },
   { id: 'automations', label: 'Automatisations', icon: Zap },
+  { id: 'kits', label: 'Kits', icon: Package },
   { id: 'settings', label: 'Réglages', icon: Settings2 },
+  { id: 'delivery', label: 'Livraison', icon: GitBranch },
+  { id: 'devops', label: 'Azure DevOps', icon: FolderGit2 },
+  { id: 'devops-prs', label: 'PR', icon: GitPullRequest },
+  { id: 'devops-tickets', label: 'Tickets', icon: Tickets },
+  { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
 ] as const;
+// These screens consume project-specific profiles, memory or Azure DevOps configuration.
+const projectScopedViews = new Set<View>([
+  'agents',
+  'skills',
+  'kits',
+  'workflows',
+  'memory',
+  'delivery',
+  'devops',
+  'devops-prs',
+  'devops-tickets',
+]);
 const workflowRank = (w: WorkflowType) => ({ feature: 0, 'code-review': 1, single: 2 })[w.id] ?? 3;
 const orderedWorkflows = (items: WorkflowType[]) =>
   [...items].sort((a, b) => workflowRank(a) - workflowRank(b));
@@ -300,6 +317,11 @@ export default function App() {
   const [view, setView] = useState<View>(
     (nav.some((n) => n.id === initialView.view) ? initialView.view : 'dashboard') as View,
   );
+  const [discussionState, setDiscussionState] = useState<DiscussionState>({
+    discussions: [],
+    agents: [],
+  });
+  const [discussionId, setDiscussionId] = useState(initialView.discussionId ?? '');
   const [featureId, setFeatureId] = useState(initialView.featureId ?? '');
   const [stepId, setStepId] = useState(initialView.stepId ?? '');
   const [create, setCreate] = useState(false);
@@ -323,6 +345,7 @@ export default function App() {
   useEffect(() => {
     const cleanup = subscribe((message) => {
       if (message.type === 'state') setState(message.state);
+      else if (message.type === 'discussionState') setDiscussionState(message.state);
       else if (message.type === 'devopsState') setDevops(message.state);
       else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
@@ -376,6 +399,23 @@ export default function App() {
       return;
     }
     if (isDemo) {
+      if (
+        message.type === 'sendDiscussion' ||
+        message.type === 'deleteDiscussion' ||
+        message.type === 'deleteWorkflow'
+      ) {
+        window.postMessage(
+          {
+            type: message.type === 'deleteWorkflow' ? 'workflowDeleteResult' : 'discussionResult',
+            requestId: message.requestId,
+            ...('discussionId' in message ? { discussionId: message.discussionId } : {}),
+            error:
+              'Mode démonstration : ouvrez Feature Studio dans VS Code pour enregistrer cette action.',
+          },
+          '*',
+        );
+        return;
+      }
       if (
         ['saveArtifact', 'requestCorrection', 'finalizeFeature'].includes(message.type) &&
         'featureId' in message
@@ -637,7 +677,7 @@ export default function App() {
               </button>
             </div>
           )}
-          {!(view === 'dashboard' && selected) && (
+          {projectScopedViews.has(view) && !create && (
             <ProjectSwitcher
               state={state}
               dispatch={dispatch}
@@ -708,6 +748,11 @@ export default function App() {
           {view === 'usage' && (
             <UsageDashboard
               features={state.features}
+              discussions={discussionState.discussions}
+              onOpenDiscussion={(id) => {
+                setDiscussionId(id);
+                chooseView('discussion');
+              }}
               onOpenFeature={(id) => {
                 setView('dashboard');
                 setFeatureId(id);
@@ -726,6 +771,26 @@ export default function App() {
               }}
             />
           )}
+          <div hidden={view !== 'discussion'}>
+            <DiscussionUI
+              state={
+                isDemo
+                  ? {
+                      ...discussionState,
+                      agents: state.agents.map((profile) => ({
+                        key: `global:${profile.id}`,
+                        profile,
+                      })),
+                    }
+                  : discussionState
+              }
+              studio={state}
+              dispatch={dispatch}
+              visible={view === 'discussion'}
+              selectedId={discussionId}
+              onSelect={setDiscussionId}
+            />
+          </div>
           {view === 'memory' && <ProjectMemoryView state={state} dispatch={dispatch} />}
           {view === 'workflows' && <WorkflowLibrary state={state} dispatch={dispatch} />}
           {view === 'kits' && <KitsUI state={state} dispatch={dispatch} />}
@@ -753,6 +818,11 @@ export default function App() {
                         <ArrowUpRight size={16} />
                       </span>
                       <h3>{a.nickname || a.name}</h3>
+                      {a.discussionAgent && (
+                        <span className="profile-role">
+                          <MessageSquare size={12} /> Agent de discussion
+                        </span>
+                      )}
                       {normalizeRoastLevel(a.roastLevel) !== 'off' && (
                         <span className="profile-role">Roast · {roastLabel(a.roastLevel)}</span>
                       )}
@@ -833,7 +903,8 @@ export default function App() {
           )}
           {(view === 'settings' || view === 'automations') && (
             <SettingsView
-              key={`${view}-${JSON.stringify(state.settings)}`}
+              key={`${view}-${state.projectCatalog?.activeProjectId ?? 'default'}`}
+              onDirtyChange={updateDraftDirty}
               settings={state.settings}
               state={state}
               automation={view === 'automations'}
@@ -2749,6 +2820,7 @@ function AgentEditor({
   const [emptyContextByDefault, setEmptyContextByDefault] = useState(
     source?.emptyContextByDefault ?? false,
   );
+  const [discussionAgent, setDiscussionAgent] = useState(source?.discussionAgent ?? false);
   const [roastLevel, setRoastLevel] = useState<RoastLevel>(normalizeRoastLevel(source?.roastLevel));
   const [scope, setScope] = useState<ProfileScope>(
     source?.source === 'workspace' ? 'workspace' : 'user',
@@ -2770,6 +2842,7 @@ function AgentEditor({
             model: string;
             skills: string[];
             emptyContextByDefault: boolean;
+            discussionAgent: boolean;
             roastLevel: RoastLevel;
           };
           origin: typeof source;
@@ -2799,6 +2872,7 @@ function AgentEditor({
         model,
         skills,
         emptyContextByDefault,
+        discussionAgent,
         roastLevel,
       },
       origin,
@@ -2814,6 +2888,7 @@ function AgentEditor({
         tools: existing.tools.join(', '),
         model: existing.model ?? '',
         emptyContextByDefault: existing.emptyContextByDefault ?? false,
+        discussionAgent: existing.discussionAgent ?? false,
         roastLevel: normalizeRoastLevel(existing.roastLevel),
       });
     if (chosen) {
@@ -2827,6 +2902,7 @@ function AgentEditor({
       setModel(chosen.model);
       setSkills(chosen.skills);
       setEmptyContextByDefault(chosen.emptyContextByDefault);
+      setDiscussionAgent(chosen.discussionAgent);
       setRoastLevel(chosen.roastLevel);
     }
     setOrigin(cached ? cached.origin : (existing ?? origin));
@@ -2869,6 +2945,7 @@ function AgentEditor({
                 nickname: nickname.trim() || undefined,
                 avatar,
                 emptyContextByDefault,
+                discussionAgent,
                 roastLevel,
               },
               profileOptions(scope, target, origin ?? undefined),
@@ -2986,6 +3063,17 @@ function AgentEditor({
             </label>
             <ModelSelect state={state} value={model} onChange={setModel} />
           </div>
+          <label className="discussion-agent-toggle">
+            <input
+              type="checkbox"
+              checked={discussionAgent}
+              onChange={(event) => setDiscussionAgent(event.target.checked)}
+            />
+            <span>
+              <strong>Agent de discussion</strong>
+              <small>Le proposer en priorité dans le menu Discussion.</small>
+            </span>
+          </label>
           <label className="field">
             <span>Mode roast</span>
             <select
@@ -3227,7 +3315,9 @@ function SettingsView({
   state,
   automation,
   dispatch,
+  onDirtyChange,
 }: {
+  onDirtyChange: (dirty: boolean) => void;
   settings: StudioSettings;
   state: StudioState;
   automation: boolean;
@@ -3235,6 +3325,23 @@ function SettingsView({
 }) {
   const [draft, setDraft] = useState(structuredClone(settings));
   const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+  const dirtyCallback = useRef(onDirtyChange);
+  dirtyCallback.current = onDirtyChange;
+  const baseline = useRef(settings);
+  useEffect(() => {
+    if (JSON.stringify(baseline.current) !== JSON.stringify(settings)) {
+      if (
+        JSON.stringify(draft) === JSON.stringify(baseline.current) ||
+        JSON.stringify(draft) === JSON.stringify(settings)
+      )
+        setDraft(structuredClone(settings));
+      baseline.current = settings;
+    }
+  }, [settings]);
+  useEffect(() => {
+    dirtyCallback.current(dirty);
+  }, [dirty]);
+  useEffect(() => () => dirtyCallback.current(false), []);
   const set = (patch: Partial<StudioSettings>) => setDraft({ ...draft, ...patch });
   const lines = (text: string) =>
     text
@@ -3245,6 +3352,7 @@ function SettingsView({
     e.preventDefault();
     dispatch({
       type: 'saveSettings',
+      projectId: state.projectCatalog?.activeProjectId,
       settings: {
         ...draft,
         mcpServers: draft.mcpServers?.map((s) => ({
@@ -3284,8 +3392,102 @@ function SettingsView({
           </p>
         </div>
       </div>
-      {!automation && <ProjectSettings state={state} dispatch={dispatch} dirty={dirty} />}
-      {!automation && <ThemePicker />}
+      {!automation && (
+        <section className="common-settings" aria-label="Réglages communs">
+          <div className="settings-section-heading">
+            <span className="eyebrow">COMMUN À TOUS LES PROJETS</span>
+            <h2>Votre atelier</h2>
+          </div>
+          <ThemePicker />
+          <section className="settings-card">
+            <div className="settings-card-title">
+              <span className="settings-icon color-2">
+                <Command size={21} />
+              </span>
+              <div>
+                <h2>GitHub Copilot CLI</h2>
+                <p>Le moteur de vos sessions, installé dans votre environnement.</p>
+              </div>
+              <Badge
+                label={
+                  state.runtime.state === 'ready'
+                    ? 'Connecté'
+                    : state.runtime.state === 'checking'
+                      ? 'Vérification'
+                      : state.runtime.state === 'unavailable'
+                        ? 'Indisponible'
+                        : 'Non vérifié'
+                }
+                tone={
+                  state.runtime.state === 'ready'
+                    ? 'green'
+                    : state.runtime.state === 'unavailable'
+                      ? 'coral'
+                      : 'neutral'
+                }
+              />
+            </div>
+            {state.runtime.error && (
+              <div className="inline-error">
+                <TriangleAlert size={16} />
+                {state.runtime.error}
+              </div>
+            )}
+            <div className="runtime-facts">
+              <div>
+                <span>Compte</span>
+                <strong>{state.runtime.account ?? 'À vérifier'}</strong>
+              </div>
+              <div>
+                <span>Version</span>
+                <strong>{state.runtime.version ?? 'À vérifier'}</strong>
+              </div>
+              <div>
+                <span>Modèles disponibles</span>
+                <strong>{state.runtime.models.length || 'À vérifier'}</strong>
+              </div>
+            </div>
+            <div className="runtime-actions">
+              <button
+                type="button"
+                className="button secondary"
+                disabled={state.runtime.state === 'checking'}
+                onClick={() => dispatch({ type: 'checkRuntime' })}
+              >
+                <RefreshCw size={15} /> Vérifier la connexion
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => dispatch({ type: 'openSettings' })}
+              >
+                Chemin du CLI dans VS Code <ArrowUpRight size={14} />
+              </button>
+            </div>
+          </section>
+          <ProjectSettings state={state} dispatch={dispatch} dirty={dirty} />
+        </section>
+      )}
+      <section className="project-settings-heading" aria-label="Réglages du projet">
+        <div>
+          <span className="eyebrow">PARAMÈTRES PAR PROJET</span>
+          <h2>{automation ? 'Automatisations du projet' : 'Configurer un projet'}</h2>
+          <p className="project-current-settings">
+            Les paramètres ci-dessous concernent{' '}
+            <strong>
+              {state.projectCatalog?.projects.find(
+                (project) => project.id === state.projectCatalog?.activeProjectId,
+              )?.name ?? state.workspace.name}
+            </strong>
+            .
+          </p>
+        </div>
+        <ProjectSwitcher
+          state={state}
+          dispatch={dispatch}
+          disabled={dirty || hasActiveRun(state)}
+        />
+      </section>
       <form onSubmit={submit}>
         {!automation && (
           <>
@@ -3296,72 +3498,7 @@ function SettingsView({
               dispatch={dispatch}
             />
             <ModelBudgetSettings settings={draft} state={state} onChange={set} />
-            <section className="settings-card">
-              <div className="settings-card-title">
-                <span className="settings-icon color-2">
-                  <Command size={21} />
-                </span>
-                <div>
-                  <h2>GitHub Copilot CLI</h2>
-                  <p>Le moteur de vos sessions, installé dans votre environnement.</p>
-                </div>
-                <Badge
-                  label={
-                    state.runtime.state === 'ready'
-                      ? 'Connecté'
-                      : state.runtime.state === 'checking'
-                        ? 'Vérification'
-                        : state.runtime.state === 'unavailable'
-                          ? 'Indisponible'
-                          : 'Non vérifié'
-                  }
-                  tone={
-                    state.runtime.state === 'ready'
-                      ? 'green'
-                      : state.runtime.state === 'unavailable'
-                        ? 'coral'
-                        : 'neutral'
-                  }
-                />
-              </div>
-              {state.runtime.error && (
-                <div className="inline-error">
-                  <TriangleAlert size={16} />
-                  {state.runtime.error}
-                </div>
-              )}
-              <div className="runtime-facts">
-                <div>
-                  <span>Compte</span>
-                  <strong>{state.runtime.account ?? 'À vérifier'}</strong>
-                </div>
-                <div>
-                  <span>Version</span>
-                  <strong>{state.runtime.version ?? 'À vérifier'}</strong>
-                </div>
-                <div>
-                  <span>Modèles disponibles</span>
-                  <strong>{state.runtime.models.length || 'À vérifier'}</strong>
-                </div>
-              </div>
-              <div className="runtime-actions">
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={state.runtime.state === 'checking'}
-                  onClick={() => dispatch({ type: 'checkRuntime' })}
-                >
-                  <RefreshCw size={15} /> Vérifier la connexion
-                </button>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => dispatch({ type: 'openSettings' })}
-                >
-                  Chemin du CLI dans VS Code <ArrowUpRight size={14} />
-                </button>
-              </div>
-            </section>
+
             <section className="settings-card">
               <div className="settings-card-title">
                 <span className="settings-icon color-0">
@@ -3698,6 +3835,15 @@ function SettingsView({
             {dirty ? 'Modifications à enregistrer' : 'Configuration du projet'}
             <small>Les scripts restent soumis à l’approbation de l’espace de travail.</small>
           </span>
+          {dirty && (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => setDraft(structuredClone(settings))}
+            >
+              Annuler les modifications
+            </button>
+          )}
           <button className="button primary" disabled={!dirty}>
             Enregistrer les réglages <Check size={16} />
           </button>

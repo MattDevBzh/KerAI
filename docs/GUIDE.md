@@ -28,6 +28,22 @@ En haut de **Réglages**, la section **L’ambiance du cockpit** propose six car
 
 Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
 
+## Discuter avec ses agents
+
+**Discussion**, juste après Dashboard, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
+
+Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche **Agent de discussion**. Ces profils sont proposés en priorité ; **Voir plus** révèle les autres agents. Les profils propres à un projet portent son nom dans la liste. Les instructions, skills et ton du profil accompagnent l’échange ; ajoute dans tes messages le contexte utile. Ce chat n’exécute pas de commandes et ne consulte pas automatiquement les fichiers des projets.
+
+Les discussions sont enregistrées localement et retrouvées après rechargement de VS Code. Recherche une conversation dans le bandeau de gauche, ou supprime son historique avec la corbeille et la confirmation native. Les mesures remontées par Copilot sont incluses dans **Consommation**, sous **Discussions**.
+
+## Projet actif et réglages
+
+Dashboard, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
+
+Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
+
+Dans **Parcours**, **Supprimer** retire le parcours du catalogue personnel pour tous les projets, après confirmation. Les sessions déjà créées et les fichiers de définition sont conservés. Réenregistrer explicitement une définition avec le même identifiant la rend de nouveau disponible.
+
 ## Choisir un parcours
 
 | Parcours         | Pour quoi ?                                                    | Étapes                                                    |

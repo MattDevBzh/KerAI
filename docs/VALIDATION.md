@@ -1,4 +1,14 @@
-# Validation et limites — v1.4.1, 15 octobre 2026
+# Validation et limites — v1.5.0, 15 octobre 2026
+
+## Discussions et navigation de v1.5.0
+
+Les tests de Discussion couvrent les instructions et skills, l’ordre des échanges après rechargement, les choix de modèle et de raisonnement, les avatars figés par réponse, les requêtes répétées, la fermeture et la réouverture du panneau pendant plusieurs réponses, l’arrêt avec conservation du texte partiel et des mesures, les erreurs du runtime, la récupération d’une réponse interrompue et la conservation d’un historique illisible. La consommation utilise le même calcul des mesures que les parcours, sans inventer de validations pour les conversations.
+
+Les tests de registre vérifient la suppression du catalogue dans plusieurs projets, la conservation des définitions et la recréation explicite. Le marqueur des agents est conservé dans les profils et lors de l’import/export des kits. Les tests d’interface couvrent l’ordre des menus, les sélecteurs de projet, les brouillons de réglages, les agents prioritaires, les accusés de réception tardifs après changement de conversation, l’historique, le clavier, les bulles et les avatars. Les cinq palettes et une fenêtre compacte en contraste élevé sont vérifiées.
+
+Le catalogue vide d’outils de Discussion est vérifié sur le CLI **1.0.96** avant tout prompt. La CI Linux et Windows exécute ce contrôle et les tests de persistance des discussions. L’envoi réel sur le compte Copilot de l’utilisateur reste une recette distincte ; aucun prompt payant n’est envoyé par ces tests.
+
+La publication de **v1.5.0** reste conditionnée aux validations du commit livré et aux contrôles du VSIX extrait. Le run exact est ajouté aux [notes de release](https://github.com/MattDevBzh/KerAI/releases/tag/v1.5.0). Les sections suivantes conservent les preuves et limites des versions précédentes.
 
 ## Identité visuelle de v1.4.1
 

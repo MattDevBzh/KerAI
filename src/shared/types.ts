@@ -182,6 +182,7 @@ export interface AgentProfile {
   nickname?: string;
   avatar?: string;
   emptyContextByDefault?: boolean;
+  discussionAgent?: boolean;
   roastLevel?: import('./roast').RoastLevel;
 }
 export interface SkillInfo {
@@ -378,6 +379,7 @@ export type ClientMessage =
         nickname?: string;
         avatar?: string;
         emptyContextByDefault?: boolean;
+        discussionAgent?: boolean;
         roastLevel?: import('./roast').RoastLevel;
       };
     }
@@ -388,9 +390,11 @@ export type ClientMessage =
       requestId: string;
       options: import('./profiles').ProfileSaveOptions;
     }
-  | { type: 'saveSettings'; settings: StudioSettings }
+  | { type: 'saveSettings'; settings: StudioSettings; projectId?: string }
   | { type: 'createWorkflow' }
   | { type: 'saveWorkflow'; workflow: Workflow }
+  | { type: 'deleteWorkflow'; workflowId: string; requestId: string }
+  | import('./discussions').DiscussionClientMessage
   | { type: 'saveAutopilot'; featureId: string; config: AutopilotConfig }
   | { type: 'startAutopilot' | 'pauseAutopilot'; featureId: string }
   | { type: 'saveBudget'; featureId: string; budget: FeatureBudget }
@@ -404,6 +408,8 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | import('./discussions').DiscussionHostMessage
+  | { type: 'workflowDeleteResult'; requestId: string; error?: string; cancelled?: boolean }
   | { type: 'projectResult'; requestId: string; error?: string; message?: string }
   | {
       type: 'featureTeamResult';
@@ -448,6 +454,8 @@ export type HostMessage =
   | { type: 'checkpointComparison'; requestId: string; comparison: CheckpointComparison }
   | { type: 'navigate'; view: 'create' | 'dashboard'; featureId?: string };
 export interface RunInput {
+  /** Host-owned conversation mode: no repository, MCP, human-question or native tools. */
+  mode?: 'discussion';
   projects?: import('./projects').RunProject[];
   devopsProjectKey?: string;
   feature: Feature;

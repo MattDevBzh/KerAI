@@ -170,6 +170,9 @@ export class StudioHub extends EventEmitter {
     const state = this.snapshot();
     if (state) this.emit('state', state);
   }
+  async refreshProfiles(): Promise<void> {
+    for (const entry of this.entries.values()) await entry.service.refresh();
+  }
   async dispose(): Promise<void> {
     if (this.disposing) return this.disposing;
     this.disposing = (async () => {

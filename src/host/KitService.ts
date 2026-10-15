@@ -32,6 +32,7 @@ const agentSchema = z.object({
   avatar: avatarSchema.optional(),
   nickname: z.string().max(80).optional(),
   emptyContextByDefault: z.boolean().optional(),
+  discussionAgent: z.boolean().optional(),
   roastLevel: z.enum(ROAST_LEVELS).optional(),
 });
 const PRESETS: KitMetadata[] = [

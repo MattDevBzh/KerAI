@@ -502,7 +502,10 @@ export class CopilotCliAdapter implements AgentAdapter {
       });
     try {
       const mcp = await withSignal(
-        resolveMcpPlan(input.mcpServers ?? [], this.options.resolveMcpSecret),
+        resolveMcpPlan(
+          input.mode === 'discussion' ? [] : (input.mcpServers ?? []),
+          this.options.resolveMcpSecret,
+        ),
         controller.signal,
       );
       secrets = mcp.secrets;
@@ -515,71 +518,74 @@ export class CopilotCliAdapter implements AgentAdapter {
           'Copilot CLI n’est pas connecté dans l’environnement Feature Studio. Lance le diagnostic de connexion.',
         );
       const tools = [
-        ...(await withSignal(
-          this.options.getTools(input, callbacks, controller.signal),
-          controller.signal,
-        )),
+        ...(input.mode === 'discussion'
+          ? []
+          : await withSignal(
+              this.options.getTools(input, callbacks, controller.signal),
+              controller.signal,
+            )),
       ];
-      tools.push({
-        name: 'studio_ask_human',
-        description:
-          'Ask the human a question and wait for their real answer. Never invent a response. Cancels with the active attempt.',
-        parameters: {
-          type: 'object',
-          properties: {
-            question: { type: 'string', minLength: 1, maxLength: 2_000 },
-            choices: {
-              type: 'array',
-              items: { type: 'string', minLength: 1, maxLength: 300 },
-              minItems: 2,
-              maxItems: 8,
+      if (input.mode !== 'discussion')
+        tools.push({
+          name: 'studio_ask_human',
+          description:
+            'Ask the human a question and wait for their real answer. Never invent a response. Cancels with the active attempt.',
+          parameters: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', minLength: 1, maxLength: 2_000 },
+              choices: {
+                type: 'array',
+                items: { type: 'string', minLength: 1, maxLength: 300 },
+                minItems: 2,
+                maxItems: 8,
+              },
+              allowFreeform: { type: 'boolean' },
             },
-            allowFreeform: { type: 'boolean' },
+            required: ['question'],
+            additionalProperties: false,
           },
-          required: ['question'],
-          additionalProperties: false,
-        },
-        skipPermission: true,
-        defer: 'never',
-        handler: async (raw, invocation) => {
-          const schema = z
-            .object({
-              question: z.string().trim().min(1).max(2_000),
-              choices: z.array(z.string().trim().min(1).max(300)).min(2).max(8).optional(),
-              allowFreeform: z.boolean().default(true),
-            })
-            .strict();
-          const question = schema.parse(raw);
-          if (!callbacks.onQuestion)
-            throw new Error(
-              'Aucun dialogue humain n’est disponible pour cette question. Termine avec le bloc de questions structuré.',
+          skipPermission: true,
+          defer: 'never',
+          handler: async (raw, invocation) => {
+            const schema = z
+              .object({
+                question: z.string().trim().min(1).max(2_000),
+                choices: z.array(z.string().trim().min(1).max(300)).min(2).max(8).optional(),
+                allowFreeform: z.boolean().default(true),
+              })
+              .strict();
+            const question = schema.parse(raw);
+            if (!callbacks.onQuestion)
+              throw new Error(
+                'Aucun dialogue humain n’est disponible pour cette question. Termine avec le bloc de questions structuré.',
+              );
+            const requestSignal = invocation.signal
+              ? AbortSignal.any([controller.signal, invocation.signal])
+              : controller.signal;
+            if (requestSignal.aborted) throw cancelled(requestSignal);
+            const answer = await withSignal(
+              callbacks.onQuestion({
+                ...question,
+                question: redactMcp(question.question, secrets),
+                choices: question.choices?.map((choice) => redactMcp(choice, secrets)),
+              }),
+              requestSignal,
             );
-          const requestSignal = invocation.signal
-            ? AbortSignal.any([controller.signal, invocation.signal])
-            : controller.signal;
-          if (requestSignal.aborted) throw cancelled(requestSignal);
-          const answer = await withSignal(
-            callbacks.onQuestion({
-              ...question,
-              question: redactMcp(question.question, secrets),
-              choices: question.choices?.map((choice) => redactMcp(choice, secrets)),
-            }),
-            requestSignal,
-          );
-          if (typeof answer !== 'string' || !answer.trim())
-            throw new Error('Une réponse humaine non vide est nécessaire.');
-          if (redactMcp(answer, secrets) !== answer)
-            throw new Error(
-              'Renseigne les identifiants MCP dans les réglages sécurisés, pas dans une réponse destinée au modèle.',
-            );
-          if (!question.allowFreeform && question.choices && !question.choices.includes(answer))
-            throw new Error('La réponse doit correspondre à un choix proposé.');
-          return { resultType: 'success', textResultForLlm: JSON.stringify({ answer }) };
-        },
-      });
+            if (typeof answer !== 'string' || !answer.trim())
+              throw new Error('Une réponse humaine non vide est nécessaire.');
+            if (redactMcp(answer, secrets) !== answer)
+              throw new Error(
+                'Renseigne les identifiants MCP dans les réglages sécurisés, pas dans une réponse destinée au modèle.',
+              );
+            if (!question.allowFreeform && question.choices && !question.choices.includes(answer))
+              throw new Error('La réponse doit correspondre à un choix proposé.');
+            return { resultType: 'success', textResultForLlm: JSON.stringify({ answer }) };
+          },
+        });
       const allowed = new Set(tools.map((t) => t.name));
       if (
-        !tools.length ||
+        (input.mode !== 'discussion' && !tools.length) ||
         allowed.size !== tools.length ||
         tools.some(
           (t) => !/^studio_[a-z0-9_]+$/.test(t.name) || !t.handler || t.overridesBuiltInTool,
@@ -696,7 +702,9 @@ export class CopilotCliAdapter implements AgentAdapter {
         systemMessage: {
           mode: 'append',
           content:
-            'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
+            input.mode === 'discussion'
+              ? 'Tu participes à une conversation Feature Studio. Réponds naturellement à la dernière intervention humaine en tenant compte de l’historique et du profil fourni. Tu ne disposes d’aucun outil ni d’accès au projet. Pose tes questions directement dans ta réponse.'
+              : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
         },
         customAgents: [
           {
@@ -705,7 +713,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             description: input.agent.description,
             // Role instructions appear once in the exact business prompt shown in preview.
             prompt:
-              'Les instructions de rôle sont dans le prompt métier de cette étape. Utilise uniquement le catalogue autorisé.',
+              'Les instructions du rôle figurent dans le prompt. Utilise uniquement le catalogue autorisé.',
             tools: agentAllowed,
             infer: false,
           },
@@ -874,10 +882,15 @@ export class CopilotCliAdapter implements AgentAdapter {
       }
       if (!content.trim())
         throw new Error(
-          'Copilot a terminé sans livrable final. Les fragments partiels ne sont pas validés comme livrable.',
+          input.mode === 'discussion'
+            ? 'Copilot a terminé sans réponse complète. Vous pouvez poursuivre la discussion.'
+            : 'Copilot a terminé sans livrable final. Les fragments partiels ne sont pas validés comme livrable.',
         );
-      const parsed = parseQuestions(redactMcp(content, secrets));
-      const review = parseReview(parsed.content);
+      const parsed =
+        input.mode === 'discussion'
+          ? { content: redactMcp(content, secrets), questions: [] }
+          : parseQuestions(redactMcp(content, secrets));
+      const review = input.mode === 'discussion' ? undefined : parseReview(parsed.content);
       return {
         ...parsed,
         sessionId: session.sessionId,

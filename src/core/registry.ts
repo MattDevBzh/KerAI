@@ -26,6 +26,7 @@ const agentMetadata = z.object({
   nickname: z.string().max(80).optional(),
   avatar: avatarSchema.optional(),
   emptyContextByDefault: z.boolean().optional(),
+  discussionAgent: z.boolean().optional(),
   roastLevel: z.enum(ROAST_LEVELS).optional(),
 });
 const skillMetadata = z.object({ name: z.string().min(1), description: z.string() });
@@ -238,6 +239,19 @@ export class AgentRegistry {
         }
     }
     for (const [id, workflow] of workflows) {
+      const removed = await safePath(this.userPath, `feature-studio/removed-workflows/${id}.json`);
+      if (
+        await lstat(removed).then(
+          () => true,
+          (error) => {
+            if (error.code === 'ENOENT') return false;
+            throw error;
+          },
+        )
+      ) {
+        workflows.delete(id);
+        continue;
+      }
       const invalid = workflow.steps.find(
         (s) => !agents.has(s.agentId) || s.skills.some((skill) => !skills.has(skill)),
       );
@@ -355,6 +369,7 @@ export class AgentRegistry {
       | 'nickname'
       | 'avatar'
       | 'emptyContextByDefault'
+      | 'discussionAgent'
       | 'roastLevel'
       | 'targets'
       | 'revision'
@@ -376,7 +391,8 @@ export class AgentRegistry {
       const document = parseDocument(frontmatter, { uniqueKeys: true });
       for (const key of Object.keys(agentMetadata.shape)) {
         // Older editors cannot clear a tone they do not know about; the current UI sends off explicitly.
-        if (key === 'roastLevel' && input.roastLevel === undefined) continue;
+        if ((key === 'roastLevel' || key === 'discussionAgent') && input[key] === undefined)
+          continue;
         const value = meta[key as keyof typeof meta];
         if (value === undefined) document.delete(key);
         else document.set(key, value);
@@ -483,5 +499,28 @@ export class AgentRegistry {
     await mkdir(dirname(path), { recursive: true });
     await safePath(this.userPath, `feature-studio/workflows/${workflow.id}.yaml`);
     await writeFile(path, stringify(workflow), 'utf8');
+    const removed = await safePath(
+      this.userPath,
+      `feature-studio/removed-workflows/${workflow.id}.json`,
+    );
+    await unlink(removed).catch((error) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+  }
+
+  /** Retire all versions from this user's catalogue; existing sessions own their step snapshots. */
+  async deleteWorkflow(id: string): Promise<void> {
+    identifier.parse(id);
+    const data = await this.load();
+    if (!data.workflows.some((workflow) => workflow.id === id))
+      throw new Error('Parcours inconnu.');
+    const fragment = `feature-studio/removed-workflows/${id}.json`;
+    const target = await safePath(this.userPath, fragment);
+    await mkdir(dirname(target), { recursive: true });
+    await safePath(this.userPath, fragment);
+    await writeFile(target, JSON.stringify({ id, removedAt: new Date().toISOString() }), {
+      flag: 'wx',
+      mode: 0o600,
+    });
   }
 }

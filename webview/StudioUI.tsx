@@ -1,6 +1,7 @@
 import { orderedAgents } from '../src/shared/team';
 import { toCredits, toNanoAiu, formatCredits } from '../src/shared/credits';
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { subscribe } from './bridge';
 import {
   ArrowDown,
   ArrowRight,
@@ -1636,6 +1637,19 @@ function newStep(state: StudioState): WorkflowStep {
   };
 }
 export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispatch: Dispatch }) {
+  const [deleting, setDeleting] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const deleteRequest = useRef('');
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (message.type !== 'workflowDeleteResult' || message.requestId !== deleteRequest.current)
+          return;
+        setDeleting('');
+        setDeleteError(message.error ?? '');
+      }),
+    [],
+  );
   const [editor, setEditor] = useState<WorkflowType | null>(null);
   const [originalId, setOriginalId] = useState('');
   const open = (workflow: WorkflowType, isCopy = false) => {
@@ -1679,6 +1693,11 @@ export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispa
         </button>
       </div>
       <div className="workflow-library">
+        {deleteError && (
+          <p className="inline-error" role="alert">
+            {deleteError}
+          </p>
+        )}
         {state.workflows.map((w) => (
           <article className="workflow-library-card" key={w.id}>
             <div className="section-heading">
@@ -1704,6 +1723,22 @@ export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispa
               </button>
               <button className="text-button" onClick={() => open(w, true)}>
                 <Copy size={13} /> Dupliquer
+              </button>
+              <button
+                className="text-button"
+                aria-label={`Supprimer le parcours ${w.name}`}
+                disabled={
+                  Boolean(deleting) || !state.workspace.trusted || Boolean(state.workspaceOperation)
+                }
+                onClick={() => {
+                  const requestId = crypto.randomUUID();
+                  deleteRequest.current = requestId;
+                  setDeleting(w.id);
+                  setDeleteError('');
+                  dispatch({ type: 'deleteWorkflow', workflowId: w.id, requestId });
+                }}
+              >
+                <Trash2 size={13} /> {deleting === w.id ? 'Suppression…' : 'Supprimer'}
               </button>
             </div>
           </article>

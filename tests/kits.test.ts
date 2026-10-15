@@ -69,7 +69,22 @@ describe('portable kit dependency and file contracts', () => {
   it('exports a chosen agent with its skill resources, validates the round trip and installs locally', async () => {
     const f = await fixture();
     const bundle = await f.kits.compose(metadata, ['agent:fs-devops-plan']);
+    const agentFile = bundle.files.find(
+      (entry) => entry.path === 'agents/fs-devops-plan.agent.md',
+    )!;
+    Object.assign(
+      agentFile,
+      file(
+        agentFile.path,
+        Buffer.from(agentFile.base64, 'base64')
+          .toString('utf8')
+          .replace('---\n', '---\ndiscussionAgent: true\n'),
+      ),
+    );
     expect(validateKit(bundle).nodes).toHaveLength(4);
+    expect(
+      validateKit(bundle).nodes.find((node) => node.id === 'fs-devops-plan')?.discussionAgent,
+    ).toBe(true);
     expect(bundle.files.map((f) => f.path)).toContain(
       'skills/devops-inspect/scripts/ado-readonly.cjs',
     );
@@ -84,6 +99,9 @@ describe('portable kit dependency and file contracts', () => {
     expect((await f.registry.load()).agents.find((a) => a.id === 'fs-devops-plan')?.source).toBe(
       'user',
     );
+    expect(
+      (await f.registry.load()).agents.find((a) => a.id === 'fs-devops-plan')?.discussionAgent,
+    ).toBe(true);
     expect((await f.kits.preview(imported)).files.every((f) => f.status === 'identical')).toBe(
       true,
     );

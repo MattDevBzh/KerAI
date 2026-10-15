@@ -1,4 +1,5 @@
 import { devOpsMessageVariants } from '../core/devopsSchemas';
+import { discussionMessageVariants } from '../core/discussionSchemas';
 import { z } from 'zod';
 import { settingsSchema } from '../core/store';
 import { avatarSchema } from '../core/registry';
@@ -21,6 +22,7 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  ...discussionMessageVariants,
   ...kitMessageVariants,
   z
     .object({
@@ -272,6 +274,7 @@ export const messageSchema = z.discriminatedUnion('type', [
           nickname: z.string().max(80).optional(),
           avatar: avatarSchema.optional(),
           emptyContextByDefault: z.boolean().optional(),
+          discussionAgent: z.boolean().optional(),
           roastLevel: z.enum(ROAST_LEVELS).optional(),
         })
         .strict(),
@@ -299,8 +302,11 @@ export const messageSchema = z.discriminatedUnion('type', [
         .strict(),
     })
     .strict(),
-  z.object({ type: z.literal('saveSettings'), settings: settingsSchema }).strict(),
+  z
+    .object({ type: z.literal('saveSettings'), settings: settingsSchema, projectId: id.optional() })
+    .strict(),
   z.object({ type: z.literal('saveWorkflow'), workflow: workflowSchema }).strict(),
+  z.object({ type: z.literal('deleteWorkflow'), workflowId: id, requestId: id }).strict(),
   z
     .object({ type: z.literal('saveAutopilot'), featureId: id, config: autopilotConfigSchema })
     .strict(),

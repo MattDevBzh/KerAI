@@ -9,6 +9,8 @@ import {
   type UsageSummary,
 } from '../src/core/analytics';
 import type { Feature } from '../src/shared/types';
+import type { Discussion } from '../src/shared/discussions';
+import { discussionUsage } from '../src/core/discussionUsage';
 import './UsageDashboard.css';
 
 const number = formatCredits;
@@ -197,12 +199,24 @@ function Outcomes({ summary }: { summary: UsageSummary }) {
   );
 }
 export function UsageDashboard({
-  features,
-  onOpenFeature,
+  features: workflowFeatures,
+  discussions = [],
+  onOpenFeature: openFeature,
+  onOpenDiscussion,
 }: {
   features: Feature[];
+  discussions?: Discussion[];
   onOpenFeature: (id: string) => void;
+  onOpenDiscussion?: (id: string) => void;
 }) {
+  const features = useMemo(
+    () => [...workflowFeatures, ...discussionUsage(discussions)],
+    [workflowFeatures, discussions],
+  );
+  const onOpenFeature = (id: string) =>
+    id.startsWith('discussion:')
+      ? onOpenDiscussion?.(id.slice('discussion:'.length))
+      : openFeature(id);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [workflowId, setWorkflowId] = useState('');
@@ -228,7 +242,7 @@ export function UsageDashboard({
             <BarChart3 size={24} />
             Consommation
           </h1>
-          <p>La consommation et les validations de vos sessions, à partir des mesures reçues.</p>
+          <p>La consommation de vos sessions et discussions, à partir des mesures reçues.</p>
         </div>
       </header>
       <form
@@ -382,8 +396,11 @@ export function UsageDashboard({
                     {feature.title}
                   </button>
                   <span>
-                    {step.name} · {attempt.startedAt} · {model} · {attempt.status} · révision{' '}
-                    {attempt.revision ?? 0}
+                    {step.name} · {attempt.startedAt} · {model} ·{' '}
+                    {feature.workflowId === '__discussion__' && attempt.status === 'awaiting_review'
+                      ? 'terminée'
+                      : attempt.status}{' '}
+                    · révision {attempt.revision ?? 0}
                   </span>
                 </li>
               ))}

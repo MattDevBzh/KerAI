@@ -16,6 +16,31 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 describe('agent, skill and workflow registry', () => {
+  it('retires all workflow versions across projects without destroying definitions, and permits recreation', async () => {
+    const { root, registry, userPath } = await setup();
+    const original = (await registry.load()).workflows.find(
+      (workflow) => workflow.id === 'feature',
+    )!;
+    const originalFile = await readFile(original.source!, 'utf8');
+    await registry.deleteWorkflow(original.id);
+    expect((await registry.load()).workflows.some((workflow) => workflow.id === original.id)).toBe(
+      false,
+    );
+    const other = new AgentRegistry(join(root, 'other'), resolve('defaults'), userPath);
+    expect((await other.load()).workflows.some((workflow) => workflow.id === original.id)).toBe(
+      false,
+    );
+    expect(await readFile(original.source!, 'utf8')).toBe(originalFile);
+    await registry.saveWorkflow(original);
+    expect((await registry.load()).workflows.some((workflow) => workflow.id === original.id)).toBe(
+      true,
+    );
+    await registry.deleteWorkflow(original.id);
+    expect((await registry.load()).workflows.some((workflow) => workflow.id === original.id)).toBe(
+      false,
+    );
+    await expect(registry.deleteWorkflow('../outside')).rejects.toThrow();
+  });
   it('provides five derived agents and three valid defaults without guessed model IDs or dotnet commands', async () => {
     const { registry } = await setup();
     const data = await registry.load();
@@ -59,6 +84,7 @@ describe('agent, skill and workflow registry', () => {
       nickname: 'Gandalf',
       avatar: 'wizard',
       emptyContextByDefault: true,
+      discussionAgent: true,
     });
     await mkdir(join(root, '.feature-studio/workflows'), { recursive: true });
     await writeFile(join(root, '.feature-studio/workflows/bad.yaml'), 'id: broken\nsteps: []\n');
@@ -70,6 +96,7 @@ describe('agent, skill and workflow registry', () => {
     expect(data.agents.find((a) => a.id === original.id)?.nickname).toBe('Gandalf');
     expect(data.agents.find((a) => a.id === original.id)?.avatar).toBe('wizard');
     expect(data.agents.find((a) => a.id === original.id)?.emptyContextByDefault).toBe(true);
+    expect(data.agents.find((a) => a.id === original.id)?.discussionAgent).toBe(true);
     await expect(registry.saveAgent({ ...original, avatar: 'invalid' })).rejects.toThrow();
     expect(data.notices.some((n) => n.includes('bad.yaml'))).toBe(true);
     expect(data.workflows.map((w) => w.id)).toEqual(

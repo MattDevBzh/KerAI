@@ -315,16 +315,6 @@ export function ProjectSettings({
         </p>
       )}
       {action.notice && <p role="status">{action.notice}</p>}
-      {!!catalog.projects.length && (
-        <p className="project-current-settings">
-          Les réglages Copilot, MCP, tests et scripts ci-dessous concernent{' '}
-          <strong>
-            {catalog.projects.find((project) => project.id === catalog.activeProjectId)?.name ??
-              state.workspace.name}
-          </strong>
-          .
-        </p>
-      )}
     </section>
   );
 }

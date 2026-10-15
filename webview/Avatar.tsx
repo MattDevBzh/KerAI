@@ -8,7 +8,7 @@ export function Avatar({
   status = 'pending',
   small = false,
 }: {
-  agent?: AgentProfile;
+  agent?: Pick<AgentProfile, 'id' | 'avatar'>;
   status?: StepStatus;
   small?: boolean;
 }) {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0 — 2026-10-15
+
+- Nouveau menu **Discussion** après Dashboard : agent au choix, modèle et raisonnement par conversation, réponses progressives, arrêt, bulles et avatars adaptés aux thèmes.
+- Historique local classé par date, recherche, reprise après rechargement et suppression confirmée. Les mesures des discussions rejoignent Consommation.
+- Marquage **Agent de discussion** à la création et dans l’éditeur, profils prioritaires et bouton **Voir plus**. Le marquage est conservé dans les kits.
+- Menus réordonnés : Dashboard, Discussion, Validation, Consommation, Parcours, Agents, Skills, Automatisations, Kits, Réglages, Livraison, Azure DevOps (PR, Tickets), Mémoire.
+- Choix de projet limité aux écrans qui en utilisent les données ; les réglages communs précèdent une liste de projets et leurs paramètres. Les sauvegardes ciblent explicitement le projet affiché.
+- Suppression confirmée des parcours du catalogue personnel, avec conservation des sessions et des fichiers de définition.
+- Tests de persistance, annulation, erreurs, consommation, profils, catalogue Copilot sans outils et interface dans les cinq thèmes, en contraste élevé et en fenêtre compacte.
+
+
 ## 1.4.1 — 2026-10-15
 
 - Adopte le logo « L’équipe » dans la fiche de l’extension, le lanceur, l’onglet et le cockpit. Ajoute une déclinaison monochrome pour la barre d’activité VS Code.

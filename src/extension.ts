@@ -1,4 +1,5 @@
 import { StudioHub } from './host/StudioHub';
+import { DiscussionService, type DiscussionProfile } from './host/DiscussionService';
 import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
 import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
 import { sessionMarkdown } from './shared/sessionExport';
@@ -231,7 +232,52 @@ export async function activate(context: vscode.ExtensionContext) {
   hub.on('state', (state) =>
     send({ type: 'state', state: { ...state, favoriteAgentIds: favorites() } }),
   );
+  const discussions = new DiscussionService({
+    directory: hubDirectory,
+    workspacePath: dedicatedWindow.home,
+    assertTrusted: () => {
+      if (!vscode.workspace.isTrusted)
+        throw new Error('Approuvez cet espace de travail pour discuter avec les agents.');
+    },
+    defaults: () => {
+      const config = vscode.workspace.getConfiguration('featureStudio');
+      return {
+        defaultModel: config.get('defaultModel', ''),
+        timeoutMinutes: config.get('timeoutMinutes', 20),
+      };
+    },
+    adapter: async () => (await hub.entry('empty')).service.adapter,
+    profiles: async () => {
+      const personal = await (await hub.entry('empty')).service.registry.load();
+      const profiles: DiscussionProfile[] = personal.agents.map((profile) => ({
+        key: `global:${profile.id}`,
+        profile,
+        skills: personal.skills,
+      }));
+      for (const project of catalog.state.projects) {
+        if (project.hidden) continue;
+        try {
+          const data = await (await hub.entry(project.id)).service.registry.load();
+          profiles.push(
+            ...data.agents
+              .filter((agent) => agent.source === 'workspace')
+              .map((profile) => ({
+                key: `project:${project.id}:${profile.id}`,
+                projectName: project.name,
+                profile,
+                skills: data.skills,
+              })),
+          );
+        } catch (error) {
+          output.appendLine(`Agents de discussion — ${project.name} : ${(error as Error).message}`);
+        }
+      }
+      return profiles;
+    },
+  });
+  discussions.on('state', (state) => send({ type: 'discussionState', state }));
   disposeHub = async () => {
+    await discussions.dispose();
     await hub.dispose();
     initialized = false;
   };
@@ -267,6 +313,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
       }
       await hub.initialize();
+      await discussions.initialize();
       initialized = true;
     })();
     try {
@@ -353,6 +400,7 @@ export async function activate(context: vscode.ExtensionContext) {
           devops = active.devops;
           hub.publish();
           send({ type: 'devopsState', state: devops.getState() });
+          await discussions.refreshProfiles();
         }
         send({ type: 'projectResult', requestId: message.requestId });
       } catch (error) {
@@ -365,6 +413,53 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
     await bootstrap();
+    if (message.type === 'refreshDiscussions') {
+      await discussions.refreshProfiles();
+      return;
+    }
+    if (
+      message.type === 'sendDiscussion' ||
+      message.type === 'deleteDiscussion' ||
+      message.type === 'cancelDiscussion'
+    ) {
+      if (message.type === 'cancelDiscussion') {
+        discussions.cancel(message.discussionId);
+        return;
+      }
+      try {
+        if (message.type === 'sendDiscussion') await discussions.send(message);
+        else {
+          const choice = await vscode.window.showWarningMessage(
+            'Supprimer cette discussion et son historique ?',
+            { modal: true },
+            'Supprimer',
+          );
+          if (choice !== 'Supprimer') {
+            send({
+              type: 'discussionResult',
+              requestId: message.requestId,
+              discussionId: message.discussionId,
+              cancelled: true,
+            });
+            return;
+          }
+          await discussions.delete(message.discussionId);
+        }
+        send({
+          type: 'discussionResult',
+          requestId: message.requestId,
+          discussionId: message.discussionId,
+        });
+      } catch (error) {
+        send({
+          type: 'discussionResult',
+          requestId: message.requestId,
+          discussionId: message.discussionId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
     if (message.type === 'activateProject') {
       const entry = await hub.activateProject(message.projectId);
       service = entry.service;
@@ -387,7 +482,10 @@ export async function activate(context: vscode.ExtensionContext) {
         ? hub.snapshot()?.humanRequests?.find((request) => request.id === message.requestId)
             ?.featureId
         : undefined;
-    const current = await ensure('featureId' in message ? message.featureId : requestOwner);
+    const current =
+      message.type === 'saveSettings' && message.projectId
+        ? (await hub.entry(message.projectId)).service
+        : await ensure('featureId' in message ? message.featureId : requestOwner);
     if (message.type === 'activateFeature') {
       current.publish();
       send({ type: 'devopsState', state: devops!.getState() });
@@ -437,6 +535,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'ready':
+        discussions.publish();
         webviewReady = true;
         if (dedicated) void drainRequests();
         sendTheme();
@@ -444,6 +543,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (devops) send({ type: 'devopsState', state: devops.getState() });
         return;
       case 'refresh':
+        await discussions.refreshProfiles();
         await current.refresh();
         return;
       case 'checkRuntime':
@@ -792,7 +892,8 @@ export async function activate(context: vscode.ExtensionContext) {
             message.type === 'saveAgent'
               ? await current.registry.saveAgent(message.agent, message.options)
               : await current.registry.saveSkill(message.id, message.content, message.options);
-          await current.refresh();
+          await hub.refreshProfiles();
+          await discussions.refreshProfiles().catch(report);
           send({
             type: 'profileSaveResult',
             requestId: message.requestId,
@@ -1079,6 +1180,38 @@ export async function activate(context: vscode.ExtensionContext) {
           'Parcours enregistré au niveau utilisateur. Les sessions existantes conservent leur définition.',
         );
         return;
+      case 'deleteWorkflow': {
+        try {
+          current.assertConfigurable();
+          const workflow = current.state.workflows.find((entry) => entry.id === message.workflowId);
+          if (!workflow) throw new Error('Parcours inconnu.');
+          const choice = await vscode.window.showWarningMessage(
+            `Supprimer « ${workflow.name} » du catalogue ?`,
+            {
+              modal: true,
+              detail:
+                'Ce parcours sera retiré de votre catalogue pour tous vos projets. Les sessions existantes et les fichiers de définition seront conservés.',
+            },
+            'Supprimer',
+          );
+          if (choice !== 'Supprimer') {
+            send({ type: 'workflowDeleteResult', requestId: message.requestId, cancelled: true });
+            return;
+          }
+          current.assertConfigurable();
+          await current.registry.deleteWorkflow(message.workflowId);
+          await hub.refreshProfiles();
+          send({ type: 'workflowDeleteResult', requestId: message.requestId });
+          notice('Parcours supprimé du catalogue. Les sessions existantes sont conservées.');
+        } catch (error) {
+          send({
+            type: 'workflowDeleteResult',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        }
+        return;
+      }
       case 'saveAutopilot':
         await current.saveAutopilot(message.featureId, message.config);
         return;
@@ -1177,7 +1310,10 @@ export async function activate(context: vscode.ExtensionContext) {
       () => {
         if (panel === target) panel = undefined;
         webviewReady = false;
-        shuttingDown = hub.dispose().finally(() => {
+        shuttingDown = (async () => {
+          await discussions.pause();
+          await hub.dispose();
+        })().finally(() => {
           initialized = false;
           service = undefined;
           devops = undefined;
