@@ -227,3 +227,13 @@ Le VSIX livré est vérifié par `releases/SHA256SUMS`. Le stockage des artefact
 - Les modifications directes des agents/skills/workflows sont rechargées avec **Actualiser**. Un workflow existant conserve sa définition copiée. Le stockage migre v0/v1/v2 vers v3, préserve les versions inconnues/corrompues et ne propose pas de migration inverse, synchronisation multi-machine ou import d’un export Markdown. La v0.2 refuse les données v3. Archiver ne supprime ni worktree ni points sur disque ; leur nettoyage automatique n’est pas implémenté.
 
 Les captures du README portent un bandeau **démonstration**. Les huit avatars pixel art et leurs GIF sont les mêmes assets que dans le VSIX ; leur provenance et leur reconstruction restent dans `design/avatars`.
+
+## 1.4.0 — avatars de métiers, 15 octobre 2026
+
+- Vingt personnages distincts, pixel art de face, avec repos, travail animé (quatre images, boucle de 320 ms par image) et réussite : 60 assets distribués. Le repos du mage conserve le visuel approuvé.
+- TypeScript, construction webview/extension et packaging VSIX réussis.
+- 67 tests Vitest ciblés réussis : catalogue et transparence des PNG/GIF, quatre images de travail distinctes, profils anciens/nouveaux, registre et kits. Le contrôle a conduit à supprimer le bruit d’arrondi alpha de 1/255 dans l’export PNG ; les couleurs visibles restent intactes.
+- 9 scénarios Playwright réussis : 20 choix chargés, libellés mobiles, sauvegarde du profil, anciens identifiants, trois états et réduction des mouvements, kits, glisser-déposer et célébrations.
+- Galerie contrôlée dans Chromium : 20 images chargées, animation GIF visible sur des captures successives, poses de réussite, fonds clair/sombre et réduction des mouvements.
+- Le VSIX contient exactement les 60 assets attendus. Les profils et kits historiques conservent leurs identifiants, résolus par le catalogue commun à l’affichage ; aucune migration automatique de fichiers personnels.
+- Contrôles effectués sous Linux ; l’hôte VS Code natif Windows n’a pas été relancé pour cette modification graphique. Aucun prompt Copilot payant ni appel Azure DevOps.

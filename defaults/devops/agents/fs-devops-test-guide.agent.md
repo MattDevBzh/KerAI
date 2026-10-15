@@ -3,7 +3,7 @@ name: "DevOps · Guide de test"
 description: "Fournir une procédure manuelle adaptée au diff pour tester hors production."
 tools: ["read", "search", "studio_devops_inspect"]
 model: ""
-avatar: "devops-lab"
+avatar: qa-automation
 nickname: "Laborantin"
 skills: ["devops-test-guide", "devops-inspect", "devops-azure-preflight"]
 user-invocable: true

@@ -3,7 +3,7 @@ name: "Spécifications"
 description: "Clarifier le besoin et ses critères avant développement."
 tools: ["read", "search"]
 model: ""
-avatar: "detective"
+avatar: business-analyst
 nickname: ""
 skills: ["ai-ticket"]
 user-invocable: true

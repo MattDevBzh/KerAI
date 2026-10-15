@@ -3,7 +3,7 @@ name: "DevOps · Modifications locales"
 description: "Modifier pipelines, infrastructure et scripts dans le workspace selon le plan approuvé."
 tools: ["read", "search", "edit"]
 model: ""
-avatar: "devops-builder"
+avatar: devops-engineer
 nickname: "Bâtisseur"
 skills: ["devops-implement"]
 user-invocable: true

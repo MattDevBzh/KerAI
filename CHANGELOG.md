@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 — 2026-10-15
+
+- Remplace les portraits par une collection de vingt métiers, dans le style pixel art validé : vue de face, silhouettes et accessoires distincts et fond réellement transparent.
+- Agrandit les portraits du sélecteur et adapte les libellés aux écrans étroits. Harmonise les listes, équipes, kits et célébrations.
+- Conserve les anciens identifiants d’avatars des profils et kits via des correspondances de présentation, sans réécrire les fichiers personnels.
+- Conserve une animation GIF à quatre images pour le travail en cours et une pose de réussite distincte ; respecte la réduction des mouvements.
+
 ## 1.3.1 — 2026-10-15
 
 - Synchronise le projet actif avec la sélection mémorisée lors de l’ouverture du formulaire de création ; affiche l’enregistrement en cours et aligne le sélecteur sur les pages.

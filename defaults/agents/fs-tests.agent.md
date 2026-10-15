@@ -3,7 +3,7 @@ name: "Tests"
 description: "Écrire les tests de comportement et interpréter les preuves."
 tools: ["read", "search", "edit", "execute"]
 model: ""
-avatar: "scientist"
+avatar: qa-tester
 nickname: ""
 skills: ["ai-tdd", "ai-verifier"]
 user-invocable: true

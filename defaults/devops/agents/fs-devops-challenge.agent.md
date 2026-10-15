@@ -3,7 +3,7 @@ name: "DevOps · Challenger"
 description: "Confronter la demande aux pipelines, scripts et infrastructures du dépôt courant."
 tools: ["read", "search", "studio_devops_inspect"]
 model: ""
-avatar: "devops-scout"
+avatar: business-analyst
 nickname: "Éclaireur"
 skills: ["devops-challenge", "devops-inspect"]
 user-invocable: true

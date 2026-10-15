@@ -285,7 +285,7 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
     page.getByText('Enregistré au niveau utilisateur, disponible dans tous les projets.'),
   ).toBeVisible();
   await page.getByLabel('Son petit nom').fill('Capitaine Bug');
-  await page.getByRole('button', { name: 'La capitaine' }).click();
+  await page.getByRole('button', { name: 'Responsable des livraisons' }).click();
   await page.getByLabel('Nom du profil').fill('Quality companion');
   await page.getByLabel('Instructions', { exact: false }).fill('Vérifie les critères de réussite.');
   await page.getByRole('checkbox', { name: 'Contexte vide par défaut' }).check();
@@ -296,12 +296,48 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
       emptyContextByDefault: true,
       id: 'quality-companion',
       nickname: 'Capitaine Bug',
-      avatar: 'captain',
+      avatar: 'release-manager',
     },
   });
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+test('catalogue métiers : vingt portraits chargés et libellés mobiles', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await page.getByRole('button', { name: 'Nouvel agent' }).click();
+  const picker = page.locator('.avatar-picker');
+  await expect(picker.getByRole('button')).toHaveCount(20);
+  await expect
+    .poll(() =>
+      picker
+        .locator('img')
+        .evaluateAll((images) =>
+          images.every(
+            (image) =>
+              image instanceof HTMLImageElement && image.complete && image.naturalWidth === 256,
+          ),
+        ),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Architecte logiciel', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Architecte logiciel', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() => picker.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
+    .toBe(true);
+  await expect
+    .poll(() =>
+      picker
+        .locator('span')
+        .evaluateAll((labels) =>
+          labels.every((label) => label.scrollWidth <= label.clientWidth + 1),
+        ),
+    )
+    .toBe(true);
 });
 test('nouveau hook désactivé par défaut, activation uniquement après action humaine', async ({
   page,

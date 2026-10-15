@@ -1989,11 +1989,7 @@ main {
   width: 64px;
   height: 64px;
   border-radius: 13px;
-  background: radial-gradient(
-    circle at 50% 50%,
-    color-mix(in srgb, var(--lavender) 11%, transparent),
-    transparent
-  );
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2034,7 +2030,7 @@ main {
 }
 .avatar-picker {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
   gap: 8px;
   margin-bottom: 24px;
 }
@@ -2059,15 +2055,18 @@ main {
   background: color-mix(in srgb, var(--coral) 8%, transparent);
 }
 .avatar-picker img {
-  height: 45px;
-  width: 45px;
+  height: 76px;
+  width: 76px;
   object-fit: contain;
   image-rendering: pixelated;
 }
 .avatar-picker span {
-  font-size: 7px;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: center;
   color: var(--muted);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .avatar-picker svg {
   position: absolute;
@@ -2738,7 +2737,7 @@ body.vscode-high-contrast-light .badge {
     gap: 13px;
   }
   .avatar-picker {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(85px, 1fr));
   }
   .avatar-picker img {
     width: 55px;

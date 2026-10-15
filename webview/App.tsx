@@ -2,7 +2,8 @@ import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
 import { TeamComposer } from './TeamComposer';
 import { AgentFavorite } from './AgentFavorite';
 import { orderedAgents, teamLocked } from '../src/shared/team';
-import { Avatar, avatarOptions, avatarDefaults } from './Avatar';
+import { Avatar, avatarOptions } from './Avatar';
+import { resolveAvatar } from '../src/shared/avatars';
 import { usageCredits } from '../src/shared/credits';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
@@ -2713,9 +2714,7 @@ function AgentEditor({
   const [id, setId] = useState(source?.id ?? '');
   const [name, setName] = useState(source?.name ?? '');
   const [nickname, setNickname] = useState(source?.nickname ?? '');
-  const [avatar, setAvatar] = useState(
-    source?.avatar ?? avatarDefaults[source?.id ?? ''] ?? 'robot',
-  );
+  const [avatar, setAvatar] = useState(resolveAvatar(source?.avatar, source?.id));
   const [description, setDescription] = useState(source?.description ?? '');
   const [instructions, setInstructions] = useState(source?.instructions ?? '');
   const [tools, setTools] = useState(source?.tools.join(', ') ?? '');
@@ -2785,7 +2784,7 @@ function AgentEditor({
       (existing && {
         ...existing,
         nickname: existing.nickname ?? '',
-        avatar: existing.avatar ?? 'robot',
+        avatar: resolveAvatar(existing.avatar, existing.id),
         tools: existing.tools.join(', '),
         model: existing.model ?? '',
         emptyContextByDefault: existing.emptyContextByDefault ?? false,
@@ -2795,7 +2794,7 @@ function AgentEditor({
       setId(chosen.id);
       setName(chosen.name);
       setNickname(chosen.nickname);
-      setAvatar(chosen.avatar);
+      setAvatar(resolveAvatar(chosen.avatar, chosen.id));
       setDescription(chosen.description);
       setInstructions(chosen.instructions);
       setTools(chosen.tools);

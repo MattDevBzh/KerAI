@@ -1,34 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Bot } from 'lucide-react';
 import type { AgentProfile, StepStatus } from '../src/shared/types';
-export const avatarOptions = [
-  { id: 'wizard', name: 'Le mage' },
-  { id: 'hacker', name: 'Le hacker' },
-  { id: 'detective', name: 'Le détective' },
-  { id: 'lumberjack', name: 'Le bûcheron' },
-  { id: 'scientist', name: 'La scientifique' },
-  { id: 'robot', name: 'Le robot' },
-  { id: 'ninja', name: 'Le ninja' },
-  { id: 'captain', name: 'La capitaine' },
-  { id: 'devops-scout', name: 'Éclaireur' },
-  { id: 'devops-architect', name: 'Architecte DevOps' },
-  { id: 'devops-builder', name: 'Bâtisseur' },
-  { id: 'devops-sentinel', name: 'Vigie' },
-  { id: 'devops-lab', name: 'Laborantin' },
-  { id: 'devops-controller', name: 'Contrôleur' },
-];
-export const avatarDefaults: Record<string, string> = {
-  'fs-specs': 'detective',
-  'fs-plan': 'wizard',
-  'fs-dev': 'hacker',
-  'fs-tests': 'scientist',
-  'fs-review': 'ninja',
-  analyst: 'detective',
-  architect: 'wizard',
-  builder: 'hacker',
-  tester: 'scientist',
-  reviewer: 'ninja',
-};
+import { resolveAvatar } from '../src/shared/avatars';
+export { avatarOptions } from '../src/shared/avatars';
 export function Avatar({
   agent,
   status = 'pending',
@@ -42,7 +16,7 @@ export function Avatar({
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
   const [failed, setFailed] = useState(false);
-  const id = agent?.avatar || avatarDefaults[agent?.id ?? ''] || 'robot';
+  const id = resolveAvatar(agent?.avatar, agent?.id);
   useEffect(() => {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setReduced(query.matches);
