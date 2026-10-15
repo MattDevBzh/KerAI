@@ -311,3 +311,8 @@ Les vérifications physiques (par exemple un fichier modifié depuis les tests) 
 Sous le visuel Feature Studio de la barre latérale, l’encart affiche les crédits consommés et inclus du compte connecté au CLI, ainsi que le renouvellement et le dépassement autorisé lorsque ces informations sont disponibles. Il interroge le quota toutes les 10 secondes lorsque la vue est visible, sans ouvrir de session ni envoyer de prompt. Le relevé GitHub peut être différé. Un quota absent, une API incompatible ou une unité non confirmée est indiqué comme indisponible, jamais comme zéro. Les crédits inclus ne constituent pas un plafond de facturation si GitHub autorise un dépassement. Les totaux des sessions du cockpit restent distincts de ce relevé du compte.
 
 Les coûts et les seuils sont présentés en crédits. Les mesures historiques sont conservées dans leur précision d’origine (1 crédit = 1 milliard de nano-AIU) ; les valeurs partielles ou inconnues restent signalées.
+
+
+### Skill absente lors de la préparation du contexte
+
+L’aperçu reste accessible si une skill configurée ne figure pas dans le catalogue. Le bloc « Skill introuvable » indique son identifiant et l’agent ou l’étape qui la référence. Restaure son fichier `SKILL.md`, corrige la référence, ou décoche le bloc pour cette tentative puis actualise l’aperçu. Le lancement reste bloqué tant qu’un bloc indisponible est inclus. Le catalogue est relu lors de l’aperçu et du lancement pour prendre en compte les installations manuelles.

@@ -38,6 +38,7 @@ export interface PromptSection {
   enabled?: boolean;
   editable?: boolean;
   originalContent?: string;
+  unavailable?: boolean;
 }
 export interface RunPreview {
   featureId: string;

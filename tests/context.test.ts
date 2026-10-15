@@ -61,6 +61,22 @@ const entry: MemoryEntry = {
 };
 
 describe('deterministic context compiler', () => {
+  it('exposes unavailable skills and prevents a content override from bypassing the missing source', () => {
+    const data = input();
+    data.agent.skills = ['missing'];
+    data.step.skills = ['missing'];
+    data.launch!.contextBlocks = { 'skill:missing': { content: 'Invented skill instructions' } };
+    const preview = previewContext(data);
+    expect(preview.sections.filter((s) => s.unavailable)).toHaveLength(1);
+    expect(preview.errors.join(' ')).toContain('missing');
+    expect(() => buildPrompt(data)).toThrow('missing');
+    data.launch!.contextBlocks['skill:missing'].enabled = false;
+    expect(previewContext(data).errors).toEqual([]);
+    expect(buildPrompt(data)).not.toContain('Invented skill instructions');
+    data.launch = { ...emptyLaunch(), contextMode: 'empty' };
+    expect(previewContext(data).errors).toEqual([]);
+  });
+
   it('compiles full question, choices, answer and original provenance without depending on a resumed session', () => {
     const data = input();
     data.attempt.questions = [];

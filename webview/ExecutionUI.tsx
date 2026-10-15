@@ -510,6 +510,12 @@ export function LaunchDialog({
                           <span>{s.label}</span>
                           <small>{enabled ? 'Inclus' : 'Exclu'}</small>
                         </label>
+                        {s.unavailable && (
+                          <p className="field-help">
+                            Cette skill est absente du catalogue. Décoche ce bloc pour continuer
+                            sans elle, ou restaure la skill puis actualise l’aperçu.
+                          </p>
+                        )}
                         <details>
                           <summary>
                             Lire ou modifier{' '}
@@ -525,6 +531,7 @@ export function LaunchDialog({
                               rows={8}
                               maxLength={60000}
                               value={content}
+                              readOnly={s.unavailable}
                               onChange={(e) => changeBlock(s.id, { content: e.target.value })}
                             />
                           </label>
