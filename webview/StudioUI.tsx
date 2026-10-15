@@ -1,3 +1,4 @@
+import { orderedAgents } from '../src/shared/team';
 import { toCredits, toNanoAiu, formatCredits } from '../src/shared/credits';
 import { useState, type FormEvent } from 'react';
 import {
@@ -140,7 +141,7 @@ export function AutopilotBar({
         <div className="autopilot-actions">
           <button
             className="text-button"
-            disabled={auto?.status === 'running'}
+            disabled={!feature.steps.length || auto?.status === 'running'}
             onClick={() => setEditing(true)}
           >
             <Settings2 size={14} /> Configurer
@@ -1536,7 +1537,7 @@ function MemoryEditor({
         </label>
         <fieldset className="skill-options">
           <legend>Agents concernés · aucun choisi = tous les agents</legend>
-          {state.agents.map((a) => (
+          {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
             <label key={a.id}>
               <input
                 type="checkbox"
@@ -1982,7 +1983,7 @@ function WorkflowEditor({
                       onChange={(e) => update({ agentId: e.target.value })}
                     >
                       <option value="">Choisir un agent…</option>
-                      {state.agents.map((a) => (
+                      {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.nickname || a.name}
                         </option>

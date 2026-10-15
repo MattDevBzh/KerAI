@@ -137,6 +137,8 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  teamRevision?: number;
+  teamLockedAt?: string;
   descriptionRevision?: number;
   descriptionVersions?: import('./collaboration').EditorialVersion[];
   corrections?: import('./collaboration').CorrectionCycle[];
@@ -234,6 +236,7 @@ export interface RuntimeStatus {
   error?: string;
 }
 export interface StudioState {
+  favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
   schemaVersion: 1 | 2 | 3 | 4;
   workspace: {
@@ -260,6 +263,14 @@ export type ClientMessage =
   | import('./collaboration').CollaborationClientMessage
   | import('./kits').KitClientMessage
   | DevOpsClientMessage
+  | {
+      type: 'saveFeatureTeam';
+      featureId: string;
+      requestId: string;
+      expectedRevision: number;
+      steps: WorkflowStep[];
+    }
+  | { type: 'setAgentFavorite'; agentId: string; favorite: boolean; requestId: string }
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
   | { type: 'installQualityKit'; featureId?: string }
   | { type: 'openQualityAttachment'; featureId: string; evidenceId: string; attachmentId: string }
@@ -270,7 +281,7 @@ export type ClientMessage =
       type: 'createFeature';
       title: string;
       description: string;
-      workflowId: string;
+      workflowId?: string;
       agentId?: string;
       model?: string;
       isolated?: boolean;
@@ -389,6 +400,14 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | {
+      type: 'featureTeamResult';
+      requestId: string;
+      featureId: string;
+      revision?: number;
+      error?: string;
+    }
+  | { type: 'agentFavoriteResult'; requestId: string; error?: string }
   | { type: 'correctionResult'; featureId: string; correctionId?: string; error?: string }
   | {
       type: 'artifactSaveResult';

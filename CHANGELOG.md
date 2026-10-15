@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.1 — 2026-10-15
+
+- Corrige la largeur du panneau de composition pour afficher davantage d’agents côte à côte sur grand écran.
+
+## 1.2.0 — 2026-10-15
+
+- Crée les nouvelles features sans équipe et ouvre directement leur fiche. Le brouillon reste disponible après fermeture.
+- Ajoute un panneau de composition par glisser-déposer des avatars ou des équipes, sans limite fixe d’interventions : ordre, duplication, retrait, rôle, permissions, modèle et réflexion. Les modèles d’équipes restent inchangés.
+- Autorise la modification de la composition jusqu’à la première tentative ; vérifie le verrouillage et la révision côté extension.
+- Ajoute les favoris personnels, partagés entre projets et affichés en premier dans les catalogues et sélecteurs.
+
 ## 1.1.2 — 2026-10-15
 
 - Permet de préparer l’aperçu du contexte lorsqu’une skill configurée est absente : son identifiant et son origine sont affichés dans un bloc décochable. Le lancement reste bloqué si une skill absente est incluse ; une exclusion explicite permet de continuer sans cette compétence.

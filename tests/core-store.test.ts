@@ -42,6 +42,14 @@ function feature() {
   return { engine, item };
 }
 describe('durable versioned store', () => {
+  it('round trips an empty draft without treating it as a completed workflow', async () => {
+    const { store } = await setup();
+    const item = new WorkflowEngine().createFeature(undefined, { title: 'Draft', description: '' });
+    await store.save([item], defaultSettings);
+    expect((await store.load()).features[0]).toEqual(item);
+    expect(() => store.save([{ ...item, status: 'completed' }], defaultSettings)).toThrow();
+    expect(() => store.save([{ ...item, activeStepId: 'ghost' }], defaultSettings)).toThrow();
+  });
   it('persists exact question provenance across a replay and reload', async () => {
     const { store } = await setup();
     const { engine, item } = feature();

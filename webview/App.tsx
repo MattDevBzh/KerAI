@@ -1,3 +1,7 @@
+import { TeamComposer } from './TeamComposer';
+import { AgentFavorite } from './AgentFavorite';
+import { orderedAgents, teamLocked } from '../src/shared/team';
+import { Avatar, avatarOptions, avatarDefaults } from './Avatar';
 import { usageCredits } from '../src/shared/credits';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
@@ -302,7 +306,6 @@ export default function App() {
     draftDirtyRef.current = value;
     setDraftDirty(value);
   };
-  const [workflowId, setWorkflowId] = useState('');
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [confirm, setConfirm] = useState<{
     title: string;
@@ -320,7 +323,7 @@ export default function App() {
       else if (message.type === 'navigate') {
         if (draftDirtyRef.current) {
           setNotice({
-            text: 'Enregistrez le brouillon du compte rendu avant de changer de page.',
+            text: 'Terminez ou annulez les modifications en cours avant de changer de page.',
             error: true,
           });
           return;
@@ -344,6 +347,7 @@ export default function App() {
         'createCheckpoint',
         'startAutopilot',
         'configureStep',
+        'saveFeatureTeam',
         'saveArtifact',
         'requestCorrection',
         'finalizeFeature',
@@ -410,16 +414,11 @@ export default function App() {
   };
   const selected = state?.features.find((f) => f.id === featureId);
   const activeFeatures = state?.features.filter((f) => !f.archived) ?? [];
-  const openCreate = (id?: string) => {
-    setWorkflowId(
-      id ?? state?.workflows.find((w) => w.id === 'feature')?.id ?? state?.workflows[0]?.id ?? '',
-    );
-    setCreate(true);
-  };
+  const openCreate = (_id?: string) => setCreate(true);
   const chooseView = (id: View) => {
     if (draftDirty) {
       setNotice({
-        text: 'Enregistrez le brouillon du compte rendu avant de changer de page.',
+        text: 'Terminez ou annulez les modifications en cours avant de changer de page.',
         error: true,
       });
       return;
@@ -720,32 +719,35 @@ export default function App() {
               onCreate={() => setAgentEditor('new')}
             >
               <div className="library-grid">
-                {state.agents.map((a, i) => (
-                  <button className="library-card" key={a.id} onClick={() => setAgentEditor(a)}>
-                    <Avatar agent={a} />
-                    <span className="library-meta">
-                      {a.source === 'workspace'
-                        ? 'PROJET'
-                        : a.source === 'user'
-                          ? 'UTILISATEUR'
-                          : 'KIT FOURNI'}
-                      <ArrowUpRight size={16} />
-                    </span>
-                    <h3>{a.nickname || a.name}</h3>
-                    {normalizeRoastLevel(a.roastLevel) !== 'off' && (
-                      <span className="profile-role">Roast · {roastLabel(a.roastLevel)}</span>
-                    )}
-                    <p>
-                      {a.nickname && <span className="profile-role">{a.name}</span>}
-                      {a.description}
-                    </p>
-                    <div className="card-footer">
-                      <span>
-                        {a.skills.length} skill{a.skills.length > 1 ? 's' : ''}
+                {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
+                  <div className="agent-library-item" key={a.id}>
+                    <AgentFavorite agent={a} state={state} dispatch={dispatch} />
+                    <button className="library-card" key={a.id} onClick={() => setAgentEditor(a)}>
+                      <Avatar agent={a} />
+                      <span className="library-meta">
+                        {a.source === 'workspace'
+                          ? 'PROJET'
+                          : a.source === 'user'
+                            ? 'UTILISATEUR'
+                            : 'KIT FOURNI'}
+                        <ArrowUpRight size={16} />
                       </span>
-                      <span>{a.model || 'Modèle automatique'}</span>
-                    </div>
-                  </button>
+                      <h3>{a.nickname || a.name}</h3>
+                      {normalizeRoastLevel(a.roastLevel) !== 'off' && (
+                        <span className="profile-role">Roast · {roastLabel(a.roastLevel)}</span>
+                      )}
+                      <p>
+                        {a.nickname && <span className="profile-role">{a.name}</span>}
+                        {a.description}
+                      </p>
+                      <div className="card-footer">
+                        <span>
+                          {a.skills.length} skill{a.skills.length > 1 ? 's' : ''}
+                        </span>
+                        <span>{a.model || 'Modèle automatique'}</span>
+                      </div>
+                    </button>
+                  </div>
                 ))}
               </div>
               {!state.agents.length && (
@@ -756,8 +758,8 @@ export default function App() {
               <div className="quiet-note">
                 <ShieldCheck size={17} />
                 <span>
-                  Les permissions de chaque étape encadrent les outils de l’agent. Les profils sont
-                  enregistrés dans le projet.
+                  Les permissions de chaque étape encadrent les outils de l’agent. Les favoris sont
+                  personnels et communs à vos projets.
                 </span>
               </div>
             </Library>
@@ -832,7 +834,6 @@ export default function App() {
       {create && (
         <CreateModal
           state={state}
-          initialWorkflow={workflowId}
           onClose={() => setCreate(false)}
           onCreate={(message) => {
             dispatch(message);
@@ -1227,80 +1228,35 @@ function ModelSelect({
 }
 function CreateModal({
   state,
-  initialWorkflow,
   onClose,
   onCreate,
 }: {
   state: StudioState;
-  initialWorkflow: string;
   onClose: () => void;
-  onCreate: (m: Extract<ClientMessage, { type: 'createFeature' }>) => void;
+  onCreate: (message: Extract<ClientMessage, { type: 'createFeature' }>) => void;
 }) {
-  const [workflow, setWorkflow] = useState(initialWorkflow || state.workflows[0]?.id || '');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [agent, setAgent] = useState('');
-  const [model, setModel] = useState('');
-  const [isolated, setIsolated] = useState(
-    Boolean(
-      state.workspace.canIsolate &&
-        ['feature', 'single'].includes(initialWorkflow || state.workflows[0]?.id || ''),
-    ),
-  );
-  const creationBusy = Boolean(state.workspaceOperation) || hasActiveRun(state);
+  const [title, setTitle] = useState(''),
+    [description, setDescription] = useState('');
+  const [isolated, setIsolated] = useState(Boolean(state.workspace.canIsolate));
+  const busy = Boolean(state.workspaceOperation) || hasActiveRun(state);
   return (
     <Modal
-      title="Une idée, un nouveau parcours."
-      subtitle="Choisissez un point de départ. Vous gardez la main à chaque étape."
+      title="Une nouvelle feature"
+      subtitle="Posez le besoin. Vous composerez votre équipe sur la fiche."
       onClose={onClose}
-      wide
     >
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (title.trim() && workflow)
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (title.trim() && !busy)
             onCreate({
               type: 'createFeature',
               title: title.trim(),
               description: description.trim(),
-              workflowId: workflow,
               isolated: isolated && Boolean(state.workspace.canIsolate),
-              ...(agent ? { agentId: agent } : {}),
-              ...(model ? { model } : {}),
             });
         }}
       >
-        <div className="workflow-picker" role="radiogroup" aria-label="Type de session">
-          {orderedWorkflows(state.workflows).map((w) => (
-            <button
-              type="button"
-              role="radio"
-              aria-checked={workflow === w.id}
-              key={w.id}
-              className={workflow === w.id ? 'chosen' : ''}
-              onClick={() => {
-                setWorkflow(w.id);
-                setIsolated(
-                  Boolean(state.workspace.canIsolate && ['feature', 'single'].includes(w.id)),
-                );
-              }}
-            >
-              <span className={`template-icon color-${workflowRank(w) % 3}`}>
-                <WorkflowIcon workflow={w} />
-              </span>
-              <strong>{w.name}</strong>
-              <small>{w.description}</small>
-              <span className="picker-check">
-                {workflow === w.id ? <Check size={13} /> : <Circle size={13} />}
-              </span>
-            </button>
-          ))}
-        </div>
-        <WorkspaceChoice
-          state={state}
-          isolated={isolated && Boolean(state.workspace.canIsolate)}
-          onChange={setIsolated}
-        />
         <label className="field">
           <span>
             Qu’allons-nous faire ? <em>*</em>
@@ -1310,48 +1266,30 @@ function CreateModal({
             maxLength={200}
             placeholder="Ex. Une recherche plus agréable au clavier"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(event) => setTitle(event.target.value)}
           />
         </label>
         <label className="field">
           <span>Le contexte et le résultat souhaité</span>
           <textarea
             rows={4}
-            placeholder="Le besoin, les contraintes, ce qui vous ferait dire « c’est réussi »…"
+            placeholder="Le besoin, les contraintes, le résultat attendu…"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        <div className="field-row">
-          <label className="field">
-            <span>Agent de la première étape</span>
-            <div className="select-wrap">
-              <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-                <option value="">Profil prévu par le parcours</option>
-                {state.agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </label>
-          <ModelSelect state={state} value={model} onChange={setModel} />
-        </div>
+        <WorkspaceChoice
+          state={state}
+          isolated={isolated && Boolean(state.workspace.canIsolate)}
+          onChange={setIsolated}
+        />
         <div className="modal-actions">
-          <span className="muted">
-            <ShieldCheck size={14} /> Créer ne lance aucune exécution.
-          </span>
+          <span className="muted">Créer ne lance aucune exécution.</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
-          <button
-            type="submit"
-            className="button primary"
-            disabled={!title.trim() || !workflow || creationBusy}
-          >
-            Créer la session <ArrowRight size={16} />
+          <button type="submit" className="button primary" disabled={!title.trim() || busy}>
+            Créer la feature <ArrowRight size={16} />
           </button>
         </div>
       </form>
@@ -1385,6 +1323,14 @@ function FeatureDetail({
     feature.steps.find((s) => s.id === stepId) ??
     feature.steps.find((s) => s.id === feature.activeStepId) ??
     feature.steps[0];
+  const [composing, setComposing] = useState(false),
+    [teamPending, setTeamPending] = useState(false);
+  const closeTeam = () => {
+    if (!teamPending) {
+      setComposing(false);
+      onDirtyChange(false);
+    }
+  };
   const done = feature.steps.filter((s) => s.status === 'approved').length;
   const [correction, setCorrection] = useState<{
     sourceStepId: string;
@@ -1438,6 +1384,26 @@ function FeatureDetail({
 
   return (
     <div className="page feature-page">
+      {composing && (
+        <Modal
+          title="Composer mon équipe"
+          subtitle="Ajoutez des équipes et des agents, puis ajustez chaque intervention."
+          wide
+          onClose={closeTeam}
+        >
+          <TeamComposer
+            feature={feature}
+            state={state}
+            dispatch={dispatch}
+            onPendingChange={setTeamPending}
+            onClose={() => {
+              setComposing(false);
+              setTeamPending(false);
+              onDirtyChange(false);
+            }}
+          />
+        </Modal>
+      )}
       {correction && (
         <Modal
           title="Demander une correction"
@@ -1510,9 +1476,31 @@ function FeatureDetail({
       <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
       <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <div className="feature-control-band">
-        <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
+        {!!feature.steps.length && (
+          <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
+        )}
         <BudgetMeter feature={feature} state={state} dispatch={dispatch} />
       </div>
+      {!!feature.steps.length && (
+        <div className="feature-team-heading">
+          <h2>Votre équipe</h2>
+          {teamLocked(feature) ? (
+            <span className="muted">Composition verrouillée depuis la première exécution</span>
+          ) : (
+            <button
+              className="button secondary small"
+              disabled={busy || detailDirty || Boolean(feature.archived)}
+              onClick={() => {
+                setComposing(true);
+                onDirtyChange(true);
+              }}
+            >
+              <Settings2 size={14} />
+              Modifier l’équipe
+            </button>
+          )}
+        </div>
+      )}
       <div className="journey-heading">
         <span className="eyebrow">LE PARCOURS</span>
         <span>
@@ -1598,7 +1586,24 @@ function FeatureDetail({
           confirm={confirm}
         />
       ) : (
-        <Empty title="Ce parcours n’a aucune étape">Choisissez un autre modèle de session.</Empty>
+        <section className="feature-empty-team">
+          <Bot size={32} />
+          <h2>Aucune équipe constituée</h2>
+          <p className="muted">
+            Votre feature est enregistrée. Ajoutez les agents qui vont intervenir.
+          </p>
+          <button
+            className="button primary"
+            disabled={busy || Boolean(feature.archived)}
+            onClick={() => {
+              setComposing(true);
+              onDirtyChange(true);
+            }}
+          >
+            <Plus size={16} />
+            Composer mon équipe
+          </button>
+        </section>
       )}
     </div>
   );
@@ -2546,7 +2551,7 @@ function StepConfig({
         <label className="field">
           <span>Profil de l’agent</span>
           <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-            {state.agents.map((a) => (
+            {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
@@ -2635,75 +2640,6 @@ function StepConfig({
         Enregistrer la configuration <Check size={14} />
       </button>
     </form>
-  );
-}
-const avatarOptions = [
-  { id: 'wizard', name: 'Le mage' },
-  { id: 'hacker', name: 'Le hacker' },
-  { id: 'detective', name: 'Le détective' },
-  { id: 'lumberjack', name: 'Le bûcheron' },
-  { id: 'scientist', name: 'La scientifique' },
-  { id: 'robot', name: 'Le robot' },
-  { id: 'ninja', name: 'Le ninja' },
-  { id: 'captain', name: 'La capitaine' },
-  { id: 'devops-scout', name: 'Éclaireur' },
-  { id: 'devops-architect', name: 'Architecte DevOps' },
-  { id: 'devops-builder', name: 'Bâtisseur' },
-  { id: 'devops-sentinel', name: 'Vigie' },
-  { id: 'devops-lab', name: 'Laborantin' },
-  { id: 'devops-controller', name: 'Contrôleur' },
-];
-const avatarDefaults: Record<string, string> = {
-  'fs-specs': 'detective',
-  'fs-plan': 'wizard',
-  'fs-dev': 'hacker',
-  'fs-tests': 'scientist',
-  'fs-review': 'ninja',
-  analyst: 'detective',
-  architect: 'wizard',
-  builder: 'hacker',
-  tester: 'scientist',
-  reviewer: 'ninja',
-};
-function Avatar({
-  agent,
-  status = 'pending',
-  small = false,
-}: {
-  agent?: AgentProfile;
-  status?: StepStatus;
-  small?: boolean;
-}) {
-  const [reduced, setReduced] = useState(
-    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  );
-  const [failed, setFailed] = useState(false);
-  const id = agent?.avatar || avatarDefaults[agent?.id ?? ''] || 'robot';
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduced(query.matches);
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
-  const pose =
-    status === 'approved'
-      ? 'approved.png'
-      : status === 'running' && !reduced
-        ? 'working.gif'
-        : 'idle.png';
-  useEffect(() => setFailed(false), [id, pose]);
-  return (
-    <span className={`pixel-avatar ${small ? 'small' : ''} ${status}`} aria-hidden="true">
-      {failed ? (
-        <Bot size={small ? 21 : 30} />
-      ) : (
-        <img
-          src={`${import.meta.env.BASE_URL}avatars/${id}/${pose}`}
-          alt=""
-          onError={() => setFailed(true)}
-        />
-      )}
-    </span>
   );
 }
 function AgentEditor({

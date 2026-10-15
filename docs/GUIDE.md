@@ -316,3 +316,16 @@ Les coûts et les seuils sont présentés en crédits. Les mesures historiques s
 ### Skill absente lors de la préparation du contexte
 
 L’aperçu reste accessible si une skill configurée ne figure pas dans le catalogue. Le bloc « Skill introuvable » indique son identifiant et l’agent ou l’étape qui la référence. Restaure son fichier `SKILL.md`, corrige la référence, ou décoche le bloc pour cette tentative puis actualise l’aperçu. Le lancement reste bloqué tant qu’un bloc indisponible est inclus. Le catalogue est relu lors de l’aperçu et du lancement pour prendre en compte les installations manuelles.
+
+
+## Composer une équipe pour une feature
+
+Créer une feature ouvre sa fiche sans équipe. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
+
+Chaque intervention affiche le rôle, le modèle et le niveau de réflexion effectifs. Le bouton de réglages permet de modifier sa mission, ses permissions et ses choix de modèle. Un agent ajouté seul commence en lecture seule : choisissez explicitement l’écriture ou les tests si nécessaire. Les équipes copiées conservent leurs réglages, skills et dépendances. Un profil de budget peut avoir priorité sur le modèle choisi.
+
+Un même agent peut intervenir plusieurs fois. Les nouveaux identifiants et noms de livrables évitent les collisions. Un parcours simple suit l’ordre des cartes ; les dépendances particulières d’une équipe existante restent obligatoires. Aucun nombre fixe de places n’est imposé.
+
+**Valider l’équipe** enregistre la composition ; **Annuler** conserve la précédente. Une équipe vide laisse la feature en brouillon. La composition reste modifiable jusqu’à la première tentative, même après préparation du contexte ; un lancement refusé avant création de tentative ne la verrouille pas. Une tentative commencée puis annulée conserve le verrouillage. Modifier la composition réinitialise le pilote qui dépend de ses étapes.
+
+L’étoile ajoute ou retire un agent des favoris. Cette préférence est enregistrée dans les réglages utilisateur de VS Code, commune aux projets, sans modifier les profils ni les fichiers du dépôt. Les favoris remontent dans les catalogues et sélecteurs, jamais dans l’ordre d’une équipe déjà composée.
