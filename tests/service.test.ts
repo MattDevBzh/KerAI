@@ -279,10 +279,86 @@ describe('StudioService execution gates', () => {
       description: '',
       workflowId: 'single',
     });
-    f.service.state.skills = f.service.state.skills.filter((skill) => skill.id !== 'ai-implement');
+    feature.steps[0].skills.push('missing-custom-skill');
     await expect(f.service.runStep(feature.id, 'session')).rejects.toThrow(/skill|compétence/i);
     expect(f.adapter.run).not.toHaveBeenCalled();
   });
+  it('previews missing agent and step skills, then runs only after their explicit exclusion', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Incomplete skill configuration',
+      description: '',
+      workflowId: 'single',
+    });
+    feature.steps[0].skills.push('missing-step-skill');
+    const agent = f.service.state.agents.find((a) => a.id === feature.steps[0].agentId)!;
+    const user = await mkdtemp(join(tmpdir(), 'studio-missing-skills-user-'));
+    roots.push(user);
+    Object.defineProperty(f.service.registry, 'userPath', { value: user });
+    await mkdir(join(user, 'agents'), { recursive: true });
+    const { stringify } = await import('yaml');
+    await writeFile(
+      join(user, 'agents', `${agent.id}.agent.md`),
+      `---\n${stringify({ name: agent.name, description: agent.description, skills: ['missing-agent-skill'] })}---\nAgent instructions\n`,
+    );
+    const preview = await f.service.previewRun(feature.id, 'session');
+    expect(preview.sections.filter((s) => s.unavailable).map((s) => s.id)).toEqual([
+      'skill:missing-agent-skill',
+      'skill:missing-step-skill',
+    ]);
+    expect(preview.errors.join(' ')).toContain('missing-agent-skill');
+    expect(preview.errors.join(' ')).toContain(agent.id);
+    expect(preview.errors.join(' ')).toContain('missing-step-skill');
+    await expect(f.service.runStep(feature.id, 'session')).rejects.toThrow('missing-agent-skill');
+    expect(f.adapter.run).not.toHaveBeenCalled();
+    const launch = {
+      initialContext: '',
+      mcpServerIds: [],
+      memoryIds: [],
+      useProjectMemory: false,
+      contextBlocks: {
+        'skill:missing-agent-skill': { enabled: false },
+        'skill:missing-step-skill': { enabled: false },
+      },
+    };
+    const excluded = await f.service.previewRun(feature.id, 'session', '', false, launch);
+    expect(excluded.errors).toEqual([]);
+    expect(excluded.prompt).not.toContain('Skill introuvable');
+    await f.service.runStep(feature.id, 'session', '', false, launch, excluded.fingerprint);
+    expect(f.adapter.run).toHaveBeenCalledOnce();
+  });
+  it('reloads skills installed manually and rejects a removal since preview without charging a run', async () => {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Reload catalog',
+      description: '',
+      workflowId: 'single',
+    });
+    const user = await mkdtemp(join(tmpdir(), 'studio-restored-skill-'));
+    roots.push(user);
+    Object.defineProperty(f.service.registry, 'userPath', { value: user });
+    feature.steps[0].skills.push('restored-skill');
+    expect((await f.service.previewRun(feature.id, 'session')).errors.join(' ')).toContain(
+      'restored-skill',
+    );
+    const directory = join(user, 'skills/restored-skill');
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, 'SKILL.md'),
+      '---\nname: Restored\ndescription: Restored skill\n---\nFresh instructions',
+    );
+    const preview = await f.service.previewRun(feature.id, 'session');
+    expect(preview.errors).toEqual([]);
+    expect(preview.prompt).toContain('Fresh instructions');
+    await rm(directory, { recursive: true });
+    await expect(
+      f.service.runStep(feature.id, 'session', '', false, undefined, preview.fingerprint),
+    ).rejects.toThrow('restored-skill');
+    expect(f.adapter.run).not.toHaveBeenCalled();
+  });
+
   it('requires workspace trust, runtime authentication and the feature branch', async () => {
     const f = await fixture();
     const feature = await f.service.createFeature({
@@ -855,5 +931,117 @@ describe('branch and memory invalidation regressions', () => {
     ).rejects.toThrow(/va invalider/);
     expect(feature.steps[1].status).toBe('approved');
     expect(f.inputs).toHaveLength(2);
+  });
+});
+
+describe('editable feature teams', () => {
+  it('persists an empty draft, accepts a composition, rejects stale saves, and retains the template', async () => {
+    const f = await fixture();
+    const feature = await f.service.createFeature({ title: 'Compose', description: 'No preset' });
+    expect((await f.service.store.load()).features[0].steps).toEqual([]);
+    const template = structuredClone(
+      f.service.state.workflows.find((workflow) => workflow.id === 'feature')!,
+    );
+    const { instantiateTeam } = await import('../src/shared/team');
+    const steps = instantiateTeam(template.steps);
+    expect(await f.service.saveFeatureTeam(feature.id, 0, steps)).toBe(1);
+    expect((await f.service.store.load()).features[0].steps).toHaveLength(steps.length);
+    await expect(f.service.saveFeatureTeam(feature.id, 0, [])).rejects.toThrow('changé');
+    expect(feature.steps).toHaveLength(steps.length);
+    expect(f.service.state.workflows.find((workflow) => workflow.id === 'feature')).toEqual(
+      template,
+    );
+    await f.service.saveFeatureTeam(feature.id, 1, []);
+    expect((await f.service.store.load()).features[0]).toMatchObject({
+      status: 'draft',
+      activeStepId: '',
+      steps: [],
+      teamRevision: 2,
+    });
+    await expect(f.service.startAutopilot(feature.id)).rejects.toThrow('Compose');
+    await expect(
+      f.service.saveAutopilot(feature.id, {
+        checkpoints: [],
+        maxRuns: 10,
+        maxCorrectionCycles: 0,
+        stepInputs: {},
+      }),
+    ).rejects.toThrow('Compose');
+  });
+  it('does not lock on preflight rejection, but retains the lock after runtime failure and reload', async () => {
+    const f = await fixture();
+    const feature = await f.service.createFeature({
+      title: 'Lock',
+      description: '',
+      workflowId: 'single',
+    });
+    const step = feature.steps[0];
+    await expect(f.service.runStep(feature.id, step.id)).rejects.toThrow('Connecte');
+    expect(feature.teamLockedAt).toBeUndefined();
+    const { teamSteps } = await import('../src/shared/team');
+    await f.service.saveFeatureTeam(feature.id, 0, teamSteps(feature));
+    await f.service.checkRuntime();
+    await f.service.previewRun(feature.id, step.id);
+    expect(feature.teamLockedAt).toBeUndefined();
+    f.run(async () => {
+      throw new Error('Runtime stopped');
+    });
+    await f.service.runStep(feature.id, step.id).catch(() => undefined);
+    expect(feature.teamLockedAt).toBeTruthy();
+    await expect(f.service.saveFeatureTeam(feature.id, 1, [])).rejects.toThrow('verrouillée');
+    expect((await f.service.store.load()).features[0].teamLockedAt).toBe(feature.teamLockedAt);
+  });
+  it('rejects invalid graph, unavailable agent, repeated report and mutation while launching', async () => {
+    const f = await fixture();
+    const feature = await f.service.createFeature({
+      title: 'Validate',
+      description: '',
+      workflowId: 'feature',
+    });
+    const { teamSteps } = await import('../src/shared/team');
+    const original = teamSteps(feature);
+    const unknown = structuredClone(original);
+    unknown[0].agentId = 'missing';
+    await expect(f.service.saveFeatureTeam(feature.id, 0, unknown)).rejects.toThrow(
+      'Agent introuvable',
+    );
+    const collision = structuredClone(original);
+    collision[1].artifact = collision[0].artifact.toUpperCase().replace(/MD$/, 'md');
+    await expect(f.service.saveFeatureTeam(feature.id, 0, collision)).rejects.toThrow(
+      'même livrable',
+    );
+    const cycle = structuredClone(original);
+    cycle[0].dependsOn = [cycle.at(-1)!.id];
+    await expect(f.service.saveFeatureTeam(feature.id, 0, cycle)).rejects.toThrow();
+    expect(teamSteps(feature)).toEqual(original);
+    let release!: () => void, enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const operation = f.service.withWorkspaceMutation(
+      'Launching',
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+          enter();
+        }),
+    );
+    await expect(f.service.saveFeatureTeam(feature.id, 0, [])).rejects.toThrow('opération');
+    await entered;
+    release();
+    await operation;
+  });
+  it('rolls back the in-memory composition if durable saving fails', async () => {
+    const f = await fixture();
+    const feature = await f.service.createFeature({
+      title: 'Rollback',
+      description: '',
+      workflowId: 'single',
+    });
+    const before = structuredClone(feature);
+    const save = vi.spyOn(f.service.store, 'save').mockRejectedValueOnce(new Error('Disk full'));
+    await expect(f.service.saveFeatureTeam(feature.id, 0, [])).rejects.toThrow('Disk full');
+    expect(feature).toEqual(before);
+    save.mockRestore();
   });
 });

@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.2.1",
+  "version": "1.6.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -26,7 +26,8 @@
   "main": "./dist/extension.cjs",
   "icon": "resources/icon.png",
   "activationEvents": [
-    "onWebviewPanel:featureStudio"
+    "onWebviewPanel:featureStudio",
+    "onStartupFinished"
   ],
   "extensionKind": [
     "workspace"
@@ -44,7 +45,7 @@
         {
           "id": "featureStudio",
           "title": "Feature Studio",
-          "icon": "resources/cockpit-geek.svg"
+          "icon": "resources/team.svg"
         }
       ]
     },
@@ -78,6 +79,14 @@
       {
         "command": "featureStudio.analyzeSession",
         "title": "Feature Studio : analyser une session"
+      },
+      {
+        "command": "featureStudio.openDedicated",
+        "title": "Feature Studio : ouvrir la fenêtre dédiée"
+      },
+      {
+        "command": "featureStudio.createWindowsShortcut",
+        "title": "Feature Studio : créer le raccourci Windows"
       }
     ],
     "menus": {
@@ -136,6 +145,15 @@
           "minimum": 1,
           "maximum": 120,
           "description": "Durée maximale d’une tentative."
+        },
+        "featureStudio.favoriteAgentIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "application",
+          "description": "Agents favoris, affichés en premier dans les catalogues et sélecteurs de Feature Studio."
         }
       }
     }
@@ -149,11 +167,13 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.2.1.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.6.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
-    "smoke:mcp": "node scripts/run-mcp-smoke.mjs"
+    "smoke:mcp": "node scripts/run-mcp-smoke.mjs",
+    "avatars:pack": "node scripts/pack-avatars.mjs",
+    "logo:pack": "node scripts/pack-logo.mjs"
   },
   "dependencies": {
     "@github/copilot-sdk": "1.0.20",

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { ClientMessage, StudioState, CheckpointComparison } from '../src/shared/types';
 import type { DevOpsConfig, DevOpsState } from '../src/shared/devops';
 import { THEME_IDS, type ThemeId } from '../src/shared/themes';
+import { resolveAvatar } from '../src/shared/avatars';
 import { featureStateKey } from '../src/shared/collaboration';
 
 interface Api {
@@ -29,8 +30,15 @@ async function smokeRun(): Promise<void> {
     (entry: { id: string }) => entry.id === 'featureStudio',
   );
   assert.equal(container?.title, 'Feature Studio');
-  assert.equal(container?.icon, 'resources/cockpit-geek.svg');
+  assert.equal(container?.icon, 'resources/team.svg');
   assert.ok(await readFile(join(extension.extensionPath, container.icon)));
+  assert.ok(await readFile(join(extension.extensionPath, 'resources/icon.png')));
+  const shortcutIcon = await readFile(
+    join(extension.extensionPath, 'resources/feature-studio.ico'),
+  );
+  assert.equal(shortcutIcon.readUInt16LE(0), 0);
+  assert.equal(shortcutIcon.readUInt16LE(2), 1);
+  assert.equal(shortcutIcon.readUInt16LE(4), 7);
   assert.ok(
     contributions.views.featureStudio.some(
       (entry: { id: string; name: string; type: string }) =>
@@ -59,7 +67,11 @@ async function smokeRun(): Promise<void> {
   assert.equal(api.getUiReady(), false, 'Showing the launcher never opens the cockpit webview');
   assert.equal(api.getTheme(), 'auto', 'The isolated user profile starts in automatic mode');
   for (const theme of THEME_IDS) {
-    await api.dispatch({ type: 'setTheme', theme, requestId: `smoke-theme-${theme}` });
+    await api.dispatch({
+      type: 'setTheme',
+      theme,
+      requestId: `smoke-theme-${theme}`,
+    });
     const config = vscode.workspace
       .getConfiguration('featureStudio')
       .inspect<ThemeId>('appearance.theme');
@@ -111,7 +123,14 @@ async function smokeRun(): Promise<void> {
   for (const agent of devopsAgents) {
     for (const asset of ['idle.png', 'working.gif', 'approved.png'])
       assert.ok(
-        await readFile(join(extension.extensionPath, 'dist/webview/avatars', agent.avatar!, asset)),
+        await readFile(
+          join(
+            extension.extensionPath,
+            'dist/webview/avatars',
+            resolveAvatar(agent.avatar, agent.id),
+            asset,
+          ),
+        ),
       );
   }
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-counterexamples'));
@@ -174,8 +193,16 @@ async function smokeRun(): Promise<void> {
   const beforeThemeChange = api.getState();
   const beforeThemeIndex = await readFile(join(source, '.git', 'index'));
   await Promise.all([
-    api.dispatch({ type: 'setTheme', theme: 'aube', requestId: 'theme-fast-first' }),
-    api.dispatch({ type: 'setTheme', theme: 'minuit', requestId: 'theme-fast-last' }),
+    api.dispatch({
+      type: 'setTheme',
+      theme: 'aube',
+      requestId: 'theme-fast-first',
+    }),
+    api.dispatch({
+      type: 'setTheme',
+      theme: 'minuit',
+      requestId: 'theme-fast-last',
+    }),
   ]);
   assert.equal(api.getTheme(), 'minuit', 'Successive changes persist in requested order');
   assert.deepEqual(
@@ -217,7 +244,11 @@ async function smokeRun(): Promise<void> {
     },
   });
   await assert.rejects(
-    api.dispatch({ type: 'runStep', featureId: feature.id, stepId: feature.steps[0].id }),
+    api.dispatch({
+      type: 'runStep',
+      featureId: feature.id,
+      stepId: feature.steps[0].id,
+    }),
     /contexte/,
   );
   await api.dispatch({
@@ -228,7 +259,12 @@ async function smokeRun(): Promise<void> {
   await api.dispatch({
     type: 'saveAutopilot',
     featureId: feature.id,
-    config: { checkpoints: ['plan', 'review'], maxRuns: 5, maxCorrectionCycles: 0, stepInputs: {} },
+    config: {
+      checkpoints: ['plan', 'review'],
+      maxRuns: 5,
+      maxCorrectionCycles: 0,
+      stepInputs: {},
+    },
   });
   await api.dispatch({
     type: 'saveMemory',
@@ -269,7 +305,12 @@ async function smokeRun(): Promise<void> {
     value: 'isolated-smoke-secret',
   });
   assert.ok(!JSON.stringify(api.getState()).includes('isolated-smoke-secret'));
-  await api.dispatch({ type: 'setMcpSecret', serverId: 'smoke-mcp', key: 'SMOKE_KEY', value: '' });
+  await api.dispatch({
+    type: 'setMcpSecret',
+    serverId: 'smoke-mcp',
+    key: 'SMOKE_KEY',
+    value: '',
+  });
   assert.equal(api.getState()!.memory?.length, 1);
   assert.equal(api.getState()!.features.at(-1)!.autopilot?.status, 'idle');
   await api.dispatch({
@@ -400,7 +441,11 @@ async function smokeRun(): Promise<void> {
     counterexampleProfile.id,
   );
   assert.deepEqual(await readFile(join(source, '.git', 'index')), sourceIndex);
-  await api.dispatch({ type: 'createCheckpoint', featureId: isolated.id, label: 'Before edit' });
+  await api.dispatch({
+    type: 'createCheckpoint',
+    featureId: isolated.id,
+    label: 'Before edit',
+  });
   const point = api.getState()!.features.find((f) => f.id === isolated.id)!.checkpoints![0];
   await writeFile(file, 'Feature workspace change\n');
   await writeFile(join(isolated.worktree.path, 'binary.bin'), Buffer.from([0xff, 0xfd]));
@@ -411,7 +456,11 @@ async function smokeRun(): Promise<void> {
     checkpointId: point.id,
   })) as CheckpointComparison;
   assert.ok(comparison.files.some((change) => change.path === 'story.txt'));
-  await api.dispatch({ type: 'openFile', featureId: isolated.id, path: 'story.txt' });
+  await api.dispatch({
+    type: 'openFile',
+    featureId: isolated.id,
+    path: 'story.txt',
+  });
   assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, file);
   const document = vscode.window.activeTextEditor!.document;
   const edit = new vscode.WorkspaceEdit();

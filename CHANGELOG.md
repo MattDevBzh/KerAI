@@ -1,17 +1,73 @@
 # Changelog
 
-## 1.2.1 — 2026-10-14 (préparée localement)
+## 1.6.0 — 2026-10-15
+
+- Anime le scan de l’Observateur sur la session : avatar, balayage, phase active, progression réelle et synthèse. Le bandeau reste accessible lorsque le rapport est fermé et respecte la réduction des mouvements.
+- Intègre l’Observateur au cockpit multi-projets et à sa fenêtre dédiée, en conservant discussions, équipes et paramètres de la v1.5.0.
 
 - Récupère les événements intacts lorsqu’un journal se termine par une ligne coupée. La reprise sauvegarde les octets incomplets avant nettoyage, puis permet de continuer la session ; les rapports et le stockage signalent durablement la couverture partielle. Une corruption sur une ligne terminée reste refusée.
 - Aligne les exports HTML et Markdown sur le cockpit : modèle demandé, ensemble des modèles mesurés et consommation par modèle, avec prise en charge des anciennes mesures.
 
-## 1.2.0 — 2026-10-14 (préparée localement)
+### Observateur de session
 
 - Ajoute l’Observateur d’une seule session feature : aperçu local, modèle et budget explicites, analyse de toutes les phases, améliorations sourcées, commentaires globaux, consommation par phase et bilan des appels de l’Observateur. Les rapports versionnés s’exportent en HTML autonome ou Markdown.
 - Conserve les traces complètes sur disque, y compris contextes effectivement envoyés, instructions, outils et intentions humaines. Limite initiale de 256 Mio configurable ; activité récente et pagination du journal sans supprimer les événements anciens.
 - Passe au stockage v5 avec index léger et états de session séparés, migration des formats 0 à 4 et vérification des empreintes.
 - Ajoute la suppression définitive confirmée : journaux, rapports, sauvegardes et données locales associées, collecte des objets non partagés et reprise après crash. Les fichiers du projet, branches, worktrees et exports externes restent conservés.
 - Conserve les consommations inconnues ou partielles, les coûts des échecs et annulations et les modèles réellement observés ; les plafonds sont contrôlés entre les appels.
+
+## 1.5.0 — 2026-10-15
+
+- Nouveau menu **Discussion** après Dashboard : agent au choix, modèle et raisonnement par conversation, réponses progressives, arrêt, bulles et avatars adaptés aux thèmes.
+- Historique local classé par date, recherche, reprise après rechargement et suppression confirmée. Les mesures des discussions rejoignent Consommation.
+- Marquage **Agent de discussion** à la création et dans l’éditeur, profils prioritaires et bouton **Voir plus**. Le marquage est conservé dans les kits.
+- Menus réordonnés : Dashboard, Discussion, Validation, Consommation, Parcours, Agents, Skills, Automatisations, Kits, Réglages, Livraison, Azure DevOps (PR, Tickets), Mémoire.
+- Choix de projet limité aux écrans qui en utilisent les données ; les réglages communs précèdent une liste de projets et leurs paramètres. Les sauvegardes ciblent explicitement le projet affiché.
+- Suppression confirmée des parcours du catalogue personnel, avec conservation des sessions et des fichiers de définition.
+- Tests de persistance, annulation, erreurs, consommation, profils, catalogue Copilot sans outils et interface dans les cinq thèmes, en contraste élevé et en fenêtre compacte.
+
+
+## 1.4.1 — 2026-10-15
+
+- Adopte le logo « L’équipe » dans la fiche de l’extension, le lanceur, l’onglet et le cockpit. Ajoute une déclinaison monochrome pour la barre d’activité VS Code.
+- Applique automatiquement une icône Windows contenant sept tailles lors de la création ou recréation du raccourci. Sa copie dans le stockage du cockpit reste indépendante du dossier versionné de l’extension.
+- Joint l’ICO à la release avec le VSIX et vérifie les deux empreintes après téléchargement. Conserve le rendu source approuvé et le script de génération des formats d’icône.
+
+## 1.4.0 — 2026-10-15
+
+- Remplace les portraits par une collection de vingt métiers, dans le style pixel art validé : vue de face, silhouettes et accessoires distincts et fond réellement transparent.
+- Agrandit les portraits du sélecteur et adapte les libellés aux écrans étroits. Harmonise les listes, équipes, kits et célébrations.
+- Conserve les anciens identifiants d’avatars des profils et kits via des correspondances de présentation, sans réécrire les fichiers personnels.
+- Conserve une animation GIF à quatre images pour le travail en cours et une pose de réussite distincte ; respecte la réduction des mouvements.
+
+## 1.3.1 — 2026-10-15
+
+- Synchronise le projet actif avec la sélection mémorisée lors de l’ouverture du formulaire de création ; affiche l’enregistrement en cours et aligne le sélecteur sur les pages.
+- Affiche le nom personnalisé du projet dans la barre latérale.
+
+## 1.3.0 — 2026-10-15
+
+- Ouvre le cockpit complet dans une fenêtre dédiée réutilisable, indépendante du dossier ouvert dans les autres fenêtres VS Code. Ajoute la création d’un raccourci Windows sur le Bureau.
+- Ajoute un catalogue personnel d’espaces de travail dans les réglages : ajout de dossiers, renommage, masquage du sélecteur et choix du projet actif. Les dossiers et personnalisations restent en place.
+- Permet de choisir plusieurs projets par session et mémorise la dernière sélection. L’historique réunit les sessions des projets enregistrés ; chaque session conserve ses racines et branches.
+- Route explicitement les lectures, éditions, diff Git, tests, scripts, preuves et sauvegardes vers le projet choisi. Les modifications locales restent protégées et les points de restauration portent sur un dépôt identifié.
+- Conserve le worktree isolé pour les sessions à un seul projet. Les sessions multi-projets travaillent dans les dossiers sélectionnés.
+
+## 1.2.1 — 2026-10-15
+
+- Corrige la largeur du panneau de composition pour afficher davantage d’agents côte à côte sur grand écran.
+
+## 1.2.0 — 2026-10-15
+
+- Crée les nouvelles features sans équipe et ouvre directement leur fiche. Le brouillon reste disponible après fermeture.
+- Ajoute un panneau de composition par glisser-déposer des avatars ou des équipes, sans limite fixe d’interventions : ordre, duplication, retrait, rôle, permissions, modèle et réflexion. Les modèles d’équipes restent inchangés.
+- Autorise la modification de la composition jusqu’à la première tentative ; vérifie le verrouillage et la révision côté extension.
+- Ajoute les favoris personnels, partagés entre projets et affichés en premier dans les catalogues et sélecteurs.
+
+## 1.1.2 — 2026-10-15
+
+- Permet de préparer l’aperçu du contexte lorsqu’une skill configurée est absente : son identifiant et son origine sont affichés dans un bloc décochable. Le lancement reste bloqué si une skill absente est incluse ; une exclusion explicite permet de continuer sans cette compétence.
+- Recharge le catalogue lors de l’aperçu et du lancement afin de prendre en compte les skills installées ou retirées manuellement.
 
 ## 1.1.1 — 2026-10-14
 

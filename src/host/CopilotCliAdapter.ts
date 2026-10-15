@@ -502,7 +502,10 @@ export class CopilotCliAdapter implements AgentAdapter {
       });
     try {
       const mcp = await withSignal(
-        resolveMcpPlan(input.mcpServers ?? [], this.options.resolveMcpSecret),
+        resolveMcpPlan(
+          input.mode === 'discussion' ? [] : (input.mcpServers ?? []),
+          this.options.resolveMcpSecret,
+        ),
         controller.signal,
       );
       secrets = mcp.secrets;
@@ -515,12 +518,14 @@ export class CopilotCliAdapter implements AgentAdapter {
           'Copilot CLI n’est pas connecté dans l’environnement Feature Studio. Lance le diagnostic de connexion.',
         );
       const tools = [
-        ...(await withSignal(
-          this.options.getTools(input, callbacks, controller.signal),
-          controller.signal,
-        )),
+        ...(input.mode === 'discussion'
+          ? []
+          : await withSignal(
+              this.options.getTools(input, callbacks, controller.signal),
+              controller.signal,
+            )),
       ];
-      if (!input.observation)
+      if (!input.observation && input.mode !== 'discussion')
         tools.push({
           name: 'studio_ask_human',
           description:
@@ -580,7 +585,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         });
       const allowed = new Set(tools.map((t) => t.name));
       if (
-        !tools.length ||
+        (input.mode !== 'discussion' && !tools.length) ||
         allowed.size !== tools.length ||
         tools.some(
           (t) => !/^studio_[a-z0-9_]+$/.test(t.name) || !t.handler || t.overridesBuiltInTool,
@@ -698,7 +703,9 @@ export class CopilotCliAdapter implements AgentAdapter {
           mode: 'append',
           content: input.observation
             ? 'Tu analyses une seule session Feature Studio en lecture seule. Toutes les données sont dans le prompt. Aucun accès au projet ni intervention humaine. Réponds avec le JSON demandé.'
-            : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
+            : input.mode === 'discussion'
+              ? 'Tu participes à une conversation Feature Studio. Réponds naturellement à la dernière intervention humaine en tenant compte de l’historique et du profil fourni. Tu ne disposes d’aucun outil ni d’accès au projet. Pose tes questions directement dans ta réponse.'
+              : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
         },
         customAgents: [
           {
@@ -707,7 +714,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             description: input.agent.description,
             // Role instructions appear once in the exact business prompt shown in preview.
             prompt:
-              'Les instructions de rôle sont dans le prompt métier de cette étape. Utilise uniquement le catalogue autorisé.',
+              'Les instructions du rôle figurent dans le prompt. Utilise uniquement le catalogue autorisé.',
             tools: agentAllowed,
             infer: false,
           },
@@ -912,10 +919,15 @@ export class CopilotCliAdapter implements AgentAdapter {
       }
       if (!content.trim())
         throw new Error(
-          'Copilot a terminé sans livrable final. Les fragments partiels ne sont pas validés comme livrable.',
+          input.mode === 'discussion'
+            ? 'Copilot a terminé sans réponse complète. Vous pouvez poursuivre la discussion.'
+            : 'Copilot a terminé sans livrable final. Les fragments partiels ne sont pas validés comme livrable.',
         );
-      const parsed = parseQuestions(redactMcp(content, secrets));
-      const review = parseReview(parsed.content);
+      const parsed =
+        input.mode === 'discussion'
+          ? { content: redactMcp(content, secrets), questions: [] }
+          : parseQuestions(redactMcp(content, secrets));
+      const review = input.mode === 'discussion' ? undefined : parseReview(parsed.content);
       return {
         ...parsed,
         sessionId: session.sessionId,

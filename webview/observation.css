@@ -55,7 +55,7 @@
 }
 .observation-preview {
   padding: 20px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--coral);
   border-radius: 12px;
   margin: 18px 0;
 }
@@ -82,13 +82,13 @@
   color: var(--muted);
 }
 .observation-empty svg {
-  color: var(--accent);
+  color: var(--coral);
 }
 .observation-report-cover {
   padding: 32px;
   border-radius: 18px;
-  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  background: color-mix(in srgb, var(--coral) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--coral) 25%, var(--border));
 }
 .observation-report-cover h2 {
   font-size: 30px;
@@ -130,7 +130,7 @@
   margin: 22px 0;
 }
 .observation-toc a {
-  color: var(--accent);
+  color: var(--coral);
   text-decoration: none;
   border: 1px solid var(--border);
   padding: 8px 12px;
@@ -182,7 +182,7 @@
 .observation-phase-number {
   font-size: 30px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--coral);
 }
 .observation-summary {
   font-size: 16px;
@@ -191,7 +191,7 @@
 }
 .observation-strengths {
   padding: 16px 20px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--coral) 8%, transparent);
   border-radius: 10px;
 }
 .observation-strengths h4 {
@@ -204,7 +204,7 @@
 }
 .observation-finding {
   padding: 18px 20px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--coral);
   background: color-mix(in srgb, var(--muted) 5%, transparent);
   margin: 18px 0;
   border-radius: 0 10px 10px 0;
@@ -240,14 +240,14 @@
   font-size: 13px;
 }
 .observation-self {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-color: color-mix(in srgb, var(--coral) 35%, var(--border));
 }
 .observation-self details li {
   margin: 12px 0;
   overflow-wrap: anywhere;
 }
 .observation-source {
-  border: 1px solid var(--accent);
+  border: 1px solid var(--coral);
   border-radius: 14px;
   padding: 22px;
   margin: 24px 0;
@@ -326,4 +326,154 @@
 .observation-workspace p,
 .observation-storage {
   overflow-wrap: anywhere;
+}
+
+.observation-scan {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 24px 0;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--coral) 38%, var(--border));
+  border-radius: 20px;
+  background: linear-gradient(
+    115deg,
+    color-mix(in srgb, var(--coral) 10%, var(--panel)),
+    var(--panel)
+  );
+}
+.observation-scan-scene {
+  position: relative;
+  flex: 0 0 104px;
+  height: 112px;
+}
+.observation-scan-scene .pixel-avatar {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+}
+.observation-scan-document {
+  position: absolute;
+  inset: 0 24px 20px 0;
+  overflow: hidden;
+  padding: 20px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  transform: rotate(-7deg);
+}
+.observation-scan-document i {
+  display: block;
+  height: 4px;
+  margin-bottom: 9px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--coral) 25%, var(--border));
+}
+.observation-scan-document i:nth-child(even) {
+  width: 70%;
+}
+.observation-scan-document > span {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 28px;
+  border-bottom: 2px solid var(--coral);
+  background: linear-gradient(transparent, color-mix(in srgb, var(--coral) 25%, transparent));
+  animation: observation-sweep 2.8s ease-in-out infinite alternate;
+}
+@keyframes observation-sweep {
+  from {
+    transform: translateY(-24px);
+  }
+  to {
+    transform: translateY(64px);
+  }
+}
+.observation-scan-content {
+  flex: 1;
+  min-width: 0;
+}
+.observation-scan-content h2 {
+  margin: 5px 0 7px;
+  font-size: 20px;
+}
+.observation-scan-content p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.observation-scan-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.observation-scan-progress progress {
+  width: 160px;
+  max-width: 100%;
+  height: 6px;
+  accent-color: var(--coral);
+}
+.observation-scan-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+.observation-scan-phases li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.observation-scan-phases li.active {
+  color: var(--coral);
+  border-color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 8%, var(--panel));
+}
+.observation-scan-phases li.done span {
+  color: var(--coral);
+}
+.observation-scan-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+@media (max-width: 800px) {
+  .observation-scan {
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 18px;
+  }
+  .observation-scan-scene {
+    flex-basis: 72px;
+    height: 88px;
+  }
+  .observation-scan-document {
+    inset: 0 8px 12px 0;
+  }
+  .observation-scan-actions {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .observation-scan-content {
+    flex-basis: 180px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .observation-scan-document > span {
+    animation: none;
+    transform: translateY(30px);
+  }
 }

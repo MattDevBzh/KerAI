@@ -160,6 +160,22 @@ const feature = z
     id: z.string(),
     observations: z.array(observationSchema).optional(),
     traceWarnings: z.array(z.string()).optional(),
+    projects: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(150),
+            name: z.string().min(1).max(100),
+            path: z.string().min(1).max(4000),
+            branch: z.string(),
+            hidden: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .optional(),
+    teamRevision: z.number().int().nonnegative().optional(),
+    teamLockedAt: z.string().optional(),
     descriptionRevision: z.number().int().nonnegative().optional(),
     descriptionVersions: z.array(editorialVersion).optional(),
     corrections: z.array(correctionCycle).optional(),
@@ -184,12 +200,23 @@ const feature = z
     worktree: worktreeSchema.optional(),
     checkpoints: z.array(checkpointSchema).max(10000).optional(),
     workspaceFileHashes: z.record(z.string(), z.string()).optional(),
-    steps: z
-      .array(workflowSchema.shape.steps.element.extend({ status, attempts: z.array(attempt) }))
-      .min(1),
+    steps: z.array(
+      workflowSchema.shape.steps.element.extend({ status, attempts: z.array(attempt) }),
+    ),
   })
   .superRefine((value, context) => {
     const { steps } = value;
+    if (
+      value.projects &&
+      (new Set(value.projects.map((project) => project.id)).size !== value.projects.length ||
+        new Set(value.projects.map((project) => project.path)).size !== value.projects.length)
+    )
+      context.addIssue({ code: 'custom', message: 'Projets de session dupliqués.' });
+    if ((value.projects?.length ?? 0) > 1 && value.worktree)
+      context.addIssue({
+        code: 'custom',
+        message: 'Le worktree isolé est disponible pour une session à un seul projet.',
+      });
     const parsed = workflowSchema.safeParse({
       id: value.workflowId,
       name: value.workflowName,
@@ -197,9 +224,21 @@ const feature = z
       icon: '',
       steps: steps.map(({ status: _status, attempts: _attempts, ...step }) => step),
     });
-    if (!parsed.success)
+    if (steps.length && !parsed.success)
       context.addIssue({ code: 'custom', message: 'Dépendances de session invalides.' });
-    if (!steps.some((step) => step.id === value.activeStepId))
+    if (
+      !steps.length &&
+      (value.activeStepId ||
+        value.status !== 'draft' ||
+        value.teamLockedAt ||
+        value.autopilot ||
+        value.finalValidation)
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Une feature sans équipe doit rester un brouillon sans exécution.',
+      });
+    if (steps.length && !steps.some((step) => step.id === value.activeStepId))
       context.addIssue({ code: 'custom', message: 'Étape active inconnue.' });
     if (steps.some((step) => step.status !== 'pending' && !step.attempts.length))
       context.addIssue({ code: 'custom', message: 'État sans tentative.' });

@@ -221,6 +221,7 @@ export const reviewSchema = z
   });
 export const evidenceSchema = z
   .object({
+    projectId: z.string().min(1).max(150).optional(),
     devops: devOpsEvidenceSchema.optional(),
     quality: qualityEvidenceSchema.optional(),
     id: boundedId,

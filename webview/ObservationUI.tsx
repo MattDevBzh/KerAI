@@ -18,6 +18,7 @@ import {
 } from '../src/shared/observationReport';
 import { usageCredits, toNanoAiu } from '../src/shared/credits';
 import { subscribe } from './bridge';
+import { Avatar } from './Avatar';
 import { featureStateKey } from '../src/shared/collaboration';
 import './observation.css';
 
@@ -41,6 +42,96 @@ const kinds = {
   recommendation: 'Amélioration',
 };
 const impacts = { high: 'Prioritaire', medium: 'Utile', low: 'À envisager' };
+
+export function ObservationScan({
+  feature,
+  state,
+  dispatch,
+  open,
+}: {
+  feature: Feature;
+  state: StudioState;
+  dispatch: (message: ClientMessage) => void;
+  open: () => void;
+}) {
+  const review = feature.observations?.find((entry) => entry.status === 'running');
+  if (!review) return null;
+  const call = review.calls.find((entry) => entry.status === 'running');
+  const phase = call
+    ? review.phases.find((entry) => entry.stepId === call.phaseId)
+    : review.phases.find((entry) => entry.analyzedParts < entry.totalParts);
+  const total = review.coverage.totalParts;
+  const done = Math.min(total, review.coverage.analyzedParts);
+  return (
+    <section className="observation-scan" aria-label="Scan de l’Observateur">
+      <div className="observation-scan-scene" aria-hidden="true">
+        <div className="observation-scan-document">
+          <i />
+          <i />
+          <i />
+          <i />
+          <span />
+        </div>
+        <Avatar
+          agent={
+            state.agents.find((agent) => agent.id === 'fs-observer') ?? {
+              id: 'fs-observer',
+              avatar: 'detective',
+            }
+          }
+          status="running"
+        />
+      </div>
+      <div className="observation-scan-content">
+        <span className="eyebrow">L’OBSERVATEUR AU TRAVAIL</span>
+        <h2>Votre session passe à la loupe</h2>
+        <p role="status">
+          {phase ? `Analyse de la phase : ${phase.name}` : 'Synthèse des observations'}
+        </p>
+        <div className="observation-scan-progress">
+          <progress aria-label="Parties examinées" max={Math.max(1, total)} value={done} />
+          <span>
+            {done} / {total} parties examinées
+          </span>
+        </div>
+        <ol className="observation-scan-phases" aria-label="Avancement des phases">
+          {review.phases.map((entry, index) => (
+            <li
+              key={entry.stepId}
+              className={
+                phase?.stepId === entry.stepId
+                  ? 'active'
+                  : entry.analyzedParts >= entry.totalParts
+                    ? 'done'
+                    : ''
+              }
+              aria-current={phase?.stepId === entry.stepId ? 'step' : undefined}
+            >
+              <span>{entry.analyzedParts >= entry.totalParts ? '✓' : index + 1}</span>
+              {entry.name}
+            </li>
+          ))}
+          <li className={!phase ? 'active' : ''} aria-current={!phase ? 'step' : undefined}>
+            <span>✦</span>Synthèse
+          </li>
+        </ol>
+      </div>
+      <div className="observation-scan-actions">
+        <button className="button" onClick={open}>
+          <Eye size={16} />
+          Voir l’analyse
+        </button>
+        <button
+          className="text-button"
+          onClick={() => dispatch({ type: 'cancelObservation', featureId: feature.id })}
+        >
+          <Square size={13} />
+          Arrêter le scan
+        </button>
+      </div>
+    </section>
+  );
+}
 
 function Analysis({
   analysis,

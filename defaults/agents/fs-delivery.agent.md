@@ -1,4 +1,5 @@
 ---
+avatar: release-manager
 name: Agent de livraison
 description: Préparer en français des commits explicites, un push et une PR Azure DevOps.
 tools: []

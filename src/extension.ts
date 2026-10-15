@@ -1,4 +1,8 @@
 import { observationHtml, observationMarkdown } from './shared/observationReport';
+import { StudioHub } from './host/StudioHub';
+import { DiscussionService, type DiscussionProfile } from './host/DiscussionService';
+import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
+import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
 import { sessionMarkdown } from './shared/sessionExport';
 import { DevOpsController } from './host/DevOpsController';
 import { devOpsMessageSchema } from './core/devopsSchemas';
@@ -25,7 +29,8 @@ let panel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
 let devops: DevOpsController | undefined;
 let lease: WorkspaceLease | undefined;
-let initializing: Promise<StudioService> | undefined;
+let initializing: Promise<void> | undefined;
+let disposeHub: (() => Promise<void>) | undefined;
 let shuttingDown: Promise<void> | undefined;
 let webviewReady = false;
 const diffContents = new Map<string, string>();
@@ -65,6 +70,9 @@ export async function activate(context: vscode.ExtensionContext) {
     send({ type: 'themeState', theme: getTheme(), requestId, error });
   // Theme writes share a queue so fast successive choices keep their requested order.
   let themeWrites = Promise.resolve();
+  let favoriteWrites = Promise.resolve();
+  const favorites = () =>
+    vscode.workspace.getConfiguration('featureStudio').get<string[]>('favoriteAgentIds', []);
   const report = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     output.appendLine(message);
@@ -81,178 +89,251 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('featureStudio.launcher', launcher),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
+      if (event.affectsConfiguration('featureStudio.favoriteAgentIds')) service?.publish();
     }),
     vscode.workspace.registerTextDocumentContentProvider('feature-studio-diff', {
       provideTextDocumentContent: (uri) => diffContents.get(uri.toString()) ?? '',
     }),
   );
-  const ensure = async (): Promise<StudioService> => {
+  const hubDirectory = path.join(context.globalStorageUri.fsPath, 'cockpit');
+  const dedicatedWindow = new DedicatedWindow(hubDirectory);
+  const dedicated = dedicatedWindow.isDedicated(vscode.workspace.workspaceFile?.fsPath);
+  const catalog = new ProjectCatalog(hubDirectory);
+  let initialized = false;
+  const hub = new StudioHub(
+    catalog,
+    async (project?: StoredProject) => {
+      const root = project?.path ?? dedicatedWindow.home;
+      const store = new Store(
+        project ? catalog.storage(project) : path.join(hubDirectory, 'empty'),
+      );
+      const { access } = await import('node:fs/promises');
+      const isNew = await access(store.path)
+        .then(() => false)
+        .catch((error) => {
+          if (error.code === 'ENOENT') return true;
+          throw error;
+        });
+      const next = new StudioService(
+        root,
+        path.join(context.extensionPath, 'defaults'),
+        store,
+        () => vscode.workspace.isTrusted,
+      );
+      await next.initialize();
+      const config = vscode.workspace.getConfiguration('featureStudio');
+      if (isNew) {
+        next.state.settings.defaultModel = config.get('defaultModel', '');
+        next.state.settings.timeoutMinutes = config.get('timeoutMinutes', 20);
+        await next.persist();
+      }
+      next.adapter = new CopilotCliAdapter({
+        cliPath: () => vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot'),
+        storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
+        launcherPath: path.join(context.extensionPath, 'dist', 'copilot-launcher.js'),
+        debugLog: (message) => {
+          if (vscode.workspace.getConfiguration('featureStudio').get('debugCli', false))
+            output.appendLine(message);
+        },
+        getTools: (input, callbacks, signal) => next.getTools(input, callbacks, signal),
+        resolveMcpSecret: (serverId, key) =>
+          context.secrets.get(`studio-mcp:${sha256(root)}:${serverId}:${key}`),
+      });
+      await next
+        .recoverSessionDeletions()
+        .catch((error) =>
+          next.state.notices.push(`Nettoyage à reprendre : ${(error as Error).message}`),
+        );
+      next.on('errorNotice', (message) => report(new Error(message)));
+      const controller = new DevOpsController({
+        root,
+        storageDirectory: path.join(store.rootPath, 'devops'),
+        secrets: context.secrets,
+        publish: (state) => {
+          if (service === next) send({ type: 'devopsState', state });
+        },
+        guard: () => {
+          next.globalGuard?.();
+          next.assertConfigurable();
+        },
+        withMutation: (label, work) =>
+          next.withWorkspaceMutation(label, async () => {
+            const result = await work();
+            await next.refresh();
+            return result;
+          }),
+        confirm: async (title, detail) => {
+          next.assertTrusted();
+          if (
+            vscode.workspace.textDocuments.some(
+              (document) =>
+                document.isDirty &&
+                document.uri.scheme === 'file' &&
+                (document.uri.fsPath === root || document.uri.fsPath.startsWith(root + path.sep)),
+            )
+          )
+            throw new Error(
+              'Enregistre ou ferme les fichiers modifiés dans l’éditeur avant la livraison.',
+            );
+          const result = await vscode.window.showWarningMessage(
+            title,
+            { modal: true, detail },
+            'Confirmer',
+          );
+          next.assertTrusted();
+          return result === 'Confirmer';
+        },
+        requestToken: async () => {
+          const token = await vscode.window.showInputBox({
+            title: 'Connexion Azure DevOps',
+            prompt:
+              'Lecture : Code, Work Items, Build et Test Management selon tes besoins. Écriture Code uniquement pour créer des PR. Stocké dans SecretStorage.',
+            password: true,
+            ignoreFocusOut: true,
+          });
+          next.assertTrusted();
+          return token;
+        },
+        getAgentInstructions: async () => {
+          const registry = await next.registry.load();
+          const profile = registry.agents.find((agent) => agent.id === 'fs-delivery');
+          if (!profile)
+            throw new Error(
+              'Profil fs-delivery absent. Restaure le profil depuis le catalogue Agents.',
+            );
+          return profile.instructions;
+        },
+        features: () => next.state.features,
+        createFeature: async (ticket) => {
+          const feature = await next.createFeature({
+            title: `#${ticket.id} — ${ticket.title}`,
+            description: [
+              devOpsPlainText(ticket.description),
+              'Critères d’acceptation :',
+              devOpsPlainText(ticket.acceptanceCriteria) || 'Non renseignés.',
+              `Source Azure DevOps : ${ticket.url}`,
+            ].join('\n\n'),
+            isolated: false,
+            projects: project ? [project] : undefined,
+          });
+          return feature.id;
+        },
+      });
+      await controller.initialize();
+      next.devopsInspector = (signal) => {
+        next.assertTrusted();
+        return controller.inspector(signal);
+      };
+      next.devopsProjectKey = () => {
+        const config = controller.getState().config;
+        return config
+          ? `${config.organization}/${config.project}/${config.repository}`.toLowerCase()
+          : undefined;
+      };
+      return { service: next, devops: controller, project };
+    },
+    dedicated,
+    process.platform === 'win32',
+  );
+  hub.on('state', (state) =>
+    send({ type: 'state', state: { ...state, favoriteAgentIds: favorites() } }),
+  );
+  const discussions = new DiscussionService({
+    directory: hubDirectory,
+    workspacePath: dedicatedWindow.home,
+    assertTrusted: () => {
+      if (!vscode.workspace.isTrusted)
+        throw new Error('Approuvez cet espace de travail pour discuter avec les agents.');
+    },
+    defaults: () => {
+      const config = vscode.workspace.getConfiguration('featureStudio');
+      return {
+        defaultModel: config.get('defaultModel', ''),
+        timeoutMinutes: config.get('timeoutMinutes', 20),
+      };
+    },
+    adapter: async () => (await hub.entry('empty')).service.adapter,
+    profiles: async () => {
+      const personal = await (await hub.entry('empty')).service.registry.load();
+      const profiles: DiscussionProfile[] = personal.agents.map((profile) => ({
+        key: `global:${profile.id}`,
+        profile,
+        skills: personal.skills,
+      }));
+      for (const project of catalog.state.projects) {
+        if (project.hidden) continue;
+        try {
+          const data = await (await hub.entry(project.id)).service.registry.load();
+          profiles.push(
+            ...data.agents
+              .filter((agent) => agent.source === 'workspace')
+              .map((profile) => ({
+                key: `project:${project.id}:${profile.id}`,
+                projectName: project.name,
+                profile,
+                skills: data.skills,
+              })),
+          );
+        } catch (error) {
+          output.appendLine(`Agents de discussion — ${project.name} : ${(error as Error).message}`);
+        }
+      }
+      return profiles;
+    },
+  });
+  discussions.on('state', (state) => send({ type: 'discussionState', state }));
+  disposeHub = async () => {
+    await discussions.dispose();
+    await hub.dispose();
+    initialized = false;
+  };
+  const bootstrap = async (): Promise<void> => {
     if (shuttingDown) await shuttingDown;
-    if (service) return service;
+    if (initialized) return;
     if (initializing) return initializing;
     initializing = (async () => {
-      const folders = vscode.workspace.workspaceFolders;
-      if (!folders?.length)
-        throw new Error('Ouvre un dossier de projet dans VS Code pour utiliser Feature Studio.');
-      const folder =
-        folders.length === 1
-          ? folders[0]
-          : await vscode.window.showWorkspaceFolderPick({
-              placeHolder: 'Quel dossier souhaites-tu piloter ?',
-            });
-      if (!folder) throw new Error('Aucun dossier sélectionné.');
-      if (folder.uri.scheme !== 'file' || !context.storageUri)
-        throw new Error('Un dossier local ou distant sur disque est nécessaire.');
-      const root = await realpath(folder.uri.fsPath);
-      const newLease = new WorkspaceLease(root);
-      await newLease.acquire();
-      try {
-        const store = new Store(
-          path.join(context.storageUri.fsPath, 'studio', sha256(root).slice(0, 24)),
-        );
-        const { access } = await import('node:fs/promises');
-        const isNew = await access(store.path)
-          .then(() => false)
-          .catch((error) => {
-            if (error.code === 'ENOENT') return true;
-            throw error;
-          });
-        const next = new StudioService(
-          root,
-          path.join(context.extensionPath, 'defaults'),
-          store,
-          () => vscode.workspace.isTrusted,
-        );
-        await next.initialize();
-        const config = vscode.workspace.getConfiguration('featureStudio');
-        if (isNew) {
-          next.state.settings.defaultModel = config.get('defaultModel', '');
-          next.state.settings.timeoutMinutes = config.get('timeoutMinutes', 20);
-          await next.persist();
-        }
-        next.adapter = new CopilotCliAdapter({
-          cliPath: () =>
-            vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot'),
-          storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
-          launcherPath: path.join(context.extensionPath, 'dist', 'copilot-launcher.js'),
-          debugLog: (message) => {
-            if (vscode.workspace.getConfiguration('featureStudio').get('debugCli', false))
-              output.appendLine(message);
-          },
-          getTools: (input, callbacks, signal) => next.getTools(input, callbacks, signal),
-          resolveMcpSecret: (serverId, key) =>
-            context.secrets.get(`studio-mcp:${sha256(root)}:${serverId}:${key}`),
-        });
-        await next
-          .recoverSessionDeletions()
-          .catch((error) =>
-            next.state.notices.push(`Nettoyage à reprendre : ${(error as Error).message}`),
-          );
-        next.on('state', (state) => send({ type: 'state', state }));
-        next.on('errorNotice', (message) => report(new Error(message)));
-        service = next;
-        lease = newLease;
-        const controller = new DevOpsController({
-          root,
-          storageDirectory: path.join(
-            context.storageUri!.fsPath,
-            'studio',
-            sha256(root).slice(0, 24),
-            'devops',
-          ),
-          secrets: context.secrets,
-          publish: (state) => send({ type: 'devopsState', state }),
-          guard: () => next.assertConfigurable(),
-          withMutation: (label, work) =>
-            next.withWorkspaceMutation(label, async () => {
-              const result = await work();
-              await next.refresh();
-              return result;
-            }),
-          confirm: async (title, detail) => {
-            next.assertTrusted();
-            if (
-              vscode.workspace.textDocuments.some(
-                (document) =>
-                  document.isDirty &&
-                  document.uri.scheme === 'file' &&
-                  (document.uri.fsPath === root || document.uri.fsPath.startsWith(root + path.sep)),
-              )
-            )
-              throw new Error(
-                'Enregistre ou ferme les fichiers modifiés dans l’éditeur avant la livraison.',
-              );
-            const result = await vscode.window.showWarningMessage(
-              title,
-              { modal: true, detail },
-              'Confirmer',
-            );
-            next.assertTrusted();
-            return result === 'Confirmer';
-          },
-          requestToken: async () => {
-            const token = await vscode.window.showInputBox({
-              title: 'Connexion Azure DevOps',
-              prompt:
-                'Lecture : Code, Work Items, Build et Test Management selon tes besoins. Écriture Code uniquement pour créer des PR. Stocké dans SecretStorage.',
-              password: true,
-              ignoreFocusOut: true,
-            });
-            next.assertTrusted();
-            return token;
-          },
-          getAgentInstructions: async () => {
-            const registry = await next.registry.load();
-            const profile = registry.agents.find((agent) => agent.id === 'fs-delivery');
-            if (!profile)
-              throw new Error(
-                'Profil fs-delivery absent. Restaure le profil depuis le catalogue Agents.',
-              );
-            return profile.instructions;
-          },
-          features: () => next.state.features,
-          createFeature: async (ticket) => {
-            const workflow =
-              next.state.workflows.find((entry) => entry.id === 'feature') ??
-              next.state.workflows[0];
-            if (!workflow) throw new Error('Aucun parcours disponible pour créer la feature.');
-            const feature = await next.createFeature({
-              title: `#${ticket.id} — ${ticket.title}`,
-              description: [
-                devOpsPlainText(ticket.description),
-                'Critères d’acceptation :',
-                devOpsPlainText(ticket.acceptanceCriteria) || 'Non renseignés.',
-                `Source Azure DevOps : ${ticket.url}`,
-              ].join('\n\n'),
-              workflowId: workflow.id,
-              isolated: false,
-            });
-            return feature.id;
-          },
-        });
-        devops = controller;
-        await controller.initialize();
-        next.devopsInspector = (signal) => {
-          next.assertTrusted();
-          return controller.inspector(signal);
-        };
-        next.devopsProjectKey = () => {
-          const config = controller.getState().config;
-          return config
-            ? `${config.organization}/${config.project}/${config.repository}`.toLowerCase()
-            : undefined;
-        };
-        return next;
-      } catch (error) {
-        await newLease.release();
-        throw error;
+      await dedicatedWindow.prepare();
+      if (!lease) {
+        const nextLease = new WorkspaceLease(dedicatedWindow.home);
+        await nextLease.acquire();
+        lease = nextLease;
       }
+      await catalog.load();
+      if (!dedicated && !catalog.state.projects.length) {
+        for (const folder of vscode.workspace.workspaceFolders ?? []) {
+          if (folder.uri.scheme !== 'file') continue;
+          const root = await realpath(folder.uri.fsPath);
+          await catalog.add(
+            [root],
+            context.storageUri
+              ? {
+                  root,
+                  storagePath: path.join(
+                    context.storageUri.fsPath,
+                    'studio',
+                    sha256(root).slice(0, 24),
+                  ),
+                }
+              : undefined,
+          );
+        }
+      }
+      await hub.initialize();
+      await discussions.initialize();
+      initialized = true;
     })();
     try {
-      return await initializing;
+      await initializing;
     } finally {
       initializing = undefined;
     }
+  };
+  const ensure = async (featureId?: string): Promise<StudioService> => {
+    await bootstrap();
+    const entry = featureId ? await hub.activateFeature(featureId) : await hub.current();
+    service = entry.service;
+    devops = entry.devops;
+    return service;
   };
 
   const notice = (message: string) => send({ type: 'notice', message });
@@ -275,7 +356,147 @@ export async function activate(context: vscode.ExtensionContext) {
       await themeWrites;
       return;
     }
-    const current = await ensure();
+    if (
+      [
+        'addProjects',
+        'renameProject',
+        'hideProject',
+        'selectProjects',
+        'openDedicatedWindow',
+        'createWindowsShortcut',
+      ].includes(message.type) &&
+      'requestId' in message
+    ) {
+      try {
+        if (message.type === 'openDedicatedWindow') await openDedicated();
+        else if (message.type === 'createWindowsShortcut') {
+          const destination = await dedicatedWindow.shortcut(
+            process.execPath,
+            path.join(context.extensionPath, 'resources', 'feature-studio.ico'),
+          );
+          send({
+            type: 'projectResult',
+            requestId: message.requestId,
+            message: `Raccourci créé : ${destination}`,
+          });
+          return;
+        } else {
+          await bootstrap();
+          if (message.type === 'addProjects') {
+            const folders = await vscode.window.showOpenDialog({
+              title: 'Ajouter des espaces de travail',
+              canSelectFolders: true,
+              canSelectFiles: false,
+              canSelectMany: true,
+              openLabel: 'Ajouter les projets',
+            });
+            if (folders?.length) {
+              if (folders.some((folder) => folder.scheme !== 'file'))
+                throw new Error('Choisis des dossiers accessibles sur ce poste.');
+              await catalog.add(folders.map((folder) => folder.fsPath));
+              await hub.initialize();
+            }
+          } else if (message.type === 'renameProject')
+            await catalog.update(message.projectId, { name: message.name });
+          else if (message.type === 'hideProject')
+            await catalog.update(message.projectId, { hidden: message.hidden });
+          else if (message.type === 'selectProjects') await hub.select(message.projectIds);
+          const active = await hub.current();
+          service = active.service;
+          devops = active.devops;
+          hub.publish();
+          send({ type: 'devopsState', state: devops.getState() });
+          await discussions.refreshProfiles();
+        }
+        send({ type: 'projectResult', requestId: message.requestId });
+      } catch (error) {
+        send({
+          type: 'projectResult',
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
+    await bootstrap();
+    if (message.type === 'refreshDiscussions') {
+      await discussions.refreshProfiles();
+      return;
+    }
+    if (
+      message.type === 'sendDiscussion' ||
+      message.type === 'deleteDiscussion' ||
+      message.type === 'cancelDiscussion'
+    ) {
+      if (message.type === 'cancelDiscussion') {
+        discussions.cancel(message.discussionId);
+        return;
+      }
+      try {
+        if (message.type === 'sendDiscussion') await discussions.send(message);
+        else {
+          const choice = await vscode.window.showWarningMessage(
+            'Supprimer cette discussion et son historique ?',
+            { modal: true },
+            'Supprimer',
+          );
+          if (choice !== 'Supprimer') {
+            send({
+              type: 'discussionResult',
+              requestId: message.requestId,
+              discussionId: message.discussionId,
+              cancelled: true,
+            });
+            return;
+          }
+          await discussions.delete(message.discussionId);
+        }
+        send({
+          type: 'discussionResult',
+          requestId: message.requestId,
+          discussionId: message.discussionId,
+        });
+      } catch (error) {
+        send({
+          type: 'discussionResult',
+          requestId: message.requestId,
+          discussionId: message.discussionId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
+    if (message.type === 'activateProject') {
+      const entry = await hub.activateProject(message.projectId);
+      service = entry.service;
+      devops = entry.devops;
+      hub.publish();
+      send({ type: 'devopsState', state: devops.getState() });
+      return;
+    }
+    if (message.type === 'createFeature') {
+      const projects = catalog.resolve(message.projectIds ?? catalog.state.selectedProjectIds);
+      const entry = await hub.select(projects.map((project) => project.id));
+      service = entry.service;
+      devops = entry.devops;
+      const created = await service.createFeature({ ...message, projects });
+      send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+      return;
+    }
+    const requestOwner =
+      message.type === 'answerHumanRequest'
+        ? hub.snapshot()?.humanRequests?.find((request) => request.id === message.requestId)
+            ?.featureId
+        : undefined;
+    const current =
+      message.type === 'saveSettings' && message.projectId
+        ? (await hub.entry(message.projectId)).service
+        : await ensure('featureId' in message ? message.featureId : requestOwner);
+    if (message.type === 'activateFeature') {
+      current.publish();
+      send({ type: 'devopsState', state: devops!.getState() });
+      return;
+    }
     await current.recordHumanAction(message);
     const deliveryMessage = devOpsMessageSchema.safeParse(message);
     if (deliveryMessage.success) {
@@ -321,12 +542,15 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'ready':
+        discussions.publish();
         webviewReady = true;
+        if (dedicated) void drainRequests();
         sendTheme();
         current.publish();
         if (devops) send({ type: 'devopsState', state: devops.getState() });
         return;
       case 'refresh':
+        await discussions.refreshProfiles();
         await current.refresh();
         return;
       case 'checkRuntime':
@@ -335,21 +559,68 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'openSettings':
         await vscode.commands.executeCommand('workbench.action.openSettings', 'featureStudio');
         return;
-      case 'createFeature': {
-        const created = await current.createFeature(message);
-        send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+      case 'setAgentFavorite': {
+        favoriteWrites = favoriteWrites
+          .catch(() => undefined)
+          .then(async () => {
+            try {
+              const ids = new Set(favorites());
+              if (message.favorite) ids.add(message.agentId);
+              else ids.delete(message.agentId);
+              await vscode.workspace
+                .getConfiguration('featureStudio')
+                .update('favoriteAgentIds', [...ids], vscode.ConfigurationTarget.Global);
+              current.publish();
+              send({
+                type: 'agentFavoriteResult',
+                requestId: message.requestId,
+              });
+            } catch (error) {
+              send({
+                type: 'agentFavoriteResult',
+                requestId: message.requestId,
+                error: (error as Error).message,
+              });
+            }
+          });
+        await favoriteWrites;
+        return;
+      }
+      case 'saveFeatureTeam': {
+        try {
+          const revision = await current.saveFeatureTeam(
+            message.featureId,
+            message.expectedRevision,
+            message.steps,
+          );
+          send({
+            type: 'featureTeamResult',
+            featureId: message.featureId,
+            requestId: message.requestId,
+            revision,
+          });
+        } catch (error) {
+          send({
+            type: 'featureTeamResult',
+            featureId: message.featureId,
+            requestId: message.requestId,
+            error: (error as Error).message,
+          });
+        }
         return;
       }
       case 'openFeatureWorkspace': {
         current.assertTrusted();
-        const root = await current.featurePath(message.featureId);
+        const root = message.projectId
+          ? await current.projectPath(message.featureId, message.projectId)
+          : await current.featurePath(message.featureId);
         await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(root), {
           forceNewWindow: true,
         });
         return;
       }
       case 'createCheckpoint':
-        await current.createCheckpoint(message.featureId, message.label);
+        await current.createCheckpoint(message.featureId, message.label, message.projectId);
         notice('Point de restauration enregistré localement.');
         return;
       case 'compareCheckpoint': {
@@ -398,7 +669,10 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       case 'restoreCheckpoint': {
         const ensureSaved = async (): Promise<void> => {
-          const root = await current.featurePath(message.featureId);
+          const { root } = await current.checkpointWorkspace(
+            message.featureId,
+            message.checkpointId,
+          );
           const selected = new Set(message.paths.map((file) => path.resolve(root, file)));
           for (const document of vscode.workspace.textDocuments) {
             if (!document.isDirty || document.uri.scheme !== 'file') continue;
@@ -554,7 +828,11 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'requestCorrection': {
         try {
           const correctionId = await current.requestCorrection(message.featureId, message);
-          send({ type: 'correctionResult', featureId: message.featureId, correctionId });
+          send({
+            type: 'correctionResult',
+            featureId: message.featureId,
+            correctionId,
+          });
           notice('Correction enregistrée. Le pilote reprend avec les validations habituelles.');
         } catch (error) {
           send({
@@ -572,7 +850,11 @@ export async function activate(context: vscode.ExtensionContext) {
             message.featureId,
             message.expectedStateKey,
           );
-          send({ type: 'featureFinalizationResult', featureId: message.featureId, finalizationId });
+          send({
+            type: 'featureFinalizationResult',
+            featureId: message.featureId,
+            finalizationId,
+          });
           notice('Validation définitive enregistrée : session terminée.');
         } catch (error) {
           send({
@@ -698,6 +980,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'deleteFeature': {
+        const sessionDevops = devops;
         current.assertConfigurable(message.featureId);
         const feature = current.engine.getFeature(message.featureId);
         const storage = await current.sessionStorage(feature.id);
@@ -712,7 +995,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (choice !== 'Supprimer définitivement') return;
         try {
           const freedBytes = await current.deleteFeature(feature.id);
-          await devops?.removeDeletedFeature(feature.id);
+          await sessionDevops?.removeDeletedFeature(feature.id);
           send({ type: 'deleteFeatureResult', featureId: feature.id, freedBytes });
         } catch (error) {
           send({
@@ -736,8 +1019,13 @@ export async function activate(context: vscode.ExtensionContext) {
             message.type === 'saveAgent'
               ? await current.registry.saveAgent(message.agent, message.options)
               : await current.registry.saveSkill(message.id, message.content, message.options);
-          await current.refresh();
-          send({ type: 'profileSaveResult', requestId: message.requestId, ...result });
+          await hub.refreshProfiles();
+          await discussions.refreshProfiles().catch(report);
+          send({
+            type: 'profileSaveResult',
+            requestId: message.requestId,
+            ...result,
+          });
           notice(`Profil enregistré dans ${result.path}.`);
         } catch (error) {
           send({
@@ -875,7 +1163,11 @@ export async function activate(context: vscode.ExtensionContext) {
               title: 'Choisir un kit .fskit.json',
             });
             if (!selected?.[0])
-              send({ type: 'kitResult', requestId: message.requestId, cancelled: true });
+              send({
+                type: 'kitResult',
+                requestId: message.requestId,
+                cancelled: true,
+              });
             else
               send({
                 type: 'kitResult',
@@ -894,7 +1186,11 @@ export async function activate(context: vscode.ExtensionContext) {
               title: 'Exporter le kit',
             });
             if (!destination)
-              send({ type: 'kitResult', requestId: message.requestId, cancelled: true });
+              send({
+                type: 'kitResult',
+                requestId: message.requestId,
+                cancelled: true,
+              });
             else {
               current.assertConfigurable();
               await writeFile(destination.fsPath, JSON.stringify(bundle, null, 2) + '\n');
@@ -945,22 +1241,20 @@ export async function activate(context: vscode.ExtensionContext) {
           (item) => item.path,
         );
         const workflowPaths = current.state.workflows.map((item) => item.source).filter(Boolean);
+        const location = await current.fileLocation(message.featureId, message.path);
         const requested =
           !message.featureId &&
           path.isAbsolute(message.path) &&
           [...registryPaths, ...workflowPaths].includes(message.path)
             ? message.path
-            : await new PolicyEngine(
-                await current.featurePath(message.featureId),
-                'read-only',
-                [],
-              ).resolve(message.path);
+            : await new PolicyEngine(location.root, 'read-only', []).resolve(location.path);
         await vscode.window.showTextDocument(vscode.Uri.file(requested));
         return;
       }
       case 'openDiff': {
-        const root = await current.featurePath(message.featureId);
-        const absolute = await new PolicyEngine(root, 'read-only', []).resolve(message.path);
+        const location = await current.fileLocation(message.featureId, message.path);
+        const root = location.root;
+        const absolute = await new PolicyEngine(root, 'read-only', []).resolve(location.path);
         const relative = path.relative(root, absolute).split(path.sep).join('/');
         const old = await readHeadFile(root, absolute);
         const left = vscode.Uri.from({
@@ -1013,6 +1307,38 @@ export async function activate(context: vscode.ExtensionContext) {
           'Parcours enregistré au niveau utilisateur. Les sessions existantes conservent leur définition.',
         );
         return;
+      case 'deleteWorkflow': {
+        try {
+          current.assertConfigurable();
+          const workflow = current.state.workflows.find((entry) => entry.id === message.workflowId);
+          if (!workflow) throw new Error('Parcours inconnu.');
+          const choice = await vscode.window.showWarningMessage(
+            `Supprimer « ${workflow.name} » du catalogue ?`,
+            {
+              modal: true,
+              detail:
+                'Ce parcours sera retiré de votre catalogue pour tous vos projets. Les sessions existantes et les fichiers de définition seront conservés.',
+            },
+            'Supprimer',
+          );
+          if (choice !== 'Supprimer') {
+            send({ type: 'workflowDeleteResult', requestId: message.requestId, cancelled: true });
+            return;
+          }
+          current.assertConfigurable();
+          await current.registry.deleteWorkflow(message.workflowId);
+          await hub.refreshProfiles();
+          send({ type: 'workflowDeleteResult', requestId: message.requestId });
+          notice('Parcours supprimé du catalogue. Les sessions existantes sont conservées.');
+        } catch (error) {
+          send({
+            type: 'workflowDeleteResult',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        }
+        return;
+      }
       case 'saveAutopilot':
         await current.saveAutopilot(message.featureId, message.config);
         return;
@@ -1082,6 +1408,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const mount = async (target: vscode.WebviewPanel): Promise<void> => {
     webviewReady = false;
     panel = target;
+    target.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
     target.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')],
@@ -1109,20 +1436,14 @@ export async function activate(context: vscode.ExtensionContext) {
     target.onDidDispose(
       () => {
         if (panel === target) panel = undefined;
-        const previousDevOps = devops;
-        devops = undefined;
-        const previous = service,
-          oldLease = lease;
-        service = undefined;
-        lease = undefined;
+        webviewReady = false;
         shuttingDown = (async () => {
-          try {
-            await previousDevOps?.dispose();
-            await previous?.dispose();
-          } finally {
-            await oldLease?.release();
-          }
+          await discussions.pause();
+          await hub.dispose();
         })().finally(() => {
+          initialized = false;
+          service = undefined;
+          devops = undefined;
           shuttingDown = undefined;
         });
       },
@@ -1139,9 +1460,111 @@ export async function activate(context: vscode.ExtensionContext) {
     panel.reveal();
     return true;
   };
-  const open = async () => {
+  const openDedicated = async (action?: WindowRequest['action']) => {
+    await dedicatedWindow.prepare();
+    if (!dedicated) {
+      await catalog.load();
+      let projectId: string | undefined;
+      for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        if (folder.uri.scheme !== 'file') continue;
+        const root = await realpath(folder.uri.fsPath);
+        const added = await catalog.add(
+          [root],
+          context.storageUri
+            ? {
+                root,
+                storagePath: path.join(
+                  context.storageUri.fsPath,
+                  'studio',
+                  sha256(root).slice(0, 24),
+                ),
+              }
+            : undefined,
+        );
+        projectId ??= added[0]?.id;
+      }
+      if (action) await dedicatedWindow.enqueue(action, projectId);
+      await vscode.commands.executeCommand(
+        'vscode.openFolder',
+        vscode.Uri.file(dedicatedWindow.workspace),
+        { forceNewWindow: true },
+      );
+    } else {
+      await open();
+      if (action) {
+        await dedicatedWindow.enqueue(action);
+        await drainRequests();
+      }
+    }
+  };
+  const showObservationPicker = async () => {
+    await ensure();
+    const chosen = await vscode.window.showQuickPick(
+      (hub.snapshot()?.features ?? []).map((feature) => ({
+        label: feature.title,
+        description: `${feature.workflowName}${feature.archived ? ' · archive' : ''}`,
+        id: feature.id,
+      })),
+      { placeHolder: 'Quelle session souhaitez-vous analyser ?' },
+    );
+    if (chosen) {
+      await ensure(chosen.id);
+      send({ type: 'navigate', view: 'observation', featureId: chosen.id });
+    }
+  };
+  let draining = false;
+  const drainRequests = async () => {
+    if (!dedicated || !webviewReady || draining) return;
+    draining = true;
     try {
-      if (revealPanel()) return;
+      for (const request of await dedicatedWindow.takeRequests()) {
+        try {
+          await hub.initialize();
+          if (request.projectId && request.action !== 'newFeature') {
+            const entry = await hub.activateProject(request.projectId);
+            service = entry.service;
+            devops = entry.devops;
+          }
+          if (request.action === 'newFeature') send({ type: 'navigate', view: 'create' });
+          else if (request.action === 'analyzeSession') await showObservationPicker();
+          else await dispatch({ type: request.action });
+        } catch (error) {
+          report(error);
+        }
+      }
+    } finally {
+      draining = false;
+    }
+  };
+  const focusCockpit = async () => {
+    const available = new Set(await vscode.commands.getCommands(true));
+    for (const command of [
+      'workbench.action.closeSidebar',
+      'workbench.action.closePanel',
+      'workbench.action.closeAuxiliaryBar',
+    ])
+      if (available.has(command)) await vscode.commands.executeCommand(command);
+    panel?.reveal(vscode.ViewColumn.One);
+  };
+  const open = async () => {
+    if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test) {
+      await openDedicated();
+      return;
+    }
+    try {
+      if (revealPanel()) {
+        await hub.initialize();
+        const active = await hub.current();
+        service = active.service;
+        devops = active.devops;
+        hub.publish();
+        send({ type: 'devopsState', state: devops.getState() });
+        if (dedicated) {
+          await focusCockpit();
+          await drainRequests();
+        }
+        return;
+      }
       await ensure();
       // Another click may have mounted the panel while project initialization was pending.
       if (revealPanel()) return;
@@ -1151,6 +1574,7 @@ export async function activate(context: vscode.ExtensionContext) {
           retainContextWhenHidden: true,
         }),
       );
+      if (dedicated) await focusCockpit();
     } catch (error) {
       report(error);
       void vscode.window.showErrorMessage((error as Error).message);
@@ -1159,36 +1583,61 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('featureStudio.open', open),
     vscode.commands.registerCommand('featureStudio.analyzeSession', async () => {
+      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
+        return openDedicated('analyzeSession');
       await open();
-      const current = await ensure();
-      const chosen = await vscode.window.showQuickPick(
-        current.state.features.map((feature) => ({
-          label: feature.title,
-          description: `${feature.workflowName}${feature.archived ? ' · archive' : ''}`,
-          id: feature.id,
-        })),
-        { placeHolder: 'Quelle session souhaitez-vous analyser ?' },
-      );
-      if (chosen) send({ type: 'navigate', view: 'observation', featureId: chosen.id });
+      await showObservationPicker();
+    }),
+    vscode.commands.registerCommand('featureStudio.openDedicated', () => openDedicated()),
+    vscode.commands.registerCommand('featureStudio.createWindowsShortcut', async () => {
+      try {
+        const destination = await dedicatedWindow.shortcut(
+          process.execPath,
+          path.join(context.extensionPath, 'resources', 'feature-studio.ico'),
+        );
+        void vscode.window.showInformationMessage(`Raccourci Feature Studio créé : ${destination}`);
+      } catch (error) {
+        report(error);
+      }
     }),
     vscode.commands.registerCommand('featureStudio.newFeature', async () => {
+      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
+        return openDedicated('newFeature');
       await open();
       send({ type: 'navigate', view: 'create' });
     }),
     vscode.commands.registerCommand('featureStudio.installKit', async () => {
+      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
+        return openDedicated('installKit');
       await open();
       await dispatch({ type: 'installKit' }).catch(report);
     }),
     vscode.commands.registerCommand('featureStudio.migrateUserKit', async () => {
+      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
+        return openDedicated('migrateUserKit');
       await open();
       await dispatch({ type: 'migrateUserKit' }).catch(report);
     }),
     vscode.window.registerWebviewPanelSerializer('featureStudio', {
       deserializeWebviewPanel: async (restored) => {
+        if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test) {
+          restored.dispose();
+          await openDedicated();
+          return;
+        }
+        if (panel && panel !== restored) {
+          restored.dispose();
+          panel.reveal();
+          return;
+        }
         await mount(restored);
+        if (dedicated) await focusCockpit();
       },
     }),
-    vscode.workspace.onDidGrantWorkspaceTrust(() => service?.publish()),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => hub.publish()),
+    vscode.window.onDidChangeWindowState((state) => {
+      if (dedicated && state.focused) void open();
+    }),
   );
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 5);
   status.text = '$(circuit-board) Feature Studio';
@@ -1196,9 +1645,21 @@ export async function activate(context: vscode.ExtensionContext) {
   status.command = 'featureStudio.open';
   status.show();
   context.subscriptions.push(status);
+  if (dedicated) {
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(vscode.Uri.file(dedicatedWindow.requests), '*.json'),
+    );
+    context.subscriptions.push(
+      watcher,
+      watcher.onDidCreate(() => {
+        void drainRequests().catch(report);
+      }),
+    );
+    void open();
+  }
   // The isolated extension-host smoke test uses the same validated message handler as the UI.
   return {
-    getState: () => service?.snapshot(),
+    getState: () => hub.snapshot(),
     getUiReady: () => webviewReady,
     getLauncherVisible: () => launcher.visible,
     getLauncherReady: () => launcher.isReady,
@@ -1208,9 +1669,9 @@ export async function activate(context: vscode.ExtensionContext) {
   };
 }
 export async function deactivate(): Promise<void> {
-  await devops?.dispose();
+  await disposeHub?.();
   devops = undefined;
-  await service?.dispose();
+  service = undefined;
   await lease?.release();
   if (shuttingDown) await shuttingDown;
 }

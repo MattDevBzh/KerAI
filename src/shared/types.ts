@@ -152,6 +152,9 @@ export interface FeatureStep extends WorkflowStep {
 export interface Feature {
   traceWarnings?: string[];
   observations?: import('./observation').SessionObservation[];
+  projects?: import('./projects').FeatureProject[];
+  teamRevision?: number;
+  teamLockedAt?: string;
   descriptionRevision?: number;
   descriptionVersions?: import('./collaboration').EditorialVersion[];
   corrections?: import('./collaboration').CorrectionCycle[];
@@ -194,6 +197,7 @@ export interface AgentProfile {
   nickname?: string;
   avatar?: string;
   emptyContextByDefault?: boolean;
+  discussionAgent?: boolean;
   roastLevel?: import('./roast').RoastLevel;
 }
 export interface SkillInfo {
@@ -250,6 +254,8 @@ export interface RuntimeStatus {
   error?: string;
 }
 export interface StudioState {
+  projectCatalog?: import('./projects').ProjectCatalogState;
+  favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
   schemaVersion: 1 | 2 | 3 | 4 | 5;
   workspace: {
@@ -274,9 +280,18 @@ export interface StudioState {
 }
 export type ClientMessage =
   | import('./observation').ObservationClientMessage
+  | import('./projects').ProjectClientMessage
   | import('./collaboration').CollaborationClientMessage
   | import('./kits').KitClientMessage
   | DevOpsClientMessage
+  | {
+      type: 'saveFeatureTeam';
+      featureId: string;
+      requestId: string;
+      expectedRevision: number;
+      steps: WorkflowStep[];
+    }
+  | { type: 'setAgentFavorite'; agentId: string; favorite: boolean; requestId: string }
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
   | { type: 'installQualityKit'; featureId?: string }
   | { type: 'openQualityAttachment'; featureId: string; evidenceId: string; attachmentId: string }
@@ -285,9 +300,10 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      projectIds?: string[];
       title: string;
       description: string;
-      workflowId: string;
+      workflowId?: string;
       agentId?: string;
       model?: string;
       isolated?: boolean;
@@ -341,8 +357,8 @@ export type ClientMessage =
   | { type: 'archiveFeature'; featureId: string; archived: boolean }
   | { type: 'openDiff'; path: string; featureId?: string }
   | { type: 'openFile'; path: string; featureId?: string }
-  | { type: 'openFeatureWorkspace'; featureId: string }
-  | { type: 'createCheckpoint'; featureId: string; label: string }
+  | { type: 'openFeatureWorkspace'; featureId: string; projectId?: string }
+  | { type: 'createCheckpoint'; featureId: string; label: string; projectId?: string }
   | {
       type: 'compareCheckpoint';
       requestId: string;
@@ -380,6 +396,7 @@ export type ClientMessage =
         nickname?: string;
         avatar?: string;
         emptyContextByDefault?: boolean;
+        discussionAgent?: boolean;
         roastLevel?: import('./roast').RoastLevel;
       };
     }
@@ -390,9 +407,11 @@ export type ClientMessage =
       requestId: string;
       options: import('./profiles').ProfileSaveOptions;
     }
-  | { type: 'saveSettings'; settings: StudioSettings }
+  | { type: 'saveSettings'; settings: StudioSettings; projectId?: string }
   | { type: 'createWorkflow' }
   | { type: 'saveWorkflow'; workflow: Workflow }
+  | { type: 'deleteWorkflow'; workflowId: string; requestId: string }
+  | import('./discussions').DiscussionClientMessage
   | { type: 'saveAutopilot'; featureId: string; config: AutopilotConfig }
   | { type: 'startAutopilot' | 'pauseAutopilot'; featureId: string }
   | { type: 'saveBudget'; featureId: string; budget: FeatureBudget }
@@ -407,6 +426,17 @@ export type ClientMessage =
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
   | import('./observation').ObservationHostMessage
+  | import('./discussions').DiscussionHostMessage
+  | { type: 'workflowDeleteResult'; requestId: string; error?: string; cancelled?: boolean }
+  | { type: 'projectResult'; requestId: string; error?: string; message?: string }
+  | {
+      type: 'featureTeamResult';
+      requestId: string;
+      featureId: string;
+      revision?: number;
+      error?: string;
+    }
+  | { type: 'agentFavoriteResult'; requestId: string; error?: string }
   | { type: 'correctionResult'; featureId: string; correctionId?: string; error?: string }
   | {
       type: 'artifactSaveResult';
@@ -443,6 +473,9 @@ export type HostMessage =
   | { type: 'navigate'; view: 'create' | 'dashboard' | 'observation'; featureId?: string };
 export interface RunInput {
   observation?: boolean;
+  /** Host-owned conversation mode: no repository, MCP, human-question or native tools. */
+  mode?: 'discussion';
+  projects?: import('./projects').RunProject[];
   devopsProjectKey?: string;
   feature: Feature;
   step: FeatureStep;

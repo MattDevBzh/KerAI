@@ -93,7 +93,13 @@ async function hosted(page: Page, state = fresh()) {
               ?.steps.find((s) => s.id === m.stepId);
             const agent = data.agents.find((a) => a.id === step?.agentId);
             const supplied = Reflect.get(window, 'previewSections') as
-              | { id: string; label: string; source: string; content: string }[]
+              | {
+                  id: string;
+                  label: string;
+                  source: string;
+                  content: string;
+                  unavailable?: boolean;
+                }[]
               | undefined;
             const sections = (
               supplied ?? [{ id: 'human', label: 'Votre contexte', source: 'human', content }]
@@ -127,7 +133,9 @@ async function hosted(page: Page, state = fresh()) {
                       characters: prompt.length,
                       estimatedTokens: Math.ceil(prompt.length / 4),
                       maxCharacters: 60000,
-                      errors: [],
+                      errors: sections
+                        .filter((s) => s.unavailable && s.enabled)
+                        .map((s) => s.content),
                       existingChanges: Reflect.get(window, 'existingChanges'),
                     },
                   },
@@ -165,7 +173,7 @@ test('le navigateur affiche un accès VS Code, la démo nécessite un choix expl
   await expect(page.getByText('Démonstration — aucune exécution Copilot')).toBeVisible();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Une feature de démo');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   await expect(page.getByRole('status')).toContainText('aucune commande, écriture ou exécution');
 });
 test('recherche, filtres et création transmettent le contrat exact sans lancer Copilot', async ({
@@ -177,20 +185,14 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
   await page.getByLabel('Filtrer les sessions').selectOption('completed');
   await expect(page.getByText('Aucune session ne correspond')).toBeVisible();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  await page.getByRole('radio', { name: 'Session libre' }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Analyser un composant');
   await page.getByLabel('Le contexte et le résultat souhaité').fill('Comprendre les contraintes.');
-  await page.getByLabel('Agent de la première étape').selectOption('reviewer');
-  await page.getByLabel('Modèle', { exact: true }).selectOption('real-model');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   expect((await messages(page)).at(-1)).toEqual({
     type: 'createFeature',
     title: 'Analyser un composant',
     description: 'Comprendre les contraintes.',
-    workflowId: 'single',
     isolated: false,
-    agentId: 'reviewer',
-    model: 'real-model',
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
 });
@@ -283,7 +285,7 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
     page.getByText('Enregistré au niveau utilisateur, disponible dans tous les projets.'),
   ).toBeVisible();
   await page.getByLabel('Son petit nom').fill('Capitaine Bug');
-  await page.getByRole('button', { name: 'La capitaine' }).click();
+  await page.getByRole('button', { name: 'Responsable des livraisons' }).click();
   await page.getByLabel('Nom du profil').fill('Quality companion');
   await page.getByLabel('Instructions', { exact: false }).fill('Vérifie les critères de réussite.');
   await page.getByRole('checkbox', { name: 'Contexte vide par défaut' }).check();
@@ -294,12 +296,48 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
       emptyContextByDefault: true,
       id: 'quality-companion',
       nickname: 'Capitaine Bug',
-      avatar: 'captain',
+      avatar: 'release-manager',
     },
   });
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+test('catalogue métiers : vingt portraits chargés et libellés mobiles', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await page.getByRole('button', { name: 'Nouvel agent' }).click();
+  const picker = page.locator('.avatar-picker');
+  await expect(picker.getByRole('button')).toHaveCount(20);
+  await expect
+    .poll(() =>
+      picker
+        .locator('img')
+        .evaluateAll((images) =>
+          images.every(
+            (image) =>
+              image instanceof HTMLImageElement && image.complete && image.naturalWidth === 256,
+          ),
+        ),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Architecte logiciel', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Architecte logiciel', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() => picker.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
+    .toBe(true);
+  await expect
+    .poll(() =>
+      picker
+        .locator('span')
+        .evaluateAll((labels) =>
+          labels.every((label) => label.scrollWidth <= label.clientWidth + 1),
+        ),
+    )
+    .toBe(true);
 });
 test('nouveau hook désactivé par défaut, activation uniquement après action humaine', async ({
   page,
@@ -484,10 +522,8 @@ test('les cartes de parcours gardent leur identité malgré un registry trié pa
   const feature = page.locator('.template-list button').filter({ hasText: 'Feature complète' });
   await expect(feature).toContainText('De l’idée aux tests');
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Feature complète' })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
+  await expect(page.getByRole('dialog', { name: 'Une nouvelle feature' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Feature complète' })).toHaveCount(0);
 });
 test('augmenter le budget de tentatives exige une sauvegarde explicite et permet la configuration épuisée', async ({
   page,
@@ -1112,7 +1148,7 @@ async function openCheckpoints(page: Page) {
     page.getByRole('dialog', { name: 'Le code garde des points de repère.' }),
   ).toBeVisible();
 }
-test('création Git : worktree par défaut feature/session libre, relecture dans le dossier courant', async ({
+test('création Git sans équipe : worktree par défaut et choix explicite du dossier courant', async ({
   page,
 }) => {
   const state = checkpointState();
@@ -1122,23 +1158,20 @@ test('création Git : worktree par défaut feature/session libre, relecture dans
   await expect(
     page.getByText('Les changements non commités restent dans le dossier source', { exact: false }),
   ).toBeVisible();
-  await page.getByRole('radio', { name: 'Session libre' }).click();
   await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeChecked();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Une session isolée');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'createFeature',
-    workflowId: 'single',
     isolated: true,
   });
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  await page.getByRole('radio', { name: 'Relecture de code' }).click();
+  await page.getByRole('radio', { name: 'Dossier courant' }).click();
   await expect(page.getByRole('radio', { name: 'Dossier courant' })).toBeChecked();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Relire les changements existants');
-  await page.getByRole('button', { name: 'Créer la session' }).click();
+  await page.getByRole('button', { name: 'Créer la feature' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'createFeature',
-    workflowId: 'code-review',
     isolated: false,
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
@@ -1537,6 +1570,35 @@ test('contexte : décocher la spec, modifier le plan et actualiser avant lanceme
         'artifact:plan': { content: 'PLAN_ADAPTÉ' },
       },
     },
+  });
+});
+
+test('contexte : skill absente visible et décochable avant de lancer', async ({ page }) => {
+  await hosted(page);
+  await page.evaluate(() =>
+    Reflect.set(window, 'previewSections', [
+      {
+        id: 'skill:missing-custom',
+        label: 'Skill introuvable · missing-custom',
+        source: 'skill',
+        content: 'La skill missing-custom est absente.',
+        unavailable: true,
+      },
+    ]),
+  );
+  await page.locator('.session-card').first().click();
+  await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByText('Aperçu host')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await page.getByRole('checkbox', { name: /Skill introuvable · missing-custom/ }).uncheck();
+  await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
+  await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Lancer cette étape' }).click();
+  expect((await messages(page)).at(-1)).toMatchObject({
+    type: 'runStep',
+    launch: { contextBlocks: { 'skill:missing-custom': { enabled: false } } },
   });
 });
 

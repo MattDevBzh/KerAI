@@ -3,7 +3,7 @@ name: "Recette visuelle"
 description: "Parcours Playwright réels, captures et traces reliées aux critères."
 tools: ["read", "search", "edit", "execute"]
 model: ""
-avatar: "scientist"
+avatar: ux-designer
 skills: ["ai-tdd", "ai-verifier"]
 user-invocable: true
 disable-model-invocation: true

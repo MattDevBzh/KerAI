@@ -1,4 +1,15 @@
-import { ObservationPanel, TraceStorageSetting, TraceJournal } from './ObservationUI';
+import {
+  ObservationPanel,
+  ObservationScan,
+  TraceStorageSetting,
+  TraceJournal,
+} from './ObservationUI';
+import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
+import { TeamComposer } from './TeamComposer';
+import { AgentFavorite } from './AgentFavorite';
+import { orderedAgents, teamLocked } from '../src/shared/team';
+import { Avatar, avatarOptions } from './Avatar';
+import { resolveAvatar } from '../src/shared/avatars';
 import { usageCredits } from '../src/shared/credits';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
@@ -83,6 +94,7 @@ import type {
 import { initialView, isDemo, isHosted, persistView, send, subscribe } from './bridge';
 import { demoState } from './demo';
 import { QualityCommandFields, QualitySetup } from './QualityUI';
+import brandIcon from '../resources/icon.png';
 import { LaunchDialog, HumanRequests, McpSettings, McpPicker } from './ExecutionUI';
 import './evolution.css';
 import {
@@ -103,6 +115,9 @@ import {
   attentionCount,
 } from './StudioUI';
 
+import { DiscussionUI } from './DiscussionUI';
+import type { DiscussionState } from '../src/shared/discussions';
+
 type View =
   | 'kits'
   | 'usage'
@@ -111,6 +126,7 @@ type View =
   | 'devops-tickets'
   | 'delivery'
   | 'dashboard'
+  | 'discussion'
   | 'validation'
   | 'workflows'
   | 'memory'
@@ -149,21 +165,34 @@ const date = (value: string) =>
     minute: '2-digit',
   }).format(new Date(value));
 const nav = [
-  { id: 'devops', label: 'Azure DevOps', icon: FolderGit2 },
-  { id: 'devops-prs', label: 'PR', icon: GitPullRequest },
-  { id: 'devops-tickets', label: 'Tickets', icon: Tickets },
-  { id: 'delivery', label: 'Livraison', icon: GitBranch },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'usage', label: 'Consommation', icon: BarChart3 },
+  { id: 'discussion', label: 'Discussion', icon: MessageSquare },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
+  { id: 'usage', label: 'Consommation', icon: BarChart3 },
   { id: 'workflows', label: 'Parcours', icon: Workflow },
-  { id: 'kits', label: 'Kits', icon: Package },
-  { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'skills', label: 'Skills', icon: BookOpen },
   { id: 'automations', label: 'Automatisations', icon: Zap },
+  { id: 'kits', label: 'Kits', icon: Package },
   { id: 'settings', label: 'Réglages', icon: Settings2 },
+  { id: 'delivery', label: 'Livraison', icon: GitBranch },
+  { id: 'devops', label: 'Azure DevOps', icon: FolderGit2 },
+  { id: 'devops-prs', label: 'PR', icon: GitPullRequest },
+  { id: 'devops-tickets', label: 'Tickets', icon: Tickets },
+  { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
 ] as const;
+// These screens consume project-specific profiles, memory or Azure DevOps configuration.
+const projectScopedViews = new Set<View>([
+  'agents',
+  'skills',
+  'kits',
+  'workflows',
+  'memory',
+  'delivery',
+  'devops',
+  'devops-prs',
+  'devops-tickets',
+]);
 const workflowRank = (w: WorkflowType) => ({ feature: 0, 'code-review': 1, single: 2 })[w.id] ?? 3;
 const orderedWorkflows = (items: WorkflowType[]) =>
   [...items].sort((a, b) => workflowRank(a) - workflowRank(b));
@@ -296,6 +325,11 @@ export default function App() {
   const [view, setView] = useState<View>(
     (nav.some((n) => n.id === initialView.view) ? initialView.view : 'dashboard') as View,
   );
+  const [discussionState, setDiscussionState] = useState<DiscussionState>({
+    discussions: [],
+    agents: [],
+  });
+  const [discussionId, setDiscussionId] = useState(initialView.discussionId ?? '');
   const [featureId, setFeatureId] = useState(initialView.featureId ?? '');
   const [stepId, setStepId] = useState(initialView.stepId ?? '');
   const [observerRequested, setObserverRequested] = useState(false);
@@ -306,8 +340,10 @@ export default function App() {
     draftDirtyRef.current = value;
     setDraftDirty(value);
   };
-  const [workflowId, setWorkflowId] = useState('');
-  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const [notice, setNotice] = useState<{
+    text: string;
+    error?: boolean;
+  } | null>(null);
   const [confirm, setConfirm] = useState<{
     title: string;
     description: string;
@@ -318,6 +354,7 @@ export default function App() {
   useEffect(() => {
     const cleanup = subscribe((message) => {
       if (message.type === 'state') setState(message.state);
+      else if (message.type === 'discussionState') setDiscussionState(message.state);
       else if (message.type === 'devopsState') setDevops(message.state);
       else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
@@ -332,7 +369,7 @@ export default function App() {
       } else if (message.type === 'navigate') {
         if (draftDirtyRef.current) {
           setNotice({
-            text: 'Enregistrez le brouillon du compte rendu avant de changer de page.',
+            text: 'Terminez ou annulez les modifications en cours avant de changer de page.',
             error: true,
           });
           return;
@@ -347,6 +384,11 @@ export default function App() {
     return cleanup;
   }, []);
   useEffect(() => persistView({ view, featureId, stepId }), [view, featureId, stepId]);
+  const loaded = Boolean(state);
+  useEffect(() => {
+    if (loaded && featureId && view === 'dashboard' && !create && !isDemo)
+      send({ type: 'activateFeature', featureId });
+  }, [loaded, featureId, view, create]);
   const dispatch = (message: ClientMessage) => {
     if (
       state?.workspaceOperation &&
@@ -357,6 +399,7 @@ export default function App() {
         'createCheckpoint',
         'startAutopilot',
         'configureStep',
+        'saveFeatureTeam',
         'saveArtifact',
         'requestCorrection',
         'finalizeFeature',
@@ -377,6 +420,23 @@ export default function App() {
       return;
     }
     if (isDemo) {
+      if (
+        message.type === 'sendDiscussion' ||
+        message.type === 'deleteDiscussion' ||
+        message.type === 'deleteWorkflow'
+      ) {
+        window.postMessage(
+          {
+            type: message.type === 'deleteWorkflow' ? 'workflowDeleteResult' : 'discussionResult',
+            requestId: message.requestId,
+            ...('discussionId' in message ? { discussionId: message.discussionId } : {}),
+            error:
+              'Mode démonstration : ouvrez Feature Studio dans VS Code pour enregistrer cette action.',
+          },
+          '*',
+        );
+        return;
+      }
       if (
         ['saveArtifact', 'requestCorrection', 'finalizeFeature'].includes(message.type) &&
         'featureId' in message
@@ -426,16 +486,11 @@ export default function App() {
   };
   const selected = state?.features.find((f) => f.id === featureId);
   const activeFeatures = state?.features.filter((f) => !f.archived) ?? [];
-  const openCreate = (id?: string) => {
-    setWorkflowId(
-      id ?? state?.workflows.find((w) => w.id === 'feature')?.id ?? state?.workflows[0]?.id ?? '',
-    );
-    setCreate(true);
-  };
+  const openCreate = (_id?: string) => setCreate(true);
   const chooseView = (id: View) => {
     if (draftDirty) {
       setNotice({
-        text: 'Enregistrez le brouillon du compte rendu avant de changer de page.',
+        text: 'Terminez ou annulez les modifications en cours avant de changer de page.',
         error: true,
       });
       return;
@@ -447,7 +502,7 @@ export default function App() {
     return (
       <div className="launch-screen">
         <div className="brand-mark">
-          <Command size={28} />
+          <img src={brandIcon} alt="" />
         </div>
         <span className="eyebrow">VOTRE ATELIER DE DÉVELOPPEMENT</span>
         <h1>Feature Studio</h1>
@@ -480,7 +535,7 @@ export default function App() {
           aria-label="Feature Studio, accueil"
         >
           <span className="brand-mark">
-            <Command size={23} />
+            <img src={brandIcon} alt="" />
           </span>
           <span>
             Feature<span>Studio</span>
@@ -626,8 +681,9 @@ export default function App() {
             <div className="human-global-banner">
               <MessageSquare size={15} />
               <span>
-                {state.humanRequests!.length} demande{state.humanRequests!.length > 1 ? 's' : ''}{' '}
-                humaine{state.humanRequests!.length > 1 ? 's' : ''} en attente
+                {state.humanRequests!.length} demande
+                {state.humanRequests!.length > 1 ? 's' : ''} humaine
+                {state.humanRequests!.length > 1 ? 's' : ''} en attente
               </span>
               <button
                 className="text-button"
@@ -641,6 +697,13 @@ export default function App() {
                 Ouvrir la demande <ArrowRight size={13} />
               </button>
             </div>
+          )}
+          {projectScopedViews.has(view) && !create && (
+            <ProjectSwitcher
+              state={state}
+              dispatch={dispatch}
+              disabled={draftDirty || hasActiveRun(state)}
+            />
           )}
           {view === 'dashboard' &&
             (selected ? (
@@ -674,6 +737,7 @@ export default function App() {
             ))}
           <div hidden={view !== 'devops' && view !== 'delivery'}>
             <DevOpsUI
+              key={state.projectCatalog?.activeProjectId ?? 'default'}
               state={devops}
               visible={view === 'devops' || view === 'delivery'}
               features={state.features}
@@ -706,6 +770,11 @@ export default function App() {
           {view === 'usage' && (
             <UsageDashboard
               features={state.features}
+              discussions={discussionState.discussions}
+              onOpenDiscussion={(id) => {
+                setDiscussionId(id);
+                chooseView('discussion');
+              }}
               onOpenFeature={(id) => {
                 setView('dashboard');
                 setFeatureId(id);
@@ -724,6 +793,26 @@ export default function App() {
               }}
             />
           )}
+          <div hidden={view !== 'discussion'}>
+            <DiscussionUI
+              state={
+                isDemo
+                  ? {
+                      ...discussionState,
+                      agents: state.agents.map((profile) => ({
+                        key: `global:${profile.id}`,
+                        profile,
+                      })),
+                    }
+                  : discussionState
+              }
+              studio={state}
+              dispatch={dispatch}
+              visible={view === 'discussion'}
+              selectedId={discussionId}
+              onSelect={setDiscussionId}
+            />
+          </div>
           {view === 'memory' && <ProjectMemoryView state={state} dispatch={dispatch} />}
           {view === 'workflows' && <WorkflowLibrary state={state} dispatch={dispatch} />}
           {view === 'kits' && <KitsUI state={state} dispatch={dispatch} />}
@@ -737,32 +826,41 @@ export default function App() {
               onCreate={() => setAgentEditor('new')}
             >
               <div className="library-grid">
-                {state.agents.map((a, i) => (
-                  <button className="library-card" key={a.id} onClick={() => setAgentEditor(a)}>
-                    <Avatar agent={a} />
-                    <span className="library-meta">
-                      {a.source === 'workspace'
-                        ? 'PROJET'
-                        : a.source === 'user'
-                          ? 'UTILISATEUR'
-                          : 'KIT FOURNI'}
-                      <ArrowUpRight size={16} />
-                    </span>
-                    <h3>{a.nickname || a.name}</h3>
-                    {normalizeRoastLevel(a.roastLevel) !== 'off' && (
-                      <span className="profile-role">Roast · {roastLabel(a.roastLevel)}</span>
-                    )}
-                    <p>
-                      {a.nickname && <span className="profile-role">{a.name}</span>}
-                      {a.description}
-                    </p>
-                    <div className="card-footer">
-                      <span>
-                        {a.skills.length} skill{a.skills.length > 1 ? 's' : ''}
+                {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
+                  <div className="agent-library-item" key={a.id}>
+                    <AgentFavorite agent={a} state={state} dispatch={dispatch} />
+                    <button className="library-card" key={a.id} onClick={() => setAgentEditor(a)}>
+                      <Avatar agent={a} />
+                      <span className="library-meta">
+                        {a.source === 'workspace'
+                          ? 'PROJET'
+                          : a.source === 'user'
+                            ? 'UTILISATEUR'
+                            : 'KIT FOURNI'}
+                        <ArrowUpRight size={16} />
                       </span>
-                      <span>{a.model || 'Modèle automatique'}</span>
-                    </div>
-                  </button>
+                      <h3>{a.nickname || a.name}</h3>
+                      {a.discussionAgent && (
+                        <span className="profile-role">
+                          <MessageSquare size={12} /> Agent de discussion
+                        </span>
+                      )}
+                      {normalizeRoastLevel(a.roastLevel) !== 'off' && (
+                        <span className="profile-role">Roast · {roastLabel(a.roastLevel)}</span>
+                      )}
+                      <p>
+                        {a.nickname && <span className="profile-role">{a.name}</span>}
+                        {a.description}
+                      </p>
+                      <div className="card-footer">
+                        <span>
+                          {a.skills.length} skill
+                          {a.skills.length > 1 ? 's' : ''}
+                        </span>
+                        <span>{a.model || 'Modèle automatique'}</span>
+                      </div>
+                    </button>
+                  </div>
                 ))}
               </div>
               {!state.agents.length && (
@@ -773,8 +871,8 @@ export default function App() {
               <div className="quiet-note">
                 <ShieldCheck size={17} />
                 <span>
-                  Les permissions de chaque étape encadrent les outils de l’agent. Les profils sont
-                  enregistrés dans le projet.
+                  Les permissions de chaque étape encadrent les outils de l’agent. Les favoris sont
+                  personnels et communs à vos projets.
                 </span>
               </div>
             </Library>
@@ -827,7 +925,8 @@ export default function App() {
           )}
           {(view === 'settings' || view === 'automations') && (
             <SettingsView
-              key={`${view}-${JSON.stringify(state.settings)}`}
+              key={`${view}-${state.projectCatalog?.activeProjectId ?? 'default'}`}
+              onDirtyChange={updateDraftDirty}
               settings={state.settings}
               state={state}
               automation={view === 'automations'}
@@ -837,7 +936,7 @@ export default function App() {
         </main>
         <footer className="app-footer">
           <span>
-            <Command size={12} /> FEATURE STUDIO
+            <img className="brand-inline" src={brandIcon} alt="" /> FEATURE STUDIO
           </span>
           <span>Un espace pour avancer avec intention.</span>
           <span>
@@ -849,8 +948,8 @@ export default function App() {
       {create && (
         <CreateModal
           state={state}
-          initialWorkflow={workflowId}
           onClose={() => setCreate(false)}
+          dispatch={dispatch}
           onCreate={(message) => {
             dispatch(message);
             setCreate(false);
@@ -1044,6 +1143,11 @@ function Dashboard({
                         <Workflow size={15} />
                       </span>
                       {f.workflowName}
+                      {!!f.projects?.length && (
+                        <span className="session-projects">
+                          {f.projects.map((project) => project.name).join(' + ')}
+                        </span>
+                      )}
                     </span>
                     <Badge {...status} />
                   </div>
@@ -1244,80 +1348,43 @@ function ModelSelect({
 }
 function CreateModal({
   state,
-  initialWorkflow,
   onClose,
   onCreate,
+  dispatch,
 }: {
   state: StudioState;
-  initialWorkflow: string;
+  dispatch: (message: ClientMessage) => void;
   onClose: () => void;
-  onCreate: (m: Extract<ClientMessage, { type: 'createFeature' }>) => void;
+  onCreate: (message: Extract<ClientMessage, { type: 'createFeature' }>) => void;
 }) {
-  const [workflow, setWorkflow] = useState(initialWorkflow || state.workflows[0]?.id || '');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [agent, setAgent] = useState('');
-  const [model, setModel] = useState('');
-  const [isolated, setIsolated] = useState(
-    Boolean(
-      state.workspace.canIsolate &&
-        ['feature', 'single'].includes(initialWorkflow || state.workflows[0]?.id || ''),
-    ),
-  );
-  const creationBusy = Boolean(state.workspaceOperation) || hasActiveRun(state);
+  const [title, setTitle] = useState(''),
+    [description, setDescription] = useState('');
+  const [isolated, setIsolated] = useState(Boolean(state.workspace.canIsolate));
+  const [projectPending, setProjectPending] = useState(false);
+  const ids = state.projectCatalog?.selectedProjectIds;
+  const multiple = (ids?.length ?? 0) > 1;
+  const missing = Boolean(state.projectCatalog && !ids?.length);
+  const busy = Boolean(state.workspaceOperation) || hasActiveRun(state) || projectPending;
   return (
     <Modal
-      title="Une idée, un nouveau parcours."
-      subtitle="Choisissez un point de départ. Vous gardez la main à chaque étape."
+      title="Une nouvelle feature"
+      subtitle="Posez le besoin. Vous composerez votre équipe sur la fiche."
       onClose={onClose}
-      wide
     >
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (title.trim() && workflow)
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (title.trim() && !busy && !missing)
             onCreate({
               type: 'createFeature',
               title: title.trim(),
               description: description.trim(),
-              workflowId: workflow,
-              isolated: isolated && Boolean(state.workspace.canIsolate),
-              ...(agent ? { agentId: agent } : {}),
-              ...(model ? { model } : {}),
+              isolated: !multiple && isolated && Boolean(state.workspace.canIsolate),
+              ...(ids ? { projectIds: ids } : {}),
             });
         }}
       >
-        <div className="workflow-picker" role="radiogroup" aria-label="Type de session">
-          {orderedWorkflows(state.workflows).map((w) => (
-            <button
-              type="button"
-              role="radio"
-              aria-checked={workflow === w.id}
-              key={w.id}
-              className={workflow === w.id ? 'chosen' : ''}
-              onClick={() => {
-                setWorkflow(w.id);
-                setIsolated(
-                  Boolean(state.workspace.canIsolate && ['feature', 'single'].includes(w.id)),
-                );
-              }}
-            >
-              <span className={`template-icon color-${workflowRank(w) % 3}`}>
-                <WorkflowIcon workflow={w} />
-              </span>
-              <strong>{w.name}</strong>
-              <small>{w.description}</small>
-              <span className="picker-check">
-                {workflow === w.id ? <Check size={13} /> : <Circle size={13} />}
-              </span>
-            </button>
-          ))}
-        </div>
-        <WorkspaceChoice
-          state={state}
-          isolated={isolated && Boolean(state.workspace.canIsolate)}
-          onChange={setIsolated}
-        />
+        <ProjectPicker state={state} dispatch={dispatch} onPendingChange={setProjectPending} />
         <label className="field">
           <span>
             Qu’allons-nous faire ? <em>*</em>
@@ -1327,48 +1394,41 @@ function CreateModal({
             maxLength={200}
             placeholder="Ex. Une recherche plus agréable au clavier"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(event) => setTitle(event.target.value)}
           />
         </label>
         <label className="field">
           <span>Le contexte et le résultat souhaité</span>
           <textarea
             rows={4}
-            placeholder="Le besoin, les contraintes, ce qui vous ferait dire « c’est réussi »…"
+            placeholder="Le besoin, les contraintes, le résultat attendu…"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        <div className="field-row">
-          <label className="field">
-            <span>Agent de la première étape</span>
-            <div className="select-wrap">
-              <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-                <option value="">Profil prévu par le parcours</option>
-                {state.agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </label>
-          <ModelSelect state={state} value={model} onChange={setModel} />
-        </div>
+        {multiple ? (
+          <p className="muted">
+            Cette session travaille dans les dossiers sélectionnés. L’isolation en worktree est
+            disponible avec un seul projet.
+          </p>
+        ) : (
+          <WorkspaceChoice
+            state={state}
+            isolated={isolated && Boolean(state.workspace.canIsolate)}
+            onChange={setIsolated}
+          />
+        )}
         <div className="modal-actions">
-          <span className="muted">
-            <ShieldCheck size={14} /> Créer ne lance aucune exécution.
-          </span>
+          <span className="muted">Créer ne lance aucune exécution.</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Annuler
           </button>
           <button
             type="submit"
             className="button primary"
-            disabled={!title.trim() || !workflow || creationBusy}
+            disabled={!title.trim() || busy || missing}
           >
-            Créer la session <ArrowRight size={16} />
+            Créer la feature <ArrowRight size={16} />
           </button>
         </div>
       </form>
@@ -1404,6 +1464,14 @@ function FeatureDetail({
     feature.steps.find((s) => s.id === stepId) ??
     feature.steps.find((s) => s.id === feature.activeStepId) ??
     feature.steps[0];
+  const [composing, setComposing] = useState(false),
+    [teamPending, setTeamPending] = useState(false);
+  const closeTeam = () => {
+    if (!teamPending) {
+      setComposing(false);
+      onDirtyChange(false);
+    }
+  };
   const done = feature.steps.filter((s) => s.status === 'approved').length;
   const [correction, setCorrection] = useState<{
     sourceStepId: string;
@@ -1457,10 +1525,37 @@ function FeatureDetail({
     findingIds?: string[],
     commentIds?: string[],
     rootStepIds?: string[],
-  ) => setCorrection({ sourceStepId, feedback, findingIds, commentIds, rootStepIds });
+  ) =>
+    setCorrection({
+      sourceStepId,
+      feedback,
+      findingIds,
+      commentIds,
+      rootStepIds,
+    });
 
   return (
     <div className="page feature-page">
+      {composing && (
+        <Modal
+          title="Composer mon équipe"
+          subtitle="Ajoutez des équipes et des agents, puis ajustez chaque intervention."
+          wide
+          onClose={closeTeam}
+        >
+          <TeamComposer
+            feature={feature}
+            state={state}
+            dispatch={dispatch}
+            onPendingChange={setTeamPending}
+            onClose={() => {
+              setComposing(false);
+              setTeamPending(false);
+              onDirtyChange(false);
+            }}
+          />
+        </Modal>
+      )}
       {correction && (
         <Modal
           title="Demander une correction"
@@ -1545,6 +1640,12 @@ function FeatureDetail({
           </button>
         </div>
       </div>
+      <ObservationScan
+        feature={feature}
+        state={state}
+        dispatch={dispatch}
+        open={() => setObserverOpen(true)}
+      />
       {observerOpen && (
         <ObservationPanel
           feature={feature}
@@ -1553,12 +1654,44 @@ function FeatureDetail({
           close={() => setObserverOpen(false)}
         />
       )}
+      {!!feature.projects?.length && (
+        <div className="feature-projects" aria-label="Projets de cette session">
+          {feature.projects.map((project) => (
+            <span key={project.id} title={project.path}>
+              {project.name} ·{' '}
+              {project.id === feature.projects![0].id ? feature.branch : project.branch}
+            </span>
+          ))}
+        </div>
+      )}
       <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
       <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <div className="feature-control-band">
-        <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
+        {!!feature.steps.length && (
+          <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
+        )}
         <BudgetMeter feature={feature} state={state} dispatch={dispatch} />
       </div>
+      {!!feature.steps.length && (
+        <div className="feature-team-heading">
+          <h2>Votre équipe</h2>
+          {teamLocked(feature) ? (
+            <span className="muted">Composition verrouillée depuis la première exécution</span>
+          ) : (
+            <button
+              className="button secondary small"
+              disabled={busy || detailDirty || Boolean(feature.archived)}
+              onClick={() => {
+                setComposing(true);
+                onDirtyChange(true);
+              }}
+            >
+              <Settings2 size={14} />
+              Modifier l’équipe
+            </button>
+          )}
+        </div>
+      )}
       <div className="journey-heading">
         <span className="eyebrow">LE PARCOURS</span>
         <span>
@@ -1644,7 +1777,24 @@ function FeatureDetail({
           confirm={confirm}
         />
       ) : (
-        <Empty title="Ce parcours n’a aucune étape">Choisissez un autre modèle de session.</Empty>
+        <section className="feature-empty-team">
+          <Bot size={32} />
+          <h2>Aucune équipe constituée</h2>
+          <p className="muted">
+            Votre feature est enregistrée. Ajoutez les agents qui vont intervenir.
+          </p>
+          <button
+            className="button primary"
+            disabled={busy || Boolean(feature.archived)}
+            onClick={() => {
+              setComposing(true);
+              onDirtyChange(true);
+            }}
+          >
+            <Plus size={16} />
+            Composer mon équipe
+          </button>
+        </section>
       )}
     </div>
   );
@@ -1694,9 +1844,10 @@ function StepPanel({
     content !== savedContent || (descriptionChanged && description !== feature.description);
   const [savePending, setSavePending] = useState(false),
     [saveError, setSaveError] = useState('');
-  const [saveAck, setSaveAck] = useState<{ revision: number; action: 'approve' | 'review' } | null>(
-    null,
-  );
+  const [saveAck, setSaveAck] = useState<{
+    revision: number;
+    action: 'approve' | 'review';
+  } | null>(null);
   const saveAction = useRef<'approve' | 'review' | null>(null);
   const savedBriefChanged = useRef(false);
   useEffect(() => {
@@ -2211,13 +2362,25 @@ function StepPanel({
                     <span title={path}>{path}</span>
                     <button
                       className="text-button"
-                      onClick={() => dispatch({ type: 'openFile', path, featureId: feature.id })}
+                      onClick={() =>
+                        dispatch({
+                          type: 'openFile',
+                          path,
+                          featureId: feature.id,
+                        })
+                      }
                     >
                       Ouvrir
                     </button>
                     <button
                       className="button secondary small"
-                      onClick={() => dispatch({ type: 'openDiff', path, featureId: feature.id })}
+                      onClick={() =>
+                        dispatch({
+                          type: 'openDiff',
+                          path,
+                          featureId: feature.id,
+                        })
+                      }
                     >
                       Voir le diff <ArrowUpRight size={13} />
                     </button>
@@ -2595,7 +2758,7 @@ function StepConfig({
         <label className="field">
           <span>Profil de l’agent</span>
           <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-            {state.agents.map((a) => (
+            {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
@@ -2686,75 +2849,6 @@ function StepConfig({
     </form>
   );
 }
-const avatarOptions = [
-  { id: 'wizard', name: 'Le mage' },
-  { id: 'hacker', name: 'Le hacker' },
-  { id: 'detective', name: 'Le détective' },
-  { id: 'lumberjack', name: 'Le bûcheron' },
-  { id: 'scientist', name: 'La scientifique' },
-  { id: 'robot', name: 'Le robot' },
-  { id: 'ninja', name: 'Le ninja' },
-  { id: 'captain', name: 'La capitaine' },
-  { id: 'devops-scout', name: 'Éclaireur' },
-  { id: 'devops-architect', name: 'Architecte DevOps' },
-  { id: 'devops-builder', name: 'Bâtisseur' },
-  { id: 'devops-sentinel', name: 'Vigie' },
-  { id: 'devops-lab', name: 'Laborantin' },
-  { id: 'devops-controller', name: 'Contrôleur' },
-];
-const avatarDefaults: Record<string, string> = {
-  'fs-specs': 'detective',
-  'fs-plan': 'wizard',
-  'fs-dev': 'hacker',
-  'fs-tests': 'scientist',
-  'fs-review': 'ninja',
-  analyst: 'detective',
-  architect: 'wizard',
-  builder: 'hacker',
-  tester: 'scientist',
-  reviewer: 'ninja',
-};
-function Avatar({
-  agent,
-  status = 'pending',
-  small = false,
-}: {
-  agent?: AgentProfile;
-  status?: StepStatus;
-  small?: boolean;
-}) {
-  const [reduced, setReduced] = useState(
-    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  );
-  const [failed, setFailed] = useState(false);
-  const id = agent?.avatar || avatarDefaults[agent?.id ?? ''] || 'robot';
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduced(query.matches);
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
-  const pose =
-    status === 'approved'
-      ? 'approved.png'
-      : status === 'running' && !reduced
-        ? 'working.gif'
-        : 'idle.png';
-  useEffect(() => setFailed(false), [id, pose]);
-  return (
-    <span className={`pixel-avatar ${small ? 'small' : ''} ${status}`} aria-hidden="true">
-      {failed ? (
-        <Bot size={small ? 21 : 30} />
-      ) : (
-        <img
-          src={`${import.meta.env.BASE_URL}avatars/${id}/${pose}`}
-          alt=""
-          onError={() => setFailed(true)}
-        />
-      )}
-    </span>
-  );
-}
 function AgentEditor({
   agent,
   state,
@@ -2777,9 +2871,7 @@ function AgentEditor({
   const [id, setId] = useState(source?.id ?? '');
   const [name, setName] = useState(source?.name ?? '');
   const [nickname, setNickname] = useState(source?.nickname ?? '');
-  const [avatar, setAvatar] = useState(
-    source?.avatar ?? avatarDefaults[source?.id ?? ''] ?? 'robot',
-  );
+  const [avatar, setAvatar] = useState(resolveAvatar(source?.avatar, source?.id));
   const [description, setDescription] = useState(source?.description ?? '');
   const [instructions, setInstructions] = useState(source?.instructions ?? '');
   const [tools, setTools] = useState(source?.tools.join(', ') ?? '');
@@ -2788,6 +2880,7 @@ function AgentEditor({
   const [emptyContextByDefault, setEmptyContextByDefault] = useState(
     source?.emptyContextByDefault ?? false,
   );
+  const [discussionAgent, setDiscussionAgent] = useState(source?.discussionAgent ?? false);
   const [roastLevel, setRoastLevel] = useState<RoastLevel>(normalizeRoastLevel(source?.roastLevel));
   const [scope, setScope] = useState<ProfileScope>(
     source?.source === 'workspace' ? 'workspace' : 'user',
@@ -2809,6 +2902,7 @@ function AgentEditor({
             model: string;
             skills: string[];
             emptyContextByDefault: boolean;
+            discussionAgent: boolean;
             roastLevel: RoastLevel;
           };
           origin: typeof source;
@@ -2838,6 +2932,7 @@ function AgentEditor({
         model,
         skills,
         emptyContextByDefault,
+        discussionAgent,
         roastLevel,
       },
       origin,
@@ -2849,23 +2944,25 @@ function AgentEditor({
       (existing && {
         ...existing,
         nickname: existing.nickname ?? '',
-        avatar: existing.avatar ?? 'robot',
+        avatar: resolveAvatar(existing.avatar, existing.id),
         tools: existing.tools.join(', '),
         model: existing.model ?? '',
         emptyContextByDefault: existing.emptyContextByDefault ?? false,
+        discussionAgent: existing.discussionAgent ?? false,
         roastLevel: normalizeRoastLevel(existing.roastLevel),
       });
     if (chosen) {
       setId(chosen.id);
       setName(chosen.name);
       setNickname(chosen.nickname);
-      setAvatar(chosen.avatar);
+      setAvatar(resolveAvatar(chosen.avatar, chosen.id));
       setDescription(chosen.description);
       setInstructions(chosen.instructions);
       setTools(chosen.tools);
       setModel(chosen.model);
       setSkills(chosen.skills);
       setEmptyContextByDefault(chosen.emptyContextByDefault);
+      setDiscussionAgent(chosen.discussionAgent);
       setRoastLevel(chosen.roastLevel);
     }
     setOrigin(cached ? cached.origin : (existing ?? origin));
@@ -2908,6 +3005,7 @@ function AgentEditor({
                 nickname: nickname.trim() || undefined,
                 avatar,
                 emptyContextByDefault,
+                discussionAgent,
                 roastLevel,
               },
               profileOptions(scope, target, origin ?? undefined),
@@ -3025,6 +3123,17 @@ function AgentEditor({
             </label>
             <ModelSelect state={state} value={model} onChange={setModel} />
           </div>
+          <label className="discussion-agent-toggle">
+            <input
+              type="checkbox"
+              checked={discussionAgent}
+              onChange={(event) => setDiscussionAgent(event.target.checked)}
+            />
+            <span>
+              <strong>Agent de discussion</strong>
+              <small>Le proposer en priorité dans le menu Discussion.</small>
+            </span>
+          </label>
           <label className="field">
             <span>Mode roast</span>
             <select
@@ -3266,7 +3375,9 @@ function SettingsView({
   state,
   automation,
   dispatch,
+  onDirtyChange,
 }: {
+  onDirtyChange: (dirty: boolean) => void;
   settings: StudioSettings;
   state: StudioState;
   automation: boolean;
@@ -3274,6 +3385,23 @@ function SettingsView({
 }) {
   const [draft, setDraft] = useState(structuredClone(settings));
   const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+  const dirtyCallback = useRef(onDirtyChange);
+  dirtyCallback.current = onDirtyChange;
+  const baseline = useRef(settings);
+  useEffect(() => {
+    if (JSON.stringify(baseline.current) !== JSON.stringify(settings)) {
+      if (
+        JSON.stringify(draft) === JSON.stringify(baseline.current) ||
+        JSON.stringify(draft) === JSON.stringify(settings)
+      )
+        setDraft(structuredClone(settings));
+      baseline.current = settings;
+    }
+  }, [settings]);
+  useEffect(() => {
+    dirtyCallback.current(dirty);
+  }, [dirty]);
+  useEffect(() => () => dirtyCallback.current(false), []);
   const set = (patch: Partial<StudioSettings>) => setDraft({ ...draft, ...patch });
   const lines = (text: string) =>
     text
@@ -3284,6 +3412,7 @@ function SettingsView({
     e.preventDefault();
     dispatch({
       type: 'saveSettings',
+      projectId: state.projectCatalog?.activeProjectId,
       settings: {
         ...draft,
         mcpServers: draft.mcpServers?.map((s) => ({
@@ -3297,7 +3426,10 @@ function SettingsView({
           ...c,
           args: c.args.filter((a) => a.length > 0),
         })),
-        hooks: draft.hooks.map((h) => ({ ...h, args: h.args.filter((a) => a.length > 0) })),
+        hooks: draft.hooks.map((h) => ({
+          ...h,
+          args: h.args.filter((a) => a.length > 0),
+        })),
       },
     });
   };
@@ -3320,7 +3452,102 @@ function SettingsView({
           </p>
         </div>
       </div>
-      {!automation && <ThemePicker />}
+      {!automation && (
+        <section className="common-settings" aria-label="Réglages communs">
+          <div className="settings-section-heading">
+            <span className="eyebrow">COMMUN À TOUS LES PROJETS</span>
+            <h2>Votre atelier</h2>
+          </div>
+          <ThemePicker />
+          <section className="settings-card">
+            <div className="settings-card-title">
+              <span className="settings-icon color-2">
+                <Command size={21} />
+              </span>
+              <div>
+                <h2>GitHub Copilot CLI</h2>
+                <p>Le moteur de vos sessions, installé dans votre environnement.</p>
+              </div>
+              <Badge
+                label={
+                  state.runtime.state === 'ready'
+                    ? 'Connecté'
+                    : state.runtime.state === 'checking'
+                      ? 'Vérification'
+                      : state.runtime.state === 'unavailable'
+                        ? 'Indisponible'
+                        : 'Non vérifié'
+                }
+                tone={
+                  state.runtime.state === 'ready'
+                    ? 'green'
+                    : state.runtime.state === 'unavailable'
+                      ? 'coral'
+                      : 'neutral'
+                }
+              />
+            </div>
+            {state.runtime.error && (
+              <div className="inline-error">
+                <TriangleAlert size={16} />
+                {state.runtime.error}
+              </div>
+            )}
+            <div className="runtime-facts">
+              <div>
+                <span>Compte</span>
+                <strong>{state.runtime.account ?? 'À vérifier'}</strong>
+              </div>
+              <div>
+                <span>Version</span>
+                <strong>{state.runtime.version ?? 'À vérifier'}</strong>
+              </div>
+              <div>
+                <span>Modèles disponibles</span>
+                <strong>{state.runtime.models.length || 'À vérifier'}</strong>
+              </div>
+            </div>
+            <div className="runtime-actions">
+              <button
+                type="button"
+                className="button secondary"
+                disabled={state.runtime.state === 'checking'}
+                onClick={() => dispatch({ type: 'checkRuntime' })}
+              >
+                <RefreshCw size={15} /> Vérifier la connexion
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => dispatch({ type: 'openSettings' })}
+              >
+                Chemin du CLI dans VS Code <ArrowUpRight size={14} />
+              </button>
+            </div>
+          </section>
+          <ProjectSettings state={state} dispatch={dispatch} dirty={dirty} />
+        </section>
+      )}
+      <section className="project-settings-heading" aria-label="Réglages du projet">
+        <div>
+          <span className="eyebrow">PARAMÈTRES PAR PROJET</span>
+          <h2>{automation ? 'Automatisations du projet' : 'Configurer un projet'}</h2>
+          <p className="project-current-settings">
+            Les paramètres ci-dessous concernent{' '}
+            <strong>
+              {state.projectCatalog?.projects.find(
+                (project) => project.id === state.projectCatalog?.activeProjectId,
+              )?.name ?? state.workspace.name}
+            </strong>
+            .
+          </p>
+        </div>
+        <ProjectSwitcher
+          state={state}
+          dispatch={dispatch}
+          disabled={dirty || hasActiveRun(state)}
+        />
+      </section>
       <form onSubmit={submit}>
         {!automation && (
           <>
@@ -3335,72 +3562,6 @@ function SettingsView({
               value={draft.traceLimitBytes}
               onChange={(traceLimitBytes) => set({ traceLimitBytes })}
             />
-            <section className="settings-card">
-              <div className="settings-card-title">
-                <span className="settings-icon color-2">
-                  <Command size={21} />
-                </span>
-                <div>
-                  <h2>GitHub Copilot CLI</h2>
-                  <p>Le moteur de vos sessions, installé dans votre environnement.</p>
-                </div>
-                <Badge
-                  label={
-                    state.runtime.state === 'ready'
-                      ? 'Connecté'
-                      : state.runtime.state === 'checking'
-                        ? 'Vérification'
-                        : state.runtime.state === 'unavailable'
-                          ? 'Indisponible'
-                          : 'Non vérifié'
-                  }
-                  tone={
-                    state.runtime.state === 'ready'
-                      ? 'green'
-                      : state.runtime.state === 'unavailable'
-                        ? 'coral'
-                        : 'neutral'
-                  }
-                />
-              </div>
-              {state.runtime.error && (
-                <div className="inline-error">
-                  <TriangleAlert size={16} />
-                  {state.runtime.error}
-                </div>
-              )}
-              <div className="runtime-facts">
-                <div>
-                  <span>Compte</span>
-                  <strong>{state.runtime.account ?? 'À vérifier'}</strong>
-                </div>
-                <div>
-                  <span>Version</span>
-                  <strong>{state.runtime.version ?? 'À vérifier'}</strong>
-                </div>
-                <div>
-                  <span>Modèles disponibles</span>
-                  <strong>{state.runtime.models.length || 'À vérifier'}</strong>
-                </div>
-              </div>
-              <div className="runtime-actions">
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={state.runtime.state === 'checking'}
-                  onClick={() => dispatch({ type: 'checkRuntime' })}
-                >
-                  <RefreshCw size={15} /> Vérifier la connexion
-                </button>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => dispatch({ type: 'openSettings' })}
-                >
-                  Chemin du CLI dans VS Code <ArrowUpRight size={14} />
-                </button>
-              </div>
-            </section>
             <section className="settings-card">
               <div className="settings-card-title">
                 <span className="settings-icon color-0">
@@ -3543,7 +3704,12 @@ function SettingsView({
                   set({
                     testCommands: [
                       ...draft.testCommands,
-                      { id: crypto.randomUUID(), name: '', command: '', args: [] },
+                      {
+                        id: crypto.randomUUID(),
+                        name: '',
+                        command: '',
+                        args: [],
+                      },
                     ],
                   })
                 }
@@ -3613,7 +3779,11 @@ function SettingsView({
                     type="button"
                     className="icon-button"
                     aria-label={`Supprimer ${hook.name || 'le hook ' + (i + 1)}`}
-                    onClick={() => set({ hooks: draft.hooks.filter((h) => h.id !== hook.id) })}
+                    onClick={() =>
+                      set({
+                        hooks: draft.hooks.filter((h) => h.id !== hook.id),
+                      })
+                    }
                   >
                     <X size={15} />
                   </button>
@@ -3642,7 +3812,10 @@ function SettingsView({
                         set({
                           hooks: draft.hooks.map((h) =>
                             h.id === hook.id
-                              ? { ...h, event: e.target.value as 'beforeRun' | 'afterRun' }
+                              ? {
+                                  ...h,
+                                  event: e.target.value as 'beforeRun' | 'afterRun',
+                                }
                               : h,
                           ),
                         })
@@ -3725,6 +3898,15 @@ function SettingsView({
             {dirty ? 'Modifications à enregistrer' : 'Configuration du projet'}
             <small>Les scripts restent soumis à l’approbation de l’espace de travail.</small>
           </span>
+          {dirty && (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => setDraft(structuredClone(settings))}
+            >
+              Annuler les modifications
+            </button>
+          )}
           <button className="button primary" disabled={!dirty}>
             Enregistrer les réglages <Check size={16} />
           </button>

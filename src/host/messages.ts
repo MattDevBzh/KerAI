@@ -1,4 +1,5 @@
 import { devOpsMessageVariants } from '../core/devopsSchemas';
+import { discussionMessageVariants } from '../core/discussionSchemas';
 import { z } from 'zod';
 import { observationOptionsSchema } from '../core/observationSchemas';
 import { settingsSchema } from '../core/store';
@@ -22,7 +23,45 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  ...discussionMessageVariants,
   ...kitMessageVariants,
+  z
+    .object({
+      type: z.enum(['addProjects', 'openDedicatedWindow', 'createWindowsShortcut']),
+      requestId: id,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('renameProject'),
+      projectId: id,
+      name: z.string().trim().min(1).max(100),
+      requestId: id,
+    })
+    .strict(),
+  z
+    .object({ type: z.literal('hideProject'), projectId: id, hidden: z.boolean(), requestId: id })
+    .strict(),
+  z.object({ type: z.literal('selectProjects'), projectIds: z.array(id), requestId: id }).strict(),
+  z.object({ type: z.literal('activateFeature'), featureId: id }).strict(),
+  z.object({ type: z.literal('activateProject'), projectId: id }).strict(),
+  z
+    .object({
+      type: z.literal('saveFeatureTeam'),
+      featureId: id,
+      requestId: id,
+      expectedRevision: z.number().int().nonnegative(),
+      steps: z.array(workflowSchema.shape.steps.element),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('setAgentFavorite'),
+      agentId: id,
+      favorite: z.boolean(),
+      requestId: id,
+    })
+    .strict(),
   ...devOpsMessageVariants,
   z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
   z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),
@@ -50,9 +89,10 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('createFeature'),
+      projectIds: z.array(id).min(1).optional(),
       title: short.min(1),
       description: text,
-      workflowId: id,
+      workflowId: id.optional(),
       agentId: id.optional(),
       model: short.optional(),
       isolated: z.boolean().optional(),
@@ -208,11 +248,14 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deleteFeature'), featureId: id }).strict(),
   z.object({ type: z.literal('openDiff'), path: short, featureId: id.optional() }).strict(),
   z.object({ type: z.literal('openFile'), path: short, featureId: id.optional() }).strict(),
-  z.object({ type: z.literal('openFeatureWorkspace'), featureId: id }).strict(),
+  z
+    .object({ type: z.literal('openFeatureWorkspace'), featureId: id, projectId: id.optional() })
+    .strict(),
   z
     .object({
       type: z.literal('createCheckpoint'),
       featureId: id,
+      projectId: id.optional(),
       label: z.string().trim().min(1).max(200),
     })
     .strict(),
@@ -278,6 +321,7 @@ export const messageSchema = z.discriminatedUnion('type', [
           nickname: z.string().max(80).optional(),
           avatar: avatarSchema.optional(),
           emptyContextByDefault: z.boolean().optional(),
+          discussionAgent: z.boolean().optional(),
           roastLevel: z.enum(ROAST_LEVELS).optional(),
         })
         .strict(),
@@ -305,8 +349,11 @@ export const messageSchema = z.discriminatedUnion('type', [
         .strict(),
     })
     .strict(),
-  z.object({ type: z.literal('saveSettings'), settings: settingsSchema }).strict(),
+  z
+    .object({ type: z.literal('saveSettings'), settings: settingsSchema, projectId: id.optional() })
+    .strict(),
   z.object({ type: z.literal('saveWorkflow'), workflow: workflowSchema }).strict(),
+  z.object({ type: z.literal('deleteWorkflow'), workflowId: id, requestId: id }).strict(),
   z
     .object({ type: z.literal('saveAutopilot'), featureId: id, config: autopilotConfigSchema })
     .strict(),

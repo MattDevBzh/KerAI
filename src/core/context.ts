@@ -40,6 +40,13 @@ export function promptSections(input: RunInput): PromptSection[] {
   const add = (id: string, label: string, source: PromptSection['source'], content: string) => {
     if (content.trim()) sections.push({ id, label, source, content });
   };
+  if (input.projects?.length)
+    add(
+      'projects',
+      'Projets de la session',
+      'system',
+      `Projets autorisés pour cette session :\n${input.projects.map((project) => `${project.id} — ${project.name} — ${project.path} — branche ${project.branch}`).join('\n')}\n${input.projects.length > 1 ? 'Chaque outil de dépôt exige projectId. Choisis uniquement un identifiant de cette liste. Les chemins des outils sont relatifs au projet choisi. Dans les comptes rendus et références de fichiers, utilise @projectId/chemin pour identifier le dépôt. Aucune racine parente ou projet voisin n’est autorisé.' : 'Les chemins des outils sont relatifs au dossier de travail de cette session.'}`,
+    );
   add(
     'feature',
     'Besoin de la feature',
@@ -90,6 +97,22 @@ export function promptSections(input: RunInput): PromptSection[] {
   }
   for (const skill of input.skills)
     add(`skill:${skill.id}`, skill.name, 'skill', `Compétence ${skill.name} :\n${skill.content}`);
+  for (const id of new Set([...input.agent.skills, ...input.step.skills])) {
+    if (input.skills.some((skill) => skill.id === id)) continue;
+    const origins = [
+      input.agent.skills.includes(id) ? `l’agent ${input.agent.name} (${input.agent.id})` : '',
+      input.step.skills.includes(id) ? `l’étape ${input.step.name} (${input.step.id})` : '',
+    ]
+      .filter(Boolean)
+      .join(' et ');
+    sections.push({
+      id: `skill:${id}`,
+      label: `Skill introuvable · ${id}`,
+      source: 'skill',
+      content: `La skill « ${id} », référencée par ${origins}, est absente du catalogue. Restaure son fichier SKILL.md ou corrige sa référence. Pour poursuivre sans cette compétence, décoche ce bloc puis actualise l’aperçu.`,
+      unavailable: true,
+    });
+  }
   const launch = input.launch ?? input.attempt.launch;
   if (input.agent.tools.some((tool) => tool.startsWith('studio_devops_')))
     add(
@@ -257,15 +280,17 @@ export function promptSections(input: RunInput): PromptSection[] {
 }
 
 export function buildPrompt(input: RunInput): string {
-  return promptSections(input)
-    .filter((section) => section.enabled !== false)
-    .map((section) => section.content)
-    .join('\n\n');
+  const sections = promptSections(input).filter((section) => section.enabled !== false);
+  const missing = sections.filter((section) => section.unavailable);
+  if (missing.length) throw new Error(missing.map((section) => section.originalContent).join(' '));
+  return sections.map((section) => section.content).join('\n\n');
 }
 
 export function previewContext(input: RunInput, errors: string[] = []): RunPreview {
   const sections = promptSections(input);
   const included = sections.filter((section) => section.enabled !== false);
+  for (const section of included.filter((section) => section.unavailable))
+    errors.push(section.originalContent!);
   const prompt = included.map((section) => section.content).join('\n\n');
   const maxCharacters =
     input.feature.budget?.maxPromptChars ?? input.settings.budgetDefaults?.maxPromptChars ?? 60000;
@@ -303,6 +328,7 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
         budget: input.feature.budget,
         comments: input.feature.reviewComments,
         criteria: input.feature.criteria,
+        projects: input.projects,
         workspacePath: input.workspacePath,
         worktree: input.feature.worktree,
       }),

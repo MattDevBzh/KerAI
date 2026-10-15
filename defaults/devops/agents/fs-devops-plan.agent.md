@@ -3,7 +3,7 @@ name: "DevOps · Plan technique"
 description: "Construire un plan vérifiable depuis le challenge et les données exactes Azure DevOps."
 tools: ["read", "search", "studio_devops_inspect"]
 model: ""
-avatar: "devops-architect"
+avatar: cloud-architect
 nickname: "Architecte"
 skills: ["devops-plan", "devops-inspect", "devops-azure-preflight"]
 user-invocable: true

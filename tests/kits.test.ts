@@ -66,32 +66,54 @@ describe('portable kit dependency and file contracts', () => {
     expect(remaining.refs).not.toContain('skill:devops-plan');
     expect(resolveKitSelection(nodes, ['skill:absent']).errors).toHaveLength(1);
   });
-  it('exports a chosen agent with its skill resources, validates the round trip and installs locally', async () => {
-    const f = await fixture();
-    const bundle = await f.kits.compose(metadata, ['agent:fs-devops-plan']);
-    expect(validateKit(bundle).nodes).toHaveLength(4);
-    expect(bundle.files.map((f) => f.path)).toContain(
-      'skills/devops-inspect/scripts/ado-readonly.cjs',
-    );
-    expect(bundle.files.map((f) => f.path)).toContain('skills/devops-azure-preflight/LICENSE');
-    const path = join(f.root, 'roundtrip.fskit.json');
-    await writeFile(path, JSON.stringify(bundle));
-    const imported = await f.kits.readBundle(path);
-    expect(imported).toEqual(bundle);
-    const preview = await f.kits.preview(imported);
-    expect(preview.canInstall).toBe(true);
-    await f.kits.install(preview.token);
-    expect((await f.registry.load()).agents.find((a) => a.id === 'fs-devops-plan')?.source).toBe(
-      'user',
-    );
-    expect((await f.kits.preview(imported)).files.every((f) => f.status === 'identical')).toBe(
-      true,
-    );
-    expect(
-      (await f.kits.catalog()).some((k) => k.source === 'saved' && k.metadata.id === metadata.id),
-    ).toBe(true);
-    await expect(f.kits.install('forged')).rejects.toThrow(/expiré/);
-  });
+  it.each(['LF', 'CRLF'] as const)(
+    'exports an agent with its skills and discussion marker, then installs locally (%s)',
+    async (lineEndings) => {
+      const f = await fixture();
+      const bundle = await f.kits.compose(metadata, ['agent:fs-devops-plan']);
+      const agentFile = bundle.files.find(
+        (entry) => entry.path === 'agents/fs-devops-plan.agent.md',
+      )!;
+      Object.assign(
+        agentFile,
+        file(
+          agentFile.path,
+          Buffer.from(agentFile.base64, 'base64')
+            .toString('utf8')
+            .replace(/\r?\n/g, lineEndings === 'LF' ? '\n' : '\r\n')
+            .replace(/^---(\r?\n)/, '---$1discussionAgent: true$1'),
+        ),
+      );
+      expect(validateKit(bundle).nodes).toHaveLength(4);
+      expect(
+        validateKit(bundle).nodes.find((node) => node.id === 'fs-devops-plan')?.discussionAgent,
+      ).toBe(true);
+      expect(bundle.files.map((f) => f.path)).toContain(
+        'skills/devops-inspect/scripts/ado-readonly.cjs',
+      );
+      expect(bundle.files.map((f) => f.path)).toContain('skills/devops-azure-preflight/LICENSE');
+      const path = join(f.root, 'roundtrip.fskit.json');
+      await writeFile(path, JSON.stringify(bundle));
+      const imported = await f.kits.readBundle(path);
+      expect(imported).toEqual(bundle);
+      const preview = await f.kits.preview(imported);
+      expect(preview.canInstall).toBe(true);
+      await f.kits.install(preview.token);
+      expect((await f.registry.load()).agents.find((a) => a.id === 'fs-devops-plan')?.source).toBe(
+        'user',
+      );
+      expect(
+        (await f.registry.load()).agents.find((a) => a.id === 'fs-devops-plan')?.discussionAgent,
+      ).toBe(true);
+      expect((await f.kits.preview(imported)).files.every((f) => f.status === 'identical')).toBe(
+        true,
+      );
+      expect(
+        (await f.kits.catalog()).some((k) => k.source === 'saved' && k.metadata.id === metadata.id),
+      ).toBe(true);
+      await expect(f.kits.install('forged')).rejects.toThrow(/expiré/);
+    },
+  );
   it('retains all resources of custom skills and resolves local links to other skills', async () => {
     const f = await fixture();
     await f.registry.saveSkill(

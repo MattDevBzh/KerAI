@@ -240,6 +240,38 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect((await adapter.getAccountCredits()).state).toBe('ready');
     expect(fake.client.start).toHaveBeenCalledTimes(2);
   });
+  it('uses conversation overrides with no tools and preserves conversational Markdown', async () => {
+    fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({ tools: [] });
+    const request = input();
+    request.mode = 'discussion';
+    request.step.model = 'gpt-test';
+    request.step.reasoning = 'high';
+    request.preparedPrompt = 'Historical conversation';
+    const result = await adapter.run(request, callbacks, new AbortController().signal);
+    expect(fake.config).toMatchObject({
+      availableTools: [],
+      tools: [],
+      reasoningEffort: 'high',
+      model: 'gpt-test',
+      mcpServers: {},
+      enableSkills: false,
+      enableHostGitOperations: false,
+    });
+    expect(fake.config?.systemMessage).toMatchObject({
+      content: expect.stringContaining('conversation Feature Studio'),
+    });
+    expect(fake.session.send).toHaveBeenCalledWith({ prompt: 'Historical conversation' });
+    expect(result.content).toBe('# Livrable\nBonjour Matt');
+    expect(result.questions).toEqual([]);
+  });
+  it('refuses a discussion before any prompt when the runtime exposes a tool', async () => {
+    const request = input();
+    request.mode = 'discussion';
+    await expect(adapter.run(request, callbacks, new AbortController().signal)).rejects.toThrow(
+      'confinement',
+    );
+    expect(fake.session.send).not.toHaveBeenCalled();
+  });
 
   it('checks live metadata without creating or sending a session', async () => {
     const status = await adapter.check();

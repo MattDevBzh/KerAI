@@ -1,4 +1,45 @@
-# Validation et limites — v1.2.1 locale, 14 octobre 2026
+# Validation et limites — v1.6.0, 15 octobre 2026
+
+## Observateur intégré à la v1.5.0 et animation de scan
+
+- Base intégrée : `origin/main` à `514ebc3`, avec discussions, fenêtre dédiée, sessions multi-projets, composition d’équipes et avatars.
+- `npm run check` réussi : format, TypeScript, **523 tests métier réussis**, 4 ignorés (3 propres à Windows et 1 catalogue CLI exécuté séparément en CI), puis compilation.
+- **116 scénarios Chromium réussis**, dont 6 pour l’Observateur. Après ajustement des couleurs du scan, les 6 scénarios concernés ont été rejoués avec succès. Captures de bureau et écran 390 px examinées ; progression réelle, synthèse, arrêt, états terminaux et réduction des mouvements vérifiés.
+- Tests de migration du stockage v4 de la v1.5.0 vers v5 : racines des projets, équipe, révision et paramètres conservés après rechargement. Commande Observateur transférée à la fenêtre dédiée avant accès au stockage.
+- VSIX 1.6.0 construit, intégrité ZIP et version vérifiées, code extrait identique au build ; smoke de ce paquet réussi dans VS Code Insiders sur macOS. Le smoke inclut l’activation, les thèmes, les outils, la persistance, les checkpoints et la préparation locale de l’Observateur.
+- Aucun prompt Copilot payant. Les analyses et leurs coûts restent simulés dans cette recette ; les échanges avec le compte réel ne sont pas couverts.
+
+La CI Linux et Windows contrôle le commit poussé avant publication automatique. Son résultat et son commit exact sont liés dans les [notes de release v1.6.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.6.0). Les validations historiques ci-dessous restent datées et distinctes.
+
+## Discussions et navigation de v1.5.0
+
+Les tests de Discussion couvrent les instructions et skills, l’ordre des échanges après rechargement, les choix de modèle et de raisonnement, les avatars figés par réponse, les requêtes répétées, la fermeture et la réouverture du panneau pendant plusieurs réponses, l’arrêt avec conservation du texte partiel et des mesures, les erreurs du runtime, la récupération d’une réponse interrompue et la conservation d’un historique illisible. La consommation utilise le même calcul des mesures que les parcours, sans inventer de validations pour les conversations.
+
+Les tests de registre vérifient la suppression du catalogue dans plusieurs projets, la conservation des définitions et la recréation explicite. Le marqueur des agents est conservé dans les profils et lors de l’import/export des kits. Les tests d’interface couvrent l’ordre des menus, les sélecteurs de projet, les brouillons de réglages, les agents prioritaires, les accusés de réception tardifs après changement de conversation, l’historique, le clavier, les bulles et les avatars. Les cinq palettes et une fenêtre compacte en contraste élevé sont vérifiées.
+
+Le catalogue vide d’outils de Discussion est vérifié sur le CLI **1.0.96** avant tout prompt. La CI Linux et Windows exécute ce contrôle et les tests de persistance des discussions. L’envoi réel sur le compte Copilot de l’utilisateur reste une recette distincte ; aucun prompt payant n’est envoyé par ces tests.
+
+La publication de **v1.5.0** reste conditionnée aux validations du commit livré et aux contrôles du VSIX extrait. Le run exact est ajouté aux [notes de release](https://github.com/MattDevBzh/KerAI/releases/tag/v1.5.0). Les sections suivantes conservent les preuves et limites des versions précédentes.
+
+## Identité visuelle de v1.4.1
+
+Le logo « L’équipe » est partagé par la fiche de l’extension, le lanceur, l’onglet et le cockpit. Une adaptation SVG monochrome sert à la barre d’activité. L’ICO Windows contient les tailles 16, 24, 32, 48, 64, 128 et 256 px, issues du même rendu source approuvé.
+
+Le test de conservation de l’icône vérifie la suppression du fichier source, le remplacement de la copie stable et la préservation de l’ancienne icône si l’actualisation échoue. Il est exécuté sous Linux et Windows. Le smoke du contenu du VSIX contrôle la présence du PNG, du SVG et de l’ICO à sept tailles. Le SHA-256 couvre le VSIX et l’ICO, téléchargés de nouveau avant publication. Le run exact figure dans les [notes de release](https://github.com/MattDevBzh/KerAI/releases/tag/v1.4.1).
+
+Le raccourci utilise la copie de l’ICO dans les données du cockpit, sans dépendre du dossier de l’extension. Le clic natif et le rafraîchissement du cache d’icônes Windows restent à vérifier sur le poste utilisateur ; l’icône native du processus VS Code reste gérée par VS Code.
+
+## Publication de v1.4.0
+
+La version des sources et du lockfile est **1.4.0**. La CI de publication attend les validations Linux et Windows du même commit de `main` : format, TypeScript, tests métier, scénarios Chromium, catalogue CLI et hôte VS Code selon les jobs définis dans [ci.yml](../.github/workflows/ci.yml).
+
+Le job de publication reconstruit le VSIX depuis ce commit, contrôle l’intégrité ZIP et les versions de `extension/package.json` et `extension.vsixmanifest`, puis exécute le smoke VS Code sur le contenu extrait. Après téléversement, le fichier est téléchargé de la release brouillon et vérifié contre `SHA256SUMS` avant publication. Les paquets sont attachés aux releases GitHub ; les binaires présents dans le dépôt restent historiques.
+
+Les résultats effectifs sont consultables dans la [CI](https://github.com/MattDevBzh/KerAI/actions/workflows/ci.yml) et le lien vers le run du commit livré est ajouté aux [notes de release](https://github.com/MattDevBzh/KerAI/releases/tag/v1.4.0). Les contrôles ciblés des nouveaux avatars sont détaillés en fin de document. Les comptes rendus ci-dessous conservent leur version et leur plateforme d’origine.
+
+La CI Windows couvre les tests prévus par le job `windows-cli` ; elle ne simule pas le clic sur le raccourci du Bureau. Le lancement natif et les échanges avec ton compte Copilot/Azure DevOps restent à vérifier sur ton poste. Aucun prompt Copilot payant n’est envoyé par cette chaîne.
+
+## Historique local de l’Observateur (branche avant intégration)
 
 ## Vérifications locales de v1.2.1
 
@@ -7,7 +48,7 @@
 - Les **4 scénarios Chromium de l’Observateur** passent avec le rappel de plusieurs modèles dans le cockpit.
 - Le **VSIX final extrait** passe le smoke dans un vrai hôte VS Code Insiders, avec un profil temporaire et sans prompt payant.
 
-Le package local est `releases/feature-studio-1.2.1.vsix`, avec son empreinte dans `releases/SHA256SUMS`. La v1.2.0 et son empreinte sont conservées. Aucun appel Copilot payant ni publication n’a été exécuté ; les mesures de revue dans les tests restent simulées.
+Ces paquets de travail utilisaient des numéros locaux 1.2.0/1.2.1 avant la fusion ; ils sont conservés dans l’historique Git et remplacés par la livraison intégrée 1.6.0 pour éviter la confusion avec les versions publiées de ces mêmes numéros. Aucun appel Copilot payant ni publication n’a été exécuté ; les mesures de revue dans les tests restent simulées.
 
 ## Vérifications locales de v1.2.0
 
@@ -20,7 +61,7 @@ La relecture statique ciblée d’Astra high a identifié deux défauts après c
 
 Les tests d’analyse utilisent un adaptateur Copilot simulé et de vrais fichiers temporaires. Ils vérifient les contrats, la comptabilité et les contrôles d’accès ; ils ne constituent pas une mesure de qualité sur un compte Copilot réel. Aucun prompt payant ni opération distante Azure DevOps n’a été exécuté. Les crédits des fixtures ne sont pas une facture réelle. Le contrôle natif de suppression est couvert par le protocole et l’UI simulée ; sa confirmation reste une interaction humaine.
 
-Le package préparé localement est `releases/feature-studio-1.2.0.vsix`, avec son empreinte dans `releases/SHA256SUMS`. Il n’a pas été publié. Le nouveau stockage v5 refuse les anciens binaires ; les données antérieures connues sont migrées, les traces déjà perdues restent explicitement manquantes.
+Le paquet de travail 1.2.0 de cette branche n’a pas été publié ; la livraison intégrée porte le numéro 1.6.0. Le nouveau stockage v5 refuse les anciens binaires ; les données antérieures connues sont migrées, les traces déjà perdues restent explicitement manquantes.
 
 
 ## Vérifications locales de v1.1.1
@@ -250,3 +291,13 @@ Le VSIX livré est vérifié par `releases/SHA256SUMS`. Le stockage des artefact
 - Les modifications directes des agents/skills/workflows sont rechargées avec **Actualiser**. Un workflow existant conserve sa définition copiée. Le stockage migre v0/v1/v2 vers v3, préserve les versions inconnues/corrompues et ne propose pas de migration inverse, synchronisation multi-machine ou import d’un export Markdown. La v0.2 refuse les données v3. Archiver ne supprime ni worktree ni points sur disque ; leur nettoyage automatique n’est pas implémenté.
 
 Les captures du README portent un bandeau **démonstration**. Les huit avatars pixel art et leurs GIF sont les mêmes assets que dans le VSIX ; leur provenance et leur reconstruction restent dans `design/avatars`.
+
+## 1.4.0 — avatars de métiers, 15 octobre 2026
+
+- Vingt personnages distincts, pixel art de face, avec repos, travail animé (quatre images, boucle de 320 ms par image) et réussite : 60 assets distribués. Le repos du mage conserve le visuel approuvé.
+- TypeScript, construction webview/extension et packaging VSIX réussis.
+- 67 tests Vitest ciblés réussis : catalogue et transparence des PNG/GIF, quatre images de travail distinctes, profils anciens/nouveaux, registre et kits. Le contrôle a conduit à supprimer le bruit d’arrondi alpha de 1/255 dans l’export PNG ; les couleurs visibles restent intactes.
+- 9 scénarios Playwright réussis : 20 choix chargés, libellés mobiles, sauvegarde du profil, anciens identifiants, trois états et réduction des mouvements, kits, glisser-déposer et célébrations.
+- Galerie contrôlée dans Chromium : 20 images chargées, animation GIF visible sur des captures successives, poses de réussite, fonds clair/sombre et réduction des mouvements.
+- Le VSIX contient exactement les 60 assets attendus. Les profils et kits historiques conservent leurs identifiants, résolus par le catalogue commun à l’affichage ; aucune migration automatique de fichiers personnels.
+- Contrôles effectués sous Linux ; l’hôte VS Code natif Windows n’a pas été relancé pour cette modification graphique. Aucun prompt Copilot payant ni appel Azure DevOps.

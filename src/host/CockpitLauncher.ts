@@ -10,7 +10,13 @@ const launcherMessage = z.discriminatedUnion('type', [
 
 const escapeAttribute = (value: string): string =>
   value.replace(/[&<>"']/g, (character) => {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!;
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[character]!;
   });
 
 /** A local welcome view: resolving it never opens or initializes a project. */
@@ -97,7 +103,10 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
       this.postCredits();
     } catch {
       if (generation !== this.viewGeneration) return;
-      this.quota = { state: 'unavailable', message: 'Actualisation des crédits indisponible.' };
+      this.quota = {
+        state: 'unavailable',
+        message: 'Actualisation des crédits indisponible.',
+      };
       this.postCredits();
     } finally {
       this.quotaBusy = false;
@@ -135,7 +144,7 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
     const webview = this.view.webview;
     const nonce = randomBytes(20).toString('hex');
     const avatar = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'resources', 'cockpit-avatar.png'),
+      vscode.Uri.joinPath(this.extensionUri, 'resources', 'icon.png'),
     );
     const hasProject = Boolean(vscode.workspace.workspaceFolders?.length);
     const csp = `default-src 'none'; img-src ${webview.cspSource}; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'none'; base-uri 'none'; form-action 'none';`;
@@ -150,7 +159,7 @@ export class CockpitLauncher implements vscode.WebviewViewProvider, vscode.Dispo
     * { box-sizing: border-box; }
     body { margin: 0; padding: 0; color: var(--vscode-foreground); background: var(--vscode-sideBar-background); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
     main { padding: 24px 16px; text-align: center; max-width: 320px; margin: 0 auto; }
-    img { display: block; width: 112px; height: 112px; max-width: 100%; object-fit: contain; image-rendering: pixelated; margin: 0 auto 18px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); border-radius: 16px; }
+    img { display: block; width: 112px; height: 112px; max-width: 100%; object-fit: contain; margin: 0 auto 18px; }
     h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
     .credits { margin: 0 0 22px; padding: 12px; border: 1px solid var(--vscode-widget-border, var(--vscode-contrastBorder, transparent)); border-radius: 8px; background: var(--vscode-editorWidget-background); text-align: left; }
     .credits strong { display: block; margin-bottom: 6px; }

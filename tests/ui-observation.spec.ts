@@ -252,3 +252,72 @@ test('observateur : petit écran, revue partielle et session modifiée', async (
   ).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('observateur-mobile.png'), fullPage: true });
 });
+
+function scanningScenario() {
+  const state = scenario();
+  const review = state.features[0].observations![0];
+  review.status = 'running';
+  review.finishedAt = undefined;
+  review.global = undefined;
+  review.coverage.analyzedParts = 1;
+  review.phases[1].analyzedParts = 0;
+  review.calls[0].status = 'running';
+  review.calls[0].phaseId = review.phases[1].stepId;
+  return state;
+}
+
+test('scan : progression réelle, synthèse et arrêt, même avec le rapport fermé', async ({
+  page,
+}, testInfo) => {
+  const state = scanningScenario();
+  await hosted(page, state);
+  const scan = page.getByRole('region', { name: 'Scan de l’Observateur' });
+  await expect(scan).toContainText(`Analyse de la phase : ${state.features[0].steps[1].name}`);
+  await expect(scan.getByRole('progressbar')).toHaveAttribute('value', '1');
+  await expect(scan.locator('.pixel-avatar img')).toHaveAttribute('src', /working.gif$/);
+  await page
+    .getByRole('region', { name: 'Observateur de session' })
+    .getByRole('button', { name: 'Fermer' })
+    .click();
+  await expect(scan).toBeVisible();
+  await scan.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('scan-desktop.png'), fullPage: false });
+  const review = state.features[0].observations![0];
+  review.coverage.analyzedParts = 2;
+  review.phases[1].analyzedParts = 1;
+  review.calls[0].phaseId = undefined;
+  await page.evaluate((state) => window.postMessage({ type: 'state', state }, '*'), state);
+  await expect(scan.getByRole('status')).toHaveText('Synthèse des observations');
+  await expect(scan).toBeVisible();
+  await scan.getByRole('button', { name: 'Arrêter le scan' }).click();
+  expect(
+    await page.evaluate(() =>
+      (Reflect.get(window, 'observerMessages') as ClientMessage[]).some(
+        (m) => m.type === 'cancelObservation',
+      ),
+    ),
+  ).toBe(true);
+  for (const status of ['completed', 'cancelled', 'failed', 'interrupted'] as const) {
+    review.status = status;
+    await page.evaluate((state) => window.postMessage({ type: 'state', state }, '*'), state);
+    await expect(scan).toHaveCount(0);
+  }
+});
+
+test('scan : mouvements réduits et écran compact', async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await hosted(page, scanningScenario());
+  const scan = page.getByRole('region', { name: 'Scan de l’Observateur' });
+  await expect(scan.locator('.pixel-avatar img')).toHaveAttribute('src', /idle.png$/);
+  await expect(scan.locator('.observation-scan-document > span')).toHaveCSS(
+    'animation-name',
+    'none',
+  );
+  await expect(scan).toContainText('1 / 2 parties examinées');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  );
+  await scan.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('scan-mobile.png') });
+});

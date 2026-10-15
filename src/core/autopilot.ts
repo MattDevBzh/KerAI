@@ -19,6 +19,7 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   const pause = (reason: string): AutopilotAction => ({ kind: 'pause', reason });
   if (!pilot || pilot.status !== 'running')
     return pause(pilot?.reason ?? 'Le pilote automatique est arrêté.');
+  if (!feature.steps.length) return pause('Compose une équipe avant de lancer le pilote.');
   if (feature.archived) return pause('Cette feature est archivée.');
   if (feature.steps.some((step) => step.status === 'running'))
     return pause('Une tentative est déjà en cours.');

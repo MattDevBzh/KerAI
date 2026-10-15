@@ -14,6 +14,11 @@ const host = vi.hoisted(() => {
   return {
     messages,
     commands,
+    dedicated: false,
+    mode: 3,
+    executeCommand: vi.fn(),
+    enqueue: vi.fn(),
+    createPanel: vi.fn(),
     state,
     disposable,
     theme: undefined as unknown,
@@ -40,9 +45,11 @@ const host = vi.hoisted(() => {
 
 vi.mock('vscode', () => ({
   ConfigurationTarget: { Global: 1 },
+  ExtensionMode: { Test: 3 },
   StatusBarAlignment: { Left: 1 },
   ViewColumn: { One: 1 },
-  Uri: { joinPath: () => ({}) },
+  Uri: { joinPath: () => ({}), file: (fsPath: string) => ({ scheme: 'file', fsPath }) },
+  RelativePattern: class {},
   workspace: {
     workspaceFolders: [{ uri: { scheme: 'file', fsPath: '/fixture' } }],
     isTrusted: false,
@@ -58,6 +65,7 @@ vi.mock('vscode', () => ({
         });
       },
     }),
+    createFileSystemWatcher: () => ({ ...host.disposable, onDidCreate: () => host.disposable }),
     registerTextDocumentContentProvider: () => host.disposable,
     onDidChangeConfiguration: (callback: typeof host.configurationChanged) => {
       host.configurationChanged = callback;
@@ -71,10 +79,20 @@ vi.mock('vscode', () => ({
     registerWebviewViewProvider: () => host.disposable,
     createStatusBarItem: () => ({ ...host.disposable, show() {} }),
     registerWebviewPanelSerializer: () => host.disposable,
-    createWebviewPanel: () => host.panel,
+    createWebviewPanel: () => {
+      host.createPanel();
+      return host.panel;
+    },
     showErrorMessage: vi.fn(),
+    onDidChangeWindowState: () => host.disposable,
   },
   commands: {
+    executeCommand: host.executeCommand,
+    getCommands: async () => [
+      'workbench.action.closeSidebar',
+      'workbench.action.closePanel',
+      'workbench.action.closeAuxiliaryBar',
+    ],
     registerCommand: (name: string, command: () => Promise<void>) => {
       host.commands.set(name, command);
       return host.disposable;
@@ -90,10 +108,41 @@ vi.mock('node:fs/promises', () => ({
     throw Object.assign(new Error('missing'), { code: 'ENOENT' });
   },
 }));
+vi.mock('../src/host/DedicatedWindow', () => ({
+  DedicatedWindow: class {
+    home = '/global/home';
+    workspace = '/global/Feature Studio.code-workspace';
+    requests = '/global/requests';
+    isDedicated() {
+      return host.dedicated;
+    }
+    enqueue = host.enqueue;
+    async takeRequests() {
+      return [];
+    }
+    async prepare() {}
+  },
+}));
+vi.mock('../src/host/ProjectCatalog', () => ({
+  ProjectCatalog: class {
+    state = {
+      projects: [{ id: 'fixture', name: 'Fixture', path: '/fixture' }],
+      selectedProjectIds: ['fixture'],
+    };
+    async load() {}
+    async add() {
+      return this.state.projects;
+    }
+    storage() {
+      return '/fixture';
+    }
+  },
+}));
 vi.mock('../src/core/store', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/core/store')>()),
   Store: class {
     path = '/fixture/state.json';
+    rootPath = '/fixture';
   },
 }));
 vi.mock('../src/host/WorkspaceLease', () => ({
@@ -135,6 +184,11 @@ describe('personal theme host boundary', () => {
   beforeEach(async () => {
     vi.resetModules();
     host.theme = undefined;
+    host.dedicated = false;
+    host.mode = 3;
+    host.executeCommand.mockClear();
+    host.enqueue.mockClear();
+    host.createPanel.mockClear();
     host.failWrite = false;
     host.messages.length = 0;
     host.writes.length = 0;
@@ -147,11 +201,48 @@ describe('personal theme host boundary', () => {
       subscriptions: [],
       extensionUri: {},
       extensionPath: '/extension',
+      extensionMode: host.mode,
       storageUri: { fsPath: '/storage' },
       globalStorageUri: { fsPath: '/global' },
       secrets: {},
     } as never);
   };
+  it('redirects from an ordinary project without initializing another cockpit', async () => {
+    host.mode = 1;
+    await activate();
+    await host.commands.get('featureStudio.open')!();
+    expect(host.initialize).not.toHaveBeenCalled();
+    expect(host.createPanel).not.toHaveBeenCalled();
+    expect(host.executeCommand).toHaveBeenCalledWith(
+      'vscode.openFolder',
+      { scheme: 'file', fsPath: '/global/Feature Studio.code-workspace' },
+      { forceNewWindow: true },
+    );
+  });
+  it('routes the observer menu to the dedicated window before accessing session storage', async () => {
+    host.mode = 1;
+    await activate();
+    await host.commands.get('featureStudio.analyzeSession')!();
+    expect(host.initialize).not.toHaveBeenCalled();
+    expect(host.createPanel).not.toHaveBeenCalled();
+    expect(host.enqueue).toHaveBeenCalledWith('analyzeSession', 'fixture');
+    expect(host.executeCommand).toHaveBeenCalledWith('vscode.openFolder', expect.anything(), {
+      forceNewWindow: true,
+    });
+  });
+  it('mounts the full cockpit automatically in the dedicated workspace and reuses its panel', async () => {
+    host.mode = 1;
+    host.dedicated = true;
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    expect(host.initialize).toHaveBeenCalledTimes(1);
+    expect(host.createPanel).toHaveBeenCalledTimes(1);
+    expect(host.panel.webview.html).toContain('<html data-studio-theme="auto"');
+    await api.dispatch({ type: 'ready' });
+    await host.commands.get('featureStudio.open')!();
+    expect(host.createPanel).toHaveBeenCalledTimes(1);
+    expect(host.executeCommand).toHaveBeenCalledWith('workbench.action.closeSidebar');
+  });
   it('writes globally without initializing business state or requiring trust', async () => {
     const api = await activate();
     await api.dispatch({ type: 'setTheme', theme: 'aube', requestId: 'personal' });

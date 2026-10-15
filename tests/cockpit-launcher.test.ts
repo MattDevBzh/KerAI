@@ -12,7 +12,9 @@ const host = vi.hoisted(() => ({
 }));
 
 vi.mock('vscode', () => ({
-  Uri: { joinPath: (_base: unknown, ...segments: string[]) => segments.join('/') },
+  Uri: {
+    joinPath: (_base: unknown, ...segments: string[]) => segments.join('/'),
+  },
   workspace: {
     get workspaceFolders() {
       return host.folders;
@@ -46,7 +48,9 @@ describe('local cockpit launcher boundary', () => {
       postMessage: vi.fn(async () => true),
       options: {} as { localResourceRoots?: unknown[] },
       cspSource: 'vscode-webview:',
-      asWebviewUri: (uri: unknown) => ({ toString: () => `vscode-webview:/${uri}` }),
+      asWebviewUri: (uri: unknown) => ({
+        toString: () => `vscode-webview:/${uri}`,
+      }),
       onDidReceiveMessage: (callback: (message: unknown) => void) => {
         host.receive = callback;
         const listener = { dispose: vi.fn() };
@@ -192,7 +196,12 @@ describe('local cockpit launcher boundary', () => {
       expect(read).toHaveBeenCalledTimes(3);
       launcher.dispose();
       webview.postMessage.mockClear();
-      finish({ state: 'ready', used: 2, included: 1500, checkedAt: new Date().toISOString() });
+      finish({
+        state: 'ready',
+        used: 2,
+        included: 1500,
+        checkedAt: new Date().toISOString(),
+      });
       await vi.advanceTimersByTimeAsync(20_000);
       expect(read).toHaveBeenCalledTimes(3);
       expect(webview.postMessage).not.toHaveBeenCalled();
@@ -215,7 +224,7 @@ describe('local cockpit launcher boundary', () => {
     expect(policy).toContain('img-src vscode-webview:;');
     expect(policy).toContain('connect-src &#39;none&#39;');
     expect(policy).not.toMatch(/unsafe-inline|data:|https:/);
-    expect(webview.html).toContain('src="vscode-webview:/resources/cockpit-avatar.png"');
+    expect(webview.html).toContain('src="vscode-webview:/resources/icon.png"');
     launcher.dispose();
   });
 });

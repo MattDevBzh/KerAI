@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { basename, join } from 'node:path';
-import { open, readFile } from 'node:fs/promises';
+import { open, readFile, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -20,11 +20,13 @@ import type {
   AcceptanceCriterion,
   FeatureCheckpoint,
   CheckpointComparison,
+  WorkflowStep,
 } from '../shared/types';
 import { AgentRegistry } from '../core/registry';
 import { installQualityKit, resolveQualityAttachment } from './QualityRunner';
 import { Store, settingsSchema } from '../core/store';
-import { WorkflowEngine } from '../core/workflow';
+import { WorkflowEngine, validateWorkflow } from '../core/workflow';
+import { assertTeamOrder, teamLocked } from '../shared/team';
 import { boundAnswers } from '../core/questions';
 import { gitInfo, ToolHost } from './ToolHost';
 import { runProcess, redact } from './process';
@@ -47,7 +49,14 @@ import {
 import { PolicyEngine, sha256 } from './PolicyEngine';
 import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
 import { WorkspaceLease } from './WorkspaceLease';
-import { inspectExistingChanges, backupExistingChanges } from './ExistingChanges';
+import {
+  inspectProjectChanges,
+  backupProjectChanges,
+  MultiProjectTools,
+  projectInput,
+} from './MultiProjectTools';
+import type { StudioProject } from '../shared/projects';
+import { splitProjectFile, projectFile } from '../shared/projects';
 import type { DevOpsInspector } from './DevOpsInspector';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { gitRead } from './gitRead';
@@ -69,6 +78,7 @@ import {
   privateSize,
   deletionRecord,
 } from './SessionCleanup';
+import { assertDistinctProjects } from './ProjectCatalog';
 
 export class StudioService extends EventEmitter {
   private archives = new Map<string, Promise<SessionArchive>>();
@@ -142,6 +152,11 @@ export class StudioService extends EventEmitter {
   state!: StudioState;
   adapter!: AgentAdapter;
   devopsInspector?: (signal: AbortSignal) => DevOpsInspector;
+  projectInspector?: (projectId: string, signal: AbortSignal) => DevOpsInspector;
+  projectDevOpsKey?: (projectId: string) => string | undefined;
+  projectSettings?: (projectId: string) => StudioSettings | undefined;
+  projectResolver?: (projectId: string) => StudioProject | undefined;
+  globalGuard?: () => void;
   devopsProjectKey?: () => string | undefined;
   readonly registry: AgentRegistry;
   readonly kits: KitService;
@@ -156,7 +171,7 @@ export class StudioService extends EventEmitter {
   private saveTimer?: NodeJS.Timeout;
   private publishTimer?: NodeJS.Timeout;
   private disposed = false;
-  private toolHosts = new Map<string, ToolHost>();
+  private toolHosts = new Map<string, ToolHost | MultiProjectTools>();
   private automation?: { featureId: string; done: Promise<void> };
   private pendingHumans = new Map<
     string,
@@ -285,16 +300,22 @@ export class StudioService extends EventEmitter {
   async createFeature(input: {
     title: string;
     description: string;
-    workflowId: string;
+    workflowId?: string;
+    projects?: StudioProject[];
     agentId?: string;
     model?: string;
     isolated?: boolean;
   }): Promise<Feature> {
     return this.workspaceAction(undefined, 'Création de l’espace de la feature', async () => {
       const workflow = this.state.workflows.find((item) => item.id === input.workflowId);
-      if (!workflow) throw new Error('Workflow inconnu.');
+      if (input.workflowId && !workflow) throw new Error('Workflow inconnu.');
       if (input.agentId && !this.state.agents.some((agent) => agent.id === input.agentId))
         throw new Error('Agent inconnu.');
+      if ((input.projects?.length ?? 0) > 1 && input.isolated)
+        throw new Error('Le worktree isolé nécessite une session à un seul projet.');
+      if (input.projects?.length && input.projects[0].path !== this.workspacePath)
+        throw new Error('Le projet principal ne correspond pas à la session.');
+      if (input.projects) assertDistinctProjects(input.projects);
       const info = await gitInfo(this.workspacePath);
       this.assertTrusted();
       this.state.workspace.branch = info.branch;
@@ -303,6 +324,21 @@ export class StudioService extends EventEmitter {
         ...input,
         branch: info.branch,
       });
+      if (input.projects?.length) {
+        feature.projects = [];
+        for (const project of input.projects) {
+          if (this.projectResolver && this.projectResolver(project.id)?.path !== project.path)
+            throw new Error('Projet non enregistré.');
+          if ((await realpath(project.path)) !== project.path)
+            throw new Error('Le chemin du projet a changé. Ajoute à nouveau son dossier.');
+          feature.projects.push({
+            id: project.id,
+            name: project.name,
+            path: project.path,
+            branch: (await gitInfo(project.path)).branch,
+          });
+        }
+      }
       feature.budget = structuredClone(this.state.settings.budgetDefaults ?? defaultBudget);
       if (input.isolated) {
         feature.worktree = await this.workspaces.createWorktree(feature);
@@ -311,6 +347,64 @@ export class StudioService extends EventEmitter {
       this.engine.features.push(feature);
       await this.persist();
       return feature;
+    });
+  }
+  async saveFeatureTeam(
+    featureId: string,
+    expectedRevision: number,
+    steps: WorkflowStep[],
+  ): Promise<number> {
+    return this.workspaceAction(featureId, 'Enregistrement de l’équipe', async () => {
+      Object.assign(this.state, await this.registry.load());
+      this.assertTrusted();
+      const feature = this.engine.getFeature(featureId);
+      if (feature.archived) throw new Error('Réactive la feature avant de modifier son équipe.');
+      if (teamLocked(feature))
+        throw new Error('L’équipe est verrouillée : une première exécution a déjà commencé.');
+      if ((feature.teamRevision ?? 0) !== expectedRevision)
+        throw new Error('L’équipe a changé. Ferme le panneau puis rouvre la composition actuelle.');
+      const validated = steps.length
+        ? validateWorkflow({
+            id: 'custom',
+            name: 'Équipe personnalisée',
+            description: '',
+            icon: 'users',
+            steps,
+          }).steps
+        : [];
+      assertTeamOrder(validated);
+      const artifacts = new Set<string>();
+      for (const step of validated) {
+        if (!this.state.agents.some((agent) => agent.id === step.agentId))
+          throw new Error(`Agent introuvable pour « ${step.name} » : ${step.agentId}.`);
+        const artifact = step.artifact.toLowerCase();
+        if (artifacts.has(artifact))
+          throw new Error(`Deux interventions utilisent le même livrable : ${step.artifact}.`);
+        artifacts.add(artifact);
+      }
+      const previous = structuredClone(feature);
+      feature.steps = validated.map((step) => ({
+        ...structuredClone(step),
+        status: 'pending',
+        attempts: [],
+      }));
+      feature.activeStepId = feature.steps[0]?.id ?? '';
+      feature.workflowId = 'custom';
+      feature.workflowName = 'Équipe personnalisée';
+      feature.teamRevision = expectedRevision + 1;
+      feature.status = 'draft';
+      feature.updatedAt = new Date().toISOString();
+      delete feature.autopilot;
+      delete feature.finalValidation;
+      try {
+        await this.persist();
+      } catch (error) {
+        for (const key of Object.keys(feature))
+          delete (feature as unknown as Record<string, unknown>)[key];
+        Object.assign(feature, previous);
+        throw error;
+      }
+      return feature.teamRevision!;
     });
   }
   /** Dedicated delivery uses the same reservation, trust checks and source workspace lease. */
@@ -326,6 +420,7 @@ export class StudioService extends EventEmitter {
     readOnly = false,
   ): Promise<T> {
     this.assertTrusted();
+    this.globalGuard?.();
     if (this.active || this.workspaceTask)
       throw new Error('Attends la fin de l’opération en cours dans le cockpit.');
     if (this.automation && (!automated || this.automation.featureId !== featureId))
@@ -336,21 +431,21 @@ export class StudioService extends EventEmitter {
     });
     this.state.workspaceOperation = { featureId, label, readOnly };
     this.publish();
-    let lease: WorkspaceLease | undefined;
+    const leases: WorkspaceLease[] = [];
     try {
-      if (featureId) {
-        const feature = this.engine.getFeature(featureId);
-        const root = await this.workspaces.validate(feature);
-        if (feature.worktree) {
-          lease = new WorkspaceLease(root);
-          await lease.acquire();
-        }
+      const roots = featureId
+        ? await this.featureRoots(this.engine.getFeature(featureId))
+        : [this.workspacePath];
+      for (const root of [...new Set(roots)].sort()) {
+        const lease = new WorkspaceLease(root);
+        await lease.acquire();
+        leases.push(lease);
       }
       this.assertTrusted();
       return await action();
     } finally {
       try {
-        await lease?.release();
+        for (const lease of leases.reverse()) await lease.release();
       } finally {
         this.workspaceTask = undefined;
         this.state.workspaceOperation = undefined;
@@ -359,9 +454,42 @@ export class StudioService extends EventEmitter {
       }
     }
   }
+  private async featureRoots(feature: Feature): Promise<string[]> {
+    const primary = await this.workspaces.validate(feature);
+    if (!feature.projects?.length) return [primary];
+    assertDistinctProjects(feature.projects);
+    if (feature.projects[0].path !== this.workspacePath)
+      throw new Error('Projet principal incohérent.');
+    for (const project of feature.projects) {
+      if (this.projectResolver && this.projectResolver(project.id)?.path !== project.path)
+        throw new Error(`Le projet ${project.name} n’est plus enregistré à ce chemin.`);
+      if ((await realpath(project.path)) !== project.path)
+        throw new Error(`Le dossier de ${project.name} a changé. Vérifie les espaces de travail.`);
+    }
+    return feature.projects.map((project, index) => (index === 0 ? primary : project.path));
+  }
+  async projectPath(featureId: string, projectId: string): Promise<string> {
+    const feature = this.engine.getFeature(featureId);
+    const index = feature.projects?.findIndex((project) => project.id === projectId) ?? -1;
+    if (index < 0) throw new Error('Projet absent de cette session.');
+    return (await this.featureRoots(feature))[index];
+  }
+  async fileLocation(
+    featureId: string | undefined,
+    file: string,
+  ): Promise<{ root: string; path: string }> {
+    if (!featureId) return { root: this.workspacePath, path: file };
+    const feature = this.engine.getFeature(featureId);
+    const roots = await this.featureRoots(feature);
+    const selected = splitProjectFile(feature, file);
+    const index = selected.project
+      ? feature.projects!.findIndex((project) => project.id === selected.project!.id)
+      : 0;
+    return { root: roots[index], path: selected.path };
+  }
   async featurePath(featureId?: string): Promise<string> {
     return featureId
-      ? this.workspaces.validate(this.engine.getFeature(featureId))
+      ? (await this.featureRoots(this.engine.getFeature(featureId)))[0]
       : this.workspacePath;
   }
   async installQualityKit(featureId?: string) {
@@ -386,23 +514,64 @@ export class StudioService extends EventEmitter {
     const attachment = evidence.quality.attachments.find((item) => item.id === attachmentId);
     if (!attachment) throw new Error('Pièce jointe inconnue.');
     const file = await resolveQualityAttachment(
-      join(this.store.rootPath, 'quality'),
+      join(this.store.rootPath, 'quality', ...(evidence.projectId ? [evidence.projectId] : [])),
       evidence.quality,
       attachmentId,
     );
     return { file, attachment };
+  }
+  private projectWorkspaces = new Map<string, FeatureWorkspace>();
+  async checkpointWorkspace(featureId: string, checkpointId?: string, projectId?: string) {
+    const feature = this.engine.getFeature(featureId);
+    const roots = await this.featureRoots(feature);
+    const checkpoint = checkpointId
+      ? feature.checkpoints?.find((item) => item.id === checkpointId)
+      : undefined;
+    if (checkpointId && !checkpoint) throw new Error('Point de restauration inconnu.');
+    const selectedId = checkpoint?.projectId ?? projectId;
+    if ((feature.projects?.length ?? 0) < 2) {
+      if (selectedId && selectedId !== feature.projects?.[0]?.id)
+        throw new Error('Projet inconnu pour cette session.');
+      return { manager: this.workspaces, feature, root: roots[0], projectId: undefined };
+    }
+    const index = feature.projects!.findIndex((project) => project.id === selectedId);
+    if (index < 0) throw new Error('Choisis le projet du point de restauration.');
+    const project = feature.projects![index];
+    let manager = this.projectWorkspaces.get(project.id);
+    if (!manager) {
+      manager = new FeatureWorkspace(
+        roots[index],
+        join(this.store.rootPath, 'workspaces', project.id),
+      );
+      this.projectWorkspaces.set(project.id, manager);
+    }
+    return {
+      manager,
+      root: roots[index],
+      projectId: project.id,
+      feature: {
+        ...feature,
+        branch: project.branch,
+        worktree: undefined,
+        checkpoints: feature.checkpoints?.filter((point) => point.projectId === project.id),
+      },
+    };
   }
   private rememberCheckpoint(feature: Feature, checkpoint: FeatureCheckpoint): void {
     feature.checkpoints ??= [];
     feature.checkpoints.push(checkpoint);
     feature.updatedAt = new Date().toISOString();
   }
-  async createCheckpoint(featureId: string, label: string): Promise<void> {
+  async createCheckpoint(featureId: string, label: string, projectId?: string): Promise<void> {
     await this.workspaceAction(featureId, 'Sauvegarde locale des fichiers', async () => {
       const feature = this.engine.getFeature(featureId);
       if (feature.archived) throw new Error('Réactive cette session avant de créer un point.');
-      const checkpoint = await this.workspaces.capture(feature, { kind: 'manual', label });
-      this.rememberCheckpoint(feature, checkpoint);
+      const target = await this.checkpointWorkspace(featureId, undefined, projectId);
+      const checkpoint = await target.manager.capture(target.feature, { kind: 'manual', label });
+      this.rememberCheckpoint(feature, {
+        ...checkpoint,
+        ...(target.projectId ? { projectId: target.projectId } : {}),
+      });
       await this.persist();
     });
   }
@@ -414,12 +583,10 @@ export class StudioService extends EventEmitter {
     return this.workspaceAction(
       featureId,
       'Comparaison des fichiers',
-      () =>
-        this.workspaces.compare(
-          this.engine.getFeature(featureId),
-          checkpointId,
-          targetCheckpointId,
-        ),
+      async () => {
+        const target = await this.checkpointWorkspace(featureId, checkpointId);
+        return target.manager.compare(target.feature, checkpointId, targetCheckpointId);
+      },
       false,
       true,
     );
@@ -434,17 +601,18 @@ export class StudioService extends EventEmitter {
       featureId,
       'Ouverture de la comparaison',
       async () => {
-        const feature = this.engine.getFeature(featureId);
-        const comparison = await this.workspaces.compare(feature, checkpointId, targetCheckpointId);
+        const target = await this.checkpointWorkspace(featureId, checkpointId);
+        const feature = target.feature;
+        const comparison = await target.manager.compare(feature, checkpointId, targetCheckpointId);
         const change = comparison.files.find((item) => item.path === file);
         if (!change) throw new Error('Ce fichier n’appartient pas à la comparaison.');
         if (!change.restorable) throw new Error(change.reason ?? 'Ce fichier est exclu du point.');
-        const before = await this.workspaces.readFile(feature, checkpointId, file);
+        const before = await target.manager.readFile(feature, checkpointId, file);
         let after: Buffer | undefined;
         if (targetCheckpointId)
-          after = await this.workspaces.readFile(feature, targetCheckpointId, file);
+          after = await target.manager.readFile(feature, targetCheckpointId, file);
         else {
-          const policy = new PolicyEngine(await this.featurePath(featureId), 'read-only', []);
+          const policy = new PolicyEngine(target.root, 'read-only', []);
           try {
             const handle = await open(
               await policy.resolve(file),
@@ -494,18 +662,22 @@ export class StudioService extends EventEmitter {
     await this.workspaceAction(featureId, 'Restauration des fichiers sélectionnés', async () => {
       const feature = this.engine.getFeature(featureId);
       if (feature.archived) throw new Error('Réactive cette session avant de restaurer.');
-      const comparison = await this.workspaces.compare(feature, checkpointId);
+      const target = await this.checkpointWorkspace(featureId, checkpointId);
+      const comparison = await target.manager.compare(target.feature, checkpointId);
       if (comparison.fingerprint !== expectedFingerprint)
         throw new Error('Les fichiers ont changé. Actualise la comparaison avant de restaurer.');
       let recoverySaved = false;
       try {
-        const result = await this.workspaces.restore(
-          feature,
+        const result = await target.manager.restore(
+          target.feature,
           checkpointId,
           paths,
           expectedFingerprint,
           async (recovery) => {
-            this.rememberCheckpoint(feature, recovery);
+            this.rememberCheckpoint(feature, {
+              ...recovery,
+              ...(target.projectId ? { projectId: target.projectId } : {}),
+            });
             this.engine.invalidateAfterRestore(featureId);
             await this.persist();
             recoverySaved = true;
@@ -515,8 +687,9 @@ export class StudioService extends EventEmitter {
         );
         feature.workspaceFileHashes ??= {};
         for (const file of result.restoredFiles)
-          feature.workspaceFileHashes[file] =
-            comparison.files.find((item) => item.path === file)?.beforeHash ?? '<missing>';
+          feature.workspaceFileHashes[
+            target.projectId ? projectFile(feature, target.projectId, file) : file
+          ] = comparison.files.find((item) => item.path === file)?.beforeHash ?? '<missing>';
       } finally {
         // Even an interrupted restore leaves the recovery point and invalidated reviews visible.
         if (recoverySaved) await this.persist();
@@ -540,7 +713,10 @@ export class StudioService extends EventEmitter {
           }),
         },
       ];
-    const host = new ToolHost(input, callbacks, signal, this.devopsInspector);
+    const host =
+      (input.projects?.length ?? 0) > 1
+        ? new MultiProjectTools(input, callbacks, signal, this.projectInspector)
+        : new ToolHost(input, callbacks, signal, this.devopsInspector);
     this.toolHosts.set(input.attempt.id, host);
     return await host.createTools();
   }
@@ -558,10 +734,6 @@ export class StudioService extends EventEmitter {
     const agent = this.state.agents.find((item) => item.id === step.agentId);
     if (!agent) throw new Error('Agent introuvable.');
     const skillIds = [...new Set([...agent.skills, ...step.skills])];
-    if (skillIds.some((id) => !this.state.skills.some((skill) => skill.id === id)))
-      throw new Error(
-        'Une skill configurée est absente. Corrige la configuration avant de lancer cette étape.',
-      );
     const selected = launchSchema.parse(
       launch ?? {
         ...emptyLaunch(),
@@ -676,6 +848,22 @@ export class StudioService extends EventEmitter {
       attempt,
       agent: structuredClone(agent),
       skills: this.state.skills.filter((skill) => skillIds.includes(skill.id)),
+      projects: feature.projects?.map((project, index) => {
+        const settings = this.projectSettings
+          ? this.projectSettings(project.id)
+          : this.state.settings;
+        if (!settings) throw new Error(`Les réglages de ${project.name} sont indisponibles.`);
+        return {
+          ...project,
+          ...(index === 0
+            ? { path: this.workspaces.executionPath(feature), branch: feature.branch }
+            : {}),
+          settings: structuredClone(settings),
+          devopsProjectKey:
+            this.projectDevOpsKey?.(project.id) ??
+            (index === 0 ? this.devopsProjectKey?.() : undefined),
+        };
+      }),
       workspacePath: this.workspaces.executionPath(feature),
       qualityStoragePath: join(this.store.rootPath, 'quality'),
       settings: structuredClone(this.state.settings),
@@ -709,12 +897,10 @@ export class StudioService extends EventEmitter {
   ): Promise<RunPreview> {
     this.assertTrusted();
     await this.featurePath(featureId);
+    Object.assign(this.state, await this.registry.load());
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     const blocked = budgetBlockReason(input.feature);
-    const existingChanges = await inspectExistingChanges(
-      input,
-      (await gitInfo(input.workspacePath)).dirty,
-    );
+    const existingChanges = await inspectProjectChanges(input);
     this.assertTrusted();
     return { ...previewContext(input, blocked ? [blocked] : []), existingChanges };
   }
@@ -767,12 +953,19 @@ export class StudioService extends EventEmitter {
       throw new Error(
         `Cette session est liée à la branche ${feature.branch}. Reviens sur cette branche avant de la lancer.`,
       );
+    Object.assign(this.state, await this.registry.load());
+    this.assertTrusted();
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     if (input.launch?.editableExistingFiles?.length && !previewFingerprint)
       throw new Error(
         'L’autorisation de reprendre des fichiers existants exige un aperçu confirmé au lancement manuel.',
       );
-    await inspectExistingChanges(input, info.dirty);
+    for (const project of feature.projects?.slice(1) ?? []) {
+      const actual = await gitInfo(project.path);
+      if (actual.branch !== project.branch)
+        throw new Error(`Le projet ${project.name} doit être sur la branche ${project.branch}.`);
+    }
+    await inspectProjectChanges(input);
     const preview = previewContext(input);
     if (preview.errors.length) throw new Error(preview.errors.join(' '));
     if (previewFingerprint && previewFingerprint !== preview.fingerprint)
@@ -923,7 +1116,7 @@ export class StudioService extends EventEmitter {
         attempt.checkpointBeforeId = before.id;
         await this.persist();
       }
-      attempt.existingChangesBackup = await backupExistingChanges(
+      attempt.existingChangesBackup = await backupProjectChanges(
         input,
         this.store.rootPath,
         controller.signal,
@@ -1086,6 +1279,7 @@ export class StudioService extends EventEmitter {
     this.assertConfigurable(featureId);
     const feature = this.engine.getFeature(featureId),
       parsed = autopilotConfigSchema.parse(config);
+    if (!feature.steps.length) throw new Error('Compose une équipe avant de configurer le pilote.');
     const ids = new Set(feature.steps.map((step) => step.id));
     if (
       [
@@ -1141,6 +1335,7 @@ export class StudioService extends EventEmitter {
     if (this.active || this.automation || this.workspaceTask)
       throw new Error('Une exécution ou un pilote est déjà actif.');
     const feature = this.engine.getFeature(featureId);
+    if (!feature.steps.length) throw new Error('Compose une équipe avant de lancer le pilote.');
     if (!feature.autopilot)
       throw new Error('Configure le pilote et ses limites avant de le lancer.');
     if (feature.archived) throw new Error('La session est archivée.');
@@ -1261,7 +1456,16 @@ export class StudioService extends EventEmitter {
   }
   private async verifyProofFiles(feature: Feature, related: Set<string>): Promise<void> {
     const root = await this.featurePath(feature.id);
-    const policy = new PolicyEngine(root, 'read-only', []);
+    const policies = new Map<string, PolicyEngine>();
+    const resolveFile = async (file: string): Promise<string> => {
+      const target = await this.fileLocation(feature.id, file);
+      let policy = policies.get(target.root);
+      if (!policy) {
+        policy = new PolicyEngine(target.root, 'read-only', []);
+        policies.set(target.root, policy);
+      }
+      return policy.resolve(target.path);
+    };
     const ownedPaths = new Set<string>();
     for (const step of feature.steps.filter((item) => related.has(item.id))) {
       for (const historical of step.attempts)
@@ -1271,7 +1475,11 @@ export class StudioService extends EventEmitter {
       const proofs = currentTestEvidence(attempt);
       for (const evidence of proofs) {
         if (evidence.devops) {
-          const head = await gitRead(root, ['rev-parse', '--verify', 'HEAD^{commit}'], {
+          const proofRoot = evidence.projectId
+            ? feature.projects?.find((project) => project.id === evidence.projectId)?.path
+            : root;
+          if (!proofRoot) throw new Error('Projet de preuve inconnu.');
+          const head = await gitRead(proofRoot, ['rev-parse', '--verify', 'HEAD^{commit}'], {
             rawOutput: true,
           });
           if (
@@ -1289,7 +1497,7 @@ export class StudioService extends EventEmitter {
         for (const [file, hash] of Object.entries(hashes)) {
           let current = '<missing>';
           try {
-            current = sha256(await readFile(await policy.resolve(file)));
+            current = sha256(await readFile(await resolveFile(file)));
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
           }
@@ -1305,7 +1513,7 @@ export class StudioService extends EventEmitter {
     for (const file of ownedPaths) {
       let current = '<missing>';
       try {
-        current = sha256(await readFile(await policy.resolve(file)));
+        current = sha256(await readFile(await resolveFile(file)));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
@@ -1668,6 +1876,16 @@ export class StudioService extends EventEmitter {
     callbacks: RunCallbacks,
   ): Promise<void> {
     if (input.step.policy === 'read-only') return;
+    if ((input.projects?.length ?? 0) > 1) {
+      for (const project of input.projects!)
+        await this.hooks(
+          event,
+          { ...projectInput(input, project), projects: undefined },
+          signal,
+          callbacks,
+        );
+      return;
+    }
     for (const hook of input.settings.hooks.filter(
       (item) => item.enabled && item.event === event,
     )) {
@@ -1694,6 +1912,7 @@ export class StudioService extends EventEmitter {
   }
   async saveSettings(settings: StudioSettings): Promise<void> {
     this.assertTrusted();
+    this.globalGuard?.();
     if (this.active || this.automation || this.workspaceTask)
       throw new Error('Arrête la tentative et le pilote avant de changer les réglages.');
     this.state.settings = settingsSchema.parse(settings);

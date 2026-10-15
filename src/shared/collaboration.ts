@@ -258,6 +258,7 @@ export function previewCorrection(feature: Feature, request: CorrectionRequest):
 export function finalValidationReady(feature: Feature): boolean {
   return (
     !feature.archived &&
+    feature.steps.length > 0 &&
     feature.steps.every((step) => step.status === 'approved') &&
     !(feature.criteria ?? []).some(
       (criterion) => criterion.status !== 'passed' || !criterion.evidence.trim(),

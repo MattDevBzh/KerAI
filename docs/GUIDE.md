@@ -28,6 +28,22 @@ En haut de **Réglages**, la section **L’ambiance du cockpit** propose six car
 
 Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
 
+## Discuter avec ses agents
+
+**Discussion**, juste après Dashboard, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
+
+Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche **Agent de discussion**. Ces profils sont proposés en priorité ; **Voir plus** révèle les autres agents. Les profils propres à un projet portent son nom dans la liste. Les instructions, skills et ton du profil accompagnent l’échange ; ajoute dans tes messages le contexte utile. Ce chat n’exécute pas de commandes et ne consulte pas automatiquement les fichiers des projets.
+
+Les discussions sont enregistrées localement et retrouvées après rechargement de VS Code. Recherche une conversation dans le bandeau de gauche, ou supprime son historique avec la corbeille et la confirmation native. Les mesures remontées par Copilot sont incluses dans **Consommation**, sous **Discussions**.
+
+## Projet actif et réglages
+
+Dashboard, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
+
+Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
+
+Dans **Parcours**, **Supprimer** retire le parcours du catalogue personnel pour tous les projets, après confirmation. Les sessions déjà créées et les fichiers de définition sont conservés. Réenregistrer explicitement une définition avec le même identifiant la rend de nouveau disponible.
+
 ## Choisir un parcours
 
 | Parcours         | Pour quoi ?                                                    | Étapes                                                    |
@@ -153,20 +169,20 @@ L’enregistrement produit un YAML au niveau utilisateur, dans `~/.copilot/featu
 
 ## Donner une personnalité aux agents
 
-Dans **Agents**, ouvre un profil et change **Son petit nom**. Choisis l’un des quatorze personnages : le mage architecte, le hacker au café, le détective, le bûcheron, le scientifique, le robot, le ninja ou le capitaine.
+Dans **Agents**, ouvre un profil et change **Son petit nom**. Choisis l’un des vingt portraits de métiers : architecture, développement, tests, documentation, infrastructure, DevOps, sécurité, données, design, produit, support ou livraison. Ils partagent le même style pixel art, une vue de face et un fond transparent.
 
 <p>
-<img src="../webview/public/avatars/wizard/idle.png" width="82" alt="Mage">
-<img src="../webview/public/avatars/hacker/working.gif" width="82" alt="Hacker au travail">
-<img src="../webview/public/avatars/detective/idle.png" width="82" alt="Détective">
-<img src="../webview/public/avatars/lumberjack/idle.png" width="82" alt="Bûcheron">
-<img src="../webview/public/avatars/scientist/working.gif" width="82" alt="Scientifique au travail">
-<img src="../webview/public/avatars/robot/idle.png" width="82" alt="Robot">
-<img src="../webview/public/avatars/ninja/approved.png" width="82" alt="Ninja satisfait">
-<img src="../webview/public/avatars/captain/approved.png" width="82" alt="Capitaine satisfait">
+<img src="../webview/public/avatars/software-architect/idle.png" width="82" alt="Architecte logiciel">
+<img src="../webview/public/avatars/backend-developer/idle.png" width="82" alt="Développeur backend">
+<img src="../webview/public/avatars/business-analyst/idle.png" width="82" alt="Analyste métier">
+<img src="../webview/public/avatars/infrastructure-engineer/idle.png" width="82" alt="Ingénieur infrastructure">
+<img src="../webview/public/avatars/qa-tester/idle.png" width="82" alt="Testeur">
+<img src="../webview/public/avatars/qa-automation/idle.png" width="82" alt="Automaticien QA">
+<img src="../webview/public/avatars/code-reviewer/idle.png" width="82" alt="Relectrice de code">
+<img src="../webview/public/avatars/release-manager/idle.png" width="82" alt="Responsable des livraisons">
 </p>
 
-Chaque avatar possède une image de repos, un **vrai GIF de travail à quatre images**, puis une pose de validation. Les animations respectent la préférence système de réduction des mouvements. Le pseudo et le personnage sont sauvegardés dans la portée choisie du profil ; le rôle technique reste indépendant du petit nom.
+Chaque avatar utilise son portrait transparent. Un GIF à quatre images montre le geste de travail ; une pose distincte célèbre la réussite. Les animations respectent la préférence système de réduction des mouvements. Les anciens identifiants d’avatars sont reconnus à l’affichage sans réécrire automatiquement les fichiers personnels. Le pseudo et le personnage sont sauvegardés dans la portée choisie du profil ; le rôle technique reste indépendant du petit nom.
 
 Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. L’éditeur propose **PERSONNEL**, dans `~/.copilot/agents/` et `~/.copilot/skills/` (ou `COPILOT_HOME`), ou **PROJET**, dans `.github/agents/` et `.github/skills/`. Un profil du kit fourni commence en portée personnelle ; un profil personnalisé commence dans sa portée active. Le chemin et la révision attendue sont affichés avant sauvegarde. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
 
@@ -241,7 +257,7 @@ npm run package       # Produit releases/feature-studio-1.0.0.vsix
 
 Ouvre le projet et utilise **F5 → Feature Studio** pour un hôte de développement. `npm run dev` ouvre le frontend de développement ; `http://127.0.0.1:5173/?demo=1` affiche des données d’exemple avec un bandeau explicite. Sans ce paramètre et hors VS Code, aucune exécution n’est simulée.
 
-Le test réel facultatif est séparé dans `scripts/smoke-copilot.ts` et exige `FEATURE_STUDIO_LIVE_TEST=1`. Il consomme du quota Copilot. Il ne fait partie ni de `npm test` ni de la CI. Les sources des avatars et leurs prompts sont dans [design/avatars](../design/avatars/PROMPTS.md) ; `node scripts/pack-avatars.mjs` reconstruit leurs PNG/GIF.
+Le test réel facultatif est séparé dans `scripts/smoke-copilot.ts` et exige `FEATURE_STUDIO_LIVE_TEST=1`. Il consomme du quota Copilot. Il ne fait partie ni de `npm test` ni de la CI. Les sources des avatars et leurs prompts sont dans [design/avatars](../design/avatars/professions/PROMPTS.md) ; `node scripts/pack-avatars.mjs` reconstruit leurs PNG et GIF transparents.
 
 Voir [la validation livrée et les limites connues](../docs/VALIDATION.md) pour distinguer tests automatiques, test du CLI réel, versions testées et plateformes non vérifiées.
 
@@ -318,3 +334,20 @@ Les coûts et les seuils sont présentés en crédits. Les mesures historiques s
 **Analyser cette session** ouvre l’Observateur : aperçu local, modèle et budget, analyse de toutes les phases, améliorations sourcées, coûts et modèles rappelés par phase, commentaires globaux et bilan de l’Observateur. Les rapports se conservent par version et s’exportent en HTML ou Markdown. Une revue interrompue garde ses résultats et sa consommation mesurée.
 
 Les archives complètes ont une limite initiale de 256 Mio, configurable dans **Réglages → Archives de session**. Le journal s’affiche par pages. **Supprimer définitivement la session** demande une confirmation native, nettoie journaux, rapports, sauvegardes et objets non partagés, puis affiche l’espace libéré. Archiver conserve les données. [Guide complet de l’Observateur et du stockage](OBSERVATEUR.md).
+
+### Skill absente lors de la préparation du contexte
+
+L’aperçu reste accessible si une skill configurée ne figure pas dans le catalogue. Le bloc « Skill introuvable » indique son identifiant et l’agent ou l’étape qui la référence. Restaure son fichier `SKILL.md`, corrige la référence, ou décoche le bloc pour cette tentative puis actualise l’aperçu. Le lancement reste bloqué tant qu’un bloc indisponible est inclus. Le catalogue est relu lors de l’aperçu et du lancement pour prendre en compte les installations manuelles.
+
+
+## Composer une équipe pour une feature
+
+Créer une feature ouvre sa fiche sans équipe. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
+
+Chaque intervention affiche le rôle, le modèle et le niveau de réflexion effectifs. Le bouton de réglages permet de modifier sa mission, ses permissions et ses choix de modèle. Un agent ajouté seul commence en lecture seule : choisissez explicitement l’écriture ou les tests si nécessaire. Les équipes copiées conservent leurs réglages, skills et dépendances. Un profil de budget peut avoir priorité sur le modèle choisi.
+
+Un même agent peut intervenir plusieurs fois. Les nouveaux identifiants et noms de livrables évitent les collisions. Un parcours simple suit l’ordre des cartes ; les dépendances particulières d’une équipe existante restent obligatoires. Aucun nombre fixe de places n’est imposé.
+
+**Valider l’équipe** enregistre la composition ; **Annuler** conserve la précédente. Une équipe vide laisse la feature en brouillon. La composition reste modifiable jusqu’à la première tentative, même après préparation du contexte ; un lancement refusé avant création de tentative ne la verrouille pas. Une tentative commencée puis annulée conserve le verrouillage. Modifier la composition réinitialise le pilote qui dépend de ses étapes.
+
+L’étoile ajoute ou retire un agent des favoris. Cette préférence est enregistrée dans les réglages utilisateur de VS Code, commune aux projets, sans modifier les profils ni les fichiers du dépôt. Les favoris remontent dans les catalogues et sélecteurs, jamais dans l’ordre d’une équipe déjà composée.

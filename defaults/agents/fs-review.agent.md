@@ -3,7 +3,7 @@ name: "Relecture"
 description: "Relire indépendamment les changements et les preuves."
 tools: ["read", "search"]
 model: ""
-avatar: "ninja"
+avatar: code-reviewer
 nickname: ""
 skills: ["ai-relecture"]
 user-invocable: true

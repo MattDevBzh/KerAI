@@ -42,6 +42,34 @@ function feature() {
   return { engine, item };
 }
 describe('durable versioned store', () => {
+  it('round trips an empty draft without treating it as a completed workflow', async () => {
+    const { store } = await setup();
+    const item = new WorkflowEngine().createFeature(undefined, { title: 'Draft', description: '' });
+    await store.save([item], defaultSettings);
+    expect((await store.load()).features[0]).toEqual(item);
+    expect(() => store.save([{ ...item, status: 'completed' }], defaultSettings)).toThrow();
+    expect(() => store.save([{ ...item, activeStepId: 'ghost' }], defaultSettings)).toThrow();
+  });
+  it('migrates 1.5 multi-project teams without losing roots, team revision or settings', async () => {
+    const { store } = await setup(),
+      { item } = feature();
+    item.projects = [
+      { id: 'primary', name: 'API', path: '/projects/api', branch: 'main' },
+      { id: 'secondary', name: 'Web', path: '/projects/web', branch: 'feature/ui' },
+    ];
+    item.teamRevision = 3;
+    item.teamLockedAt = '2026-10-15T12:00:00Z';
+    const settings = { ...defaultSettings, defaultModel: 'project-model' };
+    await writeFile(
+      store.path,
+      JSON.stringify({ schemaVersion: 4, features: [item], settings, memory: [] }),
+    );
+    expect((await store.load()).features[0]).toEqual(item);
+    const reopened = await new Store(store.rootPath).load();
+    expect(reopened.features[0]).toEqual(item);
+    expect(reopened.settings.defaultModel).toBe('project-model');
+    expect(reopened.schemaVersion).toBe(5);
+  });
   it('persists exact question provenance across a replay and reload', async () => {
     const { store } = await setup();
     const { engine, item } = feature();

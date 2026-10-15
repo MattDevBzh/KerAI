@@ -38,6 +38,7 @@ export interface PromptSection {
   enabled?: boolean;
   editable?: boolean;
   originalContent?: string;
+  unavailable?: boolean;
 }
 export interface RunPreview {
   featureId: string;
@@ -94,6 +95,7 @@ export interface AutopilotState extends AutopilotConfig {
   updatedAt: string;
 }
 export interface TestEvidence {
+  projectId?: string;
   devops?: import('./devopsKit').DevOpsEvidence;
   quality?: import('./quality').QualityEvidence;
   id: string;

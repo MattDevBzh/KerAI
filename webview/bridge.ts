@@ -3,6 +3,7 @@ interface PersistedView {
   view?: string;
   featureId?: string;
   stepId?: string;
+  discussionId?: string;
   celebrationEnabled?: boolean;
 }
 interface VsCodeApi {
@@ -40,6 +41,12 @@ export function subscribe(callback: (message: HostMessage) => void) {
       event.data &&
       [
         'state',
+        'discussionState',
+        'discussionResult',
+        'workflowDeleteResult',
+        'projectResult',
+        'featureTeamResult',
+        'agentFavoriteResult',
         'devopsState',
         'error',
         'notice',

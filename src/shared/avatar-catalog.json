@@ -1,0 +1,121 @@
+{
+  "avatars": [
+    {
+      "id": "software-architect",
+      "name": "Architecte logiciel"
+    },
+    {
+      "id": "backend-developer",
+      "name": "Développeur backend"
+    },
+    {
+      "id": "frontend-developer",
+      "name": "Développeuse frontend"
+    },
+    {
+      "id": "qa-tester",
+      "name": "Testeur"
+    },
+    {
+      "id": "qa-automation",
+      "name": "Automaticien QA"
+    },
+    {
+      "id": "technical-writer",
+      "name": "Rédactrice technique"
+    },
+    {
+      "id": "infrastructure-engineer",
+      "name": "Ingénieur infrastructure"
+    },
+    {
+      "id": "devops-engineer",
+      "name": "Ingénieure DevOps"
+    },
+    {
+      "id": "sre-engineer",
+      "name": "Ingénieur SRE"
+    },
+    {
+      "id": "security-engineer",
+      "name": "Ingénieure sécurité"
+    },
+    {
+      "id": "data-engineer",
+      "name": "Data engineer"
+    },
+    {
+      "id": "data-scientist",
+      "name": "Data scientist"
+    },
+    {
+      "id": "database-administrator",
+      "name": "Administrateur BDD"
+    },
+    {
+      "id": "cloud-architect",
+      "name": "Architecte cloud"
+    },
+    {
+      "id": "ux-designer",
+      "name": "Designer UX/UI"
+    },
+    {
+      "id": "product-owner",
+      "name": "Product owner"
+    },
+    {
+      "id": "business-analyst",
+      "name": "Analyste métier"
+    },
+    {
+      "id": "code-reviewer",
+      "name": "Relectrice de code"
+    },
+    {
+      "id": "support-engineer",
+      "name": "Technicien support"
+    },
+    {
+      "id": "release-manager",
+      "name": "Responsable des livraisons"
+    }
+  ],
+  "legacyAliases": {
+    "wizard": "software-architect",
+    "hacker": "backend-developer",
+    "detective": "business-analyst",
+    "lumberjack": "infrastructure-engineer",
+    "scientist": "qa-tester",
+    "robot": "qa-automation",
+    "ninja": "code-reviewer",
+    "captain": "release-manager",
+    "devops-scout": "business-analyst",
+    "devops-architect": "cloud-architect",
+    "devops-builder": "devops-engineer",
+    "devops-sentinel": "security-engineer",
+    "devops-lab": "qa-automation",
+    "devops-controller": "sre-engineer"
+  },
+  "defaults": {
+    "fs-specs": "business-analyst",
+    "fs-plan": "software-architect",
+    "fs-dev": "backend-developer",
+    "fs-tests": "qa-tester",
+    "fs-review": "code-reviewer",
+    "fs-counterexamples": "security-engineer",
+    "fs-visual-tests": "ux-designer",
+    "fs-delivery": "release-manager",
+    "fs-devops-challenge": "business-analyst",
+    "fs-devops-plan": "cloud-architect",
+    "fs-devops-implement": "devops-engineer",
+    "fs-devops-review": "security-engineer",
+    "fs-devops-test-guide": "qa-automation",
+    "fs-devops-validate": "sre-engineer",
+    "analyst": "business-analyst",
+    "architect": "software-architect",
+    "builder": "backend-developer",
+    "tester": "qa-tester",
+    "reviewer": "code-reviewer"
+  }
+}
