@@ -1,6 +1,6 @@
 import { ZOOM_LEVELS } from '../shared/zoom';
 import { devOpsMessageVariants } from '../core/devopsSchemas';
-import { discussionMessageVariants } from '../core/discussionSchemas';
+import { discussionMessageVariants, discussionFeaturePlanSchema } from '../core/discussionSchemas';
 import { z } from 'zod';
 import { observationOptionsSchema } from '../core/observationSchemas';
 import { settingsSchema } from '../core/store';
@@ -88,6 +88,7 @@ export const messageSchema = z.discriminatedUnion('type', [
         'ready',
         'refresh',
         'checkRuntime',
+        'autoDetectCli',
         'installKit',
         'migrateUserKit',
         'openSettings',
@@ -98,6 +99,10 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('createFeature'),
+      requestId: z.string().uuid().optional(),
+      discussionId: z.string().uuid().optional(),
+      criteria: discussionFeaturePlanSchema.shape.criteria.optional(),
+      team: discussionFeaturePlanSchema.shape.team.optional(),
       projectIds: z.array(id).min(1).optional(),
       title: short.min(1),
       description: text,

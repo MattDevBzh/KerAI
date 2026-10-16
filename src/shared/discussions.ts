@@ -1,4 +1,21 @@
-import type { AgentProfile, Usage } from './types';
+import type { AgentProfile, Usage, PolicyProfile } from './types';
+
+export interface DiscussionFeatureMember {
+  agentId: string;
+  name: string;
+  description: string;
+  policy: PolicyProfile;
+}
+export interface DiscussionFeaturePlan {
+  title: string;
+  description: string;
+  criteria: string[];
+  team: DiscussionFeatureMember[];
+}
+export interface DiscussionFeatureDraft extends DiscussionFeaturePlan {
+  requestId: string;
+  createdAt: string;
+}
 
 export type DiscussionIdentity = Pick<AgentProfile, 'id' | 'name' | 'nickname' | 'avatar'>;
 export interface DiscussionAgent {
@@ -19,6 +36,23 @@ export interface DiscussionMessage {
   usage?: Usage;
   error?: string;
 }
+/** Host-owned copy of one report and the context of its execution. */
+export interface DiscussionSource {
+  featureId: string;
+  featureTitle: string;
+  stepId: string;
+  stepName: string;
+  attemptId: string;
+  revision: number;
+  capturedAt: string;
+  agent: AgentProfile;
+  model?: string;
+  reasoning?: string;
+  context: string;
+  output: string;
+  originalOutput?: string;
+  warnings: string[];
+}
 export interface Discussion {
   id: string;
   title: string;
@@ -28,6 +62,8 @@ export interface Discussion {
   createdAt: string;
   updatedAt: string;
   messages: DiscussionMessage[];
+  source?: DiscussionSource;
+  featureDraft?: DiscussionFeatureDraft;
 }
 export interface DiscussionState {
   discussions: Discussion[];
@@ -37,6 +73,23 @@ export interface DiscussionState {
 }
 export type DiscussionClientMessage =
   | { type: 'refreshDiscussions' }
+  | {
+      type: 'prepareDiscussionFeature';
+      requestId: string;
+      discussionId: string;
+      agentKey: string;
+      model?: string;
+      reasoning?: string;
+    }
+  | {
+      type: 'openReportDiscussion';
+      requestId: string;
+      featureId: string;
+      stepId: string;
+      attemptId: string;
+      revision: number;
+    }
+  | { type: 'returnToDiscussionReport'; discussionId: string; edit: boolean }
   | {
       type: 'sendDiscussion';
       requestId: string;
@@ -50,6 +103,16 @@ export type DiscussionClientMessage =
   | { type: 'deleteDiscussion'; discussionId: string; requestId: string };
 export type DiscussionHostMessage =
   | { type: 'discussionState'; state: DiscussionState }
+  | { type: 'featureCreateResult'; requestId: string; featureId?: string; error?: string }
+  | { type: 'reportDiscussionOpened'; requestId: string; discussionId?: string; error?: string }
+  | {
+      type: 'discussionReportOpened';
+      featureId: string;
+      stepId: string;
+      attemptId: string;
+      edit: boolean;
+      notice?: string;
+    }
   | {
       type: 'discussionResult';
       requestId: string;

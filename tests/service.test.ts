@@ -1045,3 +1045,83 @@ describe('editable feature teams', () => {
     save.mockRestore();
   });
 });
+
+it('creates an adjusted discussion proposal atomically with pending criteria and a team, without any run', async () => {
+  const f = await fixture();
+  const requestId = 'b65b0906-056a-43f7-a77f-3b5459d08e31';
+  const discussionId = '3f98001e-c9de-4d69-b0a5-9ae61c4c7b27';
+  const agentId = f.service.state.agents[0].id;
+  const input = {
+    requestId,
+    discussionId,
+    title: 'Besoin ajusté',
+    description: 'Choix humain',
+    criteria: ['Entrée ouvre le résultat'],
+    team: [
+      {
+        agentId,
+        name: 'Analyse',
+        description: 'Préciser les interactions',
+        policy: 'read-only' as const,
+      },
+      {
+        agentId,
+        name: 'Réalisation',
+        description: 'Implémenter le choix validé',
+        policy: 'workspace-write' as const,
+      },
+    ],
+  };
+  const feature = await f.service.createFeature(input);
+  expect(feature).toMatchObject({
+    discussionId,
+    status: 'draft',
+    title: 'Besoin ajusté',
+    criteria: [{ text: 'Entrée ouvre le résultat', status: 'pending', evidence: '' }],
+  });
+  expect(feature.steps.map((step) => step.policy)).toEqual(['read-only', 'workspace-write']);
+  expect(feature.steps[1].dependsOn).toEqual([feature.steps[0].id]);
+  expect(feature.steps.every((step) => !step.attempts.length)).toBe(true);
+  expect(f.adapter.run).not.toHaveBeenCalled();
+  expect((await f.service.createFeature(input)).id).toBe(feature.id);
+  expect((await f.service.store.load()).features[0].discussionId).toBe(discussionId);
+  await expect(
+    f.service.createFeature({
+      ...input,
+      requestId: undefined,
+      team: [{ ...input.team[0], agentId: 'missing' }],
+    }),
+  ).rejects.toThrow('disponible');
+  expect(f.service.engine.features).toHaveLength(1);
+});
+
+it('freezes a report discussion from the real execution archive and rejects stale revisions', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Report discussion',
+    description: 'Original need',
+    workflowId: 'feature',
+  });
+  const step = feature.steps[0];
+  step.reasoning = 'high';
+  await f.service.runStep(feature.id, step.id);
+  const attempt = step.attempts[0];
+  const source = await f.service.discussionSource(
+    feature.id,
+    step.id,
+    attempt.id,
+    attempt.revision ?? 0,
+  );
+  expect(source.context).toContain('Original need');
+  expect(source.reasoning).toBe('high');
+  expect(source.output).toBe('# Livrable');
+  feature.description = 'Changed after the run';
+  expect(
+    (await f.service.discussionSource(feature.id, step.id, attempt.id, attempt.revision ?? 0))
+      .context,
+  ).not.toContain('Changed after the run');
+  await expect(f.service.discussionSource(feature.id, step.id, attempt.id, 999)).rejects.toThrow(
+    'changé',
+  );
+});

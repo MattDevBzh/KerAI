@@ -1,11 +1,19 @@
 # Changelog
 
+## 1.10.0 — 2026-10-16
+
+- Zoom global de 80 à 200 % et mode Auto adapté à la taille disponible ; commandes dans le bandeau et les réglages, préférence personnelle conservée entre projets. Les pages profitent davantage des grands écrans.
+- Détection automatique du Copilot CLI installé dans le PATH de VS Code, puis les emplacements utilisateur npm, MSI, WinGet, `.local/bin` et Homebrew. Les lanceurs intermédiaires VS Code sont ignorés.
+- Chemin et provenance du CLI visibles après diagnostic, même en cas d’échec d’authentification. Bouton **Détection automatique** pour remplacer un ancien chemin invalide ; les chemins personnalisés restent possibles.
+- Conserve les discussions liées aux comptes rendus et la création de features depuis une discussion de la v1.9.0.
+
 ## 1.9.0 — 2026-10-16
 
-- Commandes de zoom − / + et sélection de 80 à 200 % dans le bandeau du cockpit et les réglages communs.
-- Mode Auto par défaut : agrandissement adapté à la largeur et à la hauteur disponibles, tenant compte de l’espace déjà accordé par la mise à l’échelle de Windows et de VS Code.
-- Préférence personnelle mémorisée dans `featureStudio.appearance.zoom`, partagée entre projets et restaurée à l’ouverture ; retour au réglage précédent si son enregistrement échoue.
-- Pages plus larges et mises en page adaptées à l’espace restant après zoom. Les panneaux, les dialogues et les menus restent accessibles, y compris à 200 %.
+- **Discuter avec l’agent** depuis un compte rendu : conversation persistante liée à la tentative et à la version sélectionnées, avec le profil, le modèle, le raisonnement et le contexte archivés. Un nouveau clic retrouve le même fil.
+- Retour direct au compte rendu ou à son éditeur. La copie discutée reste figée si le rapport évolue ; les modifications et validations restent humaines.
+- **Créer une feature** depuis une discussion : l’agent prépare le besoin, des critères vérifiables et une équipe ordonnée. Le formulaire permet de changer les textes, les agents, leurs missions, leur ordre et leurs autorisations avant création.
+- Propositions enregistrées, ajustements conservés dans la vue, erreurs sans perte de saisie et protection contre les créations répétées. Une feature créée reste en brouillon avec ses critères à vérifier et un lien vers la discussion d’origine.
+- Les discussions restent sans outils ; ouvrir un rapport ne déclenche aucun appel IA. Les lacunes des anciennes archives et les limites de contexte sont explicites.
 
 ## 1.8.0 — 2026-10-16
 

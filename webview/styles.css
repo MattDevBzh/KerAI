@@ -2167,9 +2167,20 @@ main {
   overflow-wrap: anywhere;
 }
 .runtime-actions {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 25px;
+}
+.runtime-location {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  min-width: 0;
+}
+.runtime-location code {
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .input-unit {
   position: relative;

@@ -48,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
         state: 'unavailable',
         message: 'Approuve cet espace de travail pour connecter Copilot CLI.',
       };
-    const cliPath = vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot');
+    const cliPath = vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'auto');
     if (quotaAdapter && cliPath !== quotaCliPath) {
       await quotaAdapter.dispose();
       quotaAdapter = undefined;
@@ -144,7 +144,7 @@ export async function activate(context: vscode.ExtensionContext) {
         await next.persist();
       }
       next.adapter = new CopilotCliAdapter({
-        cliPath: () => vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot'),
+        cliPath: () => vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'auto'),
         storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
         launcherPath: path.join(context.extensionPath, 'dist', 'copilot-launcher.js'),
         debugLog: (message) => {
@@ -408,7 +408,8 @@ export async function activate(context: vscode.ExtensionContext) {
         'openDedicatedWindow',
         'createWindowsShortcut',
       ].includes(message.type) &&
-      'requestId' in message
+      'requestId' in message &&
+      message.requestId !== undefined
     ) {
       try {
         if (message.type === 'openDedicatedWindow') await openDedicated();
@@ -466,8 +467,63 @@ export async function activate(context: vscode.ExtensionContext) {
       await discussions.refreshProfiles();
       return;
     }
+    if (message.type === 'openReportDiscussion') {
+      try {
+        const current = await ensure(message.featureId);
+        const source = await current.discussionSource(
+          message.featureId,
+          message.stepId,
+          message.attemptId,
+          message.revision,
+        );
+        const discussionId = await discussions.openSource(source);
+        send({ type: 'reportDiscussionOpened', requestId: message.requestId, discussionId });
+      } catch (error) {
+        send({
+          type: 'reportDiscussionOpened',
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
+    if (message.type === 'returnToDiscussionReport') {
+      const source = discussions.reportSource(message.discussionId);
+      const current = await ensure(source.featureId);
+      const feature = current.engine.getFeature(source.featureId),
+        step = current.engine.getStep(source.featureId, source.stepId);
+      const attempt = message.edit
+        ? step.attempts.at(-1)
+        : step.attempts.find((item) => item.id === source.attemptId);
+      if (!attempt?.artifact)
+        throw new Error(
+          'Ce compte rendu n’est plus disponible. La copie conservée reste consultable dans la discussion.',
+        );
+      const edit =
+        message.edit &&
+        !feature.archived &&
+        !feature.steps.some((item) => item.status === 'running') &&
+        feature.autopilot?.status !== 'running' &&
+        !current.state.workspaceOperation;
+      current.publish();
+      send({
+        type: 'discussionReportOpened',
+        featureId: feature.id,
+        stepId: step.id,
+        attemptId: attempt.id,
+        edit: Boolean(edit),
+        notice:
+          attempt.id !== source.attemptId || (attempt.revision ?? 0) !== source.revision
+            ? 'Le compte rendu a évolué depuis cette discussion. Vous consultez sa version actuelle ; la copie discutée reste dans le chat.'
+            : message.edit && !edit
+              ? 'Le compte rendu est consultable. L’édition sera disponible quand la session pourra être modifiée.'
+              : undefined,
+      });
+      return;
+    }
     if (
       message.type === 'sendDiscussion' ||
+      message.type === 'prepareDiscussionFeature' ||
       message.type === 'deleteDiscussion' ||
       message.type === 'cancelDiscussion'
     ) {
@@ -477,7 +533,11 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       try {
         if (message.type === 'sendDiscussion') await discussions.send(message);
-        else {
+        else if (message.type === 'prepareDiscussionFeature') {
+          const current = await ensure();
+          const registry = await current.registry.load();
+          await discussions.prepareFeature(message, registry.agents);
+        } else {
           const choice = await vscode.window.showWarningMessage(
             'Supprimer cette discussion et son historique ?',
             { modal: true },
@@ -518,12 +578,32 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
     if (message.type === 'createFeature') {
-      const projects = catalog.resolve(message.projectIds ?? catalog.state.selectedProjectIds);
-      const entry = await hub.select(projects.map((project) => project.id));
-      service = entry.service;
-      devops = entry.devops;
-      const created = await service.createFeature({ ...message, projects });
-      send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+      try {
+        if (
+          message.discussionId &&
+          !discussions.state.discussions.some((item) => item.id === message.discussionId)
+        )
+          throw new Error('La discussion d’origine n’est plus disponible.');
+        const projects = catalog.resolve(message.projectIds ?? catalog.state.selectedProjectIds);
+        const entry = await hub.select(projects.map((project) => project.id));
+        service = entry.service;
+        devops = entry.devops;
+        const created = await service.createFeature({ ...message, projects });
+        if (message.requestId)
+          send({
+            type: 'featureCreateResult',
+            requestId: message.requestId,
+            featureId: created.id,
+          });
+        send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+      } catch (error) {
+        if (!message.requestId) throw error;
+        send({
+          type: 'featureCreateResult',
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
       return;
     }
     const requestOwner =
@@ -606,6 +686,13 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       case 'checkRuntime':
         await current.checkRuntime();
+        return;
+      case 'autoDetectCli':
+        await vscode.workspace
+          .getConfiguration('featureStudio')
+          .update('cliPath', 'auto', vscode.ConfigurationTarget.Global);
+        notice('Détection automatique activée pour les prochains lancements.');
+        if (vscode.workspace.isTrusted) await current.checkRuntime();
         return;
       case 'openSettings':
         await vscode.commands.executeCommand('workbench.action.openSettings', 'featureStudio');

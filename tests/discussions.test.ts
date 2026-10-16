@@ -286,3 +286,239 @@ describe('persisted discussions', () => {
       expect(() => parseMessage({ ...input(), ...patch })).toThrow();
   });
 });
+
+describe('session discussions and feature proposals', () => {
+  let root: string;
+  const services: DiscussionService[] = [];
+  afterEach(async () => {
+    await Promise.all(services.splice(0).map((service) => service.dispose()));
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+  async function fixture() {
+    root = await mkdtemp(join(tmpdir(), 'discussion-bridge-'));
+    let profiles: DiscussionProfile[] = [
+      {
+        key: 'global:guide',
+        profile: {
+          id: 'guide',
+          name: 'Guide',
+          description: 'Aider à cadrer',
+          instructions: 'Instructions initiales',
+          skills: [],
+          tools: ['read', 'edit'],
+          path: '',
+          source: 'user',
+          roastLevel: 'spicy',
+        },
+        skills: [],
+      },
+    ];
+    const run = vi.fn(async (_input: RunInput, _callbacks: RunCallbacks) => ({
+      content: 'Réponse',
+      questions: [],
+      changedFiles: [],
+      model: 'model-a',
+    }));
+    const create = async () => {
+      const service = new DiscussionService({
+        directory: root,
+        workspacePath: root,
+        profiles: async () => profiles,
+        defaults: () => ({ defaultModel: 'changed-default', timeoutMinutes: 1 }),
+        assertTrusted() {},
+        adapter: async () => ({ run, check: vi.fn(), dispose: vi.fn() }),
+      });
+      services.push(service);
+      await service.initialize();
+      return service;
+    };
+    const source = {
+      featureId: 'feature',
+      featureTitle: 'Besoin',
+      stepId: 'step',
+      stepName: 'Plan',
+      attemptId: 'attempt',
+      revision: 0,
+      capturedAt: new Date().toISOString(),
+      agent: structuredClone(profiles[0].profile),
+      model: 'model-a',
+      reasoning: 'high',
+      context: 'Contexte historique avec skills sélectionnés',
+      output: 'Sortie originale',
+      warnings: [],
+    };
+    return {
+      service: await create(),
+      create,
+      run,
+      source,
+      profiles,
+      removeProfiles: () => {
+        profiles = [];
+      },
+    };
+  }
+  it('opens without a paid call, deduplicates a version and keeps its profile/context after reload and profile removal', async () => {
+    const f = await fixture();
+    const id = await f.service.openSource(f.source);
+    expect(await f.service.openSource(f.source)).toBe(id);
+    expect(f.run).not.toHaveBeenCalled();
+    f.source.output = 'Mutated caller';
+    f.profiles[0].profile.instructions = 'Changed profile';
+    await f.service.dispose();
+    f.removeProfiles();
+    const restored = await f.create();
+    const discussion = restored.state.discussions[0];
+    await restored.send({
+      type: 'sendDiscussion',
+      requestId: randomUUID(),
+      discussionId: id,
+      agentKey: discussion.agentKey,
+      model: 'model-a',
+      reasoning: 'high',
+      content: 'Pourquoi ?',
+    });
+    await restored.settled();
+    expect(f.run.mock.calls[0][0]).toMatchObject({
+      mode: 'discussion',
+      agent: { instructions: 'Instructions initiales' },
+      step: { policy: 'read-only', model: 'model-a', reasoning: 'high' },
+    });
+    expect(f.run.mock.calls[0][0].preparedPrompt).toContain(
+      'Contexte historique avec skills sélectionnés',
+    );
+    expect(f.run.mock.calls[0][0].preparedPrompt).toContain('Sortie originale');
+    expect(f.run.mock.calls[0][0].preparedPrompt).not.toContain('Changed profile');
+    expect(discussion.messages).toHaveLength(2);
+    expect(discussion.source?.output).toBe('Sortie originale');
+  });
+  it('keeps edited report revisions separate and rejects configuration overrides and oversized context', async () => {
+    const f = await fixture();
+    const id = await f.service.openSource(f.source);
+    const other = await f.service.openSource({
+      ...f.source,
+      revision: 1,
+      output: 'Human edit',
+      originalOutput: 'Sortie originale',
+    });
+    expect(other).not.toBe(id);
+    await expect(
+      f.service.send({
+        type: 'sendDiscussion',
+        requestId: randomUUID(),
+        discussionId: id,
+        agentKey: f.service.state.discussions[0].agentKey,
+        model: 'changed',
+        content: 'Question',
+      }),
+    ).rejects.toThrow('configuration');
+    await expect(
+      f.service.openSource({ ...f.source, revision: 2, context: 'x'.repeat(210000) }),
+    ).rejects.toThrow('volumineux');
+    expect(f.run).not.toHaveBeenCalled();
+    expect(f.service.state.discussions).toHaveLength(2);
+  });
+  it('prepares a persisted editable proposal from conversation decisions without launching a feature', async () => {
+    const f = await fixture();
+    const id = randomUUID();
+    const request = { discussionId: id, agentKey: 'global:guide', model: 'model-a' };
+    await f.service.send({
+      ...request,
+      type: 'sendDiscussion',
+      requestId: randomUUID(),
+      content: 'Nous voulons une recherche au clavier sans réseau.',
+    });
+    await f.service.settled();
+    const plan = {
+      title: 'Recherche au clavier',
+      description: 'Une recherche locale sans réseau.',
+      criteria: ['Entrée ouvre le résultat sélectionné.'],
+      team: [
+        {
+          agentId: 'guide',
+          name: 'Cadrage',
+          description: 'Définir les interactions clavier.',
+          policy: 'read-only',
+        },
+      ],
+    };
+    f.run.mockResolvedValue({
+      content: JSON.stringify(plan),
+      questions: [],
+      changedFiles: [],
+      model: 'model-a',
+    });
+    const requestId = randomUUID();
+    await f.service.prepareFeature(
+      { ...request, requestId },
+      f.profiles.map((item) => item.profile),
+    );
+    await f.service.settled();
+    expect(f.run.mock.calls[1][0].preparedPrompt).toContain('sans réseau');
+    expect(f.run.mock.calls[1][0]).toMatchObject({
+      mode: 'discussion',
+      step: { policy: 'read-only' },
+    });
+    expect(f.service.state.discussions[0].featureDraft).toMatchObject({ ...plan, requestId });
+    expect(f.service.state.discussions[0].messages.at(-1)?.content).toContain(
+      'Aucune feature n’a encore été créée',
+    );
+    await f.service.prepareFeature(
+      { ...request, requestId },
+      f.profiles.map((item) => item.profile),
+    );
+    expect(f.run).toHaveBeenCalledTimes(2);
+    await f.service.dispose();
+    expect((await f.create()).state.discussions[0].featureDraft).toMatchObject(plan);
+  });
+  it('rejects an invented team and preserves the conversation on malformed proposals', async () => {
+    const f = await fixture();
+    const discussionId = randomUUID();
+    const request = { discussionId, agentKey: 'global:guide', model: 'model-a' };
+    await expect(
+      f.service.prepareFeature(
+        { ...request, requestId: randomUUID() },
+        f.profiles.map((item) => item.profile),
+      ),
+    ).rejects.toThrow('Échangez');
+    await f.service.send({
+      ...request,
+      type: 'sendDiscussion',
+      requestId: randomUUID(),
+      content: 'Une idée.',
+    });
+    await f.service.settled();
+    for (const content of [
+      'broken json',
+      JSON.stringify({
+        title: 'Titre',
+        description: 'Besoin',
+        criteria: ['Vérifier'],
+        team: [{ agentId: 'invented', name: 'Step', description: 'Do', policy: 'workspace-write' }],
+      }),
+    ]) {
+      f.run.mockResolvedValue({ content, questions: [], changedFiles: [], model: 'model-a' });
+      await f.service.prepareFeature(
+        { ...request, requestId: randomUUID() },
+        f.profiles.map((item) => item.profile),
+      );
+      await f.service.settled();
+      expect(f.service.state.discussions[0].messages.at(-1)?.status).toBe('error');
+      expect(f.service.state.discussions[0].messages.at(-1)?.content).toBe('');
+      expect(f.service.state.discussions[0].featureDraft).toBeUndefined();
+    }
+    expect(f.service.state.discussions[0].messages[0].content).toBe('Une idée.');
+  });
+  it('accepts only source identifiers from the webview, never a forged execution context', () => {
+    const message = {
+      type: 'openReportDiscussion',
+      requestId: randomUUID(),
+      featureId: 'f',
+      stepId: 's',
+      attemptId: 'a',
+      revision: 0,
+    };
+    expect(parseMessage(message)).toMatchObject(message);
+    expect(() => parseMessage({ ...message, context: 'forged', agent: {} })).toThrow();
+  });
+});

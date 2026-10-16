@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -128,9 +128,9 @@
         },
         "featureStudio.cliPath": {
           "type": "string",
-          "default": "copilot",
+          "default": "auto",
           "scope": "machine",
-          "description": "Chemin de l’exécutable GitHub Copilot CLI."
+          "description": "auto (ou vide) : détecter Copilot CLI dans le PATH de VS Code puis les installations utilisateur npm, MSI, WinGet ou .local/bin. Un chemin complet impose une installation précise. Les lanceurs intermédiaires de VS Code sont ignorés en mode automatique."
         },
         "featureStudio.defaultModel": {
           "type": "string",
@@ -191,7 +191,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.9.0.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.10.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",

@@ -1,12 +1,23 @@
 # Validation et limites — v1.9.0, 16 octobre 2026
 
-## Zoom et grands écrans — v1.9.0
+## Zoom et détection automatique — v1.10.0
 
-- TypeScript, compilation et création du VSIX réussis. Version et intégrité ZIP du paquet contrôlées.
-- 15 tests unitaires ciblés réussis : réglages personnels, validation des messages, accusés de réception, erreur d’écriture et changements externes.
-- 29 scénarios Chromium réussis : zoom, composition d’équipes, sept thèmes, réduction des animations, contraste élevé, discussions et panneaux mobiles.
-- Mode Auto vérifié en 1440 × 900, Full HD, QHD, 4K et fenêtre ultralarge basse. Zoom manuel 200 %, défilement des dialogues, glisser-déposer, navigation, mémorisation après rechargement et retour au choix confirmé après refus d’écriture couverts. Vue QHD inspectée visuellement.
-- La recette utilise un navigateur Chromium sous Linux et un pont VS Code simulé. Le lancement natif de ce VSIX sous Windows n’a pas été réexécuté. Aucun prompt Copilot payant ni appel Azure DevOps réel.
+- Base `main` : `481651b45ff64097fa30db0a2271ce72661c64ea`. Intégration du zoom avec les discussions depuis un compte rendu et les propositions de features de la v1.9.0.
+- TypeScript vérifié ; 89 tests ciblés réussis, 3 tests Windows ignorés sur cet hôte Linux. Couverture du PATH Windows, npm/MSI/WinGet, chemins avec espaces, anciens et nouveaux lanceurs VS Code, paramètres personnels et affichage du chemin en cas d’échec du CLI ou de l’authentification. Tests de transport sans prompt réel.
+- 14 scénarios Chromium réussis : réglages CLI et chemin Windows à 390 px, zoom automatique de 1440 à 3840 px, zoom fixe à 200 %, persistance, erreur d’enregistrement, composition d’équipe, discussions liées aux rapports et propositions ajustables.
+- Le lancement réel sur Windows, l’authentification du compte et la compatibilité du CLI installé restent à vérifier avec **Vérifier la connexion**. Aucun prompt Copilot payant envoyé pendant cette recette.
+
+
+## Discussions et sessions reliées — v1.9.0
+
+- `npm run check` réussi : format, TypeScript, **567 tests métier réussis**, 4 ignorés, puis compilation.
+- **130 scénarios Chromium réussis**, dont cinq nouveaux parcours couvrant le compte rendu vers le chat, le retour direct à l’éditeur, les brouillons protégés, le rapport devenu plus récent et la proposition de feature ajustable. Les anciens fixtures de création ont été adaptés à l’accusé de réception du nouvel enregistrement ; le second passage complet est vert.
+- Le contexte hôte est testé avec un prompt archivé découpé en plusieurs fragments, les lectures d’outils, les réponses humaines, une reprise de session, les anciennes archives et la limitation explicite des traces. Le profil figé reste utilisable après suppression du profil courant et rechargement.
+- La préparation de feature est testée avec les décisions de la conversation, la persistance du brouillon, le refus d’agents inventés et de propositions illisibles, et la déduplication des requêtes. La création conserve les ajustements, les critères en attente, l’équipe ordonnée et le lien d’origine, sans lancer d’agent.
+- Les interfaces ont été examinées sur bureau et à 800 px ; le test compact vérifie que la zone de saisie et le bouton d’envoi restent dans le viewport. Le formulaire conserve les ajustements après une erreur ou sa fermeture.
+- VSIX 1.9.0 local vérifié (intégrité ZIP, version et point d’entrée), extrait puis chargé dans VS Code Insiders sur macOS. Le smoke vérifie notamment une création avec équipe et critères, une requête répétée sans doublon, aucun lancement implicite et la conservation après fermeture/réouverture.
+- Les tests utilisent un runtime simulé : aucun prompt Copilot payant n’est envoyé. Le comportement rédactionnel d’un modèle réel reste à apprécier sur un échange utilisateur.
+- Les nouveaux tests de discussions et d’archives sont inclus dans le job Windows. Les validations Linux/Windows du commit exact et le smoke du paquet construit en CI précèdent la publication ; les checksums de la release concernent le VSIX effectivement livré.
 
 
 ## Quêtes et trophées — v1.8.0

@@ -8,7 +8,9 @@ Pars d’un besoin, choisis une équipe et avance étape par étape : challenge,
 
 **[Dernière version et téléchargement](https://github.com/MattDevBzh/KerAI/releases/latest)** · [VSIX v1.9.0](https://github.com/MattDevBzh/KerAI/releases/download/v1.9.0/feature-studio-1.9.0.vsix) · [Nouveautés](CHANGELOG.md) · [Guide complet](docs/GUIDE.md)
 
-**Version actuelle : 1.9.0.** Un zoom personnel de **80 à 200 %**, un mode **Auto** pour les grands écrans et des pages plus larges. Le choix est mémorisé entre projets et après fermeture. Les 100 quêtes, les sept ambiances et les vingt costumes Halloween sont inclus. [Nouveautés de v1.9.0](docs/releases/v1.9.0.md).
+**Prochaine version : 1.10.0.** Détection automatique du CLI installé, affichage du chemin utilisé et zoom de toute l’interface de 80 à 200 %, avec adaptation automatique aux grands écrans. [Nouveautés de v1.10.0](docs/releases/v1.10.0.md).
+
+**Version publiée : 1.9.0.** Reliez vos discussions et vos sessions dans les deux sens : questionnez l’agent depuis son compte rendu, puis revenez l’éditer ; transformez une idée discutée en besoin, critères et équipe à ajuster avant création. Les quêtes et les sept ambiances restent incluses. [Nouveautés de v1.9.0](docs/releases/v1.9.0.md).
 
 ![La bibliothèque des kits : Atelier Copilot et DevOps](docs/images/kits-library.png)
 
@@ -24,7 +26,7 @@ Après mise à jour, la fiche **Feature Studio** dans Extensions doit afficher *
 
 **Prérequis :** VS Code **1.110+**, Git et GitHub Copilot CLI installé et authentifié avec un accès au CLI. Le VSIX utilise le moteur Node de VS Code ; il ne nécessite pas une installation séparée de npm. L’extension utilise le CLI local et ton authentification Copilot. Elle possède son propre cockpit et peut coexister avec la vue Chat de GitHub Copilot.
 
-Si le CLI est introuvable, renseigne `featureStudio.cliPath` dans les réglages VS Code. [Installation et diagnostic du CLI](docs/COPILOT.md). Les appels aux modèles utilisent ton quota Copilot ; consulter, configurer et exporter un kit ne lance aucun agent.
+Dans la v1.10.0, le CLI est détecté automatiquement. Si un ancien chemin est invalide, clique sur **Réglages → Détection automatique** : le chemin réellement utilisé apparaît après le diagnostic. Un chemin complet dans `featureStudio.cliPath` reste prioritaire. [Installation et diagnostic du CLI](docs/COPILOT.md). Les appels aux modèles utilisent ton quota Copilot ; consulter, configurer et exporter un kit ne lance aucun agent.
 
 ## Observateur de session
 

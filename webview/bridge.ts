@@ -5,6 +5,10 @@ interface PersistedView {
   stepId?: string;
   discussionId?: string;
   celebrationEnabled?: boolean;
+  featureProposal?: {
+    discussionId: string;
+    draft: import('../src/shared/discussions').DiscussionFeatureDraft;
+  };
 }
 interface VsCodeApi {
   postMessage(message: ClientMessage): void;
@@ -21,6 +25,9 @@ export const isHosted = Boolean(vscode);
 export const isDemo = !isHosted && new URLSearchParams(window.location.search).get('demo') === '1';
 let persistedView = vscode?.getState() ?? {};
 export const initialView = persistedView;
+export function savedFeatureProposal() {
+  return persistedView.featureProposal;
+}
 export function celebrationEnabled() {
   return persistedView.celebrationEnabled !== false;
 }
@@ -44,6 +51,9 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'questState',
         'discussionState',
         'discussionResult',
+        'reportDiscussionOpened',
+        'discussionReportOpened',
+        'featureCreateResult',
         'workflowDeleteResult',
         'projectResult',
         'featureTeamResult',

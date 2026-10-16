@@ -12,7 +12,7 @@
 
 Prérequis : **VS Code 1.110 ou ultérieur**, Git pour les branches/diffs, et **GitHub Copilot CLI** installé et authentifié avec un abonnement donnant accès au CLI. Installer le VSIX ne nécessite ni Node.js ni npm séparément. Le moteur Node embarqué dans les versions récentes de VS Code est utilisé par l’extension.
 
-Si `copilot` n’est pas trouvé, renseigne le chemin complet dans **Réglages → Chemin du CLI dans VS Code** (`featureStudio.cliPath`). Sur macOS avec Homebrew, ce peut être `/opt/homebrew/bin/copilot`. L’extension ne met pas le CLI à jour automatiquement. Voir [l’installation officielle du CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+Le réglage `featureStudio.cliPath` vaut **auto** par défaut : recherche dans le PATH du processus VS Code, puis les installations utilisateur usuelles. Dans **Réglages**, le diagnostic affiche le chemin trouvé et sa provenance. Le bouton **Détection automatique** remplace un ancien chemin personnalisé et relance le diagnostic si le projet est approuvé et disponible. Les lanceurs intermédiaires VS Code (`copilotCli` et `bin/copilot-shim`) sont ignorés. Pour imposer une installation, renseigne son chemin complet dans **Chemin du CLI dans VS Code**. Sur macOS avec Homebrew, ce peut être `/opt/homebrew/bin/copilot`. L’extension ne met pas le CLI à jour automatiquement. Voir [l’installation officielle du CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
 
 **Feature Studio ouvre son propre onglet de travail.** Il utilise le CLI local et son authentification ; il ne remplace pas les composants internes de la vue Chat de l’extension GitHub Copilot. Les deux interfaces peuvent coexister. Aucun serveur applicatif supplémentaire n’est requis ; les requêtes IA passent naturellement par GitHub Copilot.
 
@@ -57,6 +57,22 @@ Si le fichier de progression est illisible, le carnet le signale et le conserve.
 Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche **Agent de discussion**. Ces profils sont proposés en priorité ; **Voir plus** révèle les autres agents. Les profils propres à un projet portent son nom dans la liste. Les instructions, skills et ton du profil accompagnent l’échange ; ajoute dans tes messages le contexte utile. Ce chat n’exécute pas de commandes et ne consulte pas automatiquement les fichiers des projets.
 
 Les discussions sont enregistrées localement et retrouvées après rechargement de VS Code. Recherche une conversation dans le bandeau de gauche, ou supprime son historique avec la corbeille et la confirmation native. Les mesures remontées par Copilot sont incluses dans **Consommation**, sous **Discussions**.
+
+### Questionner un compte rendu
+
+Dans une session, clique **Discuter avec l’agent** à côté du livrable terminé. Le chat reprend le profil de cette exécution, son modèle et son niveau de raisonnement lorsqu’ils ont été archivés, le prompt de lancement (dont les skills et livrables sélectionnés), les échanges et résultats d’outils disponibles, les réponses humaines et la sortie. Le bouton n’envoie pas de prompt : le premier appel part à ta première question. Le même rapport et la même révision retrouvent le même fil, même après rechargement ou modification du profil.
+
+Le bandeau rappelle la session et l’étape. Déplie **Compte rendu au début de cette discussion** ou **Contexte transmis à l’agent** pour vérifier les sources. **Revenir au compte rendu** retrouve la tentative ; **Modifier le compte rendu actuel** ouvre l’éditeur de la dernière tentative. Si la sortie a évolué, un message le précise et la copie discutée reste intacte. Un brouillon de rapport non enregistré doit être terminé ou annulé avant de changer de vue.
+
+Les anciens lancements sans archives ne permettent pas de recréer leur contexte d’origine. Les données manquantes, un raisonnement non archivé ou des traces écartées pour rester dans la capacité du chat sont signalés ; le prompt et la sortie ne sont pas résumés silencieusement. Un contexte essentiel trop volumineux est refusé. La discussion conserve une copie distincte : supprimer la session empêche le retour au rapport mais conserve ce fil, supprimable séparément.
+
+### Passer d’une idée à une feature
+
+Après avoir échangé avec l’agent, clique **Créer une feature**. L’agent prépare une proposition à partir de la conversation, avec le modèle choisi ; cet appel est comptabilisé dans la consommation du chat. La proposition utilise les agents disponibles du projet actif et n’exécute aucun outil.
+
+Un formulaire présente le titre, le besoin, les critères de réussite (un par ligne) et les interventions proposées. Choisis les projets, ajuste les missions, remplace ou retire des agents, change leur ordre et vérifie leurs autorisations. La proposition et les ajustements de la vue sont conservés ; une erreur de création laisse le formulaire ouvert. **Actualiser la proposition** demande une nouvelle synthèse des échanges.
+
+**Créer la feature** enregistre une session en brouillon, ses critères encore à vérifier et l’équipe relue. Aucun agent ne démarre automatiquement. Tu retrouves les réglages complets dans **Composer mon équipe**, puis l’aperçu habituel avant lancement. **Discussion d’origine** revient à l’échange ayant préparé la feature.
 
 ## Projet actif et réglages
 
@@ -364,7 +380,7 @@ L’aperçu reste accessible si une skill configurée ne figure pas dans le cata
 
 ## Composer une équipe pour une feature
 
-Créer une feature ouvre sa fiche sans équipe. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
+Créer une feature depuis le Dashboard ouvre sa fiche sans équipe. Depuis une discussion, elle reçoit l’équipe proposée et ajustée dans le formulaire. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
 
 Chaque intervention affiche le rôle, le modèle et le niveau de réflexion effectifs. Le bouton de réglages permet de modifier sa mission, ses permissions et ses choix de modèle. Un agent ajouté seul commence en lecture seule : choisissez explicitement l’écriture ou les tests si nécessaire. Les équipes copiées conservent leurs réglages, skills et dépendances. Un profil de budget peut avoir priorité sur le modèle choisi.
 

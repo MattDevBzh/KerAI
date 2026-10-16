@@ -158,6 +158,8 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  discussionId?: string;
+  creationRequestId?: string;
   traceWarnings?: string[];
   observations?: import('./observation').SessionObservation[];
   projects?: import('./projects').FeatureProject[];
@@ -255,6 +257,8 @@ export interface ModelInfo {
 }
 export interface RuntimeStatus {
   state: 'unchecked' | 'checking' | 'ready' | 'unavailable';
+  cliPath?: string;
+  cliSource?: 'configured' | 'path' | 'user-install';
   version?: string;
   authenticated?: boolean;
   account?: string;
@@ -306,10 +310,21 @@ export type ClientMessage =
   | { type: 'installQualityKit'; featureId?: string }
   | { type: 'openQualityAttachment'; featureId: string; evidenceId: string; attachmentId: string }
   | {
-      type: 'ready' | 'refresh' | 'checkRuntime' | 'installKit' | 'migrateUserKit' | 'openSettings';
+      type:
+        | 'ready'
+        | 'refresh'
+        | 'checkRuntime'
+        | 'autoDetectCli'
+        | 'installKit'
+        | 'migrateUserKit'
+        | 'openSettings';
     }
   | {
       type: 'createFeature';
+      requestId?: string;
+      discussionId?: string;
+      criteria?: string[];
+      team?: import('./discussions').DiscussionFeatureMember[];
       projectIds?: string[];
       title: string;
       description: string;

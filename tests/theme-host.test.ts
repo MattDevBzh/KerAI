@@ -23,6 +23,7 @@ const host = vi.hoisted(() => {
     disposable,
     theme: undefined as unknown,
     zoom: undefined as unknown,
+    cliPath: undefined as unknown,
     failWrite: false,
     writes: [] as unknown[][],
     configurationChanged: undefined as
@@ -69,11 +70,18 @@ vi.mock('vscode', () => ({
     isTrusted: false,
     getConfiguration: () => ({
       get: (key: string, fallback?: unknown) =>
-        key === 'appearance.theme' ? host.theme : key === 'appearance.zoom' ? host.zoom : fallback,
+        key === 'appearance.theme'
+          ? host.theme
+          : key === 'appearance.zoom'
+            ? host.zoom
+            : key === 'cliPath'
+              ? host.cliPath
+              : fallback,
       update: async (...args: unknown[]) => {
         host.writes.push(args);
         if (host.failWrite) throw new Error('Le profil est en lecture seule.');
         if (args[0] === 'appearance.zoom') host.zoom = args[1];
+        else if (args[0] === 'cliPath') host.cliPath = args[1];
         else host.theme = args[1];
         host.configurationChanged?.({
           affectsConfiguration: (key) => key === `featureStudio.${args[0]}`,
@@ -200,6 +208,7 @@ describe('personal theme host boundary', () => {
     vi.resetModules();
     host.theme = undefined;
     host.zoom = undefined;
+    host.cliPath = undefined;
     host.dedicated = false;
     host.mode = 3;
     host.executeCommand.mockClear();
@@ -223,6 +232,22 @@ describe('personal theme host boundary', () => {
       secrets: {},
     } as never);
   };
+  it('resets a stale CLI path globally and leaves it unchanged if saving fails', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    host.cliPath = 'C:\\missing\\copilot.bat';
+    host.failWrite = true;
+    await expect(api.dispatch({ type: 'autoDetectCli' })).rejects.toThrow('lecture seule');
+    expect(host.cliPath).toBe('C:\\missing\\copilot.bat');
+    host.failWrite = false;
+    await api.dispatch({ type: 'autoDetectCli' });
+    expect(host.cliPath).toBe('auto');
+    expect(host.writes.at(-1)).toEqual(['cliPath', 'auto', 1]);
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'notice',
+      message: expect.stringContaining('activée'),
+    });
+  });
   it('redirects from an ordinary project without initializing another cockpit', async () => {
     host.mode = 1;
     await activate();

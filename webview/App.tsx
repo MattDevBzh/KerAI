@@ -96,7 +96,15 @@ import type {
   StudioState,
   Workflow as WorkflowType,
 } from '../src/shared/types';
-import { initialView, isDemo, isHosted, persistView, send, subscribe } from './bridge';
+import {
+  initialView,
+  isDemo,
+  isHosted,
+  persistView,
+  savedFeatureProposal,
+  send,
+  subscribe,
+} from './bridge';
 import { demoState } from './demo';
 import { QualityCommandFields, QualitySetup } from './QualityUI';
 import brandIcon from '../resources/icon.png';
@@ -121,7 +129,7 @@ import {
 } from './StudioUI';
 
 import { DiscussionUI } from './DiscussionUI';
-import type { DiscussionState } from '../src/shared/discussions';
+import type { DiscussionState, DiscussionFeatureDraft } from '../src/shared/discussions';
 
 type View =
   | 'quests'
@@ -341,10 +349,21 @@ export default function App() {
     agents: [],
   });
   const [discussionId, setDiscussionId] = useState(initialView.discussionId ?? '');
+  const reportRequest = useRef<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<{
+    featureId: string;
+    stepId: string;
+    attemptId: string;
+    edit: boolean;
+  }>();
   const [featureId, setFeatureId] = useState(initialView.featureId ?? '');
   const [stepId, setStepId] = useState(initialView.stepId ?? '');
   const [observerRequested, setObserverRequested] = useState(false);
   const [create, setCreate] = useState(false);
+  const [createFrom, setCreateFrom] = useState<{
+    discussionId: string;
+    draft: DiscussionFeatureDraft;
+  }>();
   const [draftDirty, setDraftDirty] = useState(false);
   const draftDirtyRef = useRef(false);
   const updateDraftDirty = (value: boolean) => {
@@ -370,7 +389,22 @@ export default function App() {
         if (message.earned?.length)
           setEarnedQuests((ids) => [...new Set([...ids, ...message.earned!])]);
       } else if (message.type === 'discussionState') setDiscussionState(message.state);
-      else if (message.type === 'devopsState') setDevops(message.state);
+      else if (message.type === 'reportDiscussionOpened') {
+        if (message.requestId !== reportRequest.current) return;
+        reportRequest.current = null;
+        if (message.error) setNotice({ text: message.error, error: true });
+        else if (message.discussionId && !draftDirtyRef.current) {
+          setDiscussionId(message.discussionId);
+          setView('discussion');
+        }
+      } else if (message.type === 'discussionReportOpened') {
+        if (draftDirtyRef.current) return;
+        setReportTarget(message);
+        setFeatureId(message.featureId);
+        setStepId(message.stepId);
+        setView('dashboard');
+        if (message.notice) setNotice({ text: message.notice });
+      } else if (message.type === 'devopsState') setDevops(message.state);
       else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
       else if (message.type === 'deleteFeatureResult') {
@@ -405,6 +439,10 @@ export default function App() {
       send({ type: 'activateFeature', featureId });
   }, [loaded, featureId, view, create]);
   const dispatch = (message: ClientMessage) => {
+    if (message.type === 'openReportDiscussion') {
+      if (draftDirtyRef.current) return;
+      reportRequest.current = message.requestId;
+    }
     if (
       state?.workspaceOperation &&
       [
@@ -501,7 +539,10 @@ export default function App() {
   };
   const selected = state?.features.find((f) => f.id === featureId);
   const activeFeatures = state?.features.filter((f) => !f.archived) ?? [];
-  const openCreate = (_id?: string) => setCreate(true);
+  const openCreate = (_id?: string) => {
+    setCreateFrom(undefined);
+    setCreate(true);
+  };
   const chooseView = (id: View) => {
     if (draftDirty) {
       setNotice({
@@ -741,6 +782,20 @@ export default function App() {
               <FeatureDetail
                 key={selected.id}
                 observerRequested={observerRequested}
+                openDiscussion={(id) => {
+                  if (!draftDirty) {
+                    if (!discussionState.discussions.some((discussion) => discussion.id === id)) {
+                      setNotice({
+                        text: 'La discussion d’origine a été supprimée ou n’est plus disponible.',
+                        error: true,
+                      });
+                      return;
+                    }
+                    setDiscussionId(id);
+                    setView('discussion');
+                  }
+                }}
+                reportTarget={reportTarget?.featureId === selected.id ? reportTarget : undefined}
                 feature={selected}
                 state={state}
                 devops={devops}
@@ -842,6 +897,10 @@ export default function App() {
               visible={view === 'discussion'}
               selectedId={discussionId}
               onSelect={setDiscussionId}
+              onCreateFeature={(discussionId, draft) => {
+                setCreateFrom({ discussionId, draft });
+                setCreate(true);
+              }}
             />
           </div>
           {view === 'memory' && <ProjectMemoryView state={state} dispatch={dispatch} />}
@@ -978,12 +1037,13 @@ export default function App() {
       </div>
       {create && (
         <CreateModal
+          origin={createFrom}
           state={state}
           onClose={() => setCreate(false)}
           dispatch={dispatch}
           onCreate={(message) => {
             dispatch(message);
-            setCreate(false);
+            if (!isHosted) setCreate(false);
           }}
         />
       )}
@@ -1378,41 +1438,114 @@ function ModelSelect({
   );
 }
 function CreateModal({
+  origin,
   state,
   onClose,
   onCreate,
   dispatch,
 }: {
+  origin?: { discussionId: string; draft: DiscussionFeatureDraft };
   state: StudioState;
   dispatch: (message: ClientMessage) => void;
   onClose: () => void;
   onCreate: (message: Extract<ClientMessage, { type: 'createFeature' }>) => void;
 }) {
-  const [title, setTitle] = useState(''),
-    [description, setDescription] = useState('');
+  const [restored] = useState(() => {
+    const saved = savedFeatureProposal();
+    return origin &&
+      saved?.discussionId === origin.discussionId &&
+      saved.draft.requestId === origin.draft.requestId
+      ? saved.draft
+      : origin?.draft;
+  });
+  const [title, setTitle] = useState(restored?.title ?? ''),
+    [description, setDescription] = useState(restored?.description ?? '');
+  const [criteria, setCriteria] = useState(restored?.criteria.join('\n') ?? '');
+  const [team, setTeam] = useState(restored?.team ?? []);
+  useEffect(() => {
+    if (origin)
+      persistView({
+        featureProposal: {
+          discussionId: origin.discussionId,
+          draft: { ...origin.draft, title, description, criteria: criteria.split('\n'), team },
+        },
+      });
+  }, [title, description, criteria, team]);
+  const [pending, setPending] = useState<string>();
+  const [error, setError] = useState('');
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (message.type !== 'featureCreateResult' || message.requestId !== pending) return;
+        setPending(undefined);
+        if (message.error) setError(message.error);
+        else {
+          persistView({ featureProposal: undefined });
+          onClose();
+        }
+      }),
+    [pending, onClose],
+  );
+  const invalidProposal = Boolean(
+    origin &&
+      (!description.trim() ||
+        !criteria.trim() ||
+        criteria.split('\n').filter((item) => item.trim()).length > 30 ||
+        criteria.split('\n').some((item) => item.length > 2000) ||
+        !team.length ||
+        team.some(
+          (member) =>
+            !member.name.trim() ||
+            !member.description.trim() ||
+            !state.agents.some((agent) => agent.id === member.agentId),
+        )),
+  );
   const [isolated, setIsolated] = useState(Boolean(state.workspace.canIsolate));
   const [projectPending, setProjectPending] = useState(false);
   const ids = state.projectCatalog?.selectedProjectIds;
   const multiple = (ids?.length ?? 0) > 1;
   const missing = Boolean(state.projectCatalog && !ids?.length);
-  const busy = Boolean(state.workspaceOperation) || hasActiveRun(state) || projectPending;
+  const busy =
+    Boolean(state.workspaceOperation) || hasActiveRun(state) || projectPending || Boolean(pending);
   return (
     <Modal
       title="Une nouvelle feature"
-      subtitle="Posez le besoin. Vous composerez votre équipe sur la fiche."
-      onClose={onClose}
+      subtitle={
+        origin
+          ? 'Relisez le besoin, les critères et l’équipe avant de créer la session.'
+          : 'Posez le besoin. Vous composerez votre équipe sur la fiche.'
+      }
+      wide={Boolean(origin)}
+      onClose={() => {
+        if (!pending) onClose();
+      }}
     >
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (title.trim() && !busy && !missing)
+          if (title.trim() && !busy && !missing && !invalidProposal) {
+            const requestId = crypto.randomUUID();
+            if (isHosted) setPending(requestId);
+            setError('');
             onCreate({
               type: 'createFeature',
+              requestId,
+              ...(origin
+                ? {
+                    discussionId: origin.discussionId,
+                    criteria: criteria
+                      .split('\n')
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                    team,
+                  }
+                : {}),
               title: title.trim(),
               description: description.trim(),
               isolated: !multiple && isolated && Boolean(state.workspace.canIsolate),
               ...(ids ? { projectIds: ids } : {}),
             });
+          }
         }}
       >
         <ProjectPicker state={state} dispatch={dispatch} onPendingChange={setProjectPending} />
@@ -1432,11 +1565,147 @@ function CreateModal({
           <span>Le contexte et le résultat souhaité</span>
           <textarea
             rows={4}
+            maxLength={origin ? 30000 : 500000}
             placeholder="Le besoin, les contraintes, le résultat attendu…"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
+        {origin && (
+          <section className="feature-proposal" aria-label="Proposition de feature">
+            <label className="field">
+              <span>Critères de réussite — un par ligne</span>
+              <textarea
+                rows={4}
+                value={criteria}
+                onChange={(event) => setCriteria(event.target.value)}
+              />
+            </label>
+            <h3>Équipe proposée · ordre des interventions</h3>
+            {team.map((member, index) => (
+              <div className="proposal-member" key={index}>
+                <label className="field">
+                  <span>Agent {index + 1}</span>
+                  <select
+                    value={member.agentId}
+                    onChange={(event) =>
+                      setTeam(
+                        team.map((item, i) =>
+                          i === index ? { ...item, agentId: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  >
+                    {!state.agents.some((agent) => agent.id === member.agentId) && (
+                      <option value={member.agentId}>Agent indisponible dans ce projet</option>
+                    )}
+                    {state.agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.nickname || agent.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Intervention {index + 1}</span>
+                  <input
+                    maxLength={200}
+                    value={member.name}
+                    onChange={(event) =>
+                      setTeam(
+                        team.map((item, i) =>
+                          i === index ? { ...item, name: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Mission {index + 1}</span>
+                  <textarea
+                    maxLength={4000}
+                    rows={2}
+                    value={member.description}
+                    onChange={(event) =>
+                      setTeam(
+                        team.map((item, i) =>
+                          i === index ? { ...item, description: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Autorisations {index + 1}</span>
+                  <select
+                    value={member.policy}
+                    onChange={(event) =>
+                      setTeam(
+                        team.map((item, i) =>
+                          i === index
+                            ? { ...item, policy: event.target.value as typeof member.policy }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="read-only">Lecture seule</option>
+                    <option value="workspace-write">Écriture dans le projet</option>
+                    <option value="tests">Tests autorisés</option>
+                  </select>
+                </label>
+                <div className="discussion-source-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={!index}
+                    onClick={() =>
+                      setTeam((items) => {
+                        const next = [...items];
+                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                        return next;
+                      })
+                    }
+                  >
+                    Monter l’intervention {index + 1}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setTeam(team.filter((_, i) => i !== index))}
+                  >
+                    Retirer l’intervention {index + 1}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="button secondary small"
+              disabled={team.length >= 12 || !state.agents.length}
+              onClick={() =>
+                setTeam([
+                  ...team,
+                  {
+                    agentId: state.agents[0].id,
+                    name: state.agents[0].name,
+                    description: state.agents[0].description,
+                    policy: 'read-only',
+                  },
+                ])
+              }
+            >
+              Ajouter une intervention
+            </button>
+            {invalidProposal && (
+              <p role="status">
+                Complétez le besoin, les critères et les missions avec les agents disponibles dans
+                le projet choisi.
+              </p>
+            )}
+          </section>
+        )}
+        {error && <p role="alert">{error}</p>}
         {multiple ? (
           <p className="muted">
             Cette session travaille dans les dossiers sélectionnés. L’isolation en worktree est
@@ -1451,13 +1720,18 @@ function CreateModal({
         )}
         <div className="modal-actions">
           <span className="muted">Créer ne lance aucune exécution.</span>
-          <button type="button" className="button secondary" onClick={onClose}>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={Boolean(pending)}
+            onClick={onClose}
+          >
             Annuler
           </button>
           <button
             type="submit"
             className="button primary"
-            disabled={!title.trim() || busy || missing}
+            disabled={!title.trim() || busy || missing || invalidProposal}
           >
             Créer la feature <ArrowRight size={16} />
           </button>
@@ -1467,7 +1741,9 @@ function CreateModal({
   );
 }
 function FeatureDetail({
+  openDiscussion,
   observerRequested,
+  reportTarget,
   feature,
   state,
   devops,
@@ -1479,7 +1755,9 @@ function FeatureDetail({
   confirm,
   onDirtyChange,
 }: {
+  openDiscussion: (id: string) => void;
   observerRequested?: boolean;
+  reportTarget?: { stepId: string; attemptId: string; edit: boolean };
   onDirtyChange: (dirty: boolean) => void;
   feature: Feature;
   state: StudioState;
@@ -1610,6 +1888,11 @@ function FeatureDetail({
         </button>
         <ChevronRight size={12} />
         <span>{feature.workflowName}</span>
+        {feature.discussionId && (
+          <button disabled={detailDirty} onClick={() => openDiscussion(feature.discussionId!)}>
+            <MessageSquare size={14} /> Discussion d’origine
+          </button>
+        )}
       </div>
       <div className="feature-heading">
         <div>
@@ -1794,6 +2077,7 @@ function FeatureDetail({
       )}
       {step ? (
         <StepPanel
+          reportTarget={reportTarget?.stepId === step.id ? reportTarget : undefined}
           key={`${feature.id}-${step.id}`}
           feature={feature}
           step={step}
@@ -1831,6 +2115,7 @@ function FeatureDetail({
   );
 }
 function StepPanel({
+  reportTarget,
   feature,
   step,
   state,
@@ -1840,6 +2125,7 @@ function StepPanel({
   onDirtyChange,
   onCorrection,
 }: {
+  reportTarget?: { attemptId: string; edit: boolean };
   onDirtyChange: (dirty: boolean) => void;
   onCorrection: (
     sourceStepId: string,
@@ -1856,13 +2142,22 @@ function StepPanel({
   confirm: (title: string, description: string, action: () => void) => void;
 }) {
   const latest = step.attempts.at(-1);
-  const [attemptId, setAttemptId] = useState('');
+  const [attemptId, setAttemptId] = useState(reportTarget?.attemptId ?? '');
   const attempt = step.attempts.find((a) => a.id === attemptId) ?? latest;
   const historic = Boolean(attempt && latest && attempt.id !== latest.id);
   const [tab, setTab] = useState<'artifact' | 'activity' | 'diffs' | 'evidence' | 'review'>(
     'artifact',
   );
-  const [edit, setEdit] = useState(false);
+  const [edit, setEdit] = useState(Boolean(reportTarget?.edit && !historic));
+  const [discussionPending, setDiscussionPending] = useState<string>();
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (message.type === 'reportDiscussionOpened' && message.requestId === discussionPending)
+          setDiscussionPending(undefined);
+      }),
+    [discussionPending],
+  );
   const [content, setContent] = useState(latest?.artifact?.content ?? '');
   const [savedContent, setSavedContent] = useState(latest?.artifact?.content ?? '');
   const [reason, setReason] = useState(''),
@@ -2197,6 +2492,31 @@ function StepPanel({
                     {attempt.artifact.name}
                     {historic && <em>Tentative précédente</em>}
                   </span>
+                  <button
+                    className="text-button"
+                    disabled={
+                      dirty ||
+                      savePending ||
+                      Boolean(discussionPending) ||
+                      attempt.status === 'running' ||
+                      !state.workspace.trusted
+                    }
+                    onClick={() => {
+                      const requestId = crypto.randomUUID();
+                      if (isHosted) setDiscussionPending(requestId);
+                      dispatch({
+                        type: 'openReportDiscussion',
+                        requestId,
+                        featureId: feature.id,
+                        stepId: step.id,
+                        attemptId: attempt.id,
+                        revision: attempt.revision ?? 0,
+                      });
+                    }}
+                  >
+                    <MessageSquare size={14} />{' '}
+                    {discussionPending ? 'Ouverture…' : 'Discuter avec l’agent'}
+                  </button>
                   {!historic && (
                     <button
                       className="text-button"
@@ -3498,7 +3818,7 @@ function SettingsView({
               </span>
               <div>
                 <h2>GitHub Copilot CLI</h2>
-                <p>Le moteur de vos sessions, installé dans votre environnement.</p>
+                <p>Détection automatique du CLI installé. Un chemin personnalisé reste possible.</p>
               </div>
               <Badge
                 label={
@@ -3539,6 +3859,19 @@ function SettingsView({
                 <strong>{state.runtime.models.length || 'À vérifier'}</strong>
               </div>
             </div>
+            <div className="runtime-location">
+              <span>Chemin utilisé au dernier diagnostic</span>
+              <code>{state.runtime.cliPath ?? 'Cliquez sur Vérifier la connexion.'}</code>
+              {state.runtime.cliSource && (
+                <small>
+                  {state.runtime.cliSource === 'configured'
+                    ? 'Chemin personnalisé'
+                    : state.runtime.cliSource === 'path'
+                      ? 'Détection automatique · PATH de VS Code'
+                      : 'Détection automatique · installation utilisateur'}
+                </small>
+              )}
+            </div>
             <div className="runtime-actions">
               <button
                 type="button"
@@ -3547,6 +3880,14 @@ function SettingsView({
                 onClick={() => dispatch({ type: 'checkRuntime' })}
               >
                 <RefreshCw size={15} /> Vérifier la connexion
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={state.runtime.state === 'checking'}
+                onClick={() => dispatch({ type: 'autoDetectCli' })}
+              >
+                Détection automatique
               </button>
               <button
                 type="button"
