@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0 — 2026-10-16
+
+- **Discuter avec l’agent** depuis un compte rendu : conversation persistante liée à la tentative et à la version sélectionnées, avec le profil, le modèle, le raisonnement et le contexte archivés. Un nouveau clic retrouve le même fil.
+- Retour direct au compte rendu ou à son éditeur. La copie discutée reste figée si le rapport évolue ; les modifications et validations restent humaines.
+- **Créer une feature** depuis une discussion : l’agent prépare le besoin, des critères vérifiables et une équipe ordonnée. Le formulaire permet de changer les textes, les agents, leurs missions, leur ordre et leurs autorisations avant création.
+- Propositions enregistrées, ajustements conservés dans la vue, erreurs sans perte de saisie et protection contre les créations répétées. Une feature créée reste en brouillon avec ses critères à vérifier et un lien vers la discussion d’origine.
+- Les discussions restent sans outils ; ouvrir un rapport ne déclenche aucun appel IA. Les lacunes des anciennes archives et les limites de contexte sont explicites.
+
 ## 1.8.0 — 2026-10-16
 
 - Un écran Quêtes avec 100 missions : 16 séries de 5 paliers et 20 défis uniques, répartis entre premiers pas, composition, collaboration, maîtrise et exploration.

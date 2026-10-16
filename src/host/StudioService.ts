@@ -62,6 +62,8 @@ import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { gitRead } from './gitRead';
 import { KitService } from './KitService';
 import { SessionArchive } from './SessionArchive';
+import { reportDiscussionSource } from './DiscussionContext';
+import { discussionFeaturePlanSchema } from '../core/discussionSchemas';
 import {
   DEFAULT_TRACE_BYTES,
   type ObservationOptions,
@@ -81,6 +83,32 @@ import {
 import { assertDistinctProjects } from './ProjectCatalog';
 
 export class StudioService extends EventEmitter {
+  async discussionSource(featureId: string, stepId: string, attemptId: string, revision: number) {
+    this.assertTrusted();
+    const feature = this.engine.getFeature(featureId),
+      step = this.engine.getStep(featureId, stepId);
+    const attempt = step.attempts.find((item) => item.id === attemptId);
+    if (!attempt || (attempt.revision ?? 0) !== revision)
+      throw new Error('Le compte rendu a changé. Rouvrez sa version actuelle avant de discuter.');
+    const source = await reportDiscussionSource(
+      structuredClone(feature),
+      structuredClone(step),
+      structuredClone(attempt),
+      await this.archiveFor(featureId),
+    );
+    this.assertTrusted();
+    const current = this.engine
+      .getStep(featureId, stepId)
+      .attempts.find((item) => item.id === attemptId);
+    if (
+      !current ||
+      current.status === 'running' ||
+      redact(current.artifact?.content ?? '') !== source.output ||
+      (current.revision ?? 0) !== revision
+    )
+      throw new Error('Le compte rendu a changé pendant l’ouverture de la discussion.');
+    return source;
+  }
   private archives = new Map<string, Promise<SessionArchive>>();
   private async archiveFor(featureId: string): Promise<SessionArchive> {
     let pending = this.archives.get(featureId);
@@ -300,6 +328,7 @@ export class StudioService extends EventEmitter {
     this.publish();
   }
   async createFeature(input: {
+    requestId?: string;
     title: string;
     description: string;
     workflowId?: string;
@@ -307,9 +336,16 @@ export class StudioService extends EventEmitter {
     agentId?: string;
     model?: string;
     isolated?: boolean;
+    discussionId?: string;
+    criteria?: string[];
+    team?: import('../shared/discussions').DiscussionFeatureMember[];
   }): Promise<Feature> {
     return this.workspaceAction(undefined, 'Création de l’espace de la feature', async () => {
-      const workflow = this.state.workflows.find((item) => item.id === input.workflowId);
+      const existing =
+        input.requestId &&
+        this.engine.features.find((feature) => feature.creationRequestId === input.requestId);
+      if (existing) return existing;
+      let workflow = this.state.workflows.find((item) => item.id === input.workflowId);
       if (input.workflowId && !workflow) throw new Error('Workflow inconnu.');
       if (input.agentId && !this.state.agents.some((agent) => agent.id === input.agentId))
         throw new Error('Agent inconnu.');
@@ -318,6 +354,36 @@ export class StudioService extends EventEmitter {
       if (input.projects?.length && input.projects[0].path !== this.workspacePath)
         throw new Error('Le projet principal ne correspond pas à la session.');
       if (input.projects) assertDistinctProjects(input.projects);
+      if (input.team) {
+        const team = discussionFeaturePlanSchema.shape.team.parse(input.team);
+        Object.assign(this.state, await this.registry.load());
+        const ids = team.map(() => `step-${randomUUID()}`);
+        workflow = validateWorkflow({
+          id: 'custom',
+          name: 'Équipe issue de la discussion',
+          description: '',
+          icon: 'users',
+          steps: team.map((member, index) => {
+            const agent = this.state.agents.find((item) => item.id === member.agentId);
+            if (!agent)
+              throw new Error(
+                `L’agent de « ${member.name} » n’est plus disponible dans ce projet. Ajustez l’équipe.`,
+              );
+            return {
+              ...member,
+              id: ids[index],
+              skills: [],
+              model: agent.model,
+              maxAttempts: 3,
+              artifact: `${ids[index]}.md`,
+              dependsOn: index ? [ids[index - 1]] : [],
+            };
+          }),
+        });
+      }
+      const criteria = input.criteria
+        ? discussionFeaturePlanSchema.shape.criteria.parse(input.criteria)
+        : [];
       const info = await gitInfo(this.workspacePath);
       this.assertTrusted();
       this.state.workspace.branch = info.branch;
@@ -326,6 +392,14 @@ export class StudioService extends EventEmitter {
         ...input,
         branch: info.branch,
       });
+      feature.discussionId = input.discussionId;
+      feature.creationRequestId = input.requestId;
+      feature.criteria = criteria.map((text) => ({
+        id: randomUUID(),
+        text,
+        status: 'pending',
+        evidence: '',
+      }));
       if (input.projects?.length) {
         feature.projects = [];
         for (const project of input.projects) {
@@ -1108,6 +1182,11 @@ export class StudioService extends EventEmitter {
           settings: input.settings,
           launch: input.launch,
           resumeSessionId: input.resumeSessionId,
+          execution: {
+            model:
+              input.step.model || input.agent.model || input.settings.defaultModel || undefined,
+            reasoning: input.step.reasoning,
+          },
         }),
       });
       await archive.flush();

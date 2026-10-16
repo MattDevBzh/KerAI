@@ -26,6 +26,19 @@ async function hosted(page: Page, state = fresh()) {
         setState: (v: object) => (saved = v),
         postMessage: (m: ClientMessage) => {
           messages.push(m);
+          if (m.type === 'createFeature' && m.requestId)
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'featureCreateResult',
+                    requestId: m.requestId,
+                    featureId: 'created-fixture',
+                  },
+                  '*',
+                ),
+              0,
+            );
           if (m.type === 'saveAgent' || m.type === 'saveSkill')
             setTimeout(
               () =>
@@ -190,6 +203,7 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
   await page.getByRole('button', { name: 'Créer la feature' }).click();
   expect((await messages(page)).at(-1)).toEqual({
     type: 'createFeature',
+    requestId: expect.any(String),
     title: 'Analyser un composant',
     description: 'Comprendre les contraintes.',
     isolated: false,

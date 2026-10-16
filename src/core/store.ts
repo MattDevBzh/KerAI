@@ -183,6 +183,8 @@ const feature = z
       .min(1)
       .optional(),
     teamRevision: z.number().int().nonnegative().optional(),
+    discussionId: z.string().uuid().optional(),
+    creationRequestId: z.string().uuid().optional(),
     teamLockedAt: z.string().optional(),
     descriptionRevision: z.number().int().nonnegative().optional(),
     descriptionVersions: z.array(editorialVersion).optional(),

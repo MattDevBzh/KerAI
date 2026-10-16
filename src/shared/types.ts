@@ -157,6 +157,8 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  discussionId?: string;
+  creationRequestId?: string;
   traceWarnings?: string[];
   observations?: import('./observation').SessionObservation[];
   projects?: import('./projects').FeatureProject[];
@@ -308,6 +310,10 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      requestId?: string;
+      discussionId?: string;
+      criteria?: string[];
+      team?: import('./discussions').DiscussionFeatureMember[];
       projectIds?: string[];
       title: string;
       description: string;

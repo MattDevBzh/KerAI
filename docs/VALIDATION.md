@@ -1,4 +1,16 @@
-# Validation et limites — v1.8.0, 16 octobre 2026
+# Validation et limites — v1.9.0, 16 octobre 2026
+
+## Discussions et sessions reliées — v1.9.0
+
+- `npm run check` réussi : format, TypeScript, **567 tests métier réussis**, 4 ignorés, puis compilation.
+- **130 scénarios Chromium réussis**, dont cinq nouveaux parcours couvrant le compte rendu vers le chat, le retour direct à l’éditeur, les brouillons protégés, le rapport devenu plus récent et la proposition de feature ajustable. Les anciens fixtures de création ont été adaptés à l’accusé de réception du nouvel enregistrement ; le second passage complet est vert.
+- Le contexte hôte est testé avec un prompt archivé découpé en plusieurs fragments, les lectures d’outils, les réponses humaines, une reprise de session, les anciennes archives et la limitation explicite des traces. Le profil figé reste utilisable après suppression du profil courant et rechargement.
+- La préparation de feature est testée avec les décisions de la conversation, la persistance du brouillon, le refus d’agents inventés et de propositions illisibles, et la déduplication des requêtes. La création conserve les ajustements, les critères en attente, l’équipe ordonnée et le lien d’origine, sans lancer d’agent.
+- Les interfaces ont été examinées sur bureau et à 800 px ; le test compact vérifie que la zone de saisie et le bouton d’envoi restent dans le viewport. Le formulaire conserve les ajustements après une erreur ou sa fermeture.
+- VSIX 1.9.0 local vérifié (intégrité ZIP, version et point d’entrée), extrait puis chargé dans VS Code Insiders sur macOS. Le smoke vérifie notamment une création avec équipe et critères, une requête répétée sans doublon, aucun lancement implicite et la conservation après fermeture/réouverture.
+- Les tests utilisent un runtime simulé : aucun prompt Copilot payant n’est envoyé. Le comportement rédactionnel d’un modèle réel reste à apprécier sur un échange utilisateur.
+- Les nouveaux tests de discussions et d’archives sont inclus dans le job Windows. Les validations Linux/Windows du commit exact et le smoke du paquet construit en CI précèdent la publication ; les checksums de la release concernent le VSIX effectivement livré.
+
 
 ## Quêtes et trophées — v1.8.0
 

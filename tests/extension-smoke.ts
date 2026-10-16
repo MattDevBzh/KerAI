@@ -646,6 +646,47 @@ async function smokeRun(): Promise<void> {
     0,
     'Preparation and storage consultation never start a paid model',
   );
+  const proposalAgent = api.getState()!.agents[0];
+  const beforeProposal = api.getState()!.features.length;
+  const proposalRequest: Extract<ClientMessage, { type: 'createFeature' }> = {
+    type: 'createFeature',
+    requestId: 'f00daf65-5877-48fa-9bb5-444b601a3173',
+    title: 'Reviewed conversation proposal',
+    description: 'Human-adjusted brief, no automatic run.',
+    criteria: ['Keyboard navigation works'],
+    team: [
+      {
+        agentId: proposalAgent.id,
+        name: 'Review the need',
+        description: 'Check the acceptance criteria',
+        policy: 'read-only',
+      },
+    ],
+  };
+  await api.dispatch(proposalRequest);
+  await api.dispatch(proposalRequest);
+  const proposed = api
+    .getState()!
+    .features.find((item) => item.creationRequestId === proposalRequest.requestId)!;
+  assert.ok(proposed);
+  assert.equal(
+    api.getState()!.features.length,
+    beforeProposal + 1,
+    'Repeated creation acknowledgements do not duplicate a feature',
+  );
+  assert.equal(proposed.status, 'draft');
+  assert.equal(proposed.criteria?.[0].status, 'pending');
+  assert.equal(
+    proposed.steps[0].attempts.length,
+    0,
+    'Creating a reviewed proposal never launches an agent',
+  );
+  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+  await vscode.commands.executeCommand('featureStudio.open');
+  assert.equal(
+    api.getState()!.features.find((item) => item.id === proposed.id)?.criteria?.[0].text,
+    'Keyboard navigation works',
+  );
   console.log(
     'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );

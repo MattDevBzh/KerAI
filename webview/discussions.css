@@ -108,6 +108,66 @@
   min-width: 0;
   min-height: 0;
 }
+.discussion-source {
+  margin: 0 28px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--side);
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+}
+.discussion-source > span {
+  color: var(--muted);
+}
+.discussion-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.discussion-feature-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 28px 14px;
+}
+.feature-proposal {
+  margin: 18px 0;
+}
+.proposal-member {
+  padding: 14px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--side);
+}
+.discussion-source-copy {
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 24px;
+  overflow-wrap: anywhere;
+}
+.discussion-source-copy details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.discussion-source-copy summary {
+  cursor: pointer;
+}
+.discussion-source-copy pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow: auto;
+}
+.discussion-context-warning {
+  border-left: 3px solid var(--coral);
+  padding-left: 12px;
+}
 .discussion-toolbar {
   display: flex;
   align-items: center;
@@ -133,6 +193,9 @@
   gap: 12px;
   padding: 0 28px 15px;
   border-bottom: 1px solid var(--border);
+}
+.discussion-controls.source-controls {
+  display: none;
 }
 .discussion-controls .field {
   min-width: 0;
@@ -283,6 +346,7 @@
   padding-top: 8px;
 }
 .discussion-composer {
+  flex-shrink: 0;
   padding: 14px 28px 20px;
   border-top: 1px solid var(--border);
 }

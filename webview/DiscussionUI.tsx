@@ -13,7 +13,12 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ClientMessage, StudioState } from '../src/shared/types';
-import type { Discussion, DiscussionAgent, DiscussionState } from '../src/shared/discussions';
+import type {
+  Discussion,
+  DiscussionAgent,
+  DiscussionState,
+  DiscussionFeatureDraft,
+} from '../src/shared/discussions';
 import { Avatar } from './Avatar';
 import { isHosted, persistView, subscribe } from './bridge';
 import './discussions.css';
@@ -37,6 +42,7 @@ export function DiscussionUI({
   visible,
   selectedId,
   onSelect,
+  onCreateFeature,
 }: {
   state: DiscussionState;
   studio: StudioState;
@@ -44,11 +50,12 @@ export function DiscussionUI({
   visible: boolean;
   selectedId: string;
   onSelect: (id: string) => void;
+  onCreateFeature: (discussionId: string, draft: DiscussionFeatureDraft) => void;
 }) {
   const [newId, setNewId] = useState(() => crypto.randomUUID());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  type Pending = { discussionId: string; action: 'send' | 'delete'; content?: string };
+  type Pending = { discussionId: string; action: 'send' | 'delete' | 'prepare'; content?: string };
   const requests = useRef<Record<string, Pending>>({});
   const [pendingRequests, setPendingRequests] = useState<Record<string, Pending>>({});
   const [search, setSearch] = useState('');
@@ -71,6 +78,7 @@ export function DiscussionUI({
         setErrors((current) => ({ ...current, [request.discussionId]: message.error ?? '' }));
         if (message.error || message.cancelled) return;
         setDrafts((current) => {
+          if (request.action === 'prepare') return current;
           if (
             request.action === 'send' &&
             current[request.discussionId]?.trim() !== request.content
@@ -89,7 +97,11 @@ export function DiscussionUI({
     [],
   );
   const request = (message: ClientMessage) => {
-    if (message.type === 'sendDiscussion' || message.type === 'deleteDiscussion') {
+    if (
+      message.type === 'sendDiscussion' ||
+      message.type === 'deleteDiscussion' ||
+      message.type === 'prepareDiscussionFeature'
+    ) {
       if (
         Object.values(requests.current).some(
           (pending) => pending.discussionId === message.discussionId,
@@ -100,7 +112,12 @@ export function DiscussionUI({
         ...requests.current,
         [message.requestId]: {
           discussionId: message.discussionId,
-          action: message.type === 'sendDiscussion' ? 'send' : 'delete',
+          action:
+            message.type === 'sendDiscussion'
+              ? 'send'
+              : message.type === 'prepareDiscussionFeature'
+                ? 'prepare'
+                : 'delete',
           content: 'content' in message ? message.content : undefined,
         },
       };
@@ -187,6 +204,7 @@ export function DiscussionUI({
         key={id}
         id={id}
         discussion={selected}
+        onCreateFeature={onCreateFeature}
         state={state}
         studio={studio}
         dispatch={request}
@@ -201,6 +219,7 @@ export function DiscussionUI({
 }
 
 function Conversation({
+  onCreateFeature,
   id,
   discussion,
   state,
@@ -212,6 +231,7 @@ function Conversation({
   error,
   visible,
 }: {
+  onCreateFeature: (discussionId: string, draft: DiscussionFeatureDraft) => void;
   id: string;
   discussion?: Discussion;
   state: DiscussionState;
@@ -231,7 +251,17 @@ function Conversation({
   const scroll = useRef<HTMLDivElement>(null),
     stick = useRef(true);
   const input = useRef<HTMLTextAreaElement>(null);
-  const selected = state.agents.find((agent) => agent.key === agentKey);
+  const [preparingFeature, setPreparingFeature] = useState<string>();
+  useEffect(() => {
+    if (visible && preparingFeature && discussion?.featureDraft?.requestId === preparingFeature) {
+      setPreparingFeature(undefined);
+      onCreateFeature(id, discussion.featureDraft);
+    }
+  }, [visible, preparingFeature, discussion?.featureDraft]);
+  const source = discussion?.source;
+  const selected = source
+    ? { key: discussion!.agentKey, profile: source.agent }
+    : state.agents.find((agent) => agent.key === agentKey);
   const others = state.agents.filter((agent) => !agent.profile.discussionAgent);
   const shownOthers = expanded ? others : others.filter((agent) => agent.key === agentKey);
   const effectiveModel = model || selected?.profile.model || state.defaultModel;
@@ -255,7 +285,7 @@ function Conversation({
   }, [pending, visible]);
   useEffect(() => {
     if (visible && stick.current && scroll.current)
-      scroll.current.scrollTop = scroll.current.scrollHeight;
+      scroll.current.scrollTop = discussion?.messages.length ? scroll.current.scrollHeight : 0;
   }, [discussion?.messages, visible]);
   const send = (event?: FormEvent) => {
     event?.preventDefault();
@@ -301,14 +331,100 @@ function Conversation({
           </button>
         )}
       </header>
-      <div className="discussion-controls">
+      {discussion && (!source || discussion.messages.length > 0) && (
+        <div className="discussion-feature-actions">
+          <button
+            className="button secondary small"
+            disabled={
+              pending ||
+              running ||
+              !discussion.messages.some(
+                (message) => message.role === 'assistant' && message.status === 'complete',
+              )
+            }
+            onClick={() => {
+              if (discussion.featureDraft) onCreateFeature(id, discussion.featureDraft);
+              else {
+                const requestId = crypto.randomUUID();
+                setPreparingFeature(requestId);
+                dispatch({
+                  type: 'prepareDiscussionFeature',
+                  requestId,
+                  discussionId: id,
+                  agentKey,
+                  model: model || undefined,
+                  reasoning: reasoning || undefined,
+                });
+              }
+            }}
+          >
+            <Plus size={14} />{' '}
+            {running && preparingFeature
+              ? 'Préparation du brouillon…'
+              : discussion.featureDraft
+                ? 'Ajuster et créer la feature'
+                : 'Créer une feature'}
+          </button>
+          {discussion.featureDraft && (
+            <button
+              className="text-button"
+              disabled={pending || running}
+              onClick={() => {
+                const requestId = crypto.randomUUID();
+                setPreparingFeature(requestId);
+                dispatch({
+                  type: 'prepareDiscussionFeature',
+                  requestId,
+                  discussionId: id,
+                  agentKey,
+                  model: model || undefined,
+                  reasoning: reasoning || undefined,
+                });
+              }}
+            >
+              Actualiser la proposition
+            </button>
+          )}
+        </div>
+      )}
+      {source && (
+        <section className="discussion-source" aria-label="Compte rendu lié">
+          <strong>
+            {source.featureTitle} · {source.stepName}
+          </strong>
+          <span>
+            Version {source.revision + 1} · {source.agent.nickname || source.agent.name} ·{' '}
+            {source.model || 'Modèle automatique'}
+            {source.reasoning ? ` · ${source.reasoning}` : ''} · configuration conservée
+          </span>
+          <div className="discussion-source-actions">
+            <button
+              className="text-button"
+              onClick={() =>
+                dispatch({ type: 'returnToDiscussionReport', discussionId: id, edit: false })
+              }
+            >
+              Revenir au compte rendu
+            </button>
+            <button
+              className="button secondary small"
+              onClick={() =>
+                dispatch({ type: 'returnToDiscussionReport', discussionId: id, edit: true })
+              }
+            >
+              Modifier le compte rendu actuel
+            </button>
+          </div>
+        </section>
+      )}
+      <div className={`discussion-controls ${source ? 'source-controls' : ''}`}>
         <div className="discussion-agent-control">
           <label className="field">
             <span>Agent</span>
             <select
               aria-label="Agent de discussion"
               value={agentKey}
-              disabled={pending || running}
+              disabled={pending || running || Boolean(source)}
               onChange={(event) => {
                 setAgentKey(event.target.value);
                 setReasoning('');
@@ -317,10 +433,15 @@ function Conversation({
               <option value="" disabled>
                 Choisir un agent
               </option>
+              {source && (
+                <option value={agentKey}>
+                  {source.agent.nickname || source.agent.name} · configuration d’origine
+                </option>
+              )}
               {agentKey && !selected && (
                 <option value={agentKey}>Agent indisponible — choisir un profil</option>
               )}
-              {preferred.length > 0 && (
+              {!source && preferred.length > 0 && (
                 <optgroup label="Agents de discussion">
                   {preferred.map((agent) => (
                     <option value={agent.key} key={agent.key}>
@@ -330,7 +451,7 @@ function Conversation({
                   ))}
                 </optgroup>
               )}
-              {shownOthers.length > 0 && (
+              {!source && shownOthers.length > 0 && (
                 <optgroup label="Autres agents">
                   {shownOthers.map((agent) => (
                     <option value={agent.key} key={agent.key}>
@@ -342,7 +463,7 @@ function Conversation({
               )}
             </select>
           </label>
-          {others.length > 0 && (
+          {!source && others.length > 0 && (
             <button
               className="text-button discussion-more"
               aria-expanded={expanded}
@@ -358,7 +479,7 @@ function Conversation({
           <select
             aria-label="Modèle de la discussion"
             value={model}
-            disabled={pending || running}
+            disabled={pending || running || Boolean(source)}
             onChange={(event) => {
               setModel(event.target.value);
               setReasoning('');
@@ -386,7 +507,7 @@ function Conversation({
           <select
             aria-label="Raisonnement de la discussion"
             value={reasoning}
-            disabled={pending || running || !efforts.length}
+            disabled={pending || running || Boolean(source) || !efforts.length}
             onChange={(event) => setReasoning(event.target.value)}
           >
             <option value="">{efforts.length ? 'Par défaut' : 'Automatique'}</option>
@@ -430,7 +551,55 @@ function Conversation({
             stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100;
         }}
       >
-        {!discussion?.messages.length && (
+        {source && (
+          <div className="discussion-source-copy">
+            <p>
+              Discutez pour comprendre ou préparer une modification. Vous gardez la main sur
+              l’édition et la validation du compte rendu.
+            </p>
+            {source.warnings.map((warning) => (
+              <p className="discussion-context-warning" key={warning}>
+                {warning}
+              </p>
+            ))}
+            <details>
+              <summary>Compte rendu au début de cette discussion</summary>
+              <div className="markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{source.output}</ReactMarkdown>
+              </div>
+            </details>
+            {source.originalOutput && (
+              <details>
+                <summary>Sortie originale de l’agent</summary>
+                <div className="markdown">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{source.originalOutput}</ReactMarkdown>
+                </div>
+              </details>
+            )}
+            <details>
+              <summary>Contexte transmis à l’agent</summary>
+              <pre>{source.context}</pre>
+            </details>
+            {!discussion?.messages.length && (
+              <div className="discussion-source-actions">
+                {[
+                  'Peux-tu m’expliquer tes choix ?',
+                  'Quelles sont les alternatives ?',
+                  'Quels points dois-je vérifier ?',
+                ].map((question) => (
+                  <button
+                    key={question}
+                    className="button secondary small"
+                    onClick={() => onDraft(question)}
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {!source && !discussion?.messages.length && (
           <div className="discussion-welcome">
             <Avatar agent={selected?.profile} />
             <h3>
