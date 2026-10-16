@@ -1,0 +1,70 @@
+html {
+  --studio-zoom: 1;
+  --studio-vh: calc(1dvh / var(--studio-zoom));
+  --studio-vw: calc(1dvw / var(--studio-zoom));
+  zoom: var(--studio-zoom);
+}
+
+/* Responsive layouts use the space left after zoom, including inside dialogs. */
+#root {
+  container: studio / inline-size;
+  min-height: calc(100 * var(--studio-vh));
+}
+
+.zoom-control {
+  position: relative;
+  flex-shrink: 0;
+}
+.zoom-buttons {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 8px;
+}
+.zoom-buttons button {
+  width: 30px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.zoom-buttons button:hover:not(:disabled) {
+  background: var(--panel-soft);
+}
+.zoom-buttons select {
+  width: 105px;
+  font-size: 12px;
+  padding: 6px 2px 6px 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  border-inline: 1px solid var(--border);
+}
+.zoom-error {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 260px;
+  max-width: calc(95 * var(--studio-vw));
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  color: var(--fg);
+  box-shadow: var(--shadow);
+}
+.zoom-control-settings {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.zoom-help {
+  margin-top: 14px;
+  max-width: 70ch;
+}

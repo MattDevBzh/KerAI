@@ -14,6 +14,7 @@ import { usageCredits } from '../src/shared/credits';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
 import { ThemePicker } from './ThemePicker';
+import { ZoomControls, ZoomSettings } from './ZoomControls';
 import { ThemeScenery } from './ThemeScenery';
 import { QuestCelebration, QuestsUI } from './QuestsUI';
 import { emptyQuestState, type QuestState } from '../src/shared/quests';
@@ -638,6 +639,7 @@ export default function App() {
             <span>{selected ? selected.title : nav.find((n) => n.id === view)?.label}</span>
           </div>
           <div className="topbar-actions">
+            <ZoomControls />
             <span className="trust-label">
               <ShieldCheck size={14} />
               {state.workspace.trusted ? 'Projet approuvé' : 'Consultation seule'}
@@ -3487,6 +3489,7 @@ function SettingsView({
             <span className="eyebrow">COMMUN À TOUS LES PROJETS</span>
             <h2>Votre atelier</h2>
           </div>
+          <ZoomSettings />
           <ThemePicker />
           <section className="settings-card">
             <div className="settings-card-title">

@@ -181,7 +181,7 @@
   overflow-wrap: anywhere;
   line-height: 1.5;
 }
-@media (max-width: 760px) {
+@container studio (max-width: 760px) {
   .usage-metrics {
     grid-template-columns: 1fr;
   }
@@ -197,7 +197,7 @@
     padding: 14px;
   }
 }
-@media (max-width: 420px) {
+@container studio (max-width: 420px) {
   .usage-filters {
     grid-template-columns: 1fr;
   }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.0 — 2026-10-16
+
+- Commandes de zoom − / + et sélection de 80 à 200 % dans le bandeau du cockpit et les réglages communs.
+- Mode Auto par défaut : agrandissement adapté à la largeur et à la hauteur disponibles, tenant compte de l’espace déjà accordé par la mise à l’échelle de Windows et de VS Code.
+- Préférence personnelle mémorisée dans `featureStudio.appearance.zoom`, partagée entre projets et restaurée à l’ouverture ; retour au réglage précédent si son enregistrement échoue.
+- Pages plus larges et mises en page adaptées à l’espace restant après zoom. Les panneaux, les dialogues et les menus restent accessibles, y compris à 200 %.
+
 ## 1.8.0 — 2026-10-16
 
 - Un écran Quêtes avec 100 missions : 16 séries de 5 paliers et 20 défis uniques, répartis entre premiers pas, composition, collaboration, maîtrise et exploration.

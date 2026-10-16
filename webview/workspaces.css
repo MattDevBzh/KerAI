@@ -614,7 +614,7 @@
   line-height: 1.8;
   margin-bottom: 15px;
 }
-@media (max-width: 1050px) {
+@container studio (max-width: 1050px) {
   .workspace-band-actions {
     flex-direction: column;
     align-items: end;
@@ -643,7 +643,7 @@
     padding: 11px;
   }
 }
-@media (max-width: 800px) {
+@container studio (max-width: 800px) {
   .git-workspace-band {
     align-items: start;
     flex-wrap: wrap;
@@ -690,7 +690,7 @@
     align-self: auto;
   }
 }
-@media (max-width: 550px) {
+@container studio (max-width: 550px) {
   .workspace-choice-options {
     grid-template-columns: 1fr;
   }

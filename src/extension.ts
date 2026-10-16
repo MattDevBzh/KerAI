@@ -24,6 +24,7 @@ import { readHeadFile } from './host/GitFileContent';
 import { redact } from './host/process';
 import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
 import { normalizeTheme } from './shared/themes';
+import { normalizeZoom } from './shared/zoom';
 import { QuestService, type QuestFact } from './host/QuestService';
 import { studioQuestFacts, discussionQuestFacts } from './host/questFacts';
 
@@ -70,6 +71,11 @@ export async function activate(context: vscode.ExtensionContext) {
     normalizeTheme(vscode.workspace.getConfiguration('featureStudio').get('appearance.theme'));
   const sendTheme = (requestId?: string, error?: string) =>
     send({ type: 'themeState', theme: getTheme(), requestId, error });
+  const getZoom = () =>
+    normalizeZoom(vscode.workspace.getConfiguration('featureStudio').get('appearance.zoom'));
+  const sendZoom = (requestId?: string, error?: string) =>
+    send({ type: 'zoomState', zoom: getZoom(), requestId, error });
+  let zoomWrites = Promise.resolve();
   // Theme writes share a queue so fast successive choices keep their requested order.
   let themeWrites = Promise.resolve();
   let favoriteWrites = Promise.resolve();
@@ -90,6 +96,7 @@ export async function activate(context: vscode.ExtensionContext) {
     },
     vscode.window.registerWebviewViewProvider('featureStudio.launcher', launcher),
     vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('featureStudio.appearance.zoom')) sendZoom();
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
       if (event.affectsConfiguration('featureStudio.favoriteAgentIds')) service?.publish();
     }),
@@ -357,6 +364,23 @@ export async function activate(context: vscode.ExtensionContext) {
   const notice = (message: string) => send({ type: 'notice', message });
   const dispatch = async (raw: unknown): Promise<void | CheckpointComparison> => {
     const message = parseMessage(raw);
+    if (message.type === 'setZoom') {
+      zoomWrites = zoomWrites.then(async () => {
+        try {
+          await vscode.workspace
+            .getConfiguration('featureStudio')
+            .update('appearance.zoom', message.zoom, vscode.ConfigurationTarget.Global);
+          sendZoom(message.requestId);
+        } catch (error) {
+          sendZoom(
+            message.requestId,
+            redact(error instanceof Error ? error.message : String(error)),
+          );
+        }
+      });
+      await zoomWrites;
+      return;
+    }
     if (message.type === 'setTheme') {
       themeWrites = themeWrites.then(async () => {
         try {
@@ -566,6 +590,7 @@ export async function activate(context: vscode.ExtensionContext) {
         webviewReady = true;
         if (dedicated) void drainRequests();
         sendTheme();
+        sendZoom();
         current.publish();
         if (devops) send({ type: 'devopsState', state: devops.getState() });
         return;
@@ -1457,7 +1482,7 @@ export async function activate(context: vscode.ExtensionContext) {
     let html = await readFile(path.join(context.extensionPath, 'dist/webview/index.html'), 'utf8');
     const csp = `default-src 'none'; img-src ${target.webview.cspSource} data:; style-src ${target.webview.cspSource} 'unsafe-inline'; font-src ${target.webview.cspSource}; script-src 'nonce-${nonce}'; connect-src 'none'; base-uri ${target.webview.cspSource}; form-action 'none';`;
     html = html
-      .replace(/<html\b/, `<html data-studio-theme="${getTheme()}"`)
+      .replace(/<html\b/, `<html data-studio-theme="${getTheme()}" data-studio-zoom="${getZoom()}"`)
       .replace(
         '<head>',
         `<head><base href="${base}"><meta http-equiv="Content-Security-Policy" content="${csp}">`,
@@ -1490,6 +1515,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     await ensure();
     sendTheme();
+    sendZoom();
     service!.publish();
     if (devops) send({ type: 'devopsState', state: devops.getState() });
   };
@@ -1702,6 +1728,7 @@ export async function activate(context: vscode.ExtensionContext) {
     getLauncherVisible: () => launcher.visible,
     getLauncherReady: () => launcher.isReady,
     getTheme,
+    getZoom,
     getQuestState: () => quests.snapshot(),
     getDevOpsState: () => devops?.getState(),
     dispatch: (message: ClientMessage) => dispatch(message),

@@ -280,12 +280,12 @@
   max-height: 400px;
   overflow: auto;
 }
-@media (max-width: 1000px) {
+@container studio (max-width: 1000px) {
   .observation-cost-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 600px) {
+@container studio (max-width: 600px) {
   .observation-workspace {
     padding: 16px;
   }
@@ -449,7 +449,7 @@
   align-items: center;
   gap: 12px;
 }
-@media (max-width: 800px) {
+@container studio (max-width: 800px) {
   .observation-scan {
     flex-wrap: wrap;
     gap: 16px;

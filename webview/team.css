@@ -1,6 +1,6 @@
 .modal.wide:has(.team-composer) {
-  width: min(1180px, 96vw);
-  max-width: 96vw;
+  width: min(1180px, calc(96 * var(--studio-vw)));
+  max-width: calc(96 * var(--studio-vw));
 }
 .team-composer {
   display: grid;
@@ -282,7 +282,7 @@
   overflow: hidden;
   clip-path: inset(50%);
 }
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .team-selection {
     position: static;
     padding: 10px;

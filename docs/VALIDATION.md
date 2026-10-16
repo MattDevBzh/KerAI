@@ -1,4 +1,13 @@
-# Validation et limites — v1.8.0, 16 octobre 2026
+# Validation et limites — v1.9.0, 16 octobre 2026
+
+## Zoom et grands écrans — v1.9.0
+
+- TypeScript, compilation et création du VSIX réussis. Version et intégrité ZIP du paquet contrôlées.
+- 15 tests unitaires ciblés réussis : réglages personnels, validation des messages, accusés de réception, erreur d’écriture et changements externes.
+- 29 scénarios Chromium réussis : zoom, composition d’équipes, sept thèmes, réduction des animations, contraste élevé, discussions et panneaux mobiles.
+- Mode Auto vérifié en 1440 × 900, Full HD, QHD, 4K et fenêtre ultralarge basse. Zoom manuel 200 %, défilement des dialogues, glisser-déposer, navigation, mémorisation après rechargement et retour au choix confirmé après refus d’écriture couverts. Vue QHD inspectée visuellement.
+- La recette utilise un navigateur Chromium sous Linux et un pont VS Code simulé. Le lancement natif de ce VSIX sous Windows n’a pas été réexécuté. Aucun prompt Copilot payant ni appel Azure DevOps réel.
+
 
 ## Quêtes et trophées — v1.8.0
 

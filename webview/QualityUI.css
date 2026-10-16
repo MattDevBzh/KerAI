@@ -107,7 +107,7 @@
 .quality-command-fields small {
   grid-column: 1 / -1;
 }
-@media (max-width: 550px) {
+@container studio (max-width: 550px) {
   .quality-command-fields {
     grid-template-columns: 1fr;
   }

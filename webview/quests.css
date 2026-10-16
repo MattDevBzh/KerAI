@@ -362,7 +362,7 @@ html[data-studio-theme-family='guilde'] .quest-card {
 html[data-studio-theme-family='papier'] .quest-card {
   box-shadow: 3px 4px 0 color-mix(in srgb, var(--border) 30%, transparent);
 }
-@media (max-width: 1100px) {
+@container studio (max-width: 1100px) {
   .quest-overview {
     grid-template-columns: 1fr 1fr;
   }
@@ -380,7 +380,7 @@ html[data-studio-theme-family='papier'] .quest-card {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .quest-overview {
     grid-template-columns: 1fr;
     padding: 24px;
@@ -427,7 +427,7 @@ html[data-studio-theme-family='papier'] .quest-card {
     border: 1px solid CanvasText;
   }
 }
-@media (max-width: 890px) {
+@container studio (max-width: 890px) {
   .nav-item:has(.quest-menu-count) {
     position: relative;
   }

@@ -190,7 +190,7 @@
   padding: 16px 10px;
 }
 .celebration-card {
-  width: clamp(76px, 12vw, 118px);
+  width: clamp(76px, calc(12 * var(--studio-vw)), 118px);
   text-align: center;
   transform: rotate(-4deg);
   padding: 4px 4px 10px;
@@ -252,7 +252,7 @@
     opacity: 0;
   }
 }
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .report-diff {
     grid-template-columns: 1fr;
   }
@@ -288,7 +288,7 @@
   margin-left: auto;
   flex-shrink: 0;
 }
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .review-finding {
     flex-wrap: wrap;
   }

@@ -1,3 +1,4 @@
+import { ZOOM_LEVELS } from '../shared/zoom';
 import { devOpsMessageVariants } from '../core/devopsSchemas';
 import { discussionMessageVariants } from '../core/discussionSchemas';
 import { z } from 'zod';
@@ -64,6 +65,13 @@ export const messageSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   ...devOpsMessageVariants,
+  z
+    .object({
+      type: z.literal('setZoom'),
+      zoom: z.union([z.literal('auto'), z.union(ZOOM_LEVELS.map((level) => z.literal(level)))]),
+      requestId: id,
+    })
+    .strict(),
   z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
   z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),
   z

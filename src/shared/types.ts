@@ -1,3 +1,4 @@
+import type { ZoomPreference } from './zoom';
 import type { DevOpsClientMessage, DevOpsState } from './devops';
 import type { ThemeId } from './themes';
 export * from './themes';
@@ -300,6 +301,7 @@ export type ClientMessage =
       steps: WorkflowStep[];
     }
   | { type: 'setAgentFavorite'; agentId: string; favorite: boolean; requestId: string }
+  | { type: 'setZoom'; zoom: ZoomPreference; requestId: string }
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
   | { type: 'installQualityKit'; featureId?: string }
   | { type: 'openQualityAttachment'; featureId: string; evidenceId: string; attachmentId: string }
@@ -462,6 +464,7 @@ export type HostMessage =
       error?: string;
     }
   | import('./kits').KitHostMessage
+  | { type: 'zoomState'; zoom: ZoomPreference; requestId?: string; error?: string }
   | { type: 'themeState'; theme: ThemeId; requestId?: string; error?: string }
   | ({ type: 'profileSaveResult'; requestId: string; error?: string } & Partial<
       import('./profiles').ProfileSaveResult

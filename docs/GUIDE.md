@@ -28,6 +28,14 @@ En haut de **Réglages**, **L’ambiance du cockpit** propose **Suivre VS Code**
 
 Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
 
+## Agrandir l’interface
+
+Le bandeau supérieur propose **− / Auto / +**. Le zoom agrandit ensemble textes, boutons, icônes et avatars. Choisis **80 à 200 %** pour garder une taille fixe ; **Auto** adapte l’affichage lorsque tu redimensionnes la fenêtre ou changes d’écran.
+
+Le mode Auto utilise l’espace disponible : par exemple 125 % en 1920 × 1080, 150 % en 2560 × 1440 et 175 % en 3840 × 2160, lorsque ces dimensions sont disponibles après la mise à l’échelle de Windows et de VS Code. Une fenêtre basse conserve davantage d’espace vertical.
+
+Le choix se trouve également dans **Réglages → Votre atelier → Taille de l’interface**. Il est enregistré dans les réglages personnels de VS Code, commun à tous tes projets, et conservé après fermeture. Changer de zoom ne lance aucun agent et ne consomme aucun crédit.
+
 ## Quêtes et trophées
 
 Le menu **Quêtes** affiche ton total de trophées. Le carnet propose **100 quêtes**, chacune valant **1 à 10 trophées** : 80 missions réparties en 16 séries de cinq paliers, et 20 défis uniques.

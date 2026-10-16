@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -158,6 +158,26 @@
           "default": [],
           "scope": "application",
           "description": "Agents favoris, affichés en premier dans les catalogues et sélecteurs de Feature Studio."
+        },
+        "featureStudio.appearance.zoom": {
+          "type": [
+            "string",
+            "number"
+          ],
+          "enum": [
+            "auto",
+            80,
+            90,
+            100,
+            110,
+            125,
+            150,
+            175,
+            200
+          ],
+          "default": "auto",
+          "scope": "application",
+          "description": "Taille de toute l’interface Feature Studio. Auto adapte le zoom à la taille disponible dans la fenêtre ; un pourcentage fixe est conservé dans tous vos projets."
         }
       }
     }
@@ -171,7 +191,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.8.0.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.9.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
