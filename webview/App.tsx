@@ -12,6 +12,8 @@ import { orderedAgents, teamLocked } from '../src/shared/team';
 import { Avatar, AgentImage, avatarOptions } from './Avatar';
 import { resolveAvatar } from '../src/shared/avatars';
 import { usageCredits } from '../src/shared/credits';
+import type { AccountCredits } from '../src/shared/credits';
+import { AccountCreditsBadge } from './AccountCreditsBadge';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
 import { ThemePicker } from './ThemePicker';
@@ -278,6 +280,11 @@ function Modal({
   );
 }
 export default function App() {
+  const [accountCredits, setAccountCredits] = useState<AccountCredits | undefined>(
+    isDemo
+      ? { state: 'unavailable', message: 'Le quota du compte est disponible dans VS Code.' }
+      : undefined,
+  );
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [navQuery, setNavQuery] = useState('');
   const [catalogQuery, setCatalogQuery] = useState({ agents: '', skills: '' });
@@ -401,6 +408,7 @@ export default function App() {
   useEffect(() => {
     const cleanup = subscribe((message) => {
       if (message.type === 'state') setState(message.state);
+      else if (message.type === 'accountCredits') setAccountCredits(message.state);
       else if (message.type === 'questState') {
         setQuestState(message.state);
         if (message.earned?.length)
@@ -785,6 +793,7 @@ export default function App() {
             <span>{selected ? selected.title : nav.find((n) => n.id === view)?.label}</span>
           </div>
           <div className="topbar-actions">
+            <AccountCreditsBadge credits={accountCredits} />
             <span className="trust-label">
               <ShieldCheck size={14} />
               {state.workspace.trusted ? 'Projet approuvé' : 'Consultation seule'}

@@ -48,6 +48,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
       event.data &&
       [
         'state',
+        'accountCredits',
         'questState',
         'discussionState',
         'discussionResult',

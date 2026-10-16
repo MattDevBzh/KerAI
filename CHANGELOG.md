@@ -1,5 +1,10 @@
 # Changelog
 
+## Non publié
+
+- L’icône Feature Studio ouvre directement le cockpit dans la fenêtre VS Code courante, sans second clic. Les commandes et la restauration d’onglet restent dans cette fenêtre ; le raccourci Windows et la commande dédiée conservent leur fenêtre à part.
+- Le compteur global des crédits GitHub Copilot est visible dans l’en-tête du cockpit. Un clic affiche les détails du compte ; l’actualisation reste limitée aux périodes où le cockpit est visible.
+
 ## 1.10.0 — 2026-10-16
 
 - Connexion Copilot automatique à l'ouverture du cockpit, après approbation de l'espace de travail et lors du passage à un projet encore non vérifié. Réutilise l'authentification locale, charge les modèles et conserve un diagnostic avec réessai manuel en cas d'échec ; aucun prompt n'est envoyé au démarrage.

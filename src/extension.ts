@@ -15,6 +15,7 @@ import { stringify } from 'yaml';
 import { Store } from './core/store';
 import { CopilotCliAdapter } from './host/CopilotCliAdapter';
 import { CockpitLauncher } from './host/CockpitLauncher';
+import { AccountCreditsMonitor } from './host/AccountCreditsMonitor';
 import { RegistryMigration } from './core/registryMigration';
 import { StudioService } from './host/StudioService';
 import { WorkspaceLease } from './host/WorkspaceLease';
@@ -41,28 +42,32 @@ export async function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Feature Studio');
   let quotaAdapter: CopilotCliAdapter | undefined;
   let quotaCliPath: string | undefined;
-  const launcher = new CockpitLauncher(context.extensionUri, async () => {
-    if (!vscode.workspace.isTrusted)
-      return {
-        state: 'unavailable',
-        message: 'Approuve cet espace de travail pour connecter Copilot CLI.',
-      };
-    const cliPath = vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot');
-    if (quotaAdapter && cliPath !== quotaCliPath) {
-      await quotaAdapter.dispose();
-      quotaAdapter = undefined;
-    }
-    if (!quotaAdapter) {
-      quotaCliPath = cliPath;
-      quotaAdapter = new CopilotCliAdapter({
-        cliPath,
-        storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
-        launcherPath: path.join(context.extensionPath, 'dist', 'copilot-launcher.js'),
-        getTools: async () => [],
-      });
-    }
-    return quotaAdapter.getAccountCredits();
-  });
+  const launcher = new CockpitLauncher();
+  const credits = new AccountCreditsMonitor(
+    async () => {
+      if (!vscode.workspace.isTrusted)
+        return {
+          state: 'unavailable',
+          message: 'Approuve cet espace de travail pour connecter Copilot CLI.',
+        };
+      const cliPath = vscode.workspace.getConfiguration('featureStudio').get('cliPath', 'copilot');
+      if (quotaAdapter && cliPath !== quotaCliPath) {
+        await quotaAdapter.dispose();
+        quotaAdapter = undefined;
+      }
+      if (!quotaAdapter) {
+        quotaCliPath = cliPath;
+        quotaAdapter = new CopilotCliAdapter({
+          cliPath,
+          storagePath: path.join(context.globalStorageUri.fsPath, 'copilot-runtime'),
+          launcherPath: path.join(context.extensionPath, 'dist', 'copilot-launcher.js'),
+          getTools: async () => [],
+        });
+      }
+      return quotaAdapter.getAccountCredits();
+    },
+    (state) => send({ type: 'accountCredits', state }),
+  );
   const send = (message: HostMessage) => {
     if (panel) void panel.webview.postMessage(message);
   };
@@ -83,6 +88,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     output,
     launcher,
+    credits,
     {
       dispose: () => {
         void quotaAdapter?.dispose();
@@ -295,6 +301,7 @@ export async function activate(context: vscode.ExtensionContext) {
     void quests.record(discussionQuestFacts(state));
   });
   disposeHub = async () => {
+    credits.setVisible(false);
     await discussions.dispose();
     await hub.dispose();
     await quests.flush();
@@ -312,7 +319,7 @@ export async function activate(context: vscode.ExtensionContext) {
         lease = nextLease;
       }
       await catalog.load();
-      if (!dedicated && !catalog.state.projects.length) {
+      if (!dedicated) {
         for (const folder of vscode.workspace.workspaceFolders ?? []) {
           if (folder.uri.scheme !== 'file') continue;
           const root = await realpath(folder.uri.fsPath);
@@ -644,6 +651,7 @@ export async function activate(context: vscode.ExtensionContext) {
         quests.publish();
         discussions.publish();
         webviewReady = true;
+        credits.setVisible(Boolean(panel?.visible));
         if (dedicated) void drainRequests();
         sendTheme();
         current.publish();
@@ -1525,6 +1533,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const mount = async (target: vscode.WebviewPanel): Promise<void> => {
     webviewReady = false;
+    credits.setVisible(false);
     panel = target;
     target.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
     target.webview.options = {
@@ -1555,15 +1564,26 @@ export async function activate(context: vscode.ExtensionContext) {
       () => {
         if (panel === target) panel = undefined;
         webviewReady = false;
+        credits.setVisible(false);
         shuttingDown = (async () => {
-          await discussions.pause();
+          await discussions.unload();
           await hub.dispose();
+          await quests.flush();
+          await lease?.release();
+          lease = undefined;
         })().finally(() => {
           initialized = false;
           service = undefined;
           devops = undefined;
           shuttingDown = undefined;
         });
+      },
+      undefined,
+      context.subscriptions,
+    );
+    target.onDidChangeViewState(
+      () => {
+        if (panel === target) credits.setVisible(webviewReady && target.visible);
       },
       undefined,
       context.subscriptions,
@@ -1664,11 +1684,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (available.has(command)) await vscode.commands.executeCommand(command);
     panel?.reveal(vscode.ViewColumn.One);
   };
-  const open = async () => {
-    if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test) {
-      await openDedicated();
-      return;
-    }
+  const open = async (): Promise<boolean> => {
     try {
       if (revealPanel()) {
         await hub.initialize();
@@ -1681,11 +1697,11 @@ export async function activate(context: vscode.ExtensionContext) {
           await focusCockpit();
           await drainRequests();
         }
-        return;
+        return true;
       }
       await ensure();
       // Another click may have mounted the panel while project initialization was pending.
-      if (revealPanel()) return;
+      if (revealPanel()) return true;
       await mount(
         vscode.window.createWebviewPanel('featureStudio', 'Feature Studio', vscode.ViewColumn.One, {
           enableScripts: true,
@@ -1693,17 +1709,17 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
       );
       if (dedicated) await focusCockpit();
+      return true;
     } catch (error) {
       report(error);
       void vscode.window.showErrorMessage((error as Error).message);
+      return false;
     }
   };
   context.subscriptions.push(
     vscode.commands.registerCommand('featureStudio.open', open),
     vscode.commands.registerCommand('featureStudio.analyzeSession', async () => {
-      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
-        return openDedicated('analyzeSession');
-      await open();
+      if (!(await open())) return;
       await showObservationPicker();
     }),
     vscode.commands.registerCommand('featureStudio.openDedicated', () => openDedicated()),
@@ -1719,30 +1735,19 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('featureStudio.newFeature', async () => {
-      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
-        return openDedicated('newFeature');
-      await open();
+      if (!(await open())) return;
       send({ type: 'navigate', view: 'create' });
     }),
     vscode.commands.registerCommand('featureStudio.installKit', async () => {
-      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
-        return openDedicated('installKit');
-      await open();
+      if (!(await open())) return;
       await dispatch({ type: 'installKit' }).catch(report);
     }),
     vscode.commands.registerCommand('featureStudio.migrateUserKit', async () => {
-      if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test)
-        return openDedicated('migrateUserKit');
-      await open();
+      if (!(await open())) return;
       await dispatch({ type: 'migrateUserKit' }).catch(report);
     }),
     vscode.window.registerWebviewPanelSerializer('featureStudio', {
       deserializeWebviewPanel: async (restored) => {
-        if (!dedicated && context.extensionMode !== vscode.ExtensionMode.Test) {
-          restored.dispose();
-          await openDedicated();
-          return;
-        }
         if (panel && panel !== restored) {
           restored.dispose();
           panel.reveal();
@@ -1752,7 +1757,10 @@ export async function activate(context: vscode.ExtensionContext) {
         if (dedicated) await focusCockpit();
       },
     }),
-    vscode.workspace.onDidGrantWorkspaceTrust(() => hub.publish()),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      hub.publish();
+      void credits.refresh();
+    }),
     vscode.window.onDidChangeWindowState((state) => {
       if (dedicated && state.focused) void open();
     }),

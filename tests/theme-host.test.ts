@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostMessage, StudioState } from '../src/shared/types';
 
 const host = vi.hoisted(() => {
@@ -19,6 +19,11 @@ const host = vi.hoisted(() => {
     executeCommand: vi.fn(),
     enqueue: vi.fn(),
     createPanel: vi.fn(),
+    acquireLease: vi.fn(),
+    releaseLease: vi.fn(),
+    disposePanel: undefined as undefined | (() => void),
+    subscriptions: [] as { dispose(): void }[],
+    restorePanel: undefined as undefined | ((panel: unknown) => Promise<void>),
     state,
     disposable,
     theme: undefined as unknown,
@@ -29,6 +34,7 @@ const host = vi.hoisted(() => {
       | ((event: { affectsConfiguration(key: string): boolean }) => void),
     initialize: vi.fn(),
     panel: {
+      visible: true,
       webview: {
         html: '',
         options: {},
@@ -37,7 +43,11 @@ const host = vi.hoisted(() => {
         postMessage: (message: HostMessage) => messages.push(message),
         onDidReceiveMessage: () => disposable,
       },
-      onDidDispose: () => disposable,
+      onDidDispose: (callback: () => void) => {
+        host.disposePanel = callback;
+        return disposable;
+      },
+      onDidChangeViewState: () => disposable,
       reveal() {},
     },
   };
@@ -91,12 +101,19 @@ vi.mock('vscode', () => ({
     createOutputChannel: () => ({ ...host.disposable, appendLine() {} }),
     registerWebviewViewProvider: () => host.disposable,
     createStatusBarItem: () => ({ ...host.disposable, show() {} }),
-    registerWebviewPanelSerializer: () => host.disposable,
+    registerWebviewPanelSerializer: (
+      _type: string,
+      serializer: { deserializeWebviewPanel(panel: unknown): Promise<void> },
+    ) => {
+      host.restorePanel = serializer.deserializeWebviewPanel;
+      return host.disposable;
+    },
     createWebviewPanel: () => {
       host.createPanel();
       return host.panel;
     },
     showErrorMessage: vi.fn(),
+    showQuickPick: vi.fn(async () => undefined),
     onDidChangeWindowState: () => host.disposable,
   },
   commands: {
@@ -160,8 +177,8 @@ vi.mock('../src/core/store', async (importOriginal) => ({
 }));
 vi.mock('../src/host/WorkspaceLease', () => ({
   WorkspaceLease: class {
-    async acquire() {}
-    async release() {}
+    acquire = host.acquireLease;
+    release = host.releaseLease;
   },
 }));
 vi.mock('../src/host/CopilotCliAdapter', () => ({ CopilotCliAdapter: class {} }));
@@ -194,6 +211,10 @@ vi.mock('../src/host/StudioService', () => ({
 }));
 
 describe('personal theme host boundary', () => {
+  afterEach(() => {
+    for (const subscription of host.subscriptions) subscription.dispose();
+    host.subscriptions.length = 0;
+  });
   beforeEach(async () => {
     vi.resetModules();
     host.theme = undefined;
@@ -202,6 +223,8 @@ describe('personal theme host boundary', () => {
     host.executeCommand.mockClear();
     host.enqueue.mockClear();
     host.createPanel.mockClear();
+    host.acquireLease.mockClear();
+    host.releaseLease.mockClear();
     host.failWrite = false;
     host.messages.length = 0;
     host.writes.length = 0;
@@ -211,7 +234,7 @@ describe('personal theme host boundary', () => {
   const activate = async () => {
     const extension = await import('../src/extension');
     return extension.activate({
-      subscriptions: [],
+      subscriptions: host.subscriptions,
       extensionUri: {},
       extensionPath: '/extension',
       extensionMode: host.mode,
@@ -220,10 +243,19 @@ describe('personal theme host boundary', () => {
       secrets: {},
     } as never);
   };
-  it('redirects from an ordinary project without initializing another cockpit', async () => {
+  it('opens and reuses the cockpit in the ordinary project window in production mode', async () => {
     host.mode = 1;
     await activate();
     await host.commands.get('featureStudio.open')!();
+    await host.commands.get('featureStudio.open')!();
+    expect(host.initialize).toHaveBeenCalledOnce();
+    expect(host.createPanel).toHaveBeenCalledOnce();
+    expect(host.executeCommand).not.toHaveBeenCalled();
+  });
+  it('keeps the explicit dedicated-window command separate from normal opening', async () => {
+    host.mode = 1;
+    await activate();
+    await host.commands.get('featureStudio.openDedicated')!();
     expect(host.initialize).not.toHaveBeenCalled();
     expect(host.createPanel).not.toHaveBeenCalled();
     expect(host.executeCommand).toHaveBeenCalledWith(
@@ -232,16 +264,35 @@ describe('personal theme host boundary', () => {
       { forceNewWindow: true },
     );
   });
-  it('routes the observer menu to the dedicated window before accessing session storage', async () => {
+  it('opens the observer and new-session commands in the current window', async () => {
     host.mode = 1;
     await activate();
     await host.commands.get('featureStudio.analyzeSession')!();
-    expect(host.initialize).not.toHaveBeenCalled();
+    await host.commands.get('featureStudio.newFeature')!();
+    expect(host.initialize).toHaveBeenCalledOnce();
+    expect(host.createPanel).toHaveBeenCalledOnce();
+    expect(host.enqueue).not.toHaveBeenCalled();
+    expect(host.executeCommand).not.toHaveBeenCalled();
+    expect(host.messages).toContainEqual({ type: 'navigate', view: 'create' });
+  });
+  it('restores the cockpit into the same ordinary window after reload', async () => {
+    host.mode = 1;
+    await activate();
+    await host.restorePanel!(host.panel);
+    expect(host.panel.webview.html).toContain('<html data-studio-theme="auto"');
+    expect(host.initialize).toHaveBeenCalledOnce();
     expect(host.createPanel).not.toHaveBeenCalled();
-    expect(host.enqueue).toHaveBeenCalledWith('analyzeSession', 'fixture');
-    expect(host.executeCommand).toHaveBeenCalledWith('vscode.openFolder', expect.anything(), {
-      forceNewWindow: true,
-    });
+    expect(host.executeCommand).not.toHaveBeenCalled();
+  });
+  it('releases the shared cockpit on tab close so another window can open it', async () => {
+    await activate();
+    await host.commands.get('featureStudio.open')!();
+    expect(host.acquireLease).toHaveBeenCalledOnce();
+    host.disposePanel!();
+    await vi.waitFor(() => expect(host.releaseLease).toHaveBeenCalledOnce());
+    await host.commands.get('featureStudio.open')!();
+    expect(host.acquireLease).toHaveBeenCalledTimes(2);
+    expect(host.createPanel).toHaveBeenCalledTimes(2);
   });
   it('mounts the full cockpit automatically in the dedicated workspace and reuses its panel', async () => {
     host.mode = 1;
@@ -262,6 +313,19 @@ describe('personal theme host boundary', () => {
     expect(host.writes).toEqual([['appearance.theme', 'papier-clair', 1]]);
     expect(api.getTheme()).toBe('papier-clair');
     expect(host.initialize).not.toHaveBeenCalled();
+  });
+  it('sends account availability to the cockpit when ready without bypassing workspace trust', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    expect(host.messages.some((message) => message.type === 'accountCredits')).toBe(false);
+    await api.dispatch({ type: 'ready' });
+    expect(host.messages).toContainEqual({
+      type: 'accountCredits',
+      state: {
+        state: 'unavailable',
+        message: 'Approuve cet espace de travail pour connecter Copilot CLI.',
+      },
+    });
   });
   it('correlates acknowledgements, preserves busy read-only state and reports failed saves honestly', async () => {
     const api = await activate();

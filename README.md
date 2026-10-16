@@ -16,7 +16,7 @@ Pars d’un besoin, choisis une équipe et avance étape par étape : challenge,
 
 1. Télécharge le **[VSIX v1.10.0 de la release GitHub](https://github.com/MattDevBzh/KerAI/releases/download/v1.10.0/feature-studio-1.10.0.vsix)**.
 2. Dans VS Code : **Extensions → … → Installer à partir du VSIX…**. Si une ancienne version tourne déjà, recharge la fenêtre.
-3. Ouvre ton dépôt et approuve le workspace. Clique sur l’icône **L’équipe** (trois agents) dans la barre latérale, puis **Ouvrir le cockpit** : Feature Studio s’ouvre dans sa fenêtre dédiée et enregistre ton projet.
+3. Ouvre ton dépôt et approuve le workspace. Clique sur l’icône **L’équipe** (trois agents) dans la barre latérale : Feature Studio s’ouvre directement dans un onglet de la fenêtre VS Code courante et enregistre ton projet.
 4. Dans **Réglages**, clique sur **Vérifier la connexion** pour contrôler le CLI, le compte et les modèles disponibles.
 5. Ouvre **Nouvelle session**, sélectionne tes projets et décris ton besoin. Compose ton équipe avec les avatars ou les équipes disponibles, puis prépare l’aperçu du contexte avant de lancer le premier agent.
 
@@ -150,7 +150,9 @@ Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est c
 
 ## Fenêtre dédiée et espaces de travail
 
-Depuis la version 1.3.0, **Feature Studio : ouvrir le cockpit** ouvre directement toute l’interface dans un espace de travail personnel « Feature Studio ». Les autres dossiers ouverts dans VS Code restent indépendants. Rouvrir ce même espace retrouve sa fenêtre ; les barres latérales, onglets et panneau sont masqués uniquement dans cette fenêtre. Le moteur reste VS Code, avec sa barre de titre et ses dialogues natifs.
+L’icône **Feature Studio** et la commande **Feature Studio : ouvrir le cockpit** ouvrent directement toute l’interface dans un onglet de la fenêtre VS Code courante. Un nouveau clic retrouve cet onglet. Le compteur global des crédits Copilot reste visible dans l’en-tête ; un clic affiche son renouvellement et les autres détails disponibles.
+
+Le **raccourci Windows** et la commande **Feature Studio : ouvrir la fenêtre dédiée** ouvrent le cockpit dans un espace de travail personnel « Feature Studio », à part. Les barres latérales, onglets et panneau sont masqués uniquement dans cette fenêtre dédiée. Le moteur reste VS Code, avec sa barre de titre et ses dialogues natifs.
 
 1. Dans **Réglages → Espaces de travail**, ajoutez vos dossiers de projets. Donnez-leur des noms distincts si nécessaire. Masquer un dossier le retire des prochaines sélections sans supprimer ses fichiers ni ses sessions.
 2. Sous Windows, cliquez sur **Créer le raccourci Windows**. Le raccourci `Feature Studio.lnk` est créé sur le Bureau avec l’exécutable de l’édition en cours (Code ou Code Insiders). Il ouvre le cockpit complet et utilise automatiquement le logo **L’équipe**. Relancer cette commande actualise aussi un raccourci déjà créé. L’icône est conservée dans les données du cockpit, indépendamment du dossier versionné de l’extension. La commande du même nom est aussi disponible dans la palette.

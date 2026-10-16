@@ -57,25 +57,17 @@ async function smokeRun(): Promise<void> {
         entry.name === 'Cockpit' &&
         entry.type === 'webview',
     ),
-    'The package contributes the local cockpit welcome webview',
+    'The package contributes the direct cockpit launcher',
   );
   const welcomes = (contributions.viewsWelcome ?? []).filter(
     (entry: { view: string }) => entry.view === 'featureStudio.launcher',
   );
   assert.equal(welcomes.length, 0, 'The obsolete native welcome content is removed');
-  await vscode.commands.executeCommand('featureStudio.launcher.focus');
   const api = await extension.activate();
-  for (let retry = 0; retry < 100 && !api.getLauncherReady(); retry++)
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.ok(api.getLauncherVisible(), 'The local launcher is rendered in the sidebar');
-  assert.ok(
-    api.getLauncherReady(),
-    'The launcher script and local avatar actually loaded and sent ready through its nonce CSP',
-  );
   assert.ok((await vscode.commands.getCommands(true)).includes('featureStudio.launcher.focus'));
-  assert.equal(api.getState(), undefined, 'Showing the launcher never initializes the store');
-  assert.equal(api.getDevOpsState(), undefined, 'Showing the launcher never initializes DevOps');
-  assert.equal(api.getUiReady(), false, 'Showing the launcher never opens the cockpit webview');
+  assert.equal(api.getState(), undefined, 'Activation alone never initializes the store');
+  assert.equal(api.getDevOpsState(), undefined, 'Activation alone never initializes DevOps');
+  assert.equal(api.getUiReady(), false, 'Activation alone never opens the cockpit webview');
   assert.equal(api.getTheme(), 'auto', 'The isolated user profile starts in automatic mode');
   for (const theme of THEME_IDS) {
     await api.dispatch({
@@ -120,6 +112,25 @@ async function smokeRun(): Promise<void> {
         join(vscode.workspace.workspaceFolders![0].uri.fsPath, 'missing-smoke-copilot'),
       vscode.ConfigurationTarget.Global,
     );
+  const originalFolders = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.toString());
+  const originalWorkspace = vscode.workspace.workspaceFile?.toString();
+  await vscode.commands.executeCommand('featureStudio.launcher.focus');
+  for (let retry = 0; retry < 100 && (!api.getUiReady() || api.getLauncherVisible()); retry++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(
+    api.getUiReady(),
+    'Selecting the activity icon opens the cockpit without a second click',
+  );
+  assert.equal(api.getLauncherVisible(), false, 'The intermediate sidebar closes after opening');
+  assert.deepEqual(
+    vscode.workspace.workspaceFolders?.map((folder) => folder.uri.toString()),
+    originalFolders,
+  );
+  assert.equal(
+    vscode.workspace.workspaceFile?.toString(),
+    originalWorkspace,
+    'The cockpit stays in the current project window',
+  );
   await Promise.all([
     vscode.commands.executeCommand('featureStudio.open'),
     vscode.commands.executeCommand('featureStudio.open'),
@@ -169,6 +180,11 @@ async function smokeRun(): Promise<void> {
   assert.equal(cockpitTabs().length, 1, 'Concurrent launcher clicks create only one cockpit');
   await vscode.commands.executeCommand('featureStudio.open');
   assert.equal(cockpitTabs().length, 1, 'The launcher command reuses the existing cockpit panel');
+  await vscode.commands.executeCommand('featureStudio.launcher.focus');
+  for (let retry = 0; retry < 100 && api.getLauncherVisible(); retry++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(api.getLauncherVisible(), false, 'Selecting the icon again still opens directly');
+  assert.equal(cockpitTabs().length, 1, 'Repeated activity selections reuse the same cockpit');
   // macOS exposes /var via workspace URIs while the host stores canonical /private/var paths.
   const source = await realpath(vscode.workspace.workspaceFolders![0].uri.fsPath);
   const devopsConfig: DevOpsConfig = {
@@ -701,7 +717,7 @@ async function smokeRun(): Promise<void> {
     'Keyboard navigation works',
   );
   console.log(
-    'PASS: activity-bar contribution/local launcher script and avatar readiness under CSP without business initialization/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
+    'PASS: activity-bar direct opening in the current window/sidebar dismissal/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );
 }
 

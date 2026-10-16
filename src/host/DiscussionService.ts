@@ -85,6 +85,8 @@ export class DiscussionService extends EventEmitter {
   async initialize(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
+    this.state.discussions = [];
+    this.state.error = undefined;
     try {
       const target = await safePath(this.options.directory, 'discussions.json');
       const source = await readFile(target, 'utf8').catch((error) => {
@@ -487,6 +489,11 @@ export class DiscussionService extends EventEmitter {
     await this.mutations;
     for (const { controller } of this.active.values()) controller.abort();
     await this.settled();
+  }
+  async unload(): Promise<void> {
+    await this.pause();
+    // Another cockpit may own the store before this window opens it again.
+    this.loaded = false;
   }
   async dispose(): Promise<void> {
     this.closed = true;

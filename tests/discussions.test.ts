@@ -187,6 +187,28 @@ describe('persisted discussions', () => {
     await service.settled();
     expect(service.state.discussions[0].messages.at(-1)?.status).toBe('complete');
   });
+  it('reloads discussions written by another cockpit after the first tab releases the store', async () => {
+    await service.send(input());
+    await service.settled();
+    await service.unload();
+    await expect(service.send(input())).rejects.toThrow(/indisponible/);
+    const other = create();
+    try {
+      await other.initialize();
+      await other.send(input());
+      await other.settled();
+    } finally {
+      await other.dispose();
+    }
+    await service.initialize();
+    expect(service.state.discussions).toHaveLength(2);
+    await service.send(input());
+    await service.settled();
+    expect(
+      JSON.parse(await readFile(join(directory, 'discussions.json'), 'utf8')).discussions,
+    ).toHaveLength(3);
+  });
+
   it('pauses concurrent conversations on panel close and can resume after reopening', async () => {
     const stream = async (_input: RunInput, callbacks: RunCallbacks, signal: AbortSignal) => {
       callbacks.onEvent({

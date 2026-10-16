@@ -439,6 +439,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'accountCredits'; state: import('./credits').AccountCredits }
   | { type: 'questState'; state: import('./quests').QuestState; earned?: string[] }
   | import('./observation').ObservationHostMessage
   | import('./discussions').DiscussionHostMessage

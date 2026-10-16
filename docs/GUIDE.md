@@ -7,7 +7,7 @@
 1. Télécharge **[feature-studio-1.10.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.10.0/feature-studio-1.10.0.vsix)** depuis la release GitHub.
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
-4. Clique sur le **petit geek au portable** dans la barre latérale de VS Code, puis sur **Ouvrir le cockpit**. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
+4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
 5. Copilot se connecte automatiquement à l'ouverture du cockpit dans un espace de travail approuvé : le diagnostic vérifie le CLI, le compte et les modèles sans envoyer de prompt. En cas d'échec, consulte **Réglages → Connexion**, corrige le problème indiqué, puis clique sur **Vérifier la connexion** pour réessayer.
 
 Prérequis : **VS Code 1.110 ou ultérieur**, Git pour les branches/diffs, et **GitHub Copilot CLI** installé et authentifié avec un abonnement donnant accès au CLI. Installer le VSIX ne nécessite ni Node.js ni npm séparément. Le moteur Node embarqué dans les versions récentes de VS Code est utilisé par l’extension.
@@ -18,7 +18,9 @@ Si `copilot` n’est pas trouvé, renseigne le chemin complet dans **Réglages �
 
 ## Accéder au cockpit depuis la barre latérale
 
-L’entrée **Feature Studio**, reconnaissable à son geek de trois quarts devant un ultrabook, ouvre un volet d’accueil avec son avatar en pixel art et le bouton **Ouvrir le cockpit**. Ce bouton ramène à l’onglet existant ; plusieurs clics pendant son ouverture ne créent pas de doublon. Sans projet ouvert, le volet propose **Ouvrir un dossier**.
+L’entrée **Feature Studio**, reconnaissable à son logo de trois agents, ouvre directement le cockpit dans un onglet de la fenêtre courante. Son volet de lancement se referme automatiquement après l’ouverture ; aucun second clic n’est nécessaire. Plusieurs clics retrouvent le même onglet. Sans dossier ouvert, tu peux ajouter tes projets depuis les réglages du cockpit. Si l’ouverture échoue, le volet conserve un bouton pour réessayer.
+
+Le **raccourci Windows** et la commande **Feature Studio : ouvrir la fenêtre dédiée** conservent une fenêtre à part. Les autres commandes de l’extension et la restauration d’un onglet après rechargement restent dans leur fenêtre d’origine.
 
 Afficher le volet seul ne démarre aucune session et n’appelle aucun modèle. L’avatar en couleur apparaît dans le volet ; sa déclinaison monochrome dans la barre d’activité suit les couleurs de VS Code. Si tu l’as masquée, fais un clic droit sur la barre d’activité pour réafficher **Feature Studio**.
 
@@ -354,7 +356,7 @@ Les vérifications physiques (par exemple un fichier modifié depuis les tests) 
 
 ### Crédits du compte Copilot
 
-Sous le visuel Feature Studio de la barre latérale, l’encart affiche les crédits consommés et inclus du compte connecté au CLI, ainsi que le renouvellement et le dépassement autorisé lorsque ces informations sont disponibles. Il interroge le quota toutes les 10 secondes lorsque la vue est visible, sans ouvrir de session ni envoyer de prompt. Le relevé GitHub peut être différé. Un quota absent, une API incompatible ou une unité non confirmée est indiqué comme indisponible, jamais comme zéro. Les crédits inclus ne constituent pas un plafond de facturation si GitHub autorise un dépassement. Les totaux des sessions du cockpit restent distincts de ce relevé du compte.
+Dans l’en-tête du cockpit, le compteur **Copilot** affiche les crédits consommés et inclus du compte connecté au CLI. Un clic ouvre les détails : renouvellement, dépassement autorisé et heure du relevé lorsque ces informations sont disponibles. Le quota est actualisé toutes les 10 secondes lorsque le cockpit est visible, sans ouvrir de session ni envoyer de prompt. Le relevé GitHub peut être différé. Un quota absent, une API incompatible ou une unité non confirmée est indiqué comme indisponible, jamais comme zéro. Les crédits inclus ne constituent pas un plafond de facturation si GitHub autorise un dépassement. Les totaux des sessions du cockpit restent distincts de ce relevé du compte.
 
 Les coûts et les seuils sont présentés en crédits. Les mesures historiques sont conservées dans leur précision d’origine (1 crédit = 1 milliard de nano-AIU) ; les valeurs partielles ou inconnues restent signalées.
 
