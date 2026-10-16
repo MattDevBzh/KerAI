@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
@@ -254,14 +255,14 @@ test('preferred agents, contextual model, streamed bubbles and history survive n
   expect(human!.x).toBeGreaterThan(agent!.x);
   await expect(page.locator('.discussion-message.assistant .pixel-avatar img')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('discussion-minuit.png') });
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
-  await page.getByRole('button', { name: 'Discussion', exact: true }).click();
+  await navigate(page, 'Dashboard');
+  await navigate(page, 'Discussion');
   await expect(page.locator('.discussion-message')).toHaveCount(2);
   await page.reload();
   await expect(page.locator('.discussion-message')).toHaveCount(2);
   await expect(page.getByLabel('Modèle de la discussion')).toHaveValue('thoughtful');
   await expect(page.getByLabel('Raisonnement de la discussion')).toHaveValue('high');
-  await page.getByRole('button', { name: 'Consommation', exact: true }).click();
+  await navigate(page, 'Consommation');
   await expect(page.getByRole('option', { name: 'Discussions', exact: true })).toHaveCount(1);
   await page
     .getByRole('region', { name: 'Par session' })
@@ -321,7 +322,7 @@ test('marking an existing profile as a discussion agent immediately makes it sel
 }) => {
   await hosted(page, 'guilde-sombre', false);
   const agents = page.getByLabel('Agent de discussion', { exact: true });
-  await expect(agents.locator('option')).toHaveText(['Choisir un agent']);
+  await expect(agents.locator('option')).toHaveText(['Choisir un agent', 'Ada', 'Merlin']);
   await page.evaluate(() => {
     const state = Reflect.get(window, 'discussionFixture') as DiscussionState;
     state.agents[0].profile.discussionAgent = true;
@@ -333,7 +334,7 @@ test('marking an existing profile as a discussion agent immediately makes it sel
 
 test('workflow deletion removes only the chosen template from the catalogue', async ({ page }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Parcours', exact: true }).click();
+  await navigate(page, 'Parcours');
   const cards = page.locator('.workflow-library-card');
   const count = await cards.count();
   const title = await cards.first().getByRole('heading').textContent();
@@ -397,7 +398,7 @@ test('discussion remains usable in a compact high-contrast window', async ({ pag
 
 test('agent creation and editing expose the discussion marker', async ({ page }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   await page.getByRole('button', { name: 'Nouvel agent', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: /Agent de discussion/ })).not.toBeChecked();
   await page.getByRole('checkbox', { name: /Agent de discussion/ }).check();

@@ -20,6 +20,14 @@ interface Api {
   getDevOpsState(): DevOpsState | undefined;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
 }
+async function waitForAutomaticConnection(api: Api): Promise<void> {
+  for (let retry = 0; retry < 250; retry++) {
+    const status = api.getState()?.runtime.state;
+    if (status === 'ready' || status === 'unavailable') return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.fail('Opening the cockpit must automatically finish its bounded Copilot check');
+}
 async function smokeRun(): Promise<void> {
   const extension = vscode.extensions.getExtension<Api>('MattDevBzh.feature-studio');
   assert.ok(extension, 'Extension found in the real VS Code extension host');
@@ -104,6 +112,14 @@ async function smokeRun(): Promise<void> {
     } as unknown as ClientMessage),
   );
   assert.equal(api.getTheme(), 'halloween', 'Invalid requests preserve the recorded choice');
+  await vscode.workspace
+    .getConfiguration('featureStudio')
+    .update(
+      'cliPath',
+      process.env.FEATURE_STUDIO_TEST_CLI_PATH ||
+        join(vscode.workspace.workspaceFolders![0].uri.fsPath, 'missing-smoke-copilot'),
+      vscode.ConfigurationTarget.Global,
+    );
   await Promise.all([
     vscode.commands.executeCommand('featureStudio.open'),
     vscode.commands.executeCommand('featureStudio.open'),
@@ -114,6 +130,13 @@ async function smokeRun(): Promise<void> {
     api.getUiReady(),
     'Webview React actually loaded and sent its ready message through the CSP',
   );
+  await waitForAutomaticConnection(api);
+  assert.equal(
+    api.getState()?.runtime.state,
+    process.env.FEATURE_STUDIO_TEST_CLI_PATH ? 'ready' : 'unavailable',
+    'The cockpit connects automatically; a missing CLI leaves the UI usable with a diagnostic',
+  );
+  if (!process.env.FEATURE_STUDIO_TEST_CLI_PATH) assert.ok(api.getState()?.runtime.error);
   assert.ok(api.getState()?.workflows.some((workflow) => workflow.id === 'quality-feature'));
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-visual-tests'));
   assert.equal(
@@ -176,17 +199,6 @@ async function smokeRun(): Promise<void> {
     'Delivery inspection and offline configuration preserve the fixture index',
   );
   assert.equal(await readFile(join(source, 'story.txt'), 'utf8'), 'Human unstaged source\n');
-  if (process.env.FEATURE_STUDIO_TEST_CLI_PATH) {
-    await vscode.workspace
-      .getConfiguration('featureStudio')
-      .update(
-        'cliPath',
-        process.env.FEATURE_STUDIO_TEST_CLI_PATH,
-        vscode.ConfigurationTarget.Global,
-      );
-    await api.dispatch({ type: 'checkRuntime' });
-    assert.equal(api.getState()?.runtime.state, 'ready', api.getState()?.runtime.error);
-  }
   await api.dispatch({
     type: 'createFeature',
     title: 'Smoke extension host',
@@ -586,6 +598,7 @@ async function smokeRun(): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   const beforeQuestReopen = api.getQuestState();
   await vscode.commands.executeCommand('featureStudio.open');
+  await waitForAutomaticConnection(api);
   await api.dispatch({ type: 'refreshQuests' });
   assert.equal(api.getQuestState().error, undefined);
   assert.deepEqual(

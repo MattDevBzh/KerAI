@@ -52,7 +52,7 @@
 .project-option small {
   overflow-wrap: anywhere;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .project-option button[aria-pressed='true'] {
   color: var(--apricot);
@@ -93,7 +93,7 @@
 }
 .project-row code {
   overflow-wrap: anywhere;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .project-row-actions {
@@ -142,7 +142,7 @@
 }
 .session-projects {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 8px;
 }
 @media (max-width: 650px) {

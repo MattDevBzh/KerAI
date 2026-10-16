@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.0 — 2026-10-16
+
+- Connexion Copilot automatique à l'ouverture du cockpit, après approbation de l'espace de travail et lors du passage à un projet encore non vérifié. Réutilise l'authentification locale, charge les modèles et conserve un diagnostic avec réessai manuel en cas d'échec ; aucun prompt n'est envoyé au démarrage.
+- Menu compact avec libellés, recherche des écrans, navigation au clavier et retour au contenu. Menu bureau plus lisible et outils secondaires repliables.
+- Textes et cibles de clic agrandis, rapports plus confortables, actions et noms longs adaptés aux petites fenêtres. Dialogues avec focus et défilement maîtrisés, commandes persistantes et protection contre les fermetures par clic à côté.
+- Accueil avec compteurs filtrants, tri des sessions, progression lisible, dates, remise à zéro des filtres et raccourcis explicites vers les catalogues.
+- Recherche des agents et skills, filtres par origine, favoris et recherche sans accents. Sommaire des réglages et sauvegarde/annulation toujours accessibles après une modification.
+- Discussions avec agents disponibles dès l'ouverture, options repliables, historique compact, retour aux derniers messages, aide à l'envoi et compteur de caractères.
+- [68 évolutions ergonomiques classées](docs/ERGONOMIE.md), dont les 44 de priorité 1 à 5 corrigées et vérifiées localement.
+
 ## 1.9.0 — 2026-10-16
 
 - **Discuter avec l’agent** depuis un compte rendu : conversation persistante liée à la tentative et à la version sélectionnées, avec le profil, le modèle, le raisonnement et le contexte archivés. Un nouveau clic retrouve le même fil.

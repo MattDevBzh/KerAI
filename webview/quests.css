@@ -120,7 +120,7 @@
   border-bottom-color: var(--coral);
 }
 .quest-tabs span {
-  font-size: 10px;
+  font-size: 12px;
   margin-left: 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -153,7 +153,7 @@
   border: 1px solid var(--border);
   border-radius: 18px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   padding: 7px 11px;
 }
 .quest-categories button[aria-pressed='true'] {
@@ -162,7 +162,7 @@
   background: var(--panel-soft);
 }
 .quest-results {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-bottom: 16px;
 }
@@ -213,7 +213,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-bottom: 9px;
 }
@@ -238,12 +238,12 @@
 .quest-card-progress span {
   flex-shrink: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .quest-help {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
   margin-bottom: 18px;
 }
@@ -276,7 +276,7 @@
 }
 .quest-completed {
   color: var(--green);
-  font-size: 11px;
+  font-size: 12px;
   display: flex;
   gap: 7px;
   align-items: center;
@@ -285,7 +285,7 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
   margin-bottom: 12px;
   color: var(--muted);
@@ -299,7 +299,7 @@
 }
 .quest-footnote {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 28px;
   line-height: 1.7;
 }
@@ -348,7 +348,7 @@
 .quest-celebration div > span {
   display: block;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 5px;
 }
 .nav-item .quest-menu-count {
@@ -395,7 +395,7 @@ html[data-studio-theme-family='papier'] .quest-card {
     justify-content: space-between;
   }
   .quest-tabs button {
-    font-size: 11px;
+    font-size: 12px;
   }
   .quest-tabs span {
     margin-left: 3px;
@@ -442,7 +442,7 @@ html[data-studio-theme-family='papier'] .quest-card {
     max-width: 38px;
     border: 1px solid var(--border);
     background: var(--side);
-    font-size: 9px;
+    font-size: 11px;
     line-height: 1.2;
   }
 }

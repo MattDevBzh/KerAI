@@ -728,23 +728,24 @@ export function TraceStorageSetting({
   onChange: (bytes: number) => void;
 }) {
   return (
-    <section className="settings-card">
+    <section className="settings-card trace-settings-card">
       <h2>Archives de session</h2>
       <p>
         Les échanges complets restent sur disque. L’activité affichée utilise un aperçu et un
         journal paginé.
       </p>
-      <label>
-        Limite des traces par session (Mio)
+      <label className="field">
+        <span>Limite des traces par session (Mio)</span>
         <input
           type="number"
+          aria-describedby="trace-limit-help"
           min={1}
           max={4096}
           value={(value ?? DEFAULT_TRACE_BYTES) / 1024 ** 2}
           onChange={(e) => onChange(Number(e.target.value) * 1024 ** 2)}
         />
       </label>
-      <p>
+      <p className="muted" id="trace-limit-help">
         Valeur initiale : 256 Mio. Les pièces jointes et points de restauration sont comptés
         séparément. L’Observateur permet de consulter l’espace utilisé et de supprimer une session
         entière.

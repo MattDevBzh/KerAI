@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
@@ -148,7 +149,7 @@ test('keyboard additions at small viewport and favorites in the main catalog', a
   await page.keyboard.press('Enter');
   await expect(page.locator('.team-member')).toHaveCount(1);
   await page.getByRole('button', { name: 'Valider l’équipe' }).click();
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   const last = page.locator('.agent-library-item').last();
   const button = last.getByRole('button', { name: /^Ajouter aux favoris/ });
   const label = await button.getAttribute('aria-label');

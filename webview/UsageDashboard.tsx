@@ -68,7 +68,16 @@ function GroupTable({
   return (
     <section className="usage-group-panel" aria-label={title}>
       <h2>{title}</h2>
-      <div className="usage-table-scroll" tabIndex={0} aria-label={`Tableau ${title}`}>
+      <p className="table-scroll-hint">
+        Sur petit écran, faites défiler le tableau horizontalement. Au clavier : placez le focus sur
+        le tableau, puis utilisez les flèches.
+      </p>
+      <div
+        className="usage-table-scroll"
+        role="region"
+        tabIndex={0}
+        aria-label={`Tableau ${title}`}
+      >
         <table className="usage-table">
           <caption>
             Sommes observées, sans classement de performance. H = humain, A = pilote automatique, ?

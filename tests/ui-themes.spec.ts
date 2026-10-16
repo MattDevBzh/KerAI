@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { demoState } from '../webview/demo';
@@ -146,7 +147,7 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
   await hosted(page, 'jardin-sombre');
   await themeState(page, 'jardin-sombre');
   await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await navigate(page, 'Dashboard');
   await expect(page.locator('html')).toHaveAttribute(
     'data-studio-theme-effective',
     'jardin-sombre',
@@ -154,7 +155,7 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
   expect(await page.evaluate(() => Reflect.get(window, 'persistedThemeView'))).toMatchObject({
     view: 'dashboard',
   });
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
   for (const native of ['vscode-high-contrast', 'vscode-high-contrast-light']) {
     await page.evaluate((native) => (document.body.className = native), native);
@@ -195,7 +196,7 @@ test('le mode automatique suit le thème natif et les radios sont utilisables au
   page,
 }) => {
   await page.goto('/?demo=1');
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   const auto = page.getByRole('radio', { name: 'Suivre VS Code — Automatique' });
   await auto.focus();
   await page.keyboard.press('ArrowRight');
@@ -211,7 +212,7 @@ test('le mode automatique suit le thème natif et les radios sont utilisables au
   await page.evaluate(() => (document.body.className = 'vscode-dark'));
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
   await page.reload();
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   await expect(auto).toBeChecked();
 });
 
@@ -309,8 +310,8 @@ for (const palette of palettes) {
         expect(value, pair).toBeGreaterThanOrEqual(
           pair.startsWith('control/') || pair === 'real input border' ? 3 : 4.5,
         );
-      await page.getByRole('button', { name: 'Livraison', exact: true }).click();
-      await page.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
+      await navigate(page, 'Livraison');
+      await navigate(page, 'Azure DevOps');
       const organization = page.getByLabel('Organisation', { exact: true });
       await expect(organization).toBeVisible();
       const surfaces = await organization.evaluate((input) => {
@@ -331,9 +332,9 @@ for (const palette of palettes) {
       });
       expect(surfaces.color).toBe(surfaces.expectedColor);
       expect(surfaces.background).toBe(surfaces.expectedBackground);
-      await page.getByRole('button', { name: 'Consommation', exact: true }).click();
+      await navigate(page, 'Consommation');
       await expect(page.locator('.usage-dashboard')).toBeVisible();
-      await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+      await navigate(page, 'Réglages');
       await page
         .getByRole('radio', {
           name:
@@ -365,7 +366,7 @@ for (const palette of palettes) {
     await mkdir(directory, { recursive: true });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
-      await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+      await navigate(page, 'Réglages');
       await expect(
         page.getByRole('radio', { name: `${palette.name} — ${palette.kind}` }),
       ).toBeChecked();
@@ -373,7 +374,7 @@ for (const palette of palettes) {
         width,
       );
       await page.screenshot({ path: `${directory}/${palette.id}-${width}-settings.png` });
-      await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+      await navigate(page, 'Dashboard');
       await expect(page.locator('.dashboard-page')).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         width,
@@ -387,7 +388,7 @@ test('Halloween habille les agents seulement quand choisi, avec repli et contras
   page,
 }) => {
   await hosted(page, 'halloween', 'dark', true);
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   const portrait = page.locator('.pixel-avatar img').first();
   await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
   await expect(portrait).toHaveJSProperty('complete', true);

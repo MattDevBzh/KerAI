@@ -106,7 +106,7 @@
   padding-left: 12px;
 }
 .devops-tag {
-  font-size: 11px;
+  font-size: 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 2px 7px;
@@ -210,7 +210,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 1.2px;
   color: var(--devops-accent);
   margin-bottom: 14px;
@@ -229,7 +229,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .devops-hero-art {
   width: 150px;
@@ -289,7 +289,7 @@
   gap: 7px;
 }
 .devops-muted {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .devops-stats {
@@ -317,7 +317,7 @@
 }
 .devops-stats span {
   grid-column: 1 / -1;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .devops-filters {
@@ -332,7 +332,7 @@
 }
 .devops-filters label {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 .devops-filters button {
   justify-self: start;
@@ -363,7 +363,7 @@
   margin: 0;
 }
 .devops-results-heading p {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .devops-dashboard-grid {
@@ -389,7 +389,7 @@
   text-decoration: underline;
 }
 .devops-dashboard-grid article > p {
-  font-size: 11px;
+  font-size: 12px;
 }
 .devops-metadata {
   display: grid;
@@ -404,7 +404,7 @@
 }
 .devops-metadata dt {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-bottom: 5px;
 }
 .devops-metadata dd {
@@ -425,7 +425,7 @@
 }
 .devops-reviewers span {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 4px;
 }

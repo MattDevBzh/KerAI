@@ -1,3 +1,4 @@
+import { searchText } from './Ergonomics';
 import { useState } from 'react';
 import {
   ArrowRight,
@@ -118,9 +119,7 @@ export function QuestsUI({
     (q) =>
       (tab === 'all' || questStatus(q, state) === tab) &&
       (category === 'all' || q.category === category) &&
-      `${q.title} ${q.description} ${q.help}`
-        .toLocaleLowerCase('fr')
-        .includes(search.toLocaleLowerCase('fr')),
+      searchText(`${q.title} ${q.description} ${q.help}`).includes(searchText(search)),
   );
   const updateTab = (value: typeof tab) => {
     setTab(value);
@@ -202,6 +201,19 @@ export function QuestsUI({
             }}
             placeholder="Un agent, un relais, une skill…"
           />
+          {search && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Effacer la recherche de quêtes"
+              onClick={() => {
+                setSearch('');
+                setLimit(12);
+              }}
+            >
+              <X size={15} />
+            </button>
+          )}
         </label>
       </div>
       <div className="quest-categories" role="group" aria-label="Familles de quêtes">

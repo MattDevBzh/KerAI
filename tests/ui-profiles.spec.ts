@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage, StudioState } from '../src/shared/types';
@@ -94,7 +95,7 @@ test('agent : versions réelles, brouillons par portée, erreur corrélée et fe
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   await page.getByRole('button').filter({ hasText: 'Project friend' }).click();
   await expect(page.getByLabel('Portée du profil')).toHaveValue('workspace');
   const body = page.getByLabel('Instructions', { exact: false });
@@ -171,7 +172,7 @@ test('skill : édition complète, version personnelle réelle et conservation du
 }) => {
   const data = state();
   await hosted(page, data);
-  await page.getByRole('button', { name: 'Skills', exact: true }).click();
+  await navigate(page, 'Skills');
   await page.locator('.library-card').filter({ hasText: data.skills[0].name }).click();
   await expect(page.getByLabel('Contenu de la skill')).toHaveValue(/PROJECT_SKILL/);
   await page.getByLabel('Portée du profil').selectOption('user');
@@ -196,7 +197,7 @@ test('skill : édition complète, version personnelle réelle et conservation du
 test('nouveaux profils : collision visible et cible projet explicite', async ({ page }) => {
   const data = state();
   await hosted(page, data);
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
   await page.getByLabel('Nom du profil').fill('Copy');
   await page.getByLabel('Identifiant', { exact: true }).fill(data.agents[0].id);
@@ -219,7 +220,7 @@ test('roast : niveau par portée, aperçu professionnel et brouillons conservés
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   const card = page.locator('.library-card').filter({ hasText: 'Project friend' });
   await expect(card).toContainText('Roast · Sans pitié');
   await card.click();

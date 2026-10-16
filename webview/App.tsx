@@ -1,3 +1,4 @@
+import { CatalogSearch, searchText, useDialogAccessibility } from './Ergonomics';
 import {
   ObservationPanel,
   ObservationScan,
@@ -33,7 +34,7 @@ import { DevOpsUI, DevOpsFeatureLinks } from './DevOpsUI';
 import { DevOpsDashboard } from './DevOpsDashboard';
 import type { DevOpsState } from '../src/shared/devops';
 import { approvalBlockers, featureCompletionBlockers } from '../src/core/validation';
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   BarChart3,
   ArrowDownToLine,
@@ -66,6 +67,7 @@ import {
   ListFilter,
   LoaderCircle,
   MessageSquare,
+  Menu,
   Play,
   Plus,
   Package,
@@ -93,7 +95,6 @@ import type {
   StepStatus,
   StudioSettings,
   StudioState,
-  Workflow as WorkflowType,
 } from '../src/shared/types';
 import {
   initialView,
@@ -207,20 +208,6 @@ const projectScopedViews = new Set<View>([
   'devops-prs',
   'devops-tickets',
 ]);
-const workflowRank = (w: WorkflowType) => ({ feature: 0, 'code-review': 1, single: 2 })[w.id] ?? 3;
-const orderedWorkflows = (items: WorkflowType[]) =>
-  [...items].sort((a, b) => workflowRank(a) - workflowRank(b));
-function WorkflowIcon({ workflow }: { workflow: WorkflowType }) {
-  return workflow.id === 'feature' ? (
-    <Sparkles size={19} />
-  ) : workflow.id === 'code-review' ? (
-    <Code2 size={19} />
-  ) : workflow.id === 'single' ? (
-    <MessageSquare size={19} />
-  ) : (
-    <Workflow size={19} />
-  );
-}
 function Badge({ label, tone = 'neutral' }: { label: string; tone?: string }) {
   return (
     <span className={`badge ${tone}`}>
@@ -263,56 +250,23 @@ function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const focusables = () =>
-      Array.from(
-        ref.current?.querySelectorAll<HTMLElement>(
-          'button, input, textarea, select, [tabindex="0"]',
-        ) ?? [],
-      ).filter((e) => !e.hasAttribute('disabled'));
-    focusables()[0]?.focus();
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeRef.current();
-      if (e.key === 'Tab') {
-        const nodes = focusables();
-        const first = nodes[0];
-        const last = nodes[nodes.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    document.addEventListener('keydown', key);
-    return () => {
-      document.removeEventListener('keydown', key);
-      previous?.focus();
-    };
-  }, []);
+  const titleId = useId();
+  useDialogAccessibility(ref, onClose);
   return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div className="modal-backdrop">
       <div
         className={`modal ${wide ? 'wide' : ''}`}
         ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby={titleId}
+        aria-describedby={subtitle ? `${titleId}-description` : undefined}
+        tabIndex={-1}
       >
         <div className="modal-heading">
           <div>
-            <h2 id="modal-title">{title}</h2>
-            {subtitle && <p>{subtitle}</p>}
+            <h2 id={titleId}>{title}</h2>
+            {subtitle && <p id={`${titleId}-description`}>{subtitle}</p>}
           </div>
           <button className="icon-button" aria-label="Fermer" onClick={onClose}>
             <X size={19} />
@@ -324,6 +278,67 @@ function Modal({
   );
 }
 export default function App() {
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const [navQuery, setNavQuery] = useState('');
+  const [catalogQuery, setCatalogQuery] = useState({ agents: '', skills: '' });
+  const [catalogScope, setCatalogScope] = useState('all');
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const navigation = useRef<HTMLElement>(null);
+  const navigationWasOpen = useRef(false);
+  const navigationFocus = useRef<'menu' | 'content'>('menu');
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 891px)');
+    const resize = () => {
+      if (desktop.matches) setNavigationOpen(false);
+    };
+    desktop.addEventListener('change', resize);
+    return () => desktop.removeEventListener('change', resize);
+  }, []);
+  useEffect(() => {
+    const wasOpen = navigationWasOpen.current;
+    navigationWasOpen.current = navigationOpen;
+    if (!navigationOpen) {
+      if (wasOpen)
+        (navigationFocus.current === 'content'
+          ? document.getElementById('main-content')
+          : menuButton.current
+        )?.focus({ preventScroll: true });
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    navigation.current?.querySelector<HTMLButtonElement>('.navigation-close')?.focus();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setNavigationOpen(false);
+        menuButton.current?.focus();
+      }
+      if (event.key === 'Tab') {
+        const nodes = Array.from(
+          navigation.current?.querySelectorAll<HTMLElement>(
+            'a[href],button,input,select,textarea,summary,[tabindex]',
+          ) ?? [],
+        ).filter(
+          (node) =>
+            node.tabIndex >= 0 && !node.matches(':disabled') && node.getClientRects().length,
+        );
+        if (event.shiftKey && document.activeElement === nodes[0]) {
+          event.preventDefault();
+          nodes.at(-1)?.focus();
+        } else if (!event.shiftKey && document.activeElement === nodes.at(-1)) {
+          event.preventDefault();
+          nodes[0]?.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', key);
+    return () => {
+      document.removeEventListener('keydown', key);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [navigationOpen]);
   const [questState, setQuestState] = useState<QuestState | undefined>(
     isDemo ? emptyQuestState() : undefined,
   );
@@ -357,6 +372,9 @@ export default function App() {
   }>();
   const [featureId, setFeatureId] = useState(initialView.featureId ?? '');
   const [stepId, setStepId] = useState(initialView.stepId ?? '');
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [view, featureId]);
   const [observerRequested, setObserverRequested] = useState(false);
   const [create, setCreate] = useState(false);
   const [createFrom, setCreateFrom] = useState<{
@@ -437,6 +455,12 @@ export default function App() {
     if (loaded && featureId && view === 'dashboard' && !create && !isDemo)
       send({ type: 'activateFeature', featureId });
   }, [loaded, featureId, view, create]);
+  useEffect(() => {
+    // Connect only when the cockpit has a trusted, not-yet-checked host state.
+    // Failed checks remain explicit retries; navigation must not start a retry loop.
+    if (isHosted && state?.workspace.trusted && state.runtime.state === 'unchecked')
+      send({ type: 'checkRuntime' });
+  }, [state?.workspace.path, state?.workspace.trusted, state?.runtime.state]);
   const dispatch = (message: ClientMessage) => {
     if (message.type === 'openReportDiscussion') {
       if (draftDirtyRef.current) return;
@@ -550,9 +574,25 @@ export default function App() {
       });
       return;
     }
+    if (navigationOpen) navigationFocus.current = 'content';
     setView(id);
     setFeatureId('');
+    setNavigationOpen(false);
+    setNavQuery('');
   };
+  const agents = orderedAgents(state?.agents ?? [], state?.favoriteAgentIds).filter(
+    (agent) =>
+      searchText(
+        `${agent.name} ${agent.nickname ?? ''} ${agent.description} ${agent.skills.join(' ')}`,
+      ).includes(searchText(catalogQuery.agents)) &&
+      (catalogScope === 'all' || agent.source === catalogScope) &&
+      (!onlyFavorites || state?.favoriteAgentIds?.includes(agent.id)),
+  );
+  const skills = (state?.skills ?? []).filter(
+    (skill) =>
+      searchText(`${skill.name} ${skill.description}`).includes(searchText(catalogQuery.skills)) &&
+      (catalogScope === 'all' || skill.source === catalogScope),
+  );
   if (!state)
     return (
       <div className="launch-screen">
@@ -583,7 +623,37 @@ export default function App() {
     );
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <a className="skip-link" href="#main-content">
+        Aller au contenu
+      </a>
+      {navigationOpen && (
+        <button
+          className="navigation-backdrop"
+          aria-label="Fermer la navigation"
+          onClick={() => {
+            setNavigationOpen(false);
+            menuButton.current?.focus();
+          }}
+        />
+      )}
+      <aside
+        id="app-navigation"
+        ref={navigation}
+        role={navigationOpen ? 'dialog' : undefined}
+        aria-modal={navigationOpen || undefined}
+        aria-label={navigationOpen ? 'Navigation du cockpit' : undefined}
+        className={`sidebar ${navigationOpen ? 'is-open' : ''}`}
+      >
+        <button
+          className="icon-button navigation-close"
+          aria-label="Fermer le menu"
+          onClick={() => {
+            setNavigationOpen(false);
+            menuButton.current?.focus();
+          }}
+        >
+          <X size={20} />
+        </button>
         <button
           className="brand"
           onClick={() => chooseView('dashboard')}
@@ -608,32 +678,57 @@ export default function App() {
             </span>
           </div>
         </div>
-        <span className="nav-heading">ESPACE DE TRAVAIL</span>
-        <nav aria-label="Navigation principale">
-          {nav.map((n) => (
+        <label className="navigation-search search-field">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="Rechercher un écran"
+            placeholder="Aller à…"
+            value={navQuery}
+            onChange={(event) => setNavQuery(event.target.value)}
+          />
+          {navQuery && (
             <button
-              key={n.id}
-              className={`nav-item ${n.id === 'devops-prs' || n.id === 'devops-tickets' ? 'nav-child' : ''} ${view === n.id ? 'active' : ''}`}
-              title={n.label}
-              onClick={() => chooseView(n.id)}
-              aria-label={n.label}
-              aria-current={view === n.id ? 'page' : undefined}
+              className="icon-button"
+              aria-label="Effacer la recherche de navigation"
+              onClick={() => setNavQuery('')}
             >
-              <n.icon size={18} />
-              <span>{n.label}</span>
-              {n.id === 'quests' && (
-                <small className="quest-menu-count" title="Trophées remportés">
-                  {questState && !questState.error ? questState.trophies : '—'}
-                </small>
-              )}
-              {n.id === 'dashboard' && activeFeatures.length > 0 && (
-                <small>{activeFeatures.length}</small>
-              )}
-              {n.id === 'validation' && attentionCount(state) > 0 && (
-                <small>{attentionCount(state)}</small>
-              )}
+              <X size={14} />
             </button>
-          ))}
+          )}
+        </label>
+        <nav aria-label="Navigation principale">
+          {nav
+            .filter((n) => searchText(n.label).includes(searchText(navQuery)))
+            .map((n) => (
+              <button
+                key={n.id}
+                className={`nav-item ${n.id === 'devops-prs' || n.id === 'devops-tickets' ? 'nav-child' : ''} ${view === n.id ? 'active' : ''}`}
+                title={n.label}
+                onClick={() => chooseView(n.id)}
+                aria-label={n.label}
+                aria-current={view === n.id ? 'page' : undefined}
+              >
+                <n.icon size={18} />
+                <span>{n.label}</span>
+                {n.id === 'quests' && (
+                  <small className="quest-menu-count" title="Trophées remportés">
+                    {questState && !questState.error ? questState.trophies : '—'}
+                  </small>
+                )}
+                {n.id === 'dashboard' && activeFeatures.length > 0 && (
+                  <small>{activeFeatures.length}</small>
+                )}
+                {n.id === 'validation' && attentionCount(state) > 0 && (
+                  <small>{attentionCount(state)}</small>
+                )}
+              </button>
+            ))}
+          {navQuery && !nav.some((n) => searchText(n.label).includes(searchText(navQuery))) && (
+            <p className="muted navigation-empty" role="status">
+              Aucun écran. Essayez un autre mot.
+            </p>
+          )}
         </nav>
         <div className="sidebar-bottom">
           <div className="connection">
@@ -658,22 +753,33 @@ export default function App() {
               <RefreshCw size={14} />
             </button>
           </div>
-          <button className="sidebar-link" onClick={() => chooseView('kits')}>
-            <Package size={14} /> Gérer les kits <ArrowUpRight size={13} />
-          </button>
-          <button className="sidebar-link" onClick={() => dispatch({ type: 'migrateUserKit' })}>
-            <ArrowUpRight size={14} /> Migrer les profils du projet
-          </button>
-          <div className="sidebar-footnote">
-            Votre intention. Vos agents.
-            <br />
-            Vous gardez la main.
-          </div>
+          <details className="sidebar-tools">
+            <summary>Outils du projet</summary>
+            <button className="sidebar-link" onClick={() => chooseView('kits')}>
+              <Package size={14} /> Gérer les kits <ArrowUpRight size={13} />
+            </button>
+            <button className="sidebar-link" onClick={() => dispatch({ type: 'migrateUserKit' })}>
+              <ArrowUpRight size={14} /> Migrer les profils du projet
+            </button>
+          </details>
         </div>
       </aside>
-      <div className="main-shell">
+      <div className="main-shell" inert={navigationOpen}>
         <ThemeScenery />
         <header className="topbar">
+          <button
+            ref={menuButton}
+            className="button secondary menu-toggle"
+            aria-label="Ouvrir le menu"
+            aria-expanded={navigationOpen}
+            aria-controls="app-navigation"
+            onClick={() => {
+              navigationFocus.current = 'menu';
+              setNavigationOpen(true);
+            }}
+          >
+            <Menu size={18} /> Menu
+          </button>
           <div className="topbar-context">
             <span className="context-dot" /> ATELIER <ChevronRight size={12} />
             <span>{selected ? selected.title : nav.find((n) => n.id === view)?.label}</span>
@@ -731,7 +837,7 @@ export default function App() {
             ))}
           </div>
         )}
-        <main>
+        <main id="main-content" tabIndex={-1}>
           <QuestCelebration
             ids={earnedQuests}
             onClose={() => setEarnedQuests([])}
@@ -811,6 +917,7 @@ export default function App() {
               />
             ) : (
               <Dashboard
+                onNavigate={chooseView}
                 state={state}
                 onCreate={openCreate}
                 onOpen={(id) => {
@@ -909,12 +1016,56 @@ export default function App() {
               title="Des agents, chacun son regard."
               eyebrow="VOTRE ÉQUIPE"
               subtitle="Des profils spécialisés, des instructions lisibles. Composez une équipe qui connaît votre manière de travailler."
-              count={`${state.agents.length} profils`}
+              count={`${agents.length} / ${state.agents.length} profils`}
               action="Nouvel agent"
               onCreate={() => setAgentEditor('new')}
             >
+              <div className="catalog-toolbar">
+                <CatalogSearch
+                  label="Rechercher un agent"
+                  value={catalogQuery.agents}
+                  onChange={(value) => setCatalogQuery({ ...catalogQuery, agents: value })}
+                  count={agents.length}
+                />
+                <label className="catalog-scope">
+                  Origine
+                  <select
+                    aria-label="Origine des agents"
+                    value={catalogScope}
+                    onChange={(event) => setCatalogScope(event.target.value)}
+                  >
+                    <option value="all">Toutes les origines</option>
+                    <option value="workspace">Ce projet</option>
+                    <option value="user">Personnel</option>
+                    <option value="bundled">Kits fournis</option>
+                  </select>
+                </label>
+                <label className="catalog-favorites">
+                  <input
+                    type="checkbox"
+                    checked={onlyFavorites}
+                    onChange={(event) => setOnlyFavorites(event.target.checked)}
+                  />{' '}
+                  Mes favoris
+                </label>
+              </div>
+              {!agents.length && state.agents.length > 0 && (
+                <div className="empty-state" role="status">
+                  <h3>Aucun résultat pour ces filtres.</h3>
+                  <button
+                    className="button secondary"
+                    onClick={() => {
+                      setCatalogQuery({ ...catalogQuery, agents: '' });
+                      setCatalogScope('all');
+                      setOnlyFavorites(false);
+                    }}
+                  >
+                    Réinitialiser les filtres
+                  </button>
+                </div>
+              )}
               <div className="library-grid">
-                {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
+                {agents.map((a) => (
                   <div className="agent-library-item" key={a.id}>
                     <AgentFavorite agent={a} state={state} dispatch={dispatch} />
                     <button className="library-card" key={a.id} onClick={() => setAgentEditor(a)}>
@@ -970,12 +1121,48 @@ export default function App() {
               title="Le savoir-faire, à portée d’agent."
               eyebrow="VOTRE BOÎTE À OUTILS"
               subtitle="Des méthodes réutilisables pour retrouver vos conventions et vos exigences dans chaque session."
-              count={`${state.skills.length} skills`}
+              count={`${skills.length} / ${state.skills.length} skills`}
               action="Nouvelle skill"
               onCreate={() => setSkillEditor('new')}
             >
+              <div className="catalog-toolbar">
+                <CatalogSearch
+                  label="Rechercher une skill"
+                  value={catalogQuery.skills}
+                  onChange={(value) => setCatalogQuery({ ...catalogQuery, skills: value })}
+                  count={skills.length}
+                />
+                <label className="catalog-scope">
+                  Origine
+                  <select
+                    aria-label="Origine des skills"
+                    value={catalogScope}
+                    onChange={(event) => setCatalogScope(event.target.value)}
+                  >
+                    <option value="all">Toutes les origines</option>
+                    <option value="workspace">Ce projet</option>
+                    <option value="user">Personnel</option>
+                    <option value="bundled">Kits fournis</option>
+                  </select>
+                </label>
+              </div>
+              {!skills.length && state.skills.length > 0 && (
+                <div className="empty-state" role="status">
+                  <h3>Aucun résultat pour ces filtres.</h3>
+                  <button
+                    className="button secondary"
+                    onClick={() => {
+                      setCatalogQuery({ ...catalogQuery, skills: '' });
+                      setCatalogScope('all');
+                      setOnlyFavorites(false);
+                    }}
+                  >
+                    Réinitialiser les filtres
+                  </button>
+                </div>
+              )}
               <div className="library-grid">
-                {state.skills.map((s, i) => (
+                {skills.map((s, i) => (
                   <button
                     className="library-card skill-card"
                     key={s.id}
@@ -1097,24 +1284,46 @@ export default function App() {
 }
 function Dashboard({
   state,
+  onNavigate,
   onCreate,
   onOpen,
 }: {
   state: StudioState;
+  onNavigate: (view: View) => void;
   onCreate: (id?: string) => void;
   onOpen: (id: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [showArchive, setShowArchive] = useState(false);
+  const [sort, setSort] = useState('recent');
   const live = state.features.filter((f) => !f.archived);
   const features = state.features.filter(
     (f) =>
       Boolean(f.archived) === showArchive &&
       (!search ||
-        `${f.title} ${f.description} ${f.branch}`.toLowerCase().includes(search.toLowerCase())) &&
-      (filter === 'all' || f.status === filter),
+        searchText(`${f.title} ${f.description} ${f.branch}`).includes(searchText(search))) &&
+      (filter === 'all' ||
+        f.status === filter ||
+        (filter === 'attention' && f.status === 'awaiting_final_validation')),
   );
+  features.sort((a, b) =>
+    sort === 'title'
+      ? a.title.localeCompare(b.title, 'fr')
+      : sort === 'oldest'
+        ? a.updatedAt.localeCompare(b.updatedAt)
+        : b.updatedAt.localeCompare(a.updatedAt),
+  );
+  const resetFilters = () => {
+    setSearch('');
+    setFilter('all');
+  };
+  const showStatus = (status: string) => {
+    setFilter(status);
+    setSearch('');
+    setShowArchive(false);
+    document.getElementById('sessions-list')?.scrollIntoView({ block: 'start' });
+  };
   const waiting = live.filter((f) =>
     ['attention', 'awaiting_final_validation'].includes(f.status),
   ).length;
@@ -1142,30 +1351,45 @@ function Dashboard({
         </button>
       </div>
       <div className="overview-strip">
-        <div>
+        <button
+          type="button"
+          aria-label="Afficher toutes les sessions"
+          aria-pressed={!showArchive && filter === 'all'}
+          onClick={() => showStatus('all')}
+        >
           <span className="stat-number">{String(live.length).padStart(2, '0')}</span>
           <span>sessions dans l’atelier</span>
           <span className="stat-icon">
             <Workflow size={20} />
           </span>
-        </div>
-        <div>
+        </button>
+        <button
+          type="button"
+          aria-label="Afficher les sessions à votre tour"
+          aria-pressed={!showArchive && filter === 'attention'}
+          onClick={() => showStatus('attention')}
+        >
           <span className="stat-number apricot-text">{String(waiting).padStart(2, '0')}</span>
           <span>à votre tour de jouer</span>
           <span className="stat-icon">
             <MessageSquare size={20} />
           </span>
-        </div>
-        <div>
+        </button>
+        <button
+          type="button"
+          aria-label="Afficher les sessions terminées"
+          aria-pressed={!showArchive && filter === 'completed'}
+          onClick={() => showStatus('completed')}
+        >
           <span className="stat-number green-text">{String(approved).padStart(2, '0')}</span>
           <span>parcours terminés</span>
           <span className="stat-icon">
             <CheckCircle2 size={20} />
           </span>
-        </div>
+        </button>
       </div>
       <div className="dashboard-columns">
-        <section className="sessions-section">
+        <section className="sessions-section" id="sessions-list">
           <div className="section-heading">
             <h2>
               {showArchive ? 'Archives' : 'Vos sessions'}
@@ -1173,7 +1397,11 @@ function Dashboard({
             </h2>
             <button
               className={`text-button ${showArchive ? 'selected' : ''}`}
-              onClick={() => setShowArchive(!showArchive)}
+              aria-pressed={showArchive}
+              onClick={() => {
+                setShowArchive(!showArchive);
+                resetFilters();
+              }}
             >
               <Archive size={14} />
               {showArchive ? 'Voir les sessions' : 'Archives'}
@@ -1215,6 +1443,29 @@ function Dashboard({
               <ChevronDown size={13} />
             </label>
           </div>
+          <div className="session-list-tools">
+            <span className="muted" role="status">
+              {features.length} session{features.length > 1 ? 's' : ''} affichée
+              {features.length > 1 ? 's' : ''}
+            </span>
+            <label>
+              Trier
+              <select
+                aria-label="Trier les sessions"
+                value={sort}
+                onChange={(event) => setSort(event.target.value)}
+              >
+                <option value="recent">Activité récente</option>
+                <option value="oldest">Plus anciennes</option>
+                <option value="title">Titre A → Z</option>
+              </select>
+            </label>
+            {(search || filter !== 'all') && (
+              <button className="text-button" onClick={resetFilters}>
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
           <div className="session-list">
             {features.map((f, i) => {
               const status = featureStatus[f.status];
@@ -1244,6 +1495,10 @@ function Dashboard({
                   <p>{f.description}</p>
                   <div
                     className="segmented-progress"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={f.steps.length || 1}
+                    aria-valuenow={approved}
                     aria-label={`${approved} étapes validées sur ${f.steps.length}`}
                   >
                     {f.steps.map((s) => (
@@ -1253,6 +1508,12 @@ function Dashboard({
                         title={`${s.name} : ${statuses[s.status].label}`}
                       />
                     ))}
+                  </div>
+                  <div className="session-summary">
+                    <span>
+                      {approved} / {f.steps.length} étapes validées
+                    </span>
+                    <time dateTime={f.updatedAt}>Mis à jour le {date(f.updatedAt)}</time>
                   </div>
                   <div className="session-bottom">
                     <span>
@@ -1287,6 +1548,10 @@ function Dashboard({
                   <button className="button primary" onClick={() => onCreate()}>
                     <Plus size={16} /> Créer ma première session
                   </button>
+                ) : search || filter !== 'all' ? (
+                  <button className="button secondary" onClick={resetFilters}>
+                    Effacer les filtres
+                  </button>
                 ) : undefined
               }
             >
@@ -1307,23 +1572,35 @@ function Dashboard({
               <span className="serif">prochain mouvement ?</span>
             </h2>
             <div className="template-list">
-              {orderedWorkflows(state.workflows).map((w) => (
-                <button key={w.id} onClick={() => onCreate(w.id)}>
-                  <span className={`template-icon color-${workflowRank(w) % 3}`}>
-                    <WorkflowIcon workflow={w} />
+              {(
+                [
+                  {
+                    view: 'workflows',
+                    name: 'Explorer les parcours',
+                    hint: 'Choisir une méthode de travail',
+                    icon: Workflow,
+                  },
+                  {
+                    view: 'agents',
+                    name: 'Découvrir les agents',
+                    hint: 'Trouver les bons profils',
+                    icon: Bot,
+                  },
+                  {
+                    view: 'kits',
+                    name: 'Ouvrir les kits',
+                    hint: 'Des équipes prêtes à composer',
+                    icon: Package,
+                  },
+                ] as const
+              ).map((item, index) => (
+                <button key={item.view} onClick={() => onNavigate(item.view)}>
+                  <span className={`template-icon color-${index}`}>
+                    <item.icon size={19} />
                   </span>
                   <span>
-                    <strong>{w.name}</strong>
-                    <small>
-                      {w.steps.length} étape{w.steps.length > 1 ? 's' : ''} ·{' '}
-                      {w.id === 'feature'
-                        ? 'De l’idée aux tests'
-                        : w.id === 'code-review'
-                          ? 'Un regard indépendant'
-                          : w.id === 'single'
-                            ? 'À votre rythme'
-                            : 'Personnalisé'}
-                    </small>
+                    <strong>{item.name}</strong>
+                    <small>{item.hint}</small>
                   </span>
                   <ArrowUpRight size={16} />
                 </button>
@@ -1393,7 +1670,7 @@ function Library({
         </button>
       </div>
       <div className="section-heading">
-        <h2>Dans votre projet</h2>
+        <h2>Votre catalogue</h2>
         <span className="muted">{count}</span>
       </div>
       {children}
@@ -3802,13 +4079,33 @@ function SettingsView({
         </div>
       </div>
       {!automation && (
+        <nav className="settings-jump-links" aria-label="Sections des réglages">
+          {[
+            ['appearance', 'Apparence'],
+            ['connection', 'Connexion'],
+            ['projects', 'Projets'],
+            ['mcp', 'MCP'],
+            ['models', 'Modèles et budgets'],
+            ['storage', 'Archives'],
+            ['sessions', 'Sessions'],
+            ['tests', 'Tests'],
+          ].map(([id, label]) => (
+            <a key={id} href={`#settings-${id}`}>
+              {label}
+            </a>
+          ))}
+        </nav>
+      )}
+      {!automation && (
         <section className="common-settings" aria-label="Réglages communs">
           <div className="settings-section-heading">
             <span className="eyebrow">COMMUN À TOUS LES PROJETS</span>
             <h2>Votre atelier</h2>
           </div>
-          <ThemePicker />
-          <section className="settings-card">
+          <div id="settings-appearance" className="settings-anchor">
+            <ThemePicker />
+          </div>
+          <section className="settings-card settings-anchor" id="settings-connection">
             <div className="settings-card-title">
               <span className="settings-icon color-2">
                 <Command size={21} />
@@ -3874,7 +4171,9 @@ function SettingsView({
               </button>
             </div>
           </section>
-          <ProjectSettings state={state} dispatch={dispatch} dirty={dirty} />
+          <div id="settings-projects" className="settings-anchor">
+            <ProjectSettings state={state} dispatch={dispatch} dirty={dirty} />
+          </div>
         </section>
       )}
       <section className="project-settings-heading" aria-label="Réglages du projet">
@@ -3900,18 +4199,24 @@ function SettingsView({
       <form onSubmit={submit}>
         {!automation && (
           <>
-            <McpSettings
-              servers={draft.mcpServers ?? []}
-              state={state}
-              onChange={(mcpServers) => set({ mcpServers })}
-              dispatch={dispatch}
-            />
-            <ModelBudgetSettings settings={draft} state={state} onChange={set} />
-            <TraceStorageSetting
-              value={draft.traceLimitBytes}
-              onChange={(traceLimitBytes) => set({ traceLimitBytes })}
-            />
-            <section className="settings-card">
+            <div id="settings-mcp" className="settings-anchor">
+              <McpSettings
+                servers={draft.mcpServers ?? []}
+                state={state}
+                onChange={(mcpServers) => set({ mcpServers })}
+                dispatch={dispatch}
+              />
+            </div>
+            <div id="settings-models" className="settings-anchor">
+              <ModelBudgetSettings settings={draft} state={state} onChange={set} />
+            </div>
+            <div id="settings-storage" className="settings-anchor">
+              <TraceStorageSetting
+                value={draft.traceLimitBytes}
+                onChange={(traceLimitBytes) => set({ traceLimitBytes })}
+              />
+            </div>
+            <section className="settings-card settings-anchor" id="settings-sessions">
               <div className="settings-card-title">
                 <span className="settings-icon color-0">
                   <Settings2 size={21} />
@@ -3944,7 +4249,7 @@ function SettingsView({
                 </label>
               </div>
             </section>
-            <section className="settings-card">
+            <section className="settings-card settings-anchor" id="settings-tests">
               <div className="settings-card-title">
                 <span className="settings-icon color-1">
                   <CheckCircle2 size={21} />
@@ -4242,8 +4547,8 @@ function SettingsView({
             </button>
           </section>
         )}
-        <div className="settings-save">
-          <span>
+        <div className="settings-save" data-dirty={dirty}>
+          <span role="status" aria-live="polite">
             {dirty ? 'Modifications à enregistrer' : 'Configuration du projet'}
             <small>Les scripts restent soumis à l’approbation de l’espace de travail.</small>
           </span>

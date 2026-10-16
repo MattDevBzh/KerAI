@@ -1,3 +1,4 @@
+import { searchText } from './Ergonomics';
 import { orderedAgents } from '../src/shared/team';
 import { toCredits, toNanoAiu, formatCredits } from '../src/shared/credits';
 import { useState, useEffect, useRef, type FormEvent } from 'react';
@@ -1323,7 +1324,7 @@ export function ProjectMemoryView({ state, dispatch }: { state: StudioState; dis
   const [deleting, setDeleting] = useState<MemoryEntry | null>(null);
   const [query, setQuery] = useState('');
   const memory = (state.memory ?? []).filter((m) =>
-    `${m.title} ${m.content}`.toLowerCase().includes(query.toLowerCase()),
+    searchText(`${m.title} ${m.content}`).includes(searchText(query)),
   );
   return (
     <div className="page">
@@ -1373,7 +1374,16 @@ export function ProjectMemoryView({ state, dispatch }: { state: StudioState; dis
         {memory.map((m) => (
           <article className="memory-card" key={m.id}>
             <div className="section-heading">
-              <span className="eyebrow">{m.category.toUpperCase()}</span>
+              <span className="eyebrow">
+                {
+                  {
+                    convention: 'Convention',
+                    architecture: 'Architecture',
+                    decision: 'Décision',
+                    context: 'Contexte',
+                  }[m.category]
+                }
+              </span>
               <span className={`memory-state ${m.enabled ? 'enabled' : ''}`}>
                 {m.enabled ? 'Disponible à l’injection' : 'Conservée localement'}
               </span>
@@ -1405,11 +1415,19 @@ export function ProjectMemoryView({ state, dispatch }: { state: StudioState; dis
       {!memory.length && (
         <div className="evidence-empty">
           <BrainCircuit size={30} />
-          <h3>Une mémoire qui se construit avec vous.</h3>
+          <h3>
+            {query ? 'Aucune note ne correspond.' : 'Une mémoire qui se construit avec vous.'}
+          </h3>
           <p>
-            Ajoutez une convention ou conservez une décision validée depuis une session. Les
-            nouvelles notes sont désactivées pour l’injection par défaut.
+            {query
+              ? 'Essayez un autre mot ou effacez la recherche.'
+              : 'Ajoutez une convention ou conservez une décision validée depuis une session. Les nouvelles notes sont désactivées pour l’injection par défaut.'}
           </p>
+          {query && (
+            <button className="button secondary" onClick={() => setQuery('')}>
+              Effacer la recherche
+            </button>
+          )}
         </div>
       )}
       {editor && (

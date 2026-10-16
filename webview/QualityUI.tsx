@@ -18,14 +18,19 @@ export function QualitySetup({
   disabled?: boolean;
 }) {
   return (
-    <aside className="quality-empty">
+    <aside className="quality-empty quality-setup">
       <strong>Préparer les parcours Playwright</strong>
       <p>
         Installe le reporter local, ajoute-le à ta configuration Playwright, puis déclare ci-dessous
         la commande exacte autorisée. Le dépôt doit déjà disposer de Playwright et de son
         navigateur.
       </p>
-      <button type="button" disabled={disabled} onClick={onInstall}>
+      <button
+        type="button"
+        className="button secondary small"
+        disabled={disabled}
+        onClick={onInstall}
+      >
         Installer le reporter qualité
       </button>
       <p>
@@ -158,7 +163,11 @@ export function QualityPanel({
                         {uri && attachment.kind === 'screenshot' && (
                           <img src={uri} alt={attachment.name} loading="lazy" />
                         )}
-                        <button type="button" onClick={() => onOpenAttachment(proof.id, id)}>
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          onClick={() => onOpenAttachment(proof.id, id)}
+                        >
                           {attachment.kind === 'trace' ? 'Enregistrer la trace' : 'Voir la capture'}{' '}
                           : {attachment.name}
                         </button>

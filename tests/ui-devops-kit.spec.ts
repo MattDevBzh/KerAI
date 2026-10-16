@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { demoState } from '../webview/demo';
@@ -83,7 +84,7 @@ test('kit DevOps : parcours fourni, duplication et contrat de preuve conservé',
   page,
 }) => {
   await hosted(page, await state());
-  await page.getByRole('button', { name: 'Parcours', exact: true }).click();
+  await navigate(page, 'Parcours');
   const card = page
     .locator('.workflow-library-card')
     .filter({ hasText: 'DevOps — du besoin au test vérifié' });

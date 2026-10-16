@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
@@ -125,7 +126,7 @@ test('settings expose folders and the Windows shortcut; switching updates the sc
   page,
 }, testInfo) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   await expect(page.getByRole('heading', { name: 'Espaces de travail' })).toBeVisible();
   await page.getByRole('button', { name: 'Créer le raccourci Windows' }).click();
   await expect(page.getByText('Raccourci créé sur le Bureau.')).toBeVisible();

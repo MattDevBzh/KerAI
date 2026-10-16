@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useDialogAccessibility } from './Ergonomics';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
   ChevronDown,
@@ -44,50 +45,23 @@ export function StudioDialog({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const close = useRef(onClose);
-  close.current = onClose;
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const nodes = () =>
-      Array.from(
-        ref.current?.querySelectorAll<HTMLElement>('button,input,select,textarea,[tabindex="0"]') ??
-          [],
-      ).filter((n) => !n.hasAttribute('disabled'));
-    nodes()[0]?.focus();
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close.current();
-      if (e.key === 'Tab') {
-        const n = nodes(),
-          first = n[0],
-          last = n.at(-1);
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    document.addEventListener('keydown', key);
-    return () => {
-      document.removeEventListener('keydown', key);
-      previous?.focus();
-    };
-  }, []);
+  const titleId = useId();
+  useDialogAccessibility(ref, onClose);
   return (
     <div className="modal-backdrop">
       <div
         className={`modal wide ${className}`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="studio-dialog-title"
+        aria-labelledby={titleId}
+        aria-describedby={subtitle ? `${titleId}-description` : undefined}
+        tabIndex={-1}
         ref={ref}
       >
         <div className="modal-heading">
           <div>
-            <h2 id="studio-dialog-title">{title}</h2>
-            {subtitle && <p>{subtitle}</p>}
+            <h2 id={titleId}>{title}</h2>
+            {subtitle && <p id={`${titleId}-description`}>{subtitle}</p>}
           </div>
           <button className="icon-button" aria-label="Fermer" onClick={onClose}>
             <X size={18} />

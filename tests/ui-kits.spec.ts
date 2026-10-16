@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -110,7 +111,7 @@ async function hosted(page: Page) {
     });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Kits', exact: true }).click();
+  await navigate(page, 'Kits');
   await expect(page.locator('.kit-card')).toHaveCount(2);
   return { root, kits, registry, exported, imported };
 }

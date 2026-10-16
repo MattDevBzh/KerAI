@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage, StudioState } from '../src/shared/types';
@@ -37,7 +38,7 @@ test('qualité : installation explicite et configuration du rapport dans la comm
     },
   ];
   await hosted(page, state);
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   await page.getByRole('button', { name: 'Installer le reporter qualité', exact: true }).click();
   expect((await messages(page)).at(-1)).toEqual({ type: 'installQualityKit' });
   await page.getByLabel('Collecte de preuves').selectOption('counterexample');
@@ -130,7 +131,7 @@ test('qualité : contre-exemple lisible, preuves sélectionnées par id et aucun
     },
   ];
   await hosted(page, state);
-  await page.getByRole('button', { name: 'Validation', exact: true }).click();
+  await navigate(page, 'Validation');
   await page.locator('.validation-card').filter({ hasText: 'Conception' }).click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
   const panel = page.getByRole('region', { name: 'Recette et contre-exemples' });
@@ -161,7 +162,7 @@ test('qualité : exigence de rapport visible et enregistrée dans l’éditeur p
   page,
 }) => {
   await hosted(page, structuredClone(demoState));
-  await page.getByRole('button', { name: 'Parcours', exact: true }).click();
+  await navigate(page, 'Parcours');
   await page.getByRole('button', { name: 'Nouveau parcours' }).click();
   await page.getByLabel('Nom du parcours').fill('Recette dédiée');
   await page.getByLabel('Rapport qualité requis').selectOption('visual');

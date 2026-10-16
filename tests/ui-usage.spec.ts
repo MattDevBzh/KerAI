@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import type { Attempt, ClientMessage, StudioState } from '../src/shared/types';
 import { demoState } from '../webview/demo';
@@ -125,7 +126,7 @@ async function hosted(page: Page) {
     });
   }, fixture());
   await page.goto('/');
-  await page.getByRole('button', { name: 'Consommation', exact: true }).click();
+  await navigate(page, 'Consommation');
 }
 test('consommation : mesures partielles, zéro réel, unités exactes et validations explicites', async ({
   page,
@@ -167,7 +168,9 @@ test('consommation : mesures partielles, zéro réel, unités exactes et validat
   const messages = await page.evaluate(
     () => Reflect.get(window, 'usageMessages') as ClientMessage[],
   );
-  expect(messages.filter((message) => message.type !== 'ready')).toEqual([]);
+  expect(messages.filter((message) => !['ready', 'checkRuntime'].includes(message.type))).toEqual(
+    [],
+  );
 });
 test('consommation : filtres, archives, historique hors sélection et ouverture session', async ({
   page,

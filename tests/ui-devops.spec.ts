@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
@@ -66,7 +67,7 @@ async function hosted(page: Page, devops: DevOpsState = structuredClone(base), f
     { state, devops },
   );
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Azure DevOps', exact: true })).toBeVisible();
+  await expect(page.locator('.app-shell')).toBeVisible();
 }
 const messages = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'devopsMessages') as ClientMessage[]);
@@ -74,7 +75,7 @@ test('menus Azure DevOps et livraison fonctionnent sans session, configuration l
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
+  await navigate(page, 'Azure DevOps');
   await expect(page.getByRole('heading', { name: 'Azure DevOps', exact: true })).toBeVisible();
   await page.getByLabel('Organisation', { exact: true }).fill('my-org');
   await page.getByLabel('Projet', { exact: true }).fill('My Project');
@@ -85,7 +86,7 @@ test('menus Azure DevOps et livraison fonctionnent sans session, configuration l
     config: { organization: 'my-org', project: 'My Project', repository: 'repo', remote: 'origin' },
   });
   await expect(page.locator('input[type=password]')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  await navigate(page, 'Livraison');
   await expect(page.getByRole('heading', { name: 'Agent de livraison' })).toBeVisible();
   await expect(page.getByText('codex/my-feature', { exact: true })).toBeVisible();
   await page.getByText('Nouveaux fichiers', { exact: true }).click();
@@ -95,7 +96,7 @@ test('commit : deux boutons visibles, génération renouvelable et validation du
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  await navigate(page, 'Livraison');
   const generate = page.getByRole('button', { name: 'Générer le titre du commit', exact: true });
   const commit = page.getByRole('button', { name: 'Valider le commit', exact: true });
   await expect(generate).toBeDisabled();
@@ -133,7 +134,7 @@ test('commit : deux boutons visibles, génération renouvelable et validation du
 });
 test('commit : titre manuel sans génération préalable', async ({ page }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  await navigate(page, 'Livraison');
   await page.getByLabel('src/selected.ts').check();
   await page.getByLabel('Titre du commit (modifiable)').fill('fix: correction manuelle');
   await page.getByRole('button', { name: 'Valider le commit', exact: true }).click();
@@ -185,7 +186,7 @@ test('tickets lisibles et inertes, critères/commentaires, liens feature et PR',
     },
   ];
   await hosted(page, state, true);
-  await page.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
+  await navigate(page, 'Azure DevOps');
   await page.getByText('Description et critères d’acceptation').click();
   await expect(page.getByText('Créer le tableau\nSans script', { exact: true })).toBeVisible();
   await expect(page.getByText('• Le menu fonctionne', { exact: true })).toBeVisible();
@@ -226,7 +227,7 @@ test('une PR externe brouillon peut être liée sans ticket, modifiée ou dissoc
     },
   ];
   await hosted(page, state, true);
-  await page.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
+  await navigate(page, 'Azure DevOps');
   const card = page.getByRole('article', { name: 'PR 21', exact: true });
   await expect(card.getByText('Brouillon', { exact: true })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Lier cette PR', exact: true })).toBeDisabled();
@@ -284,11 +285,11 @@ test('configuration ouverte à 390px et URLs/branches longues gardent le documen
     },
   ];
   await hosted(page, state, true);
-  await page.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
+  await navigate(page, 'Azure DevOps');
   await page.getByText('Configuration et connexion', { exact: true }).click();
   await expect(page.getByLabel('Organisation', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  await navigate(page, 'Livraison');
   await expect(page.getByText(long, { exact: false }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   for (const input of await page

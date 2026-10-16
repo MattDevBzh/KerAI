@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
@@ -133,7 +134,7 @@ async function hosted(
     { devops, state: structuredClone(demoState), view },
   );
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Azure DevOps', exact: true })).toBeVisible();
+  await expect(page.locator('.app-shell')).toBeVisible();
 }
 const panel = (page: Page) => page.locator('.devops-dashboard:visible');
 const messages = (page: Page) =>
@@ -164,29 +165,31 @@ test('enfants permanents, reprise de vue et configuration/livraison préservées
   await expect(page.locator('[aria-current=page]')).toHaveCount(1);
   await page.getByRole('button', { name: 'Configurer Azure DevOps', exact: true }).click();
   await page.getByLabel('Organisation', { exact: true }).fill('configuration-en-cours');
-  await page.getByRole('button', { name: 'Tickets', exact: true }).click();
+  await navigate(page, 'Tickets');
   await expect(panel(page).getByText('Ton dashboard attend son projet')).toBeVisible();
-  await page.getByRole('button', { name: 'Azure DevOps', exact: true }).click();
+  await navigate(page, 'Azure DevOps');
   await expect(page.getByLabel('Organisation', { exact: true })).toHaveValue(
     'configuration-en-cours',
   );
   await expect(page.getByRole('heading', { name: 'À faire', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  await navigate(page, 'Livraison');
   await page.getByLabel('Intention du changement').fill('garder mon brouillon');
-  await page.getByRole('button', { name: 'PR', exact: true }).click();
-  await page.getByRole('button', { name: 'Livraison', exact: true }).click();
+  await navigate(page, 'PR');
+  await navigate(page, 'Livraison');
   await expect(page.getByLabel('Intention du changement')).toHaveValue('garder mon brouillon');
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   await expect(page.getByRole('button', { name: 'PR', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tickets', exact: true })).toBeVisible();
-  expect((await messages(page)).filter((message) => message.type !== 'ready')).toEqual([]);
+  expect(
+    (await messages(page)).filter((message) => !['ready', 'checkRuntime'].includes(message.type)),
+  ).toEqual([]);
 });
 
 test('tickets : recherche tags, états personnalisés, liens du périmètre, tri et commentaires host', async ({
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Tickets', exact: true }).click();
+  await navigate(page, 'Tickets');
   const dashboard = panel(page);
   await expect(dashboard.getByRole('article').first()).toHaveAttribute('aria-label', 'Ticket 42');
   await dashboard.getByLabel('Rechercher un ticket').fill('accessibilite');
@@ -225,7 +228,7 @@ test('PR : branches, revue honnête, aperçu texte sûr et actions locales incha
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'PR', exact: true }).click();
+  await navigate(page, 'PR');
   const dashboard = panel(page);
   await dashboard.getByLabel('Rechercher une PR').fill('feature/tickets');
   const card = dashboard.getByRole('article', { name: 'PR 7', exact: true });
@@ -273,7 +276,7 @@ test('données inconnues, zéro reçu, API occupée, erreur et liste partielle r
     pullRequests: [],
     refreshedAt: undefined,
   });
-  await page.getByRole('button', { name: 'Tickets', exact: true }).click();
+  await navigate(page, 'Tickets');
   const dashboard = panel(page);
   await expect(dashboard.getByText('Charge tes premières données')).toBeVisible();
   await expect(dashboard.locator('.devops-stats strong')).toHaveText(['—', '—', '—', '—']);
@@ -303,7 +306,7 @@ test('actualisation garde un filtre absent explicite et changement de périmètr
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Tickets', exact: true }).click();
+  await navigate(page, 'Tickets');
   const dashboard = panel(page);
   await dashboard.getByLabel('État', { exact: true }).selectOption('Validation maison');
   await update(page, { tickets: [connected.tickets[0]] });
@@ -329,7 +332,7 @@ for (const theme of ['vscode-light', 'vscode-high-contrast', 'vscode-high-contra
     await hosted(page, state);
     await page.evaluate((theme) => document.body.classList.add(theme), theme);
     for (const name of ['PR', 'Tickets']) {
-      await page.getByRole('button', { name, exact: true }).click();
+      await navigate(page, name);
       await expect(panel(page)).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         390,

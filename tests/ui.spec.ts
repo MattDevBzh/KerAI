@@ -1,3 +1,4 @@
+import { navigate } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage, StudioState } from '../src/shared/types';
@@ -187,7 +188,9 @@ test('le navigateur affiche un accès VS Code, la démo nécessite un choix expl
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Une feature de démo');
   await page.getByRole('button', { name: 'Créer la feature' }).click();
-  await expect(page.getByRole('status')).toContainText('aucune commande, écriture ou exécution');
+  await expect(page.locator('.toast[role=status]')).toContainText(
+    'aucune commande, écriture ou exécution',
+  );
 });
 test('recherche, filtres et création transmettent le contrat exact sans lancer Copilot', async ({
   page,
@@ -293,7 +296,7 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
   await expect(
     page.getByText('Enregistré au niveau utilisateur, disponible dans tous les projets.'),
@@ -319,7 +322,7 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
 });
 test('catalogue métiers : vingt portraits chargés et libellés mobiles', async ({ page }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
   const picker = page.locator('.avatar-picker');
   await expect(picker.getByRole('button')).toHaveCount(20);
@@ -357,7 +360,7 @@ test('nouveau hook désactivé par défaut, activation uniquement après action 
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Automatisations', exact: true }).click();
+  await navigate(page, 'Automatisations');
   await page.getByRole('button', { name: 'Ajouter un hook' }).click();
   await expect(page.getByRole('checkbox')).not.toBeChecked();
   await page.getByLabel('Nom du hook').fill('Rapport local');
@@ -410,7 +413,7 @@ test('le cockpit reste dans la largeur mobile et respecte la réduction des anim
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
@@ -525,18 +528,18 @@ test('rejouer une étape validée annonce l’invalidation et ne simule aucun é
   });
   await expect(page.getByText('Une étape de plus.')).toBeVisible();
 });
-test('les cartes de parcours gardent leur identité malgré un registry trié par fichier', async ({
+test('les raccourcis ouvrent les catalogues et une nouvelle session reste sans équipe', async ({
   page,
 }) => {
   const state = fresh();
   state.workflows.sort((a, b) => a.id.localeCompare(b.id));
   await hosted(page, state);
-  const review = page.locator('.template-list button').filter({ hasText: 'Relecture de code' });
-  await expect(review).toContainText('Un regard indépendant');
-  const feature = page.locator('.template-list button').filter({ hasText: 'Feature complète' });
-  await expect(feature).toContainText('De l’idée aux tests');
+  await page
+    .getByRole('button', { name: 'Explorer les parcours Choisir une méthode de travail' })
+    .click();
+  await expect(page.getByRole('button', { name: 'Nouveau parcours' })).toBeVisible();
+  await navigate(page, 'Dashboard');
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Une nouvelle feature' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Feature complète' })).toHaveCount(0);
 });
 test('augmenter le budget de tentatives exige une sauvegarde explicite et permet la configuration épuisée', async ({
@@ -662,7 +665,7 @@ test('MCP : serveur off par défaut, preset explicite, secret password et permis
     requestId: 'permission',
     answer: 'allow',
   });
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   await page.getByLabel('Organisation Azure DevOps').fill('atelier');
   await page.getByRole('button', { name: 'Ajouter le preset Azure DevOps' }).click();
   const server = page.locator('.mcp-server');
@@ -717,7 +720,7 @@ test('configuration MCP : identifiant lettre et transports restent exclusifs san
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   await page.getByRole('button', { name: 'Ajouter un serveur MCP', exact: true }).click();
   const server = page.locator('.mcp-server');
   await server.getByLabel('Exécutable MCP').fill('node');
@@ -770,7 +773,7 @@ test('mémoire locale désactivée par défaut, opt-in sans sélection n’injec
     },
   ];
   await hosted(page, state);
-  await page.getByRole('button', { name: 'Mémoire', exact: true }).click();
+  await navigate(page, 'Mémoire');
   await page.getByRole('button', { name: 'Nouvelle note' }).click();
   await expect(
     page.getByRole('checkbox', { name: 'Rendre cette note disponible pour les prompts' }),
@@ -787,7 +790,7 @@ test('mémoire locale désactivée par défaut, opt-in sans sélection n’injec
     },
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await navigate(page, 'Dashboard');
   await page.locator('.session-card').first().click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
@@ -903,7 +906,7 @@ test('validation : preuves host, critères et remarques ; approbation liée à l
     },
   ];
   await hosted(page, state);
-  await page.getByRole('button', { name: 'Validation', exact: true }).click();
+  await navigate(page, 'Validation');
   await page.locator('.validation-card').filter({ hasText: 'Conception' }).click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
   await expect(page.getByText('Exécuté par le host', { exact: false })).toBeVisible();
@@ -979,7 +982,7 @@ test('éditeur visuel : étapes, dépendances et réorganisation clavier sans YA
   page,
 }) => {
   await hosted(page);
-  await page.getByRole('button', { name: 'Parcours', exact: true }).click();
+  await navigate(page, 'Parcours');
   await page.getByRole('button', { name: 'Nouveau parcours' }).click();
   await page.getByLabel('Nom du parcours').fill('Mon parcours');
   await page.getByLabel('Nom de l’étape').fill('Explorer');
@@ -1071,7 +1074,7 @@ test('captures documentées : lancement avec US/MCP et éditeur de parcours', as
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: 'docs/images/launch-context.png', fullPage: false });
   await page.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await page.getByRole('button', { name: 'Parcours', exact: true }).click();
+  await navigate(page, 'Parcours');
   await page
     .locator('.workflow-library-card')
     .filter({ hasText: 'Feature complète' })
@@ -1087,7 +1090,7 @@ test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) 
   await page.setViewportSize({ width: 390, height: 844 });
   await hosted(page);
   for (const view of ['Validation', 'Mémoire', 'Parcours']) {
-    await page.getByRole('button', { name: view, exact: true }).click();
+    await navigate(page, view);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
@@ -1098,7 +1101,7 @@ test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) 
     true,
   );
   await page.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await navigate(page, 'Dashboard');
   await page.locator('.session-card').first().click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
@@ -1518,9 +1521,10 @@ test('migration accessible et édition projet sans migration obligatoire', async
   state.agents[0].nickname = 'Agent projet à migrer';
   state.agents[0].path = '.github/agents/project.agent.md';
   await hosted(page, state);
+  await page.locator('.sidebar-tools > summary').click();
   await page.getByRole('button', { name: 'Migrer les profils du projet' }).click();
   expect((await messages(page)).at(-1)).toEqual({ type: 'migrateUserKit' });
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await navigate(page, 'Agents');
   await page.getByRole('button').filter({ hasText: 'Agent projet à migrer' }).click();
   await expect(page.getByLabel('Portée du profil')).toHaveValue('workspace');
   await expect(page.getByRole('button', { name: 'Enregistrer le profil' })).toBeEnabled();

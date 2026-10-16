@@ -55,7 +55,7 @@
   overflow-y: auto;
 }
 .discussion-history-list h2 {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -85,7 +85,7 @@
 }
 .discussion-history-item small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .discussion-history-item:hover,
 .discussion-history-item.active {
@@ -203,7 +203,7 @@
   gap: 7px;
 }
 .discussion-controls .field > span {
-  font-size: 10px;
+  font-size: 12px;
 }
 .discussion-controls select {
   width: 100%;
@@ -216,7 +216,7 @@
 }
 .discussion-more {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .discussion-messages {
   flex: 1;
@@ -269,7 +269,7 @@
   display: flex;
   gap: 10px;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
   margin-bottom: 7px;
   padding: 0 3px;
   color: var(--muted);
@@ -333,7 +333,7 @@
 }
 .discussion-typing,
 .discussion-model-note {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .discussion-model-note {
@@ -390,7 +390,7 @@
   justify-content: space-between;
   gap: 6px;
   margin-top: 10px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .discussion-agent-toggle {

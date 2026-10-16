@@ -1,6 +1,9 @@
+import { searchText } from './Ergonomics';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowUp,
+  ArrowDown,
+  X,
   ChevronDown,
   ChevronUp,
   MessageSquare,
@@ -59,6 +62,7 @@ export function DiscussionUI({
   const requests = useRef<Record<string, Pending>>({});
   const [pendingRequests, setPendingRequests] = useState<Record<string, Pending>>({});
   const [search, setSearch] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
   const id = selectedId || newId;
   const selected = state.discussions.find((discussion) => discussion.id === id);
   const currentId = useRef(id);
@@ -136,21 +140,34 @@ export function DiscussionUI({
   for (const discussion of [...state.discussions].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   )) {
-    if (
-      search &&
-      !discussion.title.toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr'))
-    )
-      continue;
+    if (search && !searchText(discussion.title).includes(searchText(search))) continue;
     const group = dateGroup(discussion.updatedAt);
     groups.set(group, [...(groups.get(group) ?? []), discussion]);
   }
   const fresh = () => {
     setNewId(crypto.randomUUID());
     onSelect('');
+    setHistoryOpen(false);
   };
   return (
-    <section className="discussion-page" aria-label="Discussion">
-      <aside className="discussion-history" aria-label="Historique des discussions">
+    <section
+      className={`discussion-page ${historyOpen ? 'history-open' : ''}`}
+      aria-label="Discussion"
+    >
+      <button
+        className="button secondary discussion-history-toggle"
+        aria-expanded={historyOpen}
+        aria-controls="discussion-history"
+        onClick={() => setHistoryOpen(!historyOpen)}
+      >
+        <MessageSquare size={16} />{' '}
+        {historyOpen ? 'Masquer l’historique' : 'Historique des discussions'}
+      </button>
+      <aside
+        id="discussion-history"
+        className="discussion-history"
+        aria-label="Historique des discussions"
+      >
         <div className="discussion-history-heading">
           <MessageSquare size={18} />
           <h1>Discussion</h1>
@@ -166,6 +183,16 @@ export function DiscussionUI({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Effacer la recherche de discussions"
+              onClick={() => setSearch('')}
+            >
+              <X size={15} />
+            </button>
+          )}
         </label>
         <div className="discussion-history-list">
           {[...groups].map(([label, discussions]) => (
@@ -176,7 +203,11 @@ export function DiscussionUI({
                   key={discussion.id}
                   className={`discussion-history-item ${id === discussion.id ? 'active' : ''}`}
                   aria-current={id === discussion.id ? 'page' : undefined}
-                  onClick={() => onSelect(discussion.id)}
+                  title={discussion.title}
+                  onClick={() => {
+                    onSelect(discussion.id);
+                    setHistoryOpen(false);
+                  }}
                 >
                   <span>{discussion.title}</span>
                   <small>
@@ -248,6 +279,8 @@ function Conversation({
   const [model, setModel] = useState(discussion?.model ?? '');
   const [reasoning, setReasoning] = useState(discussion?.reasoning ?? '');
   const [expanded, setExpanded] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(true);
+  const [showLatest, setShowLatest] = useState(false);
   const scroll = useRef<HTMLDivElement>(null),
     stick = useRef(true);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -263,7 +296,8 @@ function Conversation({
     ? { key: discussion!.agentKey, profile: source.agent }
     : state.agents.find((agent) => agent.key === agentKey);
   const others = state.agents.filter((agent) => !agent.profile.discussionAgent);
-  const shownOthers = expanded ? others : others.filter((agent) => agent.key === agentKey);
+  const shownOthers =
+    expanded || !preferred.length ? others : others.filter((agent) => agent.key === agentKey);
   const effectiveModel = model || selected?.profile.model || state.defaultModel;
   const efforts =
     studio.runtime.models.find((entry) => entry.id === effectiveModel)?.reasoningEfforts ?? [];
@@ -417,129 +451,143 @@ function Conversation({
           </div>
         </section>
       )}
-      <div className={`discussion-controls ${source ? 'source-controls' : ''}`}>
-        <div className="discussion-agent-control">
+      <details
+        className="discussion-options"
+        hidden={Boolean(source)}
+        open={optionsOpen}
+        onToggle={(event) => setOptionsOpen(event.currentTarget.open)}
+      >
+        <summary>
+          Agent et modèle{' '}
+          <span>
+            {selected ? nameOf(selected) : 'Choisir un agent'} · {effectiveModel || 'Automatique'}
+          </span>
+        </summary>
+        <div className={`discussion-controls ${source ? 'source-controls' : ''}`}>
+          <div className="discussion-agent-control">
+            <label className="field">
+              <span>Agent</span>
+              <select
+                aria-label="Agent de discussion"
+                value={agentKey}
+                disabled={pending || running || Boolean(source)}
+                onChange={(event) => {
+                  setAgentKey(event.target.value);
+                  setReasoning('');
+                }}
+              >
+                <option value="" disabled>
+                  Choisir un agent
+                </option>
+                {source && (
+                  <option value={agentKey}>
+                    {source.agent.nickname || source.agent.name} · configuration d’origine
+                  </option>
+                )}
+                {agentKey && !selected && (
+                  <option value={agentKey}>Agent indisponible — choisir un profil</option>
+                )}
+                {!source && preferred.length > 0 && (
+                  <optgroup label="Agents de discussion">
+                    {preferred.map((agent) => (
+                      <option value={agent.key} key={agent.key}>
+                        {nameOf(agent)}
+                        {agent.projectName ? ` · ${agent.projectName}` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {!source && shownOthers.length > 0 && (
+                  <optgroup label="Autres agents">
+                    {shownOthers.map((agent) => (
+                      <option value={agent.key} key={agent.key}>
+                        {nameOf(agent)}
+                        {agent.projectName ? ` · ${agent.projectName}` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </label>
+            {!source && preferred.length > 0 && others.length > 0 && (
+              <button
+                className="text-button discussion-more"
+                aria-expanded={expanded}
+                onClick={() => setExpanded(!expanded)}
+              >
+                {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {expanded ? 'Voir moins' : `Voir plus (${others.length})`}
+              </button>
+            )}
+          </div>
           <label className="field">
-            <span>Agent</span>
+            <span>Modèle pour cette discussion</span>
             <select
-              aria-label="Agent de discussion"
-              value={agentKey}
+              aria-label="Modèle de la discussion"
+              value={model}
               disabled={pending || running || Boolean(source)}
               onChange={(event) => {
-                setAgentKey(event.target.value);
+                setModel(event.target.value);
                 setReasoning('');
               }}
             >
-              <option value="" disabled>
-                Choisir un agent
+              <option value="">
+                {selected?.profile.model
+                  ? `Profil · ${selected.profile.model}`
+                  : state.defaultModel
+                    ? `Par défaut · ${state.defaultModel}`
+                    : 'Automatique'}
               </option>
-              {source && (
-                <option value={agentKey}>
-                  {source.agent.nickname || source.agent.name} · configuration d’origine
+              {model && !studio.runtime.models.some((entry) => entry.id === model) && (
+                <option value={model}>{model} · à vérifier</option>
+              )}
+              {studio.runtime.models.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
                 </option>
-              )}
-              {agentKey && !selected && (
-                <option value={agentKey}>Agent indisponible — choisir un profil</option>
-              )}
-              {!source && preferred.length > 0 && (
-                <optgroup label="Agents de discussion">
-                  {preferred.map((agent) => (
-                    <option value={agent.key} key={agent.key}>
-                      {nameOf(agent)}
-                      {agent.projectName ? ` · ${agent.projectName}` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {!source && shownOthers.length > 0 && (
-                <optgroup label="Autres agents">
-                  {shownOthers.map((agent) => (
-                    <option value={agent.key} key={agent.key}>
-                      {nameOf(agent)}
-                      {agent.projectName ? ` · ${agent.projectName}` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
+              ))}
             </select>
           </label>
-          {!source && others.length > 0 && (
-            <button
-              className="text-button discussion-more"
-              aria-expanded={expanded}
-              onClick={() => setExpanded(!expanded)}
+          <label className="field">
+            <span>Raisonnement</span>
+            <select
+              aria-label="Raisonnement de la discussion"
+              value={reasoning}
+              disabled={pending || running || Boolean(source) || !efforts.length}
+              onChange={(event) => setReasoning(event.target.value)}
             >
-              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {expanded ? 'Voir moins' : `Voir plus (${others.length})`}
-            </button>
-          )}
+              <option value="">{efforts.length ? 'Par défaut' : 'Automatique'}</option>
+              {reasoning && !efforts.includes(reasoning) && (
+                <option value={reasoning}>{reasoning} · à vérifier</option>
+              )}
+              {efforts.map((effort) => (
+                <option key={effort} value={effort}>
+                  {(
+                    {
+                      low: 'Léger',
+                      medium: 'Moyen',
+                      high: 'Élevé',
+                      xhigh: 'Très élevé',
+                      max: 'Maximum',
+                    } as Record<string, string>
+                  )[effort] ?? effort}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="icon-button"
+            aria-label="Actualiser les modèles Copilot"
+            title="Actualiser les modèles Copilot"
+            disabled={studio.runtime.state === 'checking'}
+            onClick={() => dispatch({ type: 'checkRuntime' })}
+          >
+            <RefreshCw size={15} />
+          </button>
         </div>
-        <label className="field">
-          <span>Modèle pour cette discussion</span>
-          <select
-            aria-label="Modèle de la discussion"
-            value={model}
-            disabled={pending || running || Boolean(source)}
-            onChange={(event) => {
-              setModel(event.target.value);
-              setReasoning('');
-            }}
-          >
-            <option value="">
-              {selected?.profile.model
-                ? `Profil · ${selected.profile.model}`
-                : state.defaultModel
-                  ? `Par défaut · ${state.defaultModel}`
-                  : 'Automatique'}
-            </option>
-            {model && !studio.runtime.models.some((entry) => entry.id === model) && (
-              <option value={model}>{model} · à vérifier</option>
-            )}
-            {studio.runtime.models.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Raisonnement</span>
-          <select
-            aria-label="Raisonnement de la discussion"
-            value={reasoning}
-            disabled={pending || running || Boolean(source) || !efforts.length}
-            onChange={(event) => setReasoning(event.target.value)}
-          >
-            <option value="">{efforts.length ? 'Par défaut' : 'Automatique'}</option>
-            {reasoning && !efforts.includes(reasoning) && (
-              <option value={reasoning}>{reasoning} · à vérifier</option>
-            )}
-            {efforts.map((effort) => (
-              <option key={effort} value={effort}>
-                {(
-                  {
-                    low: 'Léger',
-                    medium: 'Moyen',
-                    high: 'Élevé',
-                    xhigh: 'Très élevé',
-                    max: 'Maximum',
-                  } as Record<string, string>
-                )[effort] ?? effort}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="icon-button"
-          aria-label="Actualiser les modèles Copilot"
-          title="Actualiser les modèles Copilot"
-          disabled={studio.runtime.state === 'checking'}
-          onClick={() => dispatch({ type: 'checkRuntime' })}
-        >
-          <RefreshCw size={15} />
-        </button>
-      </div>
+      </details>
       <div
+        id={`discussion-messages-${id}`}
         className="discussion-messages"
         ref={scroll}
         role="log"
@@ -547,8 +595,10 @@ function Conversation({
         aria-live={running ? 'off' : 'polite'}
         onScroll={() => {
           const element = scroll.current;
-          if (element)
+          if (element) {
             stick.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100;
+            setShowLatest(!stick.current);
+          }
         }}
       >
         {source && (
@@ -686,7 +736,28 @@ function Conversation({
           </article>
         ))}
       </div>
+      {showLatest && (
+        <button
+          type="button"
+          className="button secondary latest-message"
+          aria-controls={`discussion-messages-${id}`}
+          onClick={() => {
+            if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+            stick.current = true;
+            setShowLatest(false);
+          }}
+        >
+          <ArrowDown size={15} /> Derniers messages
+        </button>
+      )}
       <form className="discussion-composer" onSubmit={send}>
+        {(!selected || !studio.workspace.trusted) && (
+          <p className="discussion-send-help" id={`send-help-${id}`}>
+            {!studio.workspace.trusted
+              ? 'Approuvez le projet dans VS Code pour envoyer un message.'
+              : 'Choisissez un agent dans « Agent et modèle » pour commencer.'}
+          </p>
+        )}
         {(error || state.error) && (
           <p className="inline-error" role="alert">
             {error || state.error}
@@ -699,6 +770,7 @@ function Conversation({
           <textarea
             ref={input}
             id={`discussion-input-${id}`}
+            aria-describedby={`discussion-note-${id}`}
             value={draft}
             disabled={pending}
             maxLength={40000}
@@ -739,8 +811,11 @@ function Conversation({
             </button>
           )}
         </div>
-        <div className="discussion-composer-note">
+        <div className="discussion-composer-note" id={`discussion-note-${id}`}>
           <span>Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne</span>
+          {draft.length >= 32000 && (
+            <span role="status">{draft.length.toLocaleString('fr-FR')} / 40 000 caractères</span>
+          )}
           <span>
             {pending
               ? 'Enregistrement…'

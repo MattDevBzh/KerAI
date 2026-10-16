@@ -4,11 +4,11 @@
 
 ## Installation
 
-1. Télécharge **[feature-studio-1.0.0.vsix](../releases/feature-studio-1.0.0.vsix)** depuis ce dépôt (bouton Download raw file sur GitHub).
+1. Télécharge **[feature-studio-1.10.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.10.0/feature-studio-1.10.0.vsix)** depuis la release GitHub.
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur le **petit geek au portable** dans la barre latérale de VS Code, puis sur **Ouvrir le cockpit**. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
-5. Dans **Réglages**, clique sur **Vérifier la connexion**. Le diagnostic vérifie le CLI, le compte et les modèles sans envoyer de prompt.
+5. Copilot se connecte automatiquement à l'ouverture du cockpit dans un espace de travail approuvé : le diagnostic vérifie le CLI, le compte et les modèles sans envoyer de prompt. En cas d'échec, consulte **Réglages → Connexion**, corrige le problème indiqué, puis clique sur **Vérifier la connexion** pour réessayer.
 
 Prérequis : **VS Code 1.110 ou ultérieur**, Git pour les branches/diffs, et **GitHub Copilot CLI** installé et authentifié avec un abonnement donnant accès au CLI. Installer le VSIX ne nécessite ni Node.js ni npm séparément. Le moteur Node embarqué dans les versions récentes de VS Code est utilisé par l’extension.
 

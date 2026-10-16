@@ -1,4 +1,22 @@
-# Validation et limites — v1.9.0, 16 octobre 2026
+# Validation et limites — v1.10.0, 16 octobre 2026
+
+## Connexion automatique et ergonomie — v1.10.0
+
+- `npm run check` réussi : format, TypeScript, **567 tests métier réussis**, 4 ignorés, puis compilation.
+- **141 scénarios Chromium réussis**. Les trois nouveaux scénarios de connexion couvrent le démarrage sans clic, l'interface utilisable pendant la vérification, l'absence de nouvelle vérification à chaque navigation, l'approbation tardive du projet, le changement de projet non vérifié, le diagnostic d'échec et le réessai manuel. Les 138 scénarios précédents, dont les 8 d'ergonomie, restent verts.
+- Le smoke dans VS Code Insiders utilise un chemin de CLI volontairement absent dans son profil isolé : le cockpit doit lancer le diagnostic automatiquement, afficher son échec et rester utilisable, puis recommencer après fermeture et réouverture. Le diagnostic réussi, les modèles et l'absence de création de session ou de prompt sont couverts par le transport injecté des tests d'adaptateur ; aucun compte personnel n'est utilisé dans cette recette.
+- Les 44 corrections ergonomiques et leurs captures sont détaillées dans l'[audit de 68 évolutions](ERGONOMIE.md).
+- Le processus de publication attend les validations Linux et Windows du même commit, vérifie le contenu du VSIX, charge le paquet extrait dans VS Code, puis télécharge à nouveau ses assets et contrôle leurs empreintes avant publication. Le commit et le run exacts figurent dans les [notes de release v1.10.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.10.0).
+- La validation du compte Copilot personnel et l'installation dans le profil habituel restent distinctes de ces tests. Une première authentification GitHub peut être nécessaire si aucun compte n'est enregistré sur le poste.
+
+## Ergonomie — corrections locales après v1.9.0
+
+- [Audit de 68 évolutions](ERGONOMIE.md), classées de 1 à 10 : les 44 de priorité 1 à 5 sont corrigées ; les 24 suivantes restent proposées.
+- `npm run check` réussi : format, TypeScript, **567 tests métier réussis**, 4 ignorés, puis compilation. La campagne complète finale a été exécutée séparément des tests d'interface après un délai dépassé sur les archives lors du premier passage simultané.
+- **138 scénarios Chromium réussis**, dont 8 nouveaux scénarios d'ergonomie : seize écrans à 390 px, menu accessible, focus et défilement, filtres et tri, catalogues, sauvegarde visible, dialogues et discussions. Les sept thèmes, le contraste élevé et les mouvements réduits restent couverts.
+- Revue visuelle locale des vues bureau et compactes. Les captures d'accueil, du catalogue et des écrans documentés sont conservées dans `docs/images/`.
+- `npm run test:extension` réussi dans VS Code Insiders sur macOS, depuis le build courant avec profil et projet isolés. Aucun prompt Copilot payant.
+- Ces résultats concernent les sources locales. Aucun nouveau VSIX ni installation dans le profil habituel, aucune CI distante ou publication ne sont attestés par ce lot. Les preuves historiques de v1.9.0 ci-dessous restent distinctes.
 
 ## Discussions et sessions reliées — v1.9.0
 
