@@ -12,6 +12,9 @@ import { Store } from '../src/core/store';
 import { sha256 } from '../src/host/PolicyEngine';
 import { WorkspaceLease } from '../src/host/WorkspaceLease';
 
+// These integration scenarios start many real Git processes; Windows process startup is slower.
+if (process.platform === 'win32') vi.setConfig({ testTimeout: 60_000 });
+
 const execute = promisify(execFile);
 const roots: string[] = [],
   services: StudioService[] = [];
@@ -246,11 +249,13 @@ describe('StudioService isolated workspaces with real local Git and a fake agent
       await replace(tools, 'tests/proof.txt', 'worktree test proof\n');
       const proof = await invoke(tools, 'studio_run_test', { id: 'local' });
       expect(proof.resultType).toBe('success');
-      expect(proof.textResultForLlm).toContain(worktree);
+      expect(JSON.parse(proof.textResultForLlm).stdout).toContain(worktree);
       return finished();
     });
     await f.service.runStep(feature.id, 'session');
     const attempt = feature.steps[0].attempts.at(-1)!;
+    expect(attempt.error).toBeUndefined();
+    expect(feature.steps[0].status).toBe('awaiting_review');
     expect(attempt.evidence?.[0].stdout).toContain(worktree);
     const before = feature.checkpoints!.find((point) => point.id === attempt.checkpointBeforeId)!,
       after = feature.checkpoints!.find((point) => point.id === attempt.checkpointAfterId)!;

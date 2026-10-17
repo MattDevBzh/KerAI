@@ -25,6 +25,9 @@ import {
   WorkspaceRestoreError,
 } from '../src/host/FeatureWorkspace';
 
+// Full capture/restore scenarios start many real Git processes on the Windows runner.
+if (process.platform === 'win32') vi.setConfig({ testTimeout: 60_000 });
+
 const execute = promisify(execFile),
   roots: string[] = [];
 const restoreRace = vi.hoisted(() => ({
@@ -515,6 +518,8 @@ describe('targeted restore with durable recovery', () => {
     await writeFile(path.join(root, 'empty.txt'), '');
     await writeFile(path.join(root, 'binary.bin'), Buffer.from([0, 255, 1]));
     await chmod(path.join(root, 'tracked.txt'), 0o755);
+    // Windows does not expose POSIX executable bits; restore the mode actually captured.
+    const capturedMode = (await lstat(path.join(root, 'tracked.txt'))).mode & 0o777;
     const before = await capture(f);
     const worktreeIndex = (
         await git(root, 'rev-parse', '--path-format=absolute', '--git-path', 'index')
@@ -546,7 +551,7 @@ describe('targeted restore with durable recovery', () => {
     expect(restored.restoredFiles).toEqual(['tracked.txt', 'empty.txt', 'binary.bin', 'added.txt']);
     expect(saved).toHaveLength(1);
     expect(await readFile(path.join(root, 'tracked.txt'), 'utf8')).toBe('Committed\n');
-    expect((await lstat(path.join(root, 'tracked.txt'))).mode & 0o777).toBe(0o755);
+    expect((await lstat(path.join(root, 'tracked.txt'))).mode & 0o777).toBe(capturedMode);
     expect(await readFile(path.join(root, 'empty.txt'))).toEqual(Buffer.alloc(0));
     expect(await readFile(path.join(root, 'binary.bin'))).toEqual(Buffer.from([0, 255, 1]));
     await expect(readFile(path.join(root, 'added.txt'))).rejects.toThrow();
