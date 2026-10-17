@@ -1,4 +1,10 @@
-# Validation et limites — sources après v1.10.0, 17 octobre 2026
+# Validation et limites — v1.11.0, 17 octobre 2026
+
+## Préparation et publication de la version 1.11.0
+
+- Sources fonctionnelles : `53efa24c0d55468a0454ef4e9e5306ad3d87df06`, dont la [CI Linux et Windows a réussi](https://github.com/MattDevBzh/KerAI/actions/runs/39031277359). Le passage à 1.11.0 modifie la version du paquet et la documentation ; les sources et les versions des dépendances restent identiques.
+- Recette locale préalable de la version 1.11.0 : `npm run check` réussi (**592 tests métier réussis**, 4 ignorés), paquet construit et inspecté, puis contenu extrait de ce VSIX chargé avec succès dans VS Code Insiders sur macOS. Les **154 scénarios Chromium** de la fusion couvrent les mêmes sources fonctionnelles.
+- La publication reconstruit le VSIX en CI après les validations Linux et Windows du commit candidat, vérifie son manifeste et son contenu, puis charge le paquet extrait dans un vrai hôte VS Code. Les assets sont téléchargés à nouveau et leurs empreintes sont contrôlées avant de rendre la release visible. Le commit et le run exacts figurent dans les [notes de release v1.11.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.11.0) ; son `SHA256SUMS` concerne le paquet publié, distinct de la construction locale préalable.
 
 ## Fusion du zoom et de la détection automatique avec main
 

@@ -4,7 +4,7 @@ Feature Studio utilise le SDK officiel `@github/copilot-sdk` **1.0.20** avec un 
 
 ## Détection et chemin utilisé
 
-Depuis la v1.10.0, `featureStudio.cliPath` vaut `auto` par défaut. Une valeur vide ou l’ancienne valeur `copilot` active également la détection. Le CLI est recherché dans les répertoires absolus du PATH de l’hôte VS Code, dans leur ordre, puis dans les emplacements usuels :
+Depuis la v1.11.0, `featureStudio.cliPath` vaut `auto` par défaut. Une valeur vide ou l’ancienne valeur `copilot` active également la détection. Le CLI est recherché dans les répertoires absolus du PATH de l’hôte VS Code, dans leur ordre, puis dans les emplacements usuels :
 
 - Windows : `%APPDATA%\npm`, `%LOCALAPPDATA%\GitHubCopilotCLI` (MSI), `%LOCALAPPDATA%\Microsoft\WinGet\Links`, `%USERPROFILE%\.local\bin`.
 - macOS/Linux : `~/.local/bin`, `/usr/local/bin`, `/usr/bin`, et `/opt/homebrew/bin` sur macOS.

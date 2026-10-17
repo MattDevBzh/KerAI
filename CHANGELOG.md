@@ -1,6 +1,6 @@
 # Changelog
 
-## Non publié
+## 1.11.0 — 2026-10-17
 
 - Zoom global de 80 à 200 % et mode Auto adapté à la taille disponible ; commandes dans le bandeau et les réglages, préférence personnelle conservée entre projets. Les pages profitent davantage des grands écrans.
 - Détection automatique du Copilot CLI installé dans le PATH de VS Code, puis les emplacements utilisateur npm, MSI, WinGet, `.local/bin` et Homebrew. Les lanceurs intermédiaires VS Code sont ignorés.

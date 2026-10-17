@@ -1,9 +1,13 @@
 # Paquets de Feature Studio
 
-La version actuelle est **1.10.0** : [télécharger le VSIX](https://github.com/MattDevBzh/KerAI/releases/download/v1.10.0/feature-studio-1.10.0.vsix) et son [SHA256SUMS](https://github.com/MattDevBzh/KerAI/releases/download/v1.10.0/SHA256SUMS).
+La version actuelle est **1.11.0** : [télécharger le VSIX](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/feature-studio-1.11.0.vsix) et son [SHA256SUMS](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/SHA256SUMS).
+
+Elle contient le zoom, la détection automatique de Copilot, l'ouverture dans la fenêtre courante et le compteur de crédits. [Notes de version](../docs/releases/v1.11.0.md).
 
 Depuis la v1.4.0, les nouveaux paquets sont publiés dans les [releases GitHub](https://github.com/MattDevBzh/KerAI/releases/latest) après validation de la CI. Les VSIX et le fichier `SHA256SUMS` présents dans ce dossier concernent les versions historiques jusqu’à la v1.1.1 et restent conservés.
 
-`npm run package` produit localement `releases/feature-studio-1.10.0.vsix`. Pour installer une version livrée, utilise l’asset `.vsix` de sa release GitHub.
+Dans VS Code, utilise **Extensions : Installer à partir du VSIX**, puis recharge la fenêtre et vérifie la version **1.11.0**. Compare l'empreinte du fichier téléchargé avec sa ligne dans le `SHA256SUMS` de la release : `shasum -a 256 feature-studio-1.11.0.vsix` sur macOS/Linux, ou `Get-FileHash .\feature-studio-1.11.0.vsix -Algorithm SHA256` sur Windows.
 
-L’[icône Windows](https://github.com/MattDevBzh/KerAI/releases/download/v1.10.0/feature-studio.ico) est également jointe à la release et couverte par son `SHA256SUMS`.
+`npm run package` produit localement `releases/feature-studio-1.11.0.vsix`. Une construction locale possède sa propre empreinte ; le `SHA256SUMS` publié concerne les fichiers téléchargés depuis GitHub.
+
+L’[icône Windows](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/feature-studio.ico) est également jointe à la release et couverte par son `SHA256SUMS`.
