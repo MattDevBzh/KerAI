@@ -302,7 +302,7 @@ svg {
 }
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  min-height: calc(100 * var(--studio-vh));
 }
 .sidebar {
   width: 207px;
@@ -314,7 +314,7 @@ svg {
   padding: 29px 17px 16px;
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: calc(100 * var(--studio-vh));
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
@@ -526,15 +526,18 @@ svg {
   flex-direction: column;
 }
 .topbar {
-  height: 62px;
+  min-height: 62px;
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
-  padding: 0 38px;
-  gap: 16px;
+  padding: 10px 38px;
+  gap: 12px;
 }
 .topbar-context {
+  flex: 1;
+  overflow: hidden;
   display: flex;
   gap: 12px;
   align-items: center;
@@ -562,7 +565,7 @@ svg {
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
   flex-shrink: 0;
 }
 .trust-label {
@@ -606,7 +609,8 @@ main {
 }
 .page {
   padding: 43px 38px 40px;
-  max-width: 1430px;
+  width: 100%;
+  max-width: 1680px;
   margin: 0 auto;
 }
 .page-heading {
@@ -2094,7 +2098,7 @@ main {
 }
 /* Project settings */
 .settings-page {
-  max-width: 1100px;
+  max-width: 1280px;
 }
 .settings-card {
   padding: 27px;
@@ -2163,9 +2167,20 @@ main {
   overflow-wrap: anywhere;
 }
 .runtime-actions {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 25px;
+}
+.runtime-location {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  min-width: 0;
+}
+.runtime-location code {
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .input-unit {
   position: relative;
@@ -2330,7 +2345,7 @@ main {
   padding: 29px;
   width: 480px;
   max-width: 100%;
-  max-height: calc(100vh - 68px);
+  max-height: calc(calc(100 * var(--studio-vh)) - 68px);
   overflow-y: auto;
 }
 .modal.wide {
@@ -2425,7 +2440,7 @@ main {
   color: var(--coral);
 }
 .launch-screen {
-  min-height: 100vh;
+  min-height: calc(100 * var(--studio-vh));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2491,7 +2506,7 @@ body.vscode-high-contrast .badge,
 body.vscode-high-contrast-light .badge {
   border: 1px solid currentColor;
 }
-@media (min-width: 1450px) {
+@container studio (min-width: 1450px) {
   .dashboard-columns {
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: 35px;
@@ -2527,7 +2542,7 @@ body.vscode-high-contrast-light .badge {
     grid-template-columns: minmax(0, 1fr) 320px;
   }
 }
-@media (max-width: 1100px) {
+@container studio (max-width: 1100px) {
   .sidebar {
     width: 183px;
     padding-left: 12px;
@@ -2645,7 +2660,7 @@ body.vscode-high-contrast-light .badge {
     padding: 24px;
   }
 }
-@media (max-width: 890px) {
+@container studio (max-width: 890px) {
   .sidebar {
     width: 66px;
     padding: 21px 9px;
@@ -2758,7 +2773,7 @@ body.vscode-high-contrast-light .badge {
     font-size: 11px;
   }
 }
-@media (max-width: 700px) {
+@container studio (max-width: 700px) {
   .page {
     padding: 27px 19px;
   }
@@ -2923,7 +2938,7 @@ body.vscode-high-contrast-light .badge {
     padding: 20px 14px;
   }
   .modal {
-    max-height: calc(100vh - 40px);
+    max-height: calc(calc(100 * var(--studio-vh)) - 40px);
     padding: 22px;
   }
   .modal-heading h2 {
@@ -2987,7 +3002,7 @@ body.vscode-high-contrast-light .badge {
     font-size: 10px;
   }
 }
-@media (max-width: 500px) {
+@container studio (max-width: 500px) {
   .sidebar {
     width: 51px;
     padding: 20px 6px;
@@ -3341,7 +3356,7 @@ body.vscode-high-contrast-light .badge {
   top: 8px;
   bottom: 8px;
 }
-@media (max-width: 890px) {
+@container studio (max-width: 890px) {
   .nav-item.nav-child {
     padding: 10px 0;
     margin-left: 5px;

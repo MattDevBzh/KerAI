@@ -1,4 +1,12 @@
-# Validation et limites — v1.10.0, 16 octobre 2026
+# Validation et limites — sources après v1.10.0, 17 octobre 2026
+
+## Fusion du zoom et de la détection automatique avec main
+
+- Intégration de `codex/display-zoom` (`10e0662307bd839e530fd7740876cc1320166014`) avec `main` (`40a639c77f337f890f9329011321c4b680b06748`). L'ouverture dans la fenêtre courante, la connexion au démarrage, les améliorations ergonomiques et le compteur de crédits sont conservés.
+- `npm run check` réussi : format, TypeScript, **592 tests métier réussis**, 4 ignorés, puis compilation. La résolution des chemins utilise les conventions de la plateforme demandée ; le scénario de pagination de plus de 1 500 fichiers garde ses assertions avec un délai adapté aux agents Windows.
+- **154 scénarios Chromium réussis**, dont les scénarios de zoom et de détection du CLI. La navigation compacte, les dialogues et les détails des crédits sont vérifiés ensemble à 200 %, ainsi que le retour à la navigation de bureau après redimensionnement.
+- `npm run test:extension` réussi dans VS Code Insiders sur macOS avec projet et profil isolés. Aucun prompt Copilot payant.
+- Cette recette porte sur les sources fusionnées. Les résultats de CI du commit final restent consultables sur GitHub ; le VSIX et les notes de la release v1.10.0 déjà publiée ne sont pas remplacés.
 
 ## Connexion automatique et ergonomie — v1.10.0
 
@@ -17,6 +25,14 @@
 - Revue visuelle locale des vues bureau et compactes. Les captures d'accueil, du catalogue et des écrans documentés sont conservées dans `docs/images/`.
 - `npm run test:extension` réussi dans VS Code Insiders sur macOS, depuis le build courant avec profil et projet isolés. Aucun prompt Copilot payant.
 - Ces résultats concernent les sources locales. Aucun nouveau VSIX ni installation dans le profil habituel, aucune CI distante ou publication ne sont attestés par ce lot. Les preuves historiques de v1.9.0 ci-dessous restent distinctes.
+
+## Zoom et détection automatique — recette de la branche avant fusion
+
+- Base `main` : `481651b45ff64097fa30db0a2271ce72661c64ea`. Intégration du zoom avec les discussions depuis un compte rendu et les propositions de features de la v1.9.0.
+- TypeScript vérifié ; 89 tests ciblés réussis, 3 tests Windows ignorés sur cet hôte Linux. Couverture du PATH Windows, npm/MSI/WinGet, chemins avec espaces, anciens et nouveaux lanceurs VS Code, paramètres personnels et affichage du chemin en cas d’échec du CLI ou de l’authentification. Tests de transport sans prompt réel.
+- 14 scénarios Chromium réussis : réglages CLI et chemin Windows à 390 px, zoom automatique de 1440 à 3840 px, zoom fixe à 200 %, persistance, erreur d’enregistrement, composition d’équipe, discussions liées aux rapports et propositions ajustables.
+- Le lancement réel sur Windows, l’authentification du compte et la compatibilité du CLI installé restent à vérifier avec **Vérifier la connexion**. Aucun prompt Copilot payant envoyé pendant cette recette.
+
 
 ## Discussions et sessions reliées — v1.9.0
 

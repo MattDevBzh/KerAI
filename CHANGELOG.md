@@ -2,6 +2,9 @@
 
 ## Non publié
 
+- Zoom global de 80 à 200 % et mode Auto adapté à la taille disponible ; commandes dans le bandeau et les réglages, préférence personnelle conservée entre projets. Les pages profitent davantage des grands écrans.
+- Détection automatique du Copilot CLI installé dans le PATH de VS Code, puis les emplacements utilisateur npm, MSI, WinGet, `.local/bin` et Homebrew. Les lanceurs intermédiaires VS Code sont ignorés.
+- Chemin et provenance du CLI visibles après diagnostic, même en cas d’échec d’authentification. Bouton **Détection automatique** pour remplacer un ancien chemin invalide ; les chemins personnalisés restent possibles.
 - L’icône Feature Studio ouvre directement le cockpit dans la fenêtre VS Code courante, sans second clic. Les commandes et la restauration d’onglet restent dans cette fenêtre ; le raccourci Windows et la commande dédiée conservent leur fenêtre à part.
 - Le compteur global des crédits GitHub Copilot est visible dans l’en-tête du cockpit. Un clic affiche les détails du compte ; l’actualisation reste limitée aux périodes où le cockpit est visible.
 

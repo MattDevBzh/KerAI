@@ -27,6 +27,8 @@ const host = vi.hoisted(() => {
     state,
     disposable,
     theme: undefined as unknown,
+    zoom: undefined as unknown,
+    cliPath: undefined as unknown,
     failWrite: false,
     writes: [] as unknown[][],
     configurationChanged: undefined as
@@ -78,13 +80,21 @@ vi.mock('vscode', () => ({
     isTrusted: false,
     getConfiguration: () => ({
       get: (key: string, fallback?: unknown) =>
-        key === 'appearance.theme' ? host.theme : fallback,
+        key === 'appearance.theme'
+          ? host.theme
+          : key === 'appearance.zoom'
+            ? host.zoom
+            : key === 'cliPath'
+              ? host.cliPath
+              : fallback,
       update: async (...args: unknown[]) => {
         host.writes.push(args);
         if (host.failWrite) throw new Error('Le profil est en lecture seule.');
-        host.theme = args[1];
+        if (args[0] === 'appearance.zoom') host.zoom = args[1];
+        else if (args[0] === 'cliPath') host.cliPath = args[1];
+        else host.theme = args[1];
         host.configurationChanged?.({
-          affectsConfiguration: (key) => key === 'featureStudio.appearance.theme',
+          affectsConfiguration: (key) => key === `featureStudio.${args[0]}`,
         });
       },
     }),
@@ -218,6 +228,8 @@ describe('personal theme host boundary', () => {
   beforeEach(async () => {
     vi.resetModules();
     host.theme = undefined;
+    host.zoom = undefined;
+    host.cliPath = undefined;
     host.dedicated = false;
     host.mode = 3;
     host.executeCommand.mockClear();
@@ -243,6 +255,22 @@ describe('personal theme host boundary', () => {
       secrets: {},
     } as never);
   };
+  it('resets a stale CLI path globally and leaves it unchanged if saving fails', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    host.cliPath = 'C:\\missing\\copilot.bat';
+    host.failWrite = true;
+    await expect(api.dispatch({ type: 'autoDetectCli' })).rejects.toThrow('lecture seule');
+    expect(host.cliPath).toBe('C:\\missing\\copilot.bat');
+    host.failWrite = false;
+    await api.dispatch({ type: 'autoDetectCli' });
+    expect(host.cliPath).toBe('auto');
+    expect(host.writes.at(-1)).toEqual(['cliPath', 'auto', 1]);
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'notice',
+      message: expect.stringContaining('activée'),
+    });
+  });
   it('opens and reuses the cockpit in the ordinary project window in production mode', async () => {
     host.mode = 1;
     await activate();
@@ -307,6 +335,47 @@ describe('personal theme host boundary', () => {
     expect(host.createPanel).toHaveBeenCalledTimes(1);
     expect(host.executeCommand).toHaveBeenCalledWith('workbench.action.closeSidebar');
   });
+  it('persists zoom globally without a project or agent run and restores the saved value on failure', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    const before = api.getState();
+    await api.dispatch({ type: 'setZoom', zoom: 150, requestId: 'zoom-save' });
+    expect(host.writes).toEqual([['appearance.zoom', 150, 1]]);
+    expect(api.getZoom()).toBe(150);
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'zoomState',
+      zoom: 150,
+      requestId: 'zoom-save',
+    });
+    host.failWrite = true;
+    await api.dispatch({ type: 'setZoom', zoom: 200, requestId: 'zoom-failure' });
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'zoomState',
+      zoom: 150,
+      requestId: 'zoom-failure',
+      error: 'Le profil est en lecture seule.',
+    });
+    expect(api.getState()).toEqual(before);
+    host.failWrite = false;
+    await api.dispatch({ type: 'setZoom', zoom: 'auto', requestId: 'zoom-reset' });
+    expect(api.getZoom()).toBe('auto');
+  });
+  it('injects the saved zoom on reopen and announces external configuration changes', async () => {
+    host.zoom = 175;
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    expect(host.panel.webview.html).toContain('data-studio-zoom="175"');
+    host.zoom = 125;
+    host.configurationChanged?.({
+      affectsConfiguration: (key) => key === 'featureStudio.appearance.zoom',
+    });
+    expect(host.messages.at(-1)).toMatchObject({ type: 'zoomState', zoom: 125 });
+    await api.dispatch({ type: 'ready' });
+    expect(host.messages).toContainEqual(expect.objectContaining({ type: 'zoomState', zoom: 125 }));
+    await expect(
+      api.dispatch({ type: 'setZoom', zoom: 999, requestId: 'bad' } as never),
+    ).rejects.toThrow();
+  });
   it('writes globally without initializing business state or requiring trust', async () => {
     const api = await activate();
     await api.dispatch({ type: 'setTheme', theme: 'papier-clair', requestId: 'personal' });
@@ -365,7 +434,9 @@ describe('personal theme host boundary', () => {
     const api = await activate();
     host.theme = 'aube" onload="arbitrary';
     await host.commands.get('featureStudio.open')!();
-    expect(host.panel.webview.html).toContain('<html data-studio-theme="auto" lang="fr">');
+    expect(host.panel.webview.html).toContain(
+      '<html data-studio-theme="auto" data-studio-zoom="auto" lang="fr">',
+    );
     expect(host.panel.webview.html).not.toContain('arbitrary');
     await api.dispatch({ type: 'ready' });
     expect(host.messages).toContainEqual(

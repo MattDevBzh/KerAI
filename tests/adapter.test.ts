@@ -276,6 +276,7 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
   it('checks live metadata without creating or sending a session', async () => {
     const status = await adapter.check();
     expect(status).toMatchObject({ state: 'ready', version: '1.0.96', authenticated: true });
+    expect(status).toMatchObject({ cliPath: process.execPath, cliSource: 'configured' });
     expect(status.models.map((m) => m.id)).toEqual(['auto', 'gpt-test']);
     expect(fake.client.createSession).not.toHaveBeenCalled();
     expect(fake.session.send).not.toHaveBeenCalled();
@@ -293,6 +294,22 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
       '--disable-builtin-mcps',
       '--disallow-temp-dir',
     ]);
+  });
+  it('keeps the resolved CLI path visible when authentication or startup fails', async () => {
+    fake.client.getAuthStatus.mockResolvedValueOnce({ isAuthenticated: false, login: '' });
+    expect(await adapter.check()).toMatchObject({
+      state: 'unavailable',
+      authenticated: false,
+      cliPath: process.execPath,
+      cliSource: 'configured',
+    });
+    fake.client.start.mockRejectedValueOnce(new Error('startup failed'));
+    expect(await adapter.check()).toMatchObject({
+      state: 'unavailable',
+      cliPath: process.execPath,
+      error: 'startup failed',
+    });
+    expect(fake.session.send).not.toHaveBeenCalled();
   });
   it('discovers server tools without prompt or model-visible execution tools', async () => {
     const catalog = await adapter.discoverMcp({

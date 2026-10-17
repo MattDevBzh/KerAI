@@ -10,6 +10,8 @@ Pars d’un besoin, choisis une équipe et avance étape par étape : challenge,
 
 **Version actuelle : 1.10.0.** Copilot se connecte automatiquement à l’ouverture du cockpit dans un projet approuvé. Profitez de 44 améliorations ergonomiques : menu compact, lisibilité, filtres, réglages et discussions. Les quêtes, les sept ambiances et les échanges liés aux comptes rendus restent inclus. [Nouveautés de v1.10.0](docs/releases/v1.10.0.md).
 
+**Sources en développement :** zoom global de 80 à 200 %, détection automatique du CLI installé et affichage du chemin utilisé. Ces ajouts seront inclus dans une prochaine publication.
+
 ![La bibliothèque des kits : Atelier Copilot et DevOps](docs/images/kits-library.png)
 
 ## Commencer
@@ -24,7 +26,7 @@ Après mise à jour, la fiche **Feature Studio** dans Extensions doit afficher *
 
 **Prérequis :** VS Code **1.110+**, Git et GitHub Copilot CLI installé et authentifié avec un accès au CLI. Le VSIX utilise le moteur Node de VS Code ; il ne nécessite pas une installation séparée de npm. L’extension utilise le CLI local et ton authentification Copilot. Elle possède son propre cockpit et peut coexister avec la vue Chat de GitHub Copilot.
 
-Si le CLI est introuvable, renseigne `featureStudio.cliPath` dans les réglages VS Code. [Installation et diagnostic du CLI](docs/COPILOT.md). Les appels aux modèles utilisent ton quota Copilot ; consulter, configurer et exporter un kit ne lance aucun agent.
+Dans les sources en développement, le CLI est détecté automatiquement. Si un ancien chemin est invalide, clique sur **Réglages → Détection automatique** : le chemin réellement utilisé apparaît après le diagnostic. Un chemin complet dans `featureStudio.cliPath` reste prioritaire. [Installation et diagnostic du CLI](docs/COPILOT.md). Les appels aux modèles utilisent ton quota Copilot ; consulter, configurer et exporter un kit ne lance aucun agent.
 
 ## Observateur de session
 

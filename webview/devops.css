@@ -169,7 +169,7 @@
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
-@media (max-width: 850px) {
+@container studio (max-width: 850px) {
   .devops-columns,
   .devops-fields {
     grid-template-columns: 1fr;
@@ -216,7 +216,7 @@
   margin-bottom: 14px;
 }
 .devops-dashboard h1 {
-  font-size: clamp(23px, 3vw, 33px);
+  font-size: clamp(23px, calc(3 * var(--studio-vw)), 33px);
   letter-spacing: -0.8px;
 }
 .devops-hero-copy p {
@@ -467,12 +467,12 @@ body:is(.vscode-high-contrast, .vscode-high-contrast-light)
   ) {
   color: var(--fg);
 }
-@media (max-width: 1100px) {
+@container studio (max-width: 1100px) {
   .devops-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 850px) {
+@container studio (max-width: 850px) {
   .devops-dashboard-grid {
     grid-template-columns: 1fr;
   }
@@ -490,7 +490,7 @@ body:is(.vscode-high-contrast, .vscode-high-contrast-light)
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 500px) {
+@container studio (max-width: 500px) {
   .devops-dashboard .devops-hero {
     padding: 20px;
   }

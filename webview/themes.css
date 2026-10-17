@@ -349,7 +349,7 @@ body.vscode-high-contrast-light {
 .theme-feedback[role='alert'] {
   color: var(--error);
 }
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .theme-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -596,7 +596,7 @@ html[data-studio-theme-family='event'] .nav-item.active {
     inset 3px 0 var(--coral),
     0 0 14px #ffb26b12;
 }
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .theme-scenery {
     opacity: 0.12;
     width: 60%;

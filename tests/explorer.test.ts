@@ -95,24 +95,29 @@ describe('bounded workspace exploration', () => {
         await expect(list(explorer, { path: file })).rejects.toThrow('sensible');
     },
   );
-  it('pages every file beyond 1500 and depth 15 deterministically, and searches the full inventory', async () => {
-    const { root, explorer } = await fixture();
-    await mkdir(join(root, 'source'));
-    const paths = Array.from(
-      { length: 1507 },
-      (_, i) => `source/file-${String(i).padStart(4, '0')}.txt`,
-    );
-    await Promise.all(paths.map((file) => writeFile(join(root, file), 'needle\n')));
-    const deep = `${Array.from({ length: 20 }, (_, i) => `d${i}`).join('/')}/deep.txt`;
-    await mkdir(join(root, deep, '..'), { recursive: true });
-    await writeFile(join(root, deep), 'needle\n');
-    const files = await allFiles(explorer);
-    expect(files).toEqual([...paths, deep].sort());
-    expect(new Set(files).size).toBe(1508);
-    const found = await allMatches(explorer);
-    expect(found.matches.map((match) => match.path)).toEqual(files);
-    expect(found.pages).toBeGreaterThan(15);
-  }, 30_000);
+  it(
+    'pages every file beyond 1500 and depth 15 deterministically, and searches the full inventory',
+    async () => {
+      const { root, explorer } = await fixture();
+      await mkdir(join(root, 'source'));
+      const paths = Array.from(
+        { length: 1507 },
+        (_, i) => `source/file-${String(i).padStart(4, '0')}.txt`,
+      );
+      await Promise.all(paths.map((file) => writeFile(join(root, file), 'needle\n')));
+      const deep = `${Array.from({ length: 20 }, (_, i) => `d${i}`).join('/')}/deep.txt`;
+      await mkdir(join(root, deep, '..'), { recursive: true });
+      await writeFile(join(root, deep), 'needle\n');
+      const files = await allFiles(explorer);
+      expect(files).toEqual([...paths, deep].sort());
+      expect(new Set(files).size).toBe(1508);
+      const found = await allMatches(explorer);
+      expect(found.matches.map((match) => match.path)).toEqual(files);
+      expect(found.pages).toBeGreaterThan(15);
+      // Windows runners need more time for the repeated scans of over 1,500 files.
+    },
+    process.platform === 'win32' ? 90_000 : 30_000,
+  );
 
   it('uses Git ignores, negations and tracked ignored files and scopes a nested workspace', async () => {
     const { root, git, explorer, explorerAt } = await fixture();

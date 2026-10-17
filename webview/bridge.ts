@@ -72,6 +72,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'profileSaveResult',
         'kitResult',
         'themeState',
+        'zoomState',
         'observationPreview',
         'observationSource',
         'sessionStorage',

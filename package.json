@@ -128,9 +128,9 @@
         },
         "featureStudio.cliPath": {
           "type": "string",
-          "default": "copilot",
+          "default": "auto",
           "scope": "machine",
-          "description": "Chemin de l’exécutable GitHub Copilot CLI."
+          "description": "auto (ou vide) : détecter Copilot CLI dans le PATH de VS Code puis les installations utilisateur npm, MSI, WinGet ou .local/bin. Un chemin complet impose une installation précise. Les lanceurs intermédiaires de VS Code sont ignorés en mode automatique."
         },
         "featureStudio.defaultModel": {
           "type": "string",
@@ -158,6 +158,26 @@
           "default": [],
           "scope": "application",
           "description": "Agents favoris, affichés en premier dans les catalogues et sélecteurs de Feature Studio."
+        },
+        "featureStudio.appearance.zoom": {
+          "type": [
+            "string",
+            "number"
+          ],
+          "enum": [
+            "auto",
+            80,
+            90,
+            100,
+            110,
+            125,
+            150,
+            175,
+            200
+          ],
+          "default": "auto",
+          "scope": "application",
+          "description": "Taille de toute l’interface Feature Studio. Auto adapte le zoom à la taille disponible dans la fenêtre ; un pourcentage fixe est conservé dans tous vos projets."
         }
       }
     }

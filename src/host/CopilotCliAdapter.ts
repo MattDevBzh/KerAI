@@ -255,7 +255,6 @@ export class CopilotCliAdapter implements AgentAdapter {
     if (this.disposed) throw new Error('Adaptateur fermé.');
     const path =
       typeof this.options.cliPath === 'function' ? this.options.cliPath() : this.options.cliPath;
-    if (!path.trim()) throw new Error('Chemin Copilot CLI manquant.');
     const launch = await CopilotLaunch.create(path, directory, this.options.debugLog, secrets);
     if (this.disposed) {
       await launch.dispose();
@@ -348,6 +347,7 @@ export class CopilotCliAdapter implements AgentAdapter {
 
   async check(): Promise<RuntimeStatus> {
     let client: CopilotClient | undefined;
+    let executable: Pick<RuntimeStatus, 'cliPath' | 'cliSource'> = {};
     const controller = new AbortController();
     this.runs.add(controller);
     const timer = setTimeout(
@@ -356,6 +356,8 @@ export class CopilotCliAdapter implements AgentAdapter {
     );
     try {
       client = await this.newClient();
+      const launch = this.launches.get(client)!;
+      executable = { cliPath: launch.executable, cliSource: launch.source };
       await withSignal(client.start(), controller.signal);
       const status = await withSignal(client.getStatus(), controller.signal);
       if (status.protocolVersion < 3)
@@ -364,6 +366,7 @@ export class CopilotCliAdapter implements AgentAdapter {
       if (!auth.isAuthenticated)
         return {
           state: 'unavailable',
+          ...executable,
           version: status.version,
           authenticated: false,
           models: [],
@@ -372,6 +375,7 @@ export class CopilotCliAdapter implements AgentAdapter {
       const models = await withSignal(client.listModels(), controller.signal);
       return {
         state: 'ready',
+        ...executable,
         version: status.version,
         authenticated: true,
         account: auth.login,
@@ -387,6 +391,7 @@ export class CopilotCliAdapter implements AgentAdapter {
     } catch (error) {
       return {
         state: 'unavailable',
+        ...executable,
         models: [],
         error: (await this.runtimeError(error, client)).message,
       };

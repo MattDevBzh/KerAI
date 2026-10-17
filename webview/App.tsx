@@ -17,6 +17,7 @@ import { AccountCreditsBadge } from './AccountCreditsBadge';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
 import { ThemePicker } from './ThemePicker';
+import { ZoomControls, ZoomSettings } from './ZoomControls';
 import { ThemeScenery } from './ThemeScenery';
 import { QuestCelebration, QuestsUI } from './QuestsUI';
 import { emptyQuestState, type QuestState } from '../src/shared/quests';
@@ -295,12 +296,13 @@ export default function App() {
   const navigationWasOpen = useRef(false);
   const navigationFocus = useRef<'menu' | 'content'>('menu');
   useEffect(() => {
-    const desktop = window.matchMedia('(min-width: 891px)');
-    const resize = () => {
-      if (desktop.matches) setNavigationOpen(false);
-    };
-    desktop.addEventListener('change', resize);
-    return () => desktop.removeEventListener('change', resize);
+    const root = document.getElementById('root');
+    if (!root) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 890) setNavigationOpen(false);
+    });
+    observer.observe(root);
+    return () => observer.disconnect();
   }, []);
   useEffect(() => {
     const wasOpen = navigationWasOpen.current;
@@ -794,6 +796,7 @@ export default function App() {
           </div>
           <div className="topbar-actions">
             <AccountCreditsBadge credits={accountCredits} />
+            <ZoomControls />
             <span className="trust-label">
               <ShieldCheck size={14} />
               {state.workspace.trusted ? 'Projet approuvé' : 'Consultation seule'}
@@ -4112,6 +4115,7 @@ function SettingsView({
             <h2>Votre atelier</h2>
           </div>
           <div id="settings-appearance" className="settings-anchor">
+            <ZoomSettings />
             <ThemePicker />
           </div>
           <section className="settings-card settings-anchor" id="settings-connection">
@@ -4121,7 +4125,7 @@ function SettingsView({
               </span>
               <div>
                 <h2>GitHub Copilot CLI</h2>
-                <p>Le moteur de vos sessions, installé dans votre environnement.</p>
+                <p>Détection automatique du CLI installé. Un chemin personnalisé reste possible.</p>
               </div>
               <Badge
                 label={
@@ -4162,6 +4166,19 @@ function SettingsView({
                 <strong>{state.runtime.models.length || 'À vérifier'}</strong>
               </div>
             </div>
+            <div className="runtime-location">
+              <span>Chemin utilisé au dernier diagnostic</span>
+              <code>{state.runtime.cliPath ?? 'Cliquez sur Vérifier la connexion.'}</code>
+              {state.runtime.cliSource && (
+                <small>
+                  {state.runtime.cliSource === 'configured'
+                    ? 'Chemin personnalisé'
+                    : state.runtime.cliSource === 'path'
+                      ? 'Détection automatique · PATH de VS Code'
+                      : 'Détection automatique · installation utilisateur'}
+                </small>
+              )}
+            </div>
             <div className="runtime-actions">
               <button
                 type="button"
@@ -4170,6 +4187,14 @@ function SettingsView({
                 onClick={() => dispatch({ type: 'checkRuntime' })}
               >
                 <RefreshCw size={15} /> Vérifier la connexion
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={state.runtime.state === 'checking'}
+                onClick={() => dispatch({ type: 'autoDetectCli' })}
+              >
+                Détection automatique
               </button>
               <button
                 type="button"

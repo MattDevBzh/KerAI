@@ -12,7 +12,7 @@
 
 Prérequis : **VS Code 1.110 ou ultérieur**, Git pour les branches/diffs, et **GitHub Copilot CLI** installé et authentifié avec un abonnement donnant accès au CLI. Installer le VSIX ne nécessite ni Node.js ni npm séparément. Le moteur Node embarqué dans les versions récentes de VS Code est utilisé par l’extension.
 
-Si `copilot` n’est pas trouvé, renseigne le chemin complet dans **Réglages → Chemin du CLI dans VS Code** (`featureStudio.cliPath`). Sur macOS avec Homebrew, ce peut être `/opt/homebrew/bin/copilot`. L’extension ne met pas le CLI à jour automatiquement. Voir [l’installation officielle du CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
+Le réglage `featureStudio.cliPath` vaut **auto** par défaut : recherche dans le PATH du processus VS Code, puis les installations utilisateur usuelles. Dans **Réglages**, le diagnostic affiche le chemin trouvé et sa provenance. Le bouton **Détection automatique** remplace un ancien chemin personnalisé et relance le diagnostic si le projet est approuvé et disponible. Les lanceurs intermédiaires VS Code (`copilotCli` et `bin/copilot-shim`) sont ignorés. Pour imposer une installation, renseigne son chemin complet dans **Chemin du CLI dans VS Code**. Sur macOS avec Homebrew, ce peut être `/opt/homebrew/bin/copilot`. L’extension ne met pas le CLI à jour automatiquement. Voir [l’installation officielle du CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli).
 
 **Feature Studio ouvre son propre onglet de travail.** Il utilise le CLI local et son authentification ; il ne remplace pas les composants internes de la vue Chat de l’extension GitHub Copilot. Les deux interfaces peuvent coexister. Aucun serveur applicatif supplémentaire n’est requis ; les requêtes IA passent naturellement par GitHub Copilot.
 
@@ -29,6 +29,14 @@ Afficher le volet seul ne démarre aucune session et n’appelle aucun modèle. 
 En haut de **Réglages**, **L’ambiance du cockpit** propose **Suivre VS Code**, puis **Jardin des idées**, **Papier vivant** et **Guilde pixel**, chacun en clair et sombre. Le septième thème, **Halloween**, transforme le décor et habille les vingt personnages (repos, travail animé et réussite). Ce thème événement est entièrement facultatif, sans activation automatique à une date donnée. Les portraits habituels reviennent dès que tu choisis une autre ambiance. Si un costume ne se charge pas, le portrait original prend le relais.
 
 Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
+
+## Agrandir l’interface
+
+Le bandeau supérieur propose **− / Auto / +**. Le zoom agrandit ensemble textes, boutons, icônes et avatars. Choisis **80 à 200 %** pour garder une taille fixe ; **Auto** adapte l’affichage lorsque tu redimensionnes la fenêtre ou changes d’écran.
+
+Le mode Auto utilise l’espace disponible : par exemple 125 % en 1920 × 1080, 150 % en 2560 × 1440 et 175 % en 3840 × 2160, lorsque ces dimensions sont disponibles après la mise à l’échelle de Windows et de VS Code. Une fenêtre basse conserve davantage d’espace vertical.
+
+Le choix se trouve également dans **Réglages → Votre atelier → Taille de l’interface**. Il est enregistré dans les réglages personnels de VS Code, commun à tous tes projets, et conservé après fermeture. Changer de zoom ne lance aucun agent et ne consomme aucun crédit.
 
 ## Quêtes et trophées
 

@@ -4,11 +4,14 @@ import App from './App';
 import './styles.css';
 import './themes.css';
 import './ergonomics.css';
+import { ZoomProvider } from './ZoomControls';
 import { ThemeProvider } from './ThemePicker';
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
+    <ZoomProvider>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </ZoomProvider>
   </React.StrictMode>,
 );

@@ -145,7 +145,7 @@
   font-size: 12px;
   margin-top: 8px;
 }
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .project-row {
     align-items: flex-start;
     flex-wrap: wrap;
@@ -187,7 +187,7 @@ main:has(.settings-page) > .project-switcher {
   background: var(--panel);
 }
 
-@media (max-width: 650px) {
+@container studio (max-width: 650px) {
   .project-switcher {
     padding: 16px 18px 0;
   }

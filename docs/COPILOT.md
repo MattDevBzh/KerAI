@@ -2,6 +2,28 @@
 
 Feature Studio utilise le SDK officiel `@github/copilot-sdk` **1.0.20** avec un processus du CLI déjà installé. Il ne simule ni les réponses ni les événements. Aucune mise à jour automatique du CLI, installation de modèle ou publication GitHub n'est lancée par l'adaptateur.
 
+## Détection et chemin utilisé
+
+Depuis la v1.10.0, `featureStudio.cliPath` vaut `auto` par défaut. Une valeur vide ou l’ancienne valeur `copilot` active également la détection. Le CLI est recherché dans les répertoires absolus du PATH de l’hôte VS Code, dans leur ordre, puis dans les emplacements usuels :
+
+- Windows : `%APPDATA%\npm`, `%LOCALAPPDATA%\GitHubCopilotCLI` (MSI), `%LOCALAPPDATA%\Microsoft\WinGet\Links`, `%USERPROFILE%\.local\bin`.
+- macOS/Linux : `~/.local/bin`, `/usr/local/bin`, `/usr/bin`, et `/opt/homebrew/bin` sur macOS.
+
+Sous Windows, la préférence par répertoire est `.exe`, `.cmd`, `.bat`, puis le fichier sans extension. Les entrées PATH vides ou relatives ne servent pas à découvrir un exécutable dans le projet. Les dossiers VS Code `github.copilot-chat/copilotCli` et `bin/copilot-shim` sont ignorés en mode automatique : leurs lanceurs cherchent une installation distincte et peuvent proposer une installation interactive. Le nouveau lanceur natif remplace les anciens scripts ; un ancien chemin `copilot.bat` peut donc disparaître après mise à jour de VS Code.
+
+**Réglages → Vérifier la connexion** affiche le chemin réellement résolu et sa provenance, même si l’authentification échoue ensuite. **Détection automatique** enregistre `auto` au niveau utilisateur et relance le diagnostic si le projet est approuvé et disponible. Aucun prompt n’est envoyé. Un chemin personnalisé reste prioritaire : s’il est absent, Feature Studio ne le remplace pas silencieusement.
+
+Pour retrouver les commandes disponibles dans un nouveau terminal PowerShell de VS Code :
+
+```powershell
+Get-Command copilot, copilot.exe, copilot.cmd, copilot.bat -All -ErrorAction SilentlyContinue |
+  Select-Object CommandType, Source, Path
+```
+
+Avec npm, sélectionner le chemin complet de `copilot.cmd`, pas `copilot.ps1`. Le PATH d’un terminal peut différer de celui du processus d’extension ; après installation, fermer toutes les fenêtres VS Code et rouvrir l’application peut être nécessaire. En WSL/SSH, le CLI doit être installé sur l’hôte où tourne Feature Studio. Réutiliser le même exécutable ne partage pas les conversations VS Code et ne garantit pas l’authentification du runtime isolé.
+
+Source : [contrat officiel du lanceur natif VS Code](https://github.com/microsoft/vscode/blob/main/copilot_shim/REQUIREMENTS.md).
+
 ## Transport et diagnostic
 
 Le SDK lance `copilot --headless --stdio --no-auto-update`. Le transport est JSON-RPC 2.0 avec le framing `Content-Length: <octets>\r\n\r\n`, et non du JSONL. L'intégration TypeScript publiée utilise :

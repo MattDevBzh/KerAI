@@ -1,18 +1,94 @@
 import { access, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { delimiter, extname, isAbsolute, join, resolve, win32 } from 'node:path';
+import { join, posix, win32 } from 'node:path';
 import { spawn } from 'node:child_process';
 import { redact } from './process';
+
+export interface CopilotExecutable {
+  cliPath: string;
+  cliSource: 'configured' | 'path' | 'user-install';
+}
+
+/** The terminal integration is an interactive bootstrapper, not the headless CLI. */
+function isVSCodeBootstrapper(path: string): boolean {
+  return /[\\/]github\.copilot-chat[\\/]copilotCli[\\/]|[\\/]bin[\\/]copilot-shim[\\/]/i.test(path);
+}
+
+export async function resolveCopilotExecutable(
+  configured: string,
+  platform = process.platform,
+  env = process.env,
+): Promise<CopilotExecutable> {
+  const selected = configured.trim().replace(/^"(.*)"$/, '$1');
+  if (selected && selected !== 'auto' && selected !== 'copilot')
+    return {
+      cliPath: await resolveConfiguredPath(selected, platform, env),
+      cliSource: 'configured',
+    };
+
+  const windows = platform === 'win32';
+  const paths = windows ? win32 : posix;
+  const variable = (name: string) =>
+    Object.entries(env).find(([key]) =>
+      windows ? key.toLowerCase() === name.toLowerCase() : key === name,
+    )?.[1];
+  const candidates: { directory: string; source: CopilotExecutable['cliSource'] }[] = (
+    variable('PATH') ?? ''
+  )
+    .split(windows ? ';' : ':')
+    .map((directory) => ({ directory: directory.replace(/^"(.*)"$/, '$1'), source: 'path' }));
+  const add = (root: string | undefined, ...segments: string[]) => {
+    if (root && paths.isAbsolute(root))
+      candidates.push({ directory: paths.join(root, ...segments), source: 'user-install' });
+  };
+  if (windows) {
+    add(variable('APPDATA'), 'npm');
+    add(variable('LOCALAPPDATA'), 'GitHubCopilotCLI');
+    add(variable('LOCALAPPDATA'), 'Microsoft', 'WinGet', 'Links');
+    add(variable('USERPROFILE'), '.local', 'bin');
+  } else {
+    add(variable('HOME'), '.local', 'bin');
+    if (platform === 'darwin') add('/opt/homebrew', 'bin');
+    add('/usr/local', 'bin');
+    add('/usr', 'bin');
+  }
+  const visited = new Set<string>();
+  for (const { directory, source } of candidates) {
+    // Never discover a project-local binary from an empty/relative PATH entry.
+    if (!paths.isAbsolute(directory) || /[\r\n\0]/.test(directory)) continue;
+    const key = windows ? paths.resolve(directory).toLowerCase() : paths.resolve(directory);
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (isVSCodeBootstrapper(paths.join(directory, 'copilot'))) continue;
+    try {
+      const cliPath = await resolveConfiguredPath('copilot', platform, { PATH: directory });
+      return { cliPath, cliSource: source };
+    } catch {
+      /* Try the next installation without executing an installer. */
+    }
+  }
+  throw new Error(
+    'Copilot CLI introuvable : détection dans le PATH de VS Code et les emplacements utilisateur usuels. Installe GitHub Copilot CLI puis redémarre VS Code, ou renseigne featureStudio.cliPath avec son chemin complet. Les lanceurs VS Code copilotCli et copilot-shim ne constituent pas une installation du CLI.',
+  );
+}
 
 export async function resolveCopilotPath(
   configured: string,
   platform = process.platform,
   env = process.env,
 ): Promise<string> {
+  return (await resolveCopilotExecutable(configured, platform, env)).cliPath;
+}
+
+async function resolveConfiguredPath(
+  configured: string,
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
   const path = configured.trim().replace(/^"(.*)"$/, '$1');
   if (!path || /[\r\n\0]/.test(path)) throw new Error('Chemin Copilot CLI invalide.');
   const windows = platform === 'win32';
-  const paths = windows ? win32 : { extname, isAbsolute, join, resolve };
+  const paths = windows ? win32 : posix;
   const isExplicitPath = paths.isAbsolute(path) || /[\\/]/.test(path);
   const pathValue = Object.entries(env).find(([key]) => key.toLowerCase() === 'path')?.[1] ?? '';
   const extensions =
@@ -21,9 +97,7 @@ export async function resolveCopilotPath(
         ? ['', '.exe', '.cmd', '.bat']
         : ['.exe', '.cmd', '.bat', '']
       : [''];
-  const entries = isExplicitPath
-    ? ['']
-    : pathValue.split(windows ? ';' : delimiter).filter(Boolean);
+  const entries = isExplicitPath ? [''] : pathValue.split(paths.delimiter).filter(Boolean);
   for (const entry of entries) {
     for (const extension of extensions) {
       const candidate = paths.resolve(entry.replace(/^"(.*)"$/, '$1'), path + extension);
@@ -39,7 +113,7 @@ export async function resolveCopilotPath(
     }
   }
   throw new Error(
-    `Copilot CLI introuvable ${isExplicitPath ? 'au chemin configuré' : 'dans le PATH'} : ${path}. Renseigne featureStudio.cliPath avec le chemin complet de copilot, copilot.exe, copilot.cmd ou copilot.bat.`,
+    `Copilot CLI introuvable ${isExplicitPath ? 'au chemin configuré' : 'dans le PATH'} : ${path}. Choisis « Détection automatique » dans les réglages Feature Studio, ou renseigne featureStudio.cliPath avec le chemin complet de copilot, copilot.exe, copilot.cmd ou copilot.bat.`,
   );
 }
 
@@ -57,6 +131,7 @@ interface LaunchStatus {
 export class CopilotLaunch {
   private constructor(
     readonly executable: string,
+    readonly source: CopilotExecutable['cliSource'],
     readonly directory: string,
     readonly configPath: string,
     private readonly statusPath: string,
@@ -70,7 +145,7 @@ export class CopilotLaunch {
     log?: (message: string) => void,
     secrets: Set<string> = new Set(),
   ) {
-    const executable = await resolveCopilotPath(configured);
+    const { cliPath: executable, cliSource } = await resolveCopilotExecutable(configured);
     const directory = await mkdtemp(join(storagePath, 'launch-'));
     const configPath = join(directory, 'config.json'),
       statusPath = join(directory, 'status.json');
@@ -85,7 +160,7 @@ export class CopilotLaunch {
     ]
       .filter(Boolean)
       .sort((a, b) => b.length - a.length);
-    return new CopilotLaunch(executable, directory, configPath, statusPath, log, values);
+    return new CopilotLaunch(executable, cliSource, directory, configPath, statusPath, log, values);
   }
 
   safe(text: string): string {
