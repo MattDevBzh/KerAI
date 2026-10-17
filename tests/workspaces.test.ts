@@ -154,6 +154,58 @@ describe('physical Git isolation', () => {
     expect(await readFile(path.join(f.source, 'tracked.txt'), 'utf8')).toBe('Unstaged source\n');
     expect(await f.manager.createWorktree(f.feature)).toEqual(f.feature.worktree);
   });
+  it('creates the requested branch from a different existing base and preserves dirty source/index', async () => {
+    const f = await fixture();
+    await git(f.source, 'branch', 'release');
+    await writeFile(path.join(f.source, 'tracked.txt'), 'New main commit\n');
+    await git(f.source, 'add', '.');
+    await git(f.source, 'commit', '-m', 'Main advanced');
+    await writeFile(path.join(f.source, 'tracked.txt'), 'Staged user edit\n');
+    await git(f.source, 'add', '.');
+    await writeFile(path.join(f.source, 'tracked.txt'), 'Unstaged user edit\n');
+    await writeFile(path.join(f.source, 'untracked.txt'), 'Keep me');
+    const index = await readFile(path.join(f.source, '.git/index'));
+    const status = await git(f.source, 'status', '--porcelain=v1');
+    const base = (await f.manager.branchChoices()).find((branch) => branch.name === 'release')!;
+    const worktree = await f.manager.createWorktree(f.feature, {
+      baseRef: base.ref,
+      baseCommit: base.commit,
+      branchName: 'codex/ticket-42',
+    });
+    expect(worktree).toMatchObject({
+      branch: 'codex/ticket-42',
+      baseBranch: 'release',
+      baseCommit: base.commit,
+    });
+    expect(await readFile(path.join(worktree.path, 'tracked.txt'), 'utf8')).toBe('Committed\n');
+    expect(await readFile(path.join(f.source, '.git/index'))).toEqual(index);
+    expect(await git(f.source, 'status', '--porcelain=v1')).toBe(status);
+    expect((await git(f.source, 'branch', '--show-current')).trim()).toBe('main');
+  });
+  it('rejects a moved base reference and invalid branch names before creating a worktree', async () => {
+    const f = await fixture();
+    const base = (await f.manager.branchChoices())[0];
+    await writeFile(path.join(f.source, 'tracked.txt'), 'Next commit\n');
+    await git(f.source, 'add', '.');
+    await git(f.source, 'commit', '-m', 'Move base');
+    await expect(
+      f.manager.createWorktree(f.feature, {
+        baseRef: base.ref,
+        baseCommit: base.commit,
+        branchName: 'codex/ticket-42',
+      }),
+    ).rejects.toThrow('changé');
+    await expect(
+      f.manager.createWorktree(f.feature, {
+        baseRef: base.ref,
+        baseCommit: base.commit,
+        branchName: '--help',
+      }),
+    ).rejects.toThrow('invalide');
+    expect(
+      (await git(f.source, 'worktree', 'list', '--porcelain')).match(/worktree /g),
+    ).toHaveLength(1);
+  });
   it('rejects creation for non-Git, unborn repositories and subfolders, but supports legacy checkpoints', async () => {
     const f = await fixture(false);
     await expect(f.manager.inspectRepository()).rejects.toThrow(/HEAD/);

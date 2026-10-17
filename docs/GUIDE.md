@@ -54,7 +54,7 @@ Si le fichier de progression est illisible, le carnet le signale et le conserve.
 
 ## Discuter avec ses agents
 
-**Discussion**, juste après Dashboard, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
+**Discussion**, juste après Sessions, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
 
 Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche **Agent de discussion**. Ces profils sont proposés en priorité ; **Voir plus** révèle les autres agents. Les profils propres à un projet portent son nom dans la liste. Les instructions, skills et ton du profil accompagnent l’échange ; ajoute dans tes messages le contexte utile. Ce chat n’exécute pas de commandes et ne consulte pas automatiquement les fichiers des projets.
 
@@ -78,7 +78,7 @@ Un formulaire présente le titre, le besoin, les critères de réussite (un par 
 
 ## Projet actif et réglages
 
-Dashboard, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
+Sessions, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
 
 Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
 
@@ -96,7 +96,7 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 
 ### Les menus du cockpit
 
-**Dashboard** regroupe les sessions. **Azure DevOps** conserve l’aperçu et la configuration ; ses sous-menus **PR** et **Tickets**, toujours visibles, ouvrent deux tableaux dédiés ; **Livraison** prépare les opérations Git du dépôt ouvert. Ces deux menus fonctionnent sans session active. **Consommation** regroupe les mesures SDK par session, parcours et modèle, avec filtres et couverture inconnue/partielle, sans estimation. [Consommation et validations](../docs/consumption.md). **Validation** rassemble questions, livrables et preuves ; **Parcours**, **Agents**, **Skills**, **Mémoire**, **Automatisations** et **Réglages** permettent de configurer le travail.
+**Sessions** regroupe les sessions. **Azure DevOps** conserve l’aperçu et la configuration ; ses sous-menus **PR** et **Tickets**, toujours visibles, ouvrent deux tableaux dédiés ; **Livraison** prépare les opérations Git du dépôt ouvert. Ces deux menus fonctionnent sans session active. **Consommation** regroupe les mesures SDK par session, parcours et modèle, avec filtres et couverture inconnue/partielle, sans estimation. [Consommation et validations](../docs/consumption.md). **Validation** rassemble questions, livrables et preuves ; **Parcours**, **Agents**, **Skills**, **Mémoire**, **Automatisations** et **Réglages** permettent de configurer le travail.
 
 ### Développer une feature
 
@@ -382,7 +382,7 @@ L’aperçu reste accessible si une skill configurée ne figure pas dans le cata
 
 ## Composer une équipe pour une feature
 
-Créer une feature depuis le Dashboard ouvre sa fiche sans équipe. Depuis une discussion, elle reçoit l’équipe proposée et ajustée dans le formulaire. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
+Créer une feature depuis le Sessions ouvre sa fiche sans équipe. Depuis une discussion, elle reçoit l’équipe proposée et ajustée dans le formulaire. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
 
 Chaque intervention affiche le rôle, le modèle et le niveau de réflexion effectifs. Le bouton de réglages permet de modifier sa mission, ses permissions et ses choix de modèle. Un agent ajouté seul commence en lecture seule : choisissez explicitement l’écriture ou les tests si nécessaire. Les équipes copiées conservent leurs réglages, skills et dépendances. Un profil de budget peut avoir priorité sur le modèle choisi.
 
@@ -391,3 +391,8 @@ Un même agent peut intervenir plusieurs fois. Les nouveaux identifiants et noms
 **Valider l’équipe** enregistre la composition ; **Annuler** conserve la précédente. Une équipe vide laisse la feature en brouillon. La composition reste modifiable jusqu’à la première tentative, même après préparation du contexte ; un lancement refusé avant création de tentative ne la verrouille pas. Une tentative commencée puis annulée conserve le verrouillage. Modifier la composition réinitialise le pilote qui dépend de ses étapes.
 
 L’étoile ajoute ou retire un agent des favoris. Cette préférence est enregistrée dans les réglages utilisateur de VS Code, commune aux projets, sans modifier les profils ni les fichiers du dépôt. Les favoris remontent dans les catalogues et sélecteurs, jamais dans l’ordre d’une équipe déjà composée.
+
+
+## Dashboard et second écran
+
+La nouvelle page **Dashboard** affiche le suivi Métro et ses modules personnalisables. **Ouvrir dans une nouvelle fenêtre** ouvre la Tour de contrôle. Consulte le [guide détaillé](DASHBOARD.md) pour les filtres, les réglages persistants, le plein écran et les limites de rafraîchissement.

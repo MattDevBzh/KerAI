@@ -1,3 +1,4 @@
+import { ticketFiltersSchema, ticketDevelopmentPlanSchema } from './devopsTicketSchemas';
 import { z } from 'zod';
 export const devOpsConfigSchema = z
   .object({
@@ -29,7 +30,24 @@ export const devOpsMessageVariants = [
   z.object({ type: z.literal('devopsConfigure'), config: devOpsConfigSchema }).strict(),
   z.object({ type: z.literal('devopsLoadTicket'), ticketId }).strict(),
   z.object({ type: z.literal('devopsLinkFeature'), ticketId, featureId }).strict(),
-  z.object({ type: z.literal('devopsCreateFeature'), ticketId }).strict(),
+  z
+    .object({
+      type: z.literal('devopsSearchTickets'),
+      sourceProjectKey: z.string().min(1).max(500),
+      filters: ticketFiltersSchema,
+      more: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('devopsPrepareTicket'),
+      ticketId,
+      sourceProjectKey: z.string().min(1).max(500).optional(),
+    })
+    .strict(),
+  z
+    .object({ type: z.literal('devopsCreateFeature'), ticketId, plan: ticketDevelopmentPlanSchema })
+    .strict(),
   z
     .object({
       type: z.literal('devopsLinkPullRequest'),

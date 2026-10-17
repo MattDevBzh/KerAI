@@ -1,5 +1,6 @@
 import type { ClientMessage, HostMessage } from '../src/shared/types';
 interface PersistedView {
+  navigationVersion?: number;
   view?: string;
   featureId?: string;
   stepId?: string;
@@ -24,7 +25,13 @@ const vscode = window.acquireVsCodeApi?.();
 export const isHosted = Boolean(vscode);
 export const isDemo = !isHosted && new URLSearchParams(window.location.search).get('demo') === '1';
 let persistedView = vscode?.getState() ?? {};
-export const initialView = persistedView;
+export const initialView = {
+  ...persistedView,
+  view:
+    persistedView.navigationVersion !== 2 && persistedView.view === 'dashboard'
+      ? 'sessions'
+      : persistedView.view,
+};
 export function savedFeatureProposal() {
   return persistedView.featureProposal;
 }
@@ -36,7 +43,7 @@ export function saveCelebrationEnabled(enabled: boolean) {
   vscode?.setState(persistedView);
 }
 export function persistView(state: PersistedView) {
-  persistedView = { ...persistedView, ...state };
+  persistedView = { ...persistedView, ...state, navigationVersion: 2 };
   vscode?.setState(persistedView);
 }
 export function send(message: ClientMessage) {
@@ -47,6 +54,8 @@ export function subscribe(callback: (message: HostMessage) => void) {
     if (
       event.data &&
       [
+        'dashboardState',
+        'dashboardSaved',
         'state',
         'accountCredits',
         'questState',

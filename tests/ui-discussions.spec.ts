@@ -189,31 +189,24 @@ test('navigation order and project selector match each page; common settings pre
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
   await expect(nav.getByRole('button')).toHaveText([
     'Dashboard',
+    'Sessions',
     'Discussion',
     'Validation',
-    'Consommation',
-    'Quêtes—',
-    'Parcours',
-    'Agents',
-    'Skills',
+    'Atelier',
+    'DevOps',
     'Automatisations',
-    'Kits',
-    'Réglages',
-    'Livraison',
-    'Azure DevOps',
-    'PR',
-    'Tickets',
     'Mémoire',
+    'Quêtes—',
   ]);
-  for (const name of ['Dashboard', 'Discussion', 'Validation', 'Consommation']) {
-    await nav.getByRole('button', { name, exact: true }).click();
+  for (const name of ['Sessions', 'Discussion', 'Validation', 'Consommation']) {
+    await navigate(page, name);
     await expect(page.getByLabel('Projet actif', { exact: true })).toHaveCount(0);
   }
   for (const name of ['Mémoire', 'Agents', 'Azure DevOps']) {
-    await nav.getByRole('button', { name, exact: true }).click();
+    await navigate(page, name);
     await expect(page.getByLabel('Projet actif', { exact: true })).toBeVisible();
   }
-  await nav.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigate(page, 'Réglages');
   const common = page.getByRole('region', { name: 'Réglages communs' });
   await expect(common.getByLabel('Projet actif', { exact: true })).toHaveCount(0);
   const scoped = page.getByRole('region', { name: 'Réglages du projet' });
@@ -255,7 +248,7 @@ test('preferred agents, contextual model, streamed bubbles and history survive n
   expect(human!.x).toBeGreaterThan(agent!.x);
   await expect(page.locator('.discussion-message.assistant .pixel-avatar img')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('discussion-minuit.png') });
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   await navigate(page, 'Discussion');
   await expect(page.locator('.discussion-message')).toHaveCount(2);
   await page.reload();

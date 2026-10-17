@@ -98,9 +98,40 @@ summary {
   display: none;
 }
 .sidebar .nav-item.nav-child {
-  margin-left: 12px;
-  padding-left: 14px;
-  width: calc(100% - 12px);
+  margin-left: 0;
+  padding-left: 12px;
+  width: 100%;
+  font-size: 12px;
+  border-left: 0;
+}
+.nav-groups {
+  margin-block: 8px;
+  padding-block: 8px;
+  border-block: 1px solid var(--border);
+}
+.sidebar .nav-group-toggle {
+  font-weight: 600;
+  color: var(--fg);
+}
+.sidebar .nav-group-toggle.is-current {
+  color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 6%, transparent);
+}
+.nav-group-chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+}
+.nav-group-toggle[aria-expanded='true'] .nav-group-chevron {
+  transform: rotate(0deg);
+}
+.nav-group-pages {
+  margin: 4px 0 8px 17px;
+  padding-left: 7px;
+  border-left: 1px solid var(--border);
+}
+.sidebar .nav-item > svg {
+  flex-shrink: 0;
 }
 .sidebar-bottom {
   flex-shrink: 0;
@@ -146,6 +177,20 @@ summary {
 }
 .topbar-actions {
   flex-wrap: wrap;
+}
+.topbar-actions .settings-toggle {
+  width: 36px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+}
+.topbar-actions .settings-toggle:hover,
+.topbar-actions .settings-toggle.active {
+  color: var(--coral);
+  border-color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 9%, var(--panel));
 }
 .account-credits {
   position: relative;

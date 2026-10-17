@@ -307,7 +307,7 @@ describe('personal theme host boundary', () => {
     host.mode = 1;
     await activate();
     await host.restorePanel!(host.panel);
-    expect(host.panel.webview.html).toContain('<html data-studio-theme="auto"');
+    expect(host.panel.webview.html).toMatch(/<html\b[^>]*\bdata-studio-theme="auto"/);
     expect(host.initialize).toHaveBeenCalledOnce();
     expect(host.createPanel).not.toHaveBeenCalled();
     expect(host.executeCommand).not.toHaveBeenCalled();
@@ -329,7 +329,7 @@ describe('personal theme host boundary', () => {
     await host.commands.get('featureStudio.open')!();
     expect(host.initialize).toHaveBeenCalledTimes(1);
     expect(host.createPanel).toHaveBeenCalledTimes(1);
-    expect(host.panel.webview.html).toContain('<html data-studio-theme="auto"');
+    expect(host.panel.webview.html).toMatch(/<html\b[^>]*\bdata-studio-theme="auto"/);
     await api.dispatch({ type: 'ready' });
     await host.commands.get('featureStudio.open')!();
     expect(host.createPanel).toHaveBeenCalledTimes(1);
@@ -434,9 +434,9 @@ describe('personal theme host boundary', () => {
     const api = await activate();
     host.theme = 'aube" onload="arbitrary';
     await host.commands.get('featureStudio.open')!();
-    expect(host.panel.webview.html).toContain(
-      '<html data-studio-theme="auto" data-studio-zoom="auto" lang="fr">',
-    );
+    for (const attribute of ['data-studio-theme="auto"', 'data-studio-zoom="auto"', 'lang="fr"']) {
+      expect(host.panel.webview.html.split('>')[0]).toContain(attribute);
+    }
     expect(host.panel.webview.html).not.toContain('arbitrary');
     await api.dispatch({ type: 'ready' });
     expect(host.messages).toContainEqual(

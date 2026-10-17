@@ -40,7 +40,7 @@ test('account total stays in the header across screens and distinguishes zero fr
   await expect(badge).toContainText('Chargement…');
   await update(page, reading);
   await expect(badge.locator('summary')).toContainText('125,5 / 1\u202f500');
-  for (const screen of ['Discussion', 'Consommation', 'Dashboard']) {
+  for (const screen of ['Discussion', 'Consommation', 'Sessions']) {
     await navigate(page, screen);
     await expect(badge.locator('summary')).toContainText('125,5 / 1\u202f500');
   }

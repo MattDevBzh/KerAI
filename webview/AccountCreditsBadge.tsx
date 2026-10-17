@@ -60,8 +60,9 @@ export function AccountCreditsBadge({ credits }: { credits?: AccountCredits }) {
           <p>{credits?.message ?? 'Chargement du quota du compte…'}</p>
         )}
         <small>
-          Actualisation toutes les 10 secondes lorsque le cockpit est visible. Le relevé GitHub peut
-          être différé. Les totaux des sessions sont disponibles dans Consommation.
+          Actualisation toutes les 10 secondes lorsque le cockpit ou la Tour de contrôle est
+          visible. Le relevé GitHub peut être différé. Les totaux des sessions sont disponibles dans
+          Consommation.
         </small>
       </section>
     </details>

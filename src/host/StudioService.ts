@@ -329,6 +329,9 @@ export class StudioService extends EventEmitter {
   }
   async createFeature(input: {
     requestId?: string;
+    ticketSource?: import('../shared/devopsTickets').TicketSourceSnapshot;
+    worktreeChoice?: { baseRef: string; baseCommit: string; branchName: string };
+    expectedCurrentBranch?: string;
     title: string;
     description: string;
     workflowId?: string;
@@ -344,7 +347,10 @@ export class StudioService extends EventEmitter {
       const existing =
         input.requestId &&
         this.engine.features.find((feature) => feature.creationRequestId === input.requestId);
-      if (existing) return existing;
+      if (existing) {
+        await this.persist();
+        return existing;
+      }
       let workflow = this.state.workflows.find((item) => item.id === input.workflowId);
       if (input.workflowId && !workflow) throw new Error('Workflow inconnu.');
       if (input.agentId && !this.state.agents.some((agent) => agent.id === input.agentId))
@@ -387,6 +393,14 @@ export class StudioService extends EventEmitter {
       const info = await gitInfo(this.workspacePath);
       this.assertTrusted();
       this.state.workspace.branch = info.branch;
+      if (
+        !input.isolated &&
+        input.expectedCurrentBranch !== undefined &&
+        input.expectedCurrentBranch !== info.branch
+      )
+        throw new Error(
+          'La branche du dossier courant a changé. Rouvre la préparation du ticket avant de créer la session.',
+        );
       // Do not publish a partially created feature while Git prepares its checkout.
       const feature = new WorkflowEngine().createFeature(workflow, {
         ...input,
@@ -394,6 +408,7 @@ export class StudioService extends EventEmitter {
       });
       feature.discussionId = input.discussionId;
       feature.creationRequestId = input.requestId;
+      feature.ticketSource = input.ticketSource ? structuredClone(input.ticketSource) : undefined;
       feature.criteria = criteria.map((text) => ({
         id: randomUUID(),
         text,
@@ -417,7 +432,7 @@ export class StudioService extends EventEmitter {
       }
       feature.budget = structuredClone(this.state.settings.budgetDefaults ?? defaultBudget);
       if (input.isolated) {
-        feature.worktree = await this.workspaces.createWorktree(feature);
+        feature.worktree = await this.workspaces.createWorktree(feature, input.worktreeChoice);
         feature.branch = feature.worktree.branch;
       }
       this.engine.features.push(feature);

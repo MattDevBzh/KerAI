@@ -14,6 +14,7 @@ import { resolveAvatar } from '../src/shared/avatars';
 import { usageCredits } from '../src/shared/credits';
 import type { AccountCredits } from '../src/shared/credits';
 import { AccountCreditsBadge } from './AccountCreditsBadge';
+import { StudioNavigation, navigationGroup, navigationScreens, type View } from './Navigation';
 import { CorrectionPanel, ReportEditor, FinalSummary } from './CollaborationUI';
 import { featureStateKey, finalValidationReady } from '../src/shared/collaboration';
 import { ThemePicker } from './ThemePicker';
@@ -21,8 +22,8 @@ import { ZoomControls, ZoomSettings } from './ZoomControls';
 import { ThemeScenery } from './ThemeScenery';
 import { QuestCelebration, QuestsUI } from './QuestsUI';
 import { emptyQuestState, type QuestState } from '../src/shared/quests';
-import { Trophy } from 'lucide-react';
 import { KitsUI } from './KitsUI';
+import { DashboardUI } from './DashboardUI';
 import { UsageDashboard } from './UsageDashboard';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
 import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
@@ -35,11 +36,11 @@ import {
 } from '../src/shared/roast';
 import { DevOpsUI, DevOpsFeatureLinks } from './DevOpsUI';
 import { DevOpsDashboard } from './DevOpsDashboard';
+import { TicketSourceCard } from './TicketsUI';
 import type { DevOpsState } from '../src/shared/devops';
 import { approvalBlockers, featureCompletionBlockers } from '../src/core/validation';
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  BarChart3,
   ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
@@ -47,8 +48,6 @@ import {
   Archive,
   Bot,
   BookOpen,
-  BrainCircuit,
-  FileCheck2,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -64,9 +63,6 @@ import {
   FileText,
   FolderGit2,
   GitBranch,
-  GitPullRequest,
-  Tickets,
-  LayoutDashboard,
   ListFilter,
   LoaderCircle,
   MessageSquare,
@@ -77,6 +73,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  Settings,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -134,23 +131,6 @@ import {
 import { DiscussionUI } from './DiscussionUI';
 import type { DiscussionState, DiscussionFeatureDraft } from '../src/shared/discussions';
 
-type View =
-  | 'quests'
-  | 'kits'
-  | 'usage'
-  | 'devops'
-  | 'devops-prs'
-  | 'devops-tickets'
-  | 'delivery'
-  | 'dashboard'
-  | 'discussion'
-  | 'validation'
-  | 'workflows'
-  | 'memory'
-  | 'agents'
-  | 'skills'
-  | 'automations'
-  | 'settings';
 const statuses: Record<StepStatus, { label: string; tone: string }> = {
   pending: { label: 'À venir', tone: 'neutral' },
   running: { label: 'En cours', tone: 'lavender' },
@@ -181,24 +161,6 @@ const date = (value: string) =>
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
-const nav = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'discussion', label: 'Discussion', icon: MessageSquare },
-  { id: 'validation', label: 'Validation', icon: FileCheck2 },
-  { id: 'usage', label: 'Consommation', icon: BarChart3 },
-  { id: 'quests', label: 'Quêtes', icon: Trophy },
-  { id: 'workflows', label: 'Parcours', icon: Workflow },
-  { id: 'agents', label: 'Agents', icon: Bot },
-  { id: 'skills', label: 'Skills', icon: BookOpen },
-  { id: 'automations', label: 'Automatisations', icon: Zap },
-  { id: 'kits', label: 'Kits', icon: Package },
-  { id: 'settings', label: 'Réglages', icon: Settings2 },
-  { id: 'delivery', label: 'Livraison', icon: GitBranch },
-  { id: 'devops', label: 'Azure DevOps', icon: FolderGit2 },
-  { id: 'devops-prs', label: 'PR', icon: GitPullRequest },
-  { id: 'devops-tickets', label: 'Tickets', icon: Tickets },
-  { id: 'memory', label: 'Mémoire', icon: BrainCircuit },
-] as const;
 // These screens consume project-specific profiles, memory or Azure DevOps configuration.
 const projectScopedViews = new Set<View>([
   'agents',
@@ -352,6 +314,7 @@ export default function App() {
     isDemo ? emptyQuestState() : undefined,
   );
   const [earnedQuests, setEarnedQuests] = useState<string[]>([]);
+  const ticketPreparationId = useRef<string | undefined>(undefined);
   const [devops, setDevops] = useState<DevOpsState>({
     authenticated: false,
     busy: false,
@@ -365,7 +328,9 @@ export default function App() {
     isDemo ? structuredClone(demoState) : null,
   );
   const [view, setView] = useState<View>(
-    (nav.some((n) => n.id === initialView.view) ? initialView.view : 'dashboard') as View,
+    (navigationScreens.some((n) => n.id === initialView.view)
+      ? initialView.view
+      : 'sessions') as View,
   );
   const [discussionState, setDiscussionState] = useState<DiscussionState>({
     discussions: [],
@@ -429,10 +394,19 @@ export default function App() {
         setReportTarget(message);
         setFeatureId(message.featureId);
         setStepId(message.stepId);
-        setView('dashboard');
+        setView('sessions');
         if (message.notice) setNotice({ text: message.notice });
-      } else if (message.type === 'devopsState') setDevops(message.state);
-      else if (message.type === 'error' || message.type === 'notice')
+      } else if (message.type === 'devopsState') {
+        setDevops(message.state);
+        if (
+          message.state.ticketPreparation &&
+          message.state.ticketPreparation.snapshotId !== ticketPreparationId.current &&
+          !draftDirtyRef.current
+        ) {
+          ticketPreparationId.current = message.state.ticketPreparation.snapshotId;
+          setView('devops-tickets');
+        }
+      } else if (message.type === 'error' || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
       else if (message.type === 'deleteFeatureResult') {
         if (message.error) setNotice({ text: message.error, error: true });
@@ -450,7 +424,14 @@ export default function App() {
           });
           return;
         }
-        setView('dashboard');
+        setView(
+          message.view === 'devops-prs' ||
+            message.view === 'devops-tickets' ||
+            message.view === 'devops'
+            ? message.view
+            : 'sessions',
+        );
+        setStepId(message.stepId ?? '');
         setFeatureId(message.featureId ?? '');
         setCreate(message.view === 'create');
         setObserverRequested(message.view === 'observation');
@@ -462,7 +443,7 @@ export default function App() {
   useEffect(() => persistView({ view, featureId, stepId }), [view, featureId, stepId]);
   const loaded = Boolean(state);
   useEffect(() => {
-    if (loaded && featureId && view === 'dashboard' && !create && !isDemo)
+    if (loaded && featureId && view === 'sessions' && !create && !isDemo)
       send({ type: 'activateFeature', featureId });
   }, [loaded, featureId, view, create]);
   useEffect(() => {
@@ -503,9 +484,23 @@ export default function App() {
         text: `${state.workspaceOperation.label} · attendez la fin de cette opération.`,
         error: true,
       });
+      if (message.type === 'devopsCreateFeature')
+        setDevops((previous) => ({
+          ...previous,
+          ticketCreateResult: {
+            requestId: message.plan.requestId,
+            error: `${state.workspaceOperation!.label} · attendez la fin de cette opération.`,
+          },
+        }));
       return;
     }
     if (isDemo) {
+      if (message.type === 'dashboardOpen') {
+        setView(message.page ?? 'sessions');
+        setFeatureId(message.featureId ?? '');
+        setStepId(message.stepId ?? '');
+        return;
+      }
       if (
         message.type === 'sendDiscussion' ||
         message.type === 'deleteDiscussion' ||
@@ -666,7 +661,7 @@ export default function App() {
         </button>
         <button
           className="brand"
-          onClick={() => chooseView('dashboard')}
+          onClick={() => chooseView('sessions')}
           aria-label="Feature Studio, accueil"
         >
           <span className="brand-mark">
@@ -707,39 +702,14 @@ export default function App() {
             </button>
           )}
         </label>
-        <nav aria-label="Navigation principale">
-          {nav
-            .filter((n) => searchText(n.label).includes(searchText(navQuery)))
-            .map((n) => (
-              <button
-                key={n.id}
-                className={`nav-item ${n.id === 'devops-prs' || n.id === 'devops-tickets' ? 'nav-child' : ''} ${view === n.id ? 'active' : ''}`}
-                title={n.label}
-                onClick={() => chooseView(n.id)}
-                aria-label={n.label}
-                aria-current={view === n.id ? 'page' : undefined}
-              >
-                <n.icon size={18} />
-                <span>{n.label}</span>
-                {n.id === 'quests' && (
-                  <small className="quest-menu-count" title="Trophées remportés">
-                    {questState && !questState.error ? questState.trophies : '—'}
-                  </small>
-                )}
-                {n.id === 'dashboard' && activeFeatures.length > 0 && (
-                  <small>{activeFeatures.length}</small>
-                )}
-                {n.id === 'validation' && attentionCount(state) > 0 && (
-                  <small>{attentionCount(state)}</small>
-                )}
-              </button>
-            ))}
-          {navQuery && !nav.some((n) => searchText(n.label).includes(searchText(navQuery))) && (
-            <p className="muted navigation-empty" role="status">
-              Aucun écran. Essayez un autre mot.
-            </p>
-          )}
-        </nav>
+        <StudioNavigation
+          view={view}
+          query={navQuery}
+          onNavigate={chooseView}
+          sessionCount={activeFeatures.length}
+          validationCount={attentionCount(state)}
+          trophies={questState && !questState.error ? questState.trophies : undefined}
+        />
         <div className="sidebar-bottom">
           <div className="connection">
             <span className={`connection-dot ${state.runtime.state}`} />
@@ -791,11 +761,24 @@ export default function App() {
             <Menu size={18} /> Menu
           </button>
           <div className="topbar-context">
-            <span className="context-dot" /> ATELIER <ChevronRight size={12} />
-            <span>{selected ? selected.title : nav.find((n) => n.id === view)?.label}</span>
+            <span className="context-dot" />
+            {navigationGroup(view)?.label.toLocaleUpperCase('fr-FR') ?? 'COCKPIT'}
+            <ChevronRight size={12} />
+            <span>
+              {selected ? selected.title : navigationScreens.find((n) => n.id === view)?.label}
+            </span>
           </div>
           <div className="topbar-actions">
             <AccountCreditsBadge credits={accountCredits} />
+            <button
+              className={`icon-button settings-toggle ${view === 'settings' ? 'active' : ''}`}
+              title="Réglages"
+              aria-label="Réglages"
+              aria-current={view === 'settings' ? 'page' : undefined}
+              onClick={() => chooseView('settings')}
+            >
+              <Settings size={18} aria-hidden="true" />
+            </button>
             <ZoomControls />
             <span className="trust-label">
               <ShieldCheck size={14} />
@@ -858,7 +841,12 @@ export default function App() {
               setEarnedQuests([]);
             }}
           />
-          {view === 'quests' && <QuestsUI state={questState} navigate={chooseView} />}
+          {view === 'quests' && (
+            <QuestsUI
+              state={questState}
+              navigate={(target) => chooseView(target === 'dashboard' ? 'sessions' : target)}
+            />
+          )}
           {state.workspaceOperation && (
             <div className="workspace-operation global-workspace-operation" role="status">
               <LoaderCircle className="spin" size={14} />
@@ -877,7 +865,7 @@ export default function App() {
                 className="text-button"
                 onClick={() => {
                   const r = state.humanRequests![0];
-                  setView('dashboard');
+                  setView('sessions');
                   setFeatureId(r.featureId);
                   setStepId(r.stepId);
                 }}
@@ -893,7 +881,10 @@ export default function App() {
               disabled={draftDirty || hasActiveRun(state)}
             />
           )}
-          {view === 'dashboard' &&
+          {view === 'dashboard' && (
+            <DashboardUI studio={state} credits={accountCredits} dispatch={dispatch} />
+          )}
+          {view === 'sessions' &&
             (selected ? (
               <FeatureDetail
                 key={selected.id}
@@ -928,7 +919,7 @@ export default function App() {
                 confirm={(title, description, action) => setConfirm({ title, description, action })}
               />
             ) : (
-              <Dashboard
+              <Sessions
                 onNavigate={chooseView}
                 state={state}
                 onCreate={openCreate}
@@ -947,7 +938,7 @@ export default function App() {
               dispatch={dispatch}
               mode={view === 'delivery' ? 'delivery' : 'dashboard'}
               onOpenFeature={(id) => {
-                setView('dashboard');
+                setView('sessions');
                 setFeatureId(id);
                 setStepId('');
               }}
@@ -963,7 +954,7 @@ export default function App() {
                 dispatch={dispatch}
                 onConfigure={() => chooseView('devops')}
                 onOpenFeature={(id) => {
-                  setView('dashboard');
+                  setView('sessions');
                   setFeatureId(id);
                   setStepId('');
                 }}
@@ -979,7 +970,7 @@ export default function App() {
                 chooseView('discussion');
               }}
               onOpenFeature={(id) => {
-                setView('dashboard');
+                setView('sessions');
                 setFeatureId(id);
                 setStepId('');
               }}
@@ -990,7 +981,7 @@ export default function App() {
               state={state}
               dispatch={dispatch}
               onOpen={(id, step) => {
-                setView('dashboard');
+                setView('sessions');
                 setFeatureId(id);
                 setStepId(step);
               }}
@@ -1294,7 +1285,7 @@ export default function App() {
     </div>
   );
 }
-function Dashboard({
+function Sessions({
   state,
   onNavigate,
   onCreate,
@@ -2266,6 +2257,7 @@ function FeatureDetail({
         </div>
       )}
       <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
+      <TicketSourceCard feature={feature} />
       <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <div className="feature-control-band">
         {!!feature.steps.length && (

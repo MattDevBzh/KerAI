@@ -1,3 +1,4 @@
+import { TicketsUI } from './TicketsUI';
 import { useEffect, useState } from 'react';
 import {
   GitPullRequest,
@@ -98,6 +99,17 @@ export function DevOpsDashboard({
   const drafts = state.pullRequests.filter((pr) => pr.isDraft).length;
   const ready = Boolean(state.config && state.authenticated);
   const hasFilters = Boolean(query || status !== 'all' || linked !== 'all' || sort !== 'recent');
+  if (kind === 'tickets')
+    return (
+      <TicketsUI
+        active={active}
+        state={state}
+        features={features}
+        dispatch={dispatch}
+        onOpenFeature={onOpenFeature}
+        onConfigure={onConfigure}
+      />
+    );
   if (!active) return null;
   return (
     <div

@@ -158,6 +158,7 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  ticketSource?: import('./devopsTickets').TicketSourceSnapshot;
   discussionId?: string;
   creationRequestId?: string;
   traceWarnings?: string[];
@@ -291,6 +292,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./dashboard').DashboardClientMessage
   | { type: 'refreshQuests' }
   | import('./observation').ObservationClientMessage
   | import('./projects').ProjectClientMessage
@@ -450,6 +452,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | import('./dashboard').DashboardHostMessage
   | { type: 'accountCredits'; state: import('./credits').AccountCredits }
   | { type: 'questState'; state: import('./quests').QuestState; earned?: string[] }
   | import('./observation').ObservationHostMessage
@@ -498,7 +501,19 @@ export type HostMessage =
       error?: string;
     }
   | { type: 'checkpointComparison'; requestId: string; comparison: CheckpointComparison }
-  | { type: 'navigate'; view: 'create' | 'dashboard' | 'observation'; featureId?: string };
+  | {
+      type: 'navigate';
+      view:
+        | 'create'
+        | 'dashboard'
+        | 'sessions'
+        | 'observation'
+        | 'devops-prs'
+        | 'devops-tickets'
+        | 'devops';
+      featureId?: string;
+      stepId?: string;
+    };
 export interface RunInput {
   observation?: boolean;
   /** Host-owned conversation mode: no repository, MCP, human-question or native tools. */

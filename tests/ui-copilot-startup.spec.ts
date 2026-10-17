@@ -57,7 +57,7 @@ test('connects automatically on startup, stays usable while checking and does no
   await publish(page, state);
   await expect(page.locator('.connection')).toContainText('Copilot connecté');
   await navigate(page, 'Réglages');
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   expect(await checks(page)).toBe(1);
   expect(
     await page.evaluate(() =>
@@ -94,7 +94,7 @@ test('keeps a failed connection available for an explicit retry without automati
   await publish(page, state);
   await navigate(page, 'Réglages');
   await expect(page.getByText('Connectez votre compte Copilot.', { exact: true })).toBeVisible();
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   expect(await checks(page)).toBe(1);
   await page.getByRole('button', { name: 'Vérifier Copilot', exact: true }).click();
   await expect.poll(() => checks(page)).toBe(2);

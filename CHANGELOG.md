@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.0 — 2026-10-17
+
+- Dashboard Métro distinct de la page Sessions : progression réelle par étape, agent courant, attentes humaines, erreurs et durées sans estimation artificielle.
+- Tour de contrôle dans une fenêtre auxiliaire VS Code, plein écran, retour vers la session et son étape, moteur partagé et fermeture des vues sans double exécution.
+- Six modules personnalisables, déplaçables, redimensionnables et duplicables, avec titres et filtres indépendants enregistrés ; actualisation Azure réglable, erreurs et limites visibles.
+- Tickets Azure DevOps tous types : recherche distante combinée, pagination, détail complet, commentaires et liens sûrs. Préparation d’une session dans le dossier courant ou un worktree, contexte source conservé et création sans lancement automatique.
+- Menus Atelier et DevOps regroupés ; Réglages dans l’en-tête près du quota Copilot. L’ancien Dashboard devient Sessions.
+
 ## 1.11.0 — 2026-10-17
 
 - Zoom global de 80 à 200 % et mode Auto adapté à la taille disponible ; commandes dans le bandeau et les réglages, préférence personnelle conservée entre projets. Les pages profitent davantage des grands écrans.

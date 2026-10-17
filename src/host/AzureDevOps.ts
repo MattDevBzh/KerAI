@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { ticketQuery } from './TicketQuery';
+import type { TicketFilters, TicketMetadata } from '../shared/devopsTickets';
 import { z } from 'zod';
 import { devOpsConfigSchema } from '../core/devopsSchemas';
 import type { DevOpsConfig, DevOpsPullRequest, DevOpsTicket } from '../shared/devops';
@@ -95,6 +98,7 @@ export function detectAzureRemote(remote: string): Omit<DevOpsConfig, 'remote'> 
 export const projectKey = (c: DevOpsConfig) =>
   `${c.organization}/${c.project}/${c.repository}`.toLowerCase();
 export class AzureDevOps {
+  private projectName?: string;
   constructor(
     readonly config: DevOpsConfig,
     private secrets: SecretStore,
@@ -277,25 +281,385 @@ export class AzureDevOps {
       truncated,
     };
   }
+  private async resolveProjectName(signal?: AbortSignal) {
+    if (this.projectName || !z.string().uuid().safeParse(this.config.project).success) return;
+    const result = await this.request(
+      `https://dev.azure.com/${encodeURIComponent(this.config.organization)}/_apis/projects/${encodeURIComponent(this.config.project)}?api-version=7.1`,
+      undefined,
+      signal,
+    );
+    if (
+      str(result.data.id).toLowerCase() !== this.config.project.toLowerCase() ||
+      !optionalStr(result.data.name)
+    )
+      throw new Error('Identité du projet Azure DevOps incohérente.');
+    this.projectName = str(result.data.name);
+  }
+  async dashboardPullRequests(status: string, signal?: AbortSignal) {
+    const pullRequests: DevOpsPullRequest[] = [];
+    let partial = false;
+    for (let skip = 0; skip < 200; skip += 50) {
+      const query = new URLSearchParams({
+        'searchCriteria.status': ['active', 'completed', 'abandoned'].includes(status)
+          ? status
+          : 'all',
+        $top: '50',
+        $skip: String(skip),
+        'api-version': '7.1',
+      });
+      const result = await this.request(`${this.repo()}/pullrequests?${query}`, undefined, signal);
+      const items = z.array(object).parse(result.data.value);
+      pullRequests.push(...items.map((item) => this.pr(item)));
+      if (items.length < 50) break;
+      if (skip === 150) partial = true;
+    }
+    return { pullRequests, partial };
+  }
+  async searchTickets(filters: TicketFilters, beforeId?: number, signal?: AbortSignal) {
+    await this.resolveProjectName(signal);
+    const result = await this.request(
+      `${this.base()}/_apis/wit/wiql?$top=51&api-version=7.1`,
+      {
+        query: ticketQuery(filters, beforeId),
+      },
+      signal,
+    );
+    const all = z
+      .array(z.object({ id: z.number().int().positive() }))
+      .parse(result.data.workItems)
+      .map((item) => item.id);
+    const ids = [...new Set(all)]
+      .filter((id) => beforeId === undefined || id < beforeId)
+      .sort((a, b) => b - a)
+      .slice(0, 50);
+    if (!ids.length) return { tickets: [], hasMore: false, omitted: 0, nextBeforeId: undefined };
+    const batch = await this.request(
+      `${this.base()}/_apis/wit/workitemsbatch?api-version=7.1`,
+      {
+        ids,
+        fields: [
+          'System.Id',
+          'System.Title',
+          'System.State',
+          'System.WorkItemType',
+          'System.TeamProject',
+          'System.AssignedTo',
+          'System.ChangedDate',
+          'System.AreaPath',
+          'System.IterationPath',
+          'System.Tags',
+        ],
+        errorPolicy: 'Omit',
+      },
+      signal,
+    );
+    const tickets = z
+      .array(object)
+      .parse(batch.data.value)
+      .filter((item) => ids.includes(Number(item.id)))
+      .map((item) => this.ticketSummary(item))
+      .sort((a, b) => b.id - a.id);
+    return {
+      tickets,
+      hasMore: all.length > 50,
+      nextBeforeId: ids.at(-1),
+      omitted: ids.length - tickets.length,
+    };
+  }
+  private ticketSummary(item: Record<string, unknown>): DevOpsTicket {
+    const fields = object.parse(item.fields);
+    const project = optionalStr(fields['System.TeamProject']);
+    if (
+      project &&
+      project.toLowerCase() !== (this.projectName ?? this.config.project).toLowerCase()
+    )
+      throw new Error('Le ticket reçu appartient à un autre projet Azure DevOps.');
+    const id = z.number().int().positive().parse(item.id);
+    return {
+      id,
+      title: str(fields['System.Title']),
+      state: str(fields['System.State']),
+      workItemType: optionalStr(fields['System.WorkItemType']),
+      assignedTo:
+        identityName(fields['System.AssignedTo']) || optionalStr(fields['System.AssignedTo']),
+      areaPath: optionalStr(fields['System.AreaPath']),
+      iterationPath: optionalStr(fields['System.IterationPath']),
+      tags: ticketTags(fields['System.Tags']),
+      createdDate: optionalDate(fields['System.CreatedDate']),
+      changedDate: optionalDate(fields['System.ChangedDate']),
+      description: str(fields['System.Description']),
+      acceptanceCriteria: str(fields['Microsoft.VSTS.Common.AcceptanceCriteria']),
+      url: `${this.base()}/_workitems/edit/${id}`,
+      comments: [],
+    };
+  }
+  async ticketMetadata(): Promise<TicketMetadata> {
+    const metadata: TicketMetadata = {
+      types: [],
+      areas: [],
+      iterations: [],
+      fields: [],
+      notices: [],
+    };
+    const results = await Promise.allSettled([
+      this.request(`${this.base()}/_apis/wit/workitemtypes?api-version=7.1`),
+      this.request(`${this.base()}/_apis/wit/classificationnodes/areas?$depth=12&api-version=7.1`),
+      this.request(
+        `${this.base()}/_apis/wit/classificationnodes/iterations?$depth=12&api-version=7.1`,
+      ),
+      this.request(`${this.base()}/_apis/wit/fields?api-version=7.1`),
+    ]);
+    for (let index = 0; index < results.length; index++) {
+      const result = results[index];
+      if (result.status === 'rejected') {
+        metadata.notices.push(
+          `${['Types et états', 'Zones', 'Itérations', 'Libellés des champs'][index]} indisponibles : ${(result.reason as Error).message}`,
+        );
+        continue;
+      }
+      try {
+        if (index === 0) {
+          const types = z.array(object).parse(result.value.data.value);
+          metadata.types = types
+            .slice(0, 100)
+            .map((type) => {
+              const states = Array.isArray(type.states)
+                ? type.states.flatMap((state) => {
+                    const value = object.safeParse(state);
+                    return value.success && optionalStr(value.data.name)
+                      ? [str(value.data.name)]
+                      : [];
+                  })
+                : [];
+              const transitions = object.safeParse(type.transitions);
+              if (transitions.success)
+                states.push(...Object.keys(transitions.data).filter(Boolean));
+              return { name: str(type.name), states: [...new Set(states)].slice(0, 100) };
+            })
+            .filter((type) => type.name);
+          if (types.length > 100)
+            metadata.notices.push('Les 100 premiers types du projet sont proposés.');
+        } else if (index === 3) {
+          metadata.fields = z
+            .array(object)
+            .parse(result.value.data.value)
+            .slice(0, 2000)
+            .map((field) => ({
+              name: str(field.name),
+              referenceName: str(field.referenceName),
+            }));
+        } else {
+          const paths = index === 1 ? metadata.areas : metadata.iterations;
+          const visit = (node: Record<string, unknown>, parent: string, depth: number) => {
+            if (paths.length >= 1000) return;
+            const name = optionalStr(node.name, 500);
+            if (!name) return;
+            const current = parent ? `${parent}\\${name}` : name;
+            paths.push(current);
+            const children = Array.isArray(node.children) ? node.children : [];
+            if (node.hasChildren && !children.length)
+              metadata.notices.push(
+                `Arborescence partielle sous ${current}. Saisis le chemin complet si nécessaire.`,
+              );
+            if (depth < 12)
+              for (const child of children) {
+                const parsed = object.safeParse(child);
+                if (parsed.success) visit(parsed.data, current, depth + 1);
+              }
+          };
+          visit(result.value.data, '', 0);
+          if (paths.length >= 1000) metadata.notices.push('Arborescence limitée à 1 000 chemins.');
+        }
+      } catch {
+        metadata.notices.push(
+          `${['Types et états', 'Zones', 'Itérations', 'Libellés des champs'][index]} : réponse invalide.`,
+        );
+      }
+    }
+    return metadata;
+  }
+  async ticketDetail(id: number, metadata?: TicketMetadata): Promise<DevOpsTicket> {
+    z.number().int().positive().parse(id);
+    await this.resolveProjectName();
+    const response = await this.request(
+      `${this.base()}/_apis/wit/workitems/${id}?$expand=all&api-version=7.1`,
+    );
+    const ticket = this.ticketSummary(response.data);
+    if (ticket.id !== id) throw new Error('Azure DevOps a renvoyé un autre ticket.');
+    const fields = object.parse(response.data.fields);
+    // IDs are organization-wide: require project ownership before importing a detail.
+    if (
+      str(fields['System.TeamProject']).toLowerCase() !==
+      (this.projectName ?? this.config.project).toLowerCase()
+    )
+      throw new Error('Le ticket appartient à un autre projet Azure DevOps.');
+    ticket.revision = z.number().int().positive().parse(response.data.rev);
+    ticket.fetchedAt = new Date().toISOString();
+    ticket.snapshotId = randomUUID();
+    ticket.detailsLoaded = true;
+    ticket.detailNotices = [];
+    const excluded = new Set([
+      'System.Id',
+      'System.Title',
+      'System.State',
+      'System.TeamProject',
+      'System.WorkItemType',
+      'System.AssignedTo',
+      'System.AreaPath',
+      'System.IterationPath',
+      'System.Tags',
+      'System.CreatedDate',
+      'System.ChangedDate',
+      'System.Description',
+      'Microsoft.VSTS.Common.AcceptanceCriteria',
+      'System.History',
+      'System.Rev',
+      'System.Watermark',
+      'System.AuthorizedDate',
+      'System.RevisedDate',
+      'System.PersonId',
+      'System.NodeName',
+      'System.AreaId',
+      'System.IterationId',
+    ]);
+    let budget = 120000;
+    ticket.extraFields = [];
+    for (const [referenceName, raw] of Object.entries(fields)) {
+      if (excluded.has(referenceName) || raw === null || raw === '') continue;
+      const value =
+        typeof raw === 'string'
+          ? raw
+          : (identityName(raw) ??
+            (typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : ''));
+      if (!value) continue;
+      if (budget <= 0 || ticket.extraFields.length >= 100) {
+        ticket.detailNotices.push('Champs supplémentaires partiels (limite de taille).');
+        break;
+      }
+      const bounded = value.slice(0, Math.min(budget, 30000));
+      budget -= bounded.length;
+      if (bounded.length < value.length)
+        ticket.detailNotices.push(`Champ ${referenceName} tronqué.`);
+      ticket.extraFields.push({
+        referenceName,
+        name:
+          metadata?.fields.find((field) => field.referenceName === referenceName)?.name ||
+          referenceName,
+        value: bounded,
+      });
+    }
+    for (const key of ['System.Description', 'Microsoft.VSTS.Common.AcceptanceCriteria'])
+      if (typeof fields[key] === 'string' && (fields[key] as string).length > 100000)
+        ticket.detailNotices.push(`Champ ${key} tronqué à 100 000 caractères.`);
+    ticket.relations = [];
+    const relations = Array.isArray(response.data.relations) ? response.data.relations : [];
+    if (relations.length > 200) ticket.detailNotices.push('Les 200 premiers liens sont affichés.');
+    for (const raw of relations.slice(0, 200)) {
+      const relation = object.safeParse(raw);
+      if (!relation.success) continue;
+      const attributes = object.safeParse(relation.data.attributes);
+      const rel = str(relation.data.rel),
+        url = str(relation.data.url);
+      const name = (attributes.success && optionalStr(attributes.data.name)) || rel;
+      let safeUrl: string | undefined,
+        kind: 'ticket' | 'pr' | 'attachment' | 'link' =
+          rel === 'AttachedFile' ? 'attachment' : 'link';
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'https:' && !parsed.username && !parsed.password)
+          safeUrl = parsed.toString();
+        const relatedId = /\/_apis\/wit\/workitems\/(\d+)$/i.exec(parsed.pathname);
+        if (safeUrl && relatedId && parsed.hostname === 'dev.azure.com') {
+          kind = 'ticket';
+          parsed.pathname = parsed.pathname.replace(
+            /\/_apis\/wit\/workitems\/\d+$/i,
+            `/_workitems/edit/${relatedId[1]}`,
+          );
+          safeUrl = parsed.toString();
+        }
+        if (url.startsWith('vstfs:///Git/PullRequestId/')) {
+          const parts = decodeURIComponent(url.slice('vstfs:///Git/PullRequestId/'.length)).split(
+            '/',
+          );
+          if (
+            parts.length === 3 &&
+            parts.slice(0, 2).every((part) => /^[a-f0-9-]{36}$/i.test(part)) &&
+            /^\d+$/.test(parts[2])
+          ) {
+            kind = 'pr';
+            safeUrl = `https://dev.azure.com/${encodeURIComponent(this.config.organization)}/${parts[0]}/_git/${parts[1]}/pullrequest/${parts[2]}`;
+          }
+        }
+      } catch {
+        /* Unsupported relation remains inert text. */
+      }
+      ticket.relations.push({
+        name:
+          kind === 'ticket'
+            ? rel.endsWith('Hierarchy-Reverse')
+              ? 'Parent'
+              : rel.endsWith('Hierarchy-Forward')
+                ? 'Enfant'
+                : name
+            : name,
+        kind,
+        url: safeUrl,
+        ...(!safeUrl ? { reference: url.slice(0, 2000) } : {}),
+      });
+    }
+    try {
+      const result = await this.comments(id);
+      ticket.comments = result.comments;
+      ticket.commentsLoaded = !result.error;
+      ticket.commentsTruncated = result.truncated;
+      ticket.commentsError = result.error;
+    } catch (error) {
+      ticket.commentsError = (error as Error).message;
+    }
+    return ticket;
+  }
   async comments(id: number) {
     const comments: DevOpsTicket['comments'] = [];
-    let continuation: string | undefined;
+    let continuation: string | undefined,
+      size = 0,
+      limited = false;
     for (let page = 0; page < 4; page++) {
-      const response = await this.request(
-        `${this.base()}/_apis/wit/workItems/${z.number().int().positive().parse(id)}/comments?$top=50&order=desc&api-version=7.1-preview.4${continuation ? `&continuationToken=${encodeURIComponent(continuation)}` : ''}`,
-      );
-      for (const value of z.array(object).parse(response.data.comments)) {
-        const author = object.safeParse(value.createdBy);
-        comments.push({
-          id: z.number().int().parse(value.id),
-          author: author.success ? str(author.data.displayName) : '',
-          text: str(value.text),
-        });
+      try {
+        const response = await this.request(
+          `${this.base()}/_apis/wit/workItems/${z.number().int().positive().parse(id)}/comments?$top=50&order=desc&api-version=7.1-preview.4${continuation ? `&continuationToken=${encodeURIComponent(continuation)}` : ''}`,
+        );
+        const values = z.array(object).parse(response.data.comments);
+        if (values.length > 50) limited = true;
+        for (const value of values.slice(0, 50)) {
+          const author = object.safeParse(value.createdBy);
+          const remaining = Math.max(0, 250000 - size);
+          if (!remaining) {
+            limited = true;
+            break;
+          }
+          const text = str(value.text).slice(0, remaining);
+          size += text.length;
+          if (
+            text.length < str(value.text).length ||
+            (typeof value.text === 'string' && value.text.length > 100000)
+          )
+            limited = true;
+          const comment = {
+            id: z.number().int().positive().parse(value.id),
+            author: author.success ? str(author.data.displayName) : '',
+            text,
+            createdDate: optionalDate(value.createdDate),
+            modifiedDate: optionalDate(value.modifiedDate),
+          };
+          if (!comments.some((item) => item.id === comment.id)) comments.push(comment);
+        }
+        continuation = str(response.data.continuationToken) || response.continuation;
+        if (!continuation || limited) break;
+      } catch (error) {
+        return { comments, truncated: true, error: (error as Error).message };
       }
-      continuation = str(response.data.continuationToken) || response.continuation;
-      if (!continuation) break;
     }
-    return { comments, truncated: Boolean(continuation) };
+    return { comments, truncated: limited || Boolean(continuation) };
   }
   private pr(item: Record<string, unknown>): DevOpsPullRequest {
     const id = z.number().int().positive().parse(item.pullRequestId);

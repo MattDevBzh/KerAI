@@ -1,3 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { newDashboardModule } from '../src/shared/dashboard';
+import {
+  defaultTicketFilters,
+  ticketContext,
+  type TicketDevelopmentPlan,
+  type TicketSourceSnapshot,
+} from '../src/shared/devopsTickets';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -59,6 +67,18 @@ async function fixture() {
     getAgentInstructions: async () => '',
     features: () => [{ id: 'feature-1', title: 'Feature One' }],
     createFeature: vi.fn(async () => 'feature-1'),
+    ensureFeatureSaved: vi.fn(async () => {}),
+    openFeature: vi.fn(async () => {}),
+    ticketTargets: async () => [
+      {
+        id: 'local-project',
+        name: 'Local',
+        path: storageDirectory,
+        branch: 'main',
+        canIsolate: false,
+        branches: [],
+      },
+    ],
     http: vi.fn(async (url, init) => {
       const u = String(url);
       if (u.includes('connectionData'))
@@ -67,6 +87,30 @@ async function fixture() {
             id: '11111111-1111-4111-8111-111111111111',
             providerDisplayName: 'Matt',
           },
+        });
+      if (u.includes('/workitems/42?'))
+        return response({
+          id: 42,
+          rev: 7,
+          fields: {
+            'System.TeamProject': 'project',
+            'System.Title': 'Ticket',
+            'System.Description': '<p>description</p>',
+            'Microsoft.VSTS.Common.AcceptanceCriteria': '<p>critère</p>',
+            'Microsoft.VSTS.TCM.ReproSteps': '<p>reproduction</p>',
+          },
+        });
+      if (u.includes('/comments?'))
+        return response({
+          comments: [
+            {
+              id: 1,
+              text: '<p>décision utile</p>',
+              createdBy: { displayName: 'Camille' },
+              createdDate: '2026-10-16T10:00:00Z',
+            },
+            { id: 2, text: 'ancienne piste', createdBy: { displayName: 'Alex' } },
+          ],
         });
       if (u.includes('wiql')) return response({ workItems: [{ id: 42 }] });
       if (u.includes('workitemsbatch'))
@@ -154,7 +198,35 @@ async function connectedDashboard() {
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
+function planFor(controller: DevOpsController): TicketDevelopmentPlan {
+  return {
+    requestId: randomUUID(),
+    sourceProjectKey: 'org/project',
+    snapshotId: controller.getState().ticketPreparation!.snapshotId,
+    title: 'Mon titre',
+    targetProjectId: 'local-project',
+    isolated: false,
+    commentIds: [1],
+    instructions: 'Rester dans ce périmètre.',
+  };
+}
 describe('controller safety and persistence', () => {
+  it('dashboard reads keep the ticket page filters and delivery state unchanged while agents work', async () => {
+    const { controller, options } = await connectedDashboard();
+    const before = controller.getState();
+    options.guard = () => {
+      throw new Error('Agent en cours');
+    };
+    options.assertReadable = vi.fn();
+    const module = newDashboardModule('prs', 'review');
+    await controller.dashboardRead(module);
+    expect(options.assertReadable).toHaveBeenCalled();
+    expect(controller.getState()).toEqual(before);
+    options.assertReadable = () => {
+      throw new Error('Projet non approuvé');
+    };
+    await expect(controller.dashboardRead(module)).rejects.toThrow('Projet non approuvé');
+  });
   it('persists deleted-feature link cleanup when restarting with an existing configuration', async () => {
     const { options, storageDirectory } = await fixture();
     const links = ['feature-1', 'deleted-feature'].map((featureId) => ({
@@ -654,9 +726,192 @@ describe('controller safety and persistence', () => {
     const { controller, options } = await fixture();
     await controller.handle({ type: 'devopsConfigure', config });
     await controller.handle({ type: 'devopsAuthenticate' });
-    await controller.handle({ type: 'devopsCreateFeature', ticketId: 42 });
-    await controller.handle({ type: 'devopsCreateFeature', ticketId: 42 });
+    await controller.handle({ type: 'devopsPrepareTicket', ticketId: 42 });
+    const plan = planFor(controller);
+    await controller.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
+    await controller.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
     expect(options.createFeature).toHaveBeenCalledOnce();
     expect(controller.getState().links).toHaveLength(1);
+  });
+});
+
+describe('ticket search, frozen import and cross-project recovery', () => {
+  it('persists server-side filters by Azure project independently of repository', async () => {
+    const f = await fixture();
+    await f.controller.handle({ type: 'devopsAuthenticate' });
+    const filters = {
+      ...defaultTicketFilters,
+      assignment: 'all' as const,
+      types: ['Demande custom'],
+      states: ['À qualifier'],
+      tags: ['UX', 'navigation'],
+      areaPath: 'project\\Produit',
+    };
+    await f.controller.handle({
+      type: 'devopsSearchTickets',
+      sourceProjectKey: 'org/project',
+      filters,
+    });
+    expect(f.controller.getState().ticketSearch?.tickets).toHaveLength(1);
+    const calls = vi
+      .mocked(f.options.http!)
+      .mock.calls.filter(([url]) => String(url).includes('wiql'));
+    const query = JSON.parse(String(calls.at(-1)![1]?.body)).query;
+    expect(query).toContain("[System.WorkItemType] IN ('Demande custom')");
+    expect(query).not.toContain('@Me');
+    await f.controller.dispose();
+    const restarted = new DevOpsController(f.options);
+    await restarted.initialize();
+    expect(restarted.getState().ticketFilters).toEqual(filters);
+    await restarted.handle({
+      type: 'devopsConfigure',
+      config: { ...config, repository: 'another-repo' },
+    });
+    expect(restarted.getState().ticketFilters).toEqual(filters);
+    await restarted.handle({
+      type: 'devopsConfigure',
+      config: { ...config, project: 'other-project' },
+    });
+    expect(restarted.getState().ticketFilters).toEqual(defaultTicketFilters);
+    await restarted.dispose();
+  });
+  it('imports exactly the preview and selected comments without choosing a team or changing Azure', async () => {
+    const f = await fixture();
+    await f.controller.handle({ type: 'devopsAuthenticate' });
+    await f.controller.handle({
+      type: 'devopsPrepareTicket',
+      ticketId: 42,
+      sourceProjectKey: 'org/project',
+    });
+    const plan = planFor(f.controller),
+      ticket = f.controller.getState().ticketDetail!;
+    await f.controller.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
+    expect(f.controller.getState().error).toBeUndefined();
+    const source = vi.mocked(f.options.createFeature).mock.calls[0][2];
+    expect(source).toMatchObject({
+      projectKey: 'org/project',
+      ticketId: 42,
+      revision: 7,
+      targetProjectId: 'local-project',
+      commentIds: [1],
+      context: ticketContext(ticket, [1], plan.instructions),
+    });
+    expect(source.context).toContain('décision utile');
+    expect(source.context).toContain('reproduction');
+    expect(source.context).not.toContain('ancienne piste');
+    expect(f.options.ensureFeatureSaved).toHaveBeenCalledWith('feature-1');
+    expect(f.options.openFeature).toHaveBeenCalledWith('feature-1');
+    const writes = vi
+      .mocked(f.options.http!)
+      .mock.calls.filter(([, init]) => init?.method && !['GET', 'POST'].includes(init.method));
+    expect(writes).toEqual([]);
+  });
+  it('keeps the session source authoritative after link save fails, then persists before opening on retry', async () => {
+    const f = await fixture();
+    const features: { id: string; title: string; ticketSource?: TicketSourceSnapshot }[] = [];
+    f.options.features = () => features;
+    await f.controller.handle({ type: 'devopsAuthenticate' });
+    await f.controller.handle({ type: 'devopsPrepareTicket', ticketId: 42 });
+    const plan = planFor(f.controller);
+    f.options.createFeature = vi.fn(async (_ticket, _plan, source) => {
+      features.push({ id: 'target-feature', title: 'Imported', ticketSource: source });
+      return 'target-feature';
+    });
+    f.options.ensureFeatureSaved = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Disque momentanément indisponible'))
+      .mockResolvedValue(undefined);
+    await f.controller.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
+    expect(f.controller.getState().ticketCreateResult?.error).toContain('Disque');
+    expect(f.options.openFeature).not.toHaveBeenCalled();
+    await f.controller.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
+    expect(f.options.createFeature).toHaveBeenCalledOnce();
+    expect(f.options.ensureFeatureSaved).toHaveBeenCalledTimes(2);
+    expect(f.options.openFeature).toHaveBeenCalledWith('target-feature');
+    await f.controller.dispose();
+    // Source controller initializes before the target project's sessions have loaded.
+    f.options.features = () => [];
+    const restarted = new DevOpsController(f.options);
+    await restarted.initialize();
+    expect(restarted.getState().links).toHaveLength(1);
+    f.options.features = () => features;
+    await restarted.handle({
+      type: 'devopsPrepareTicket',
+      ticketId: 42,
+      sourceProjectKey: 'org/project',
+    });
+    expect(f.options.createFeature).toHaveBeenCalledOnce();
+    expect(f.options.openFeature).toHaveBeenLastCalledWith('target-feature');
+    await restarted.dispose();
+  });
+  it('recovers an absent link from the session snapshot after a controller restart', async () => {
+    const f = await fixture();
+    await f.controller.handle({ type: 'devopsAuthenticate' });
+    await f.controller.handle({ type: 'devopsPrepareTicket', ticketId: 42 });
+    const plan = planFor(f.controller);
+    await f.controller.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
+    const source = vi.mocked(f.options.createFeature).mock.calls[0][2];
+    const stored = JSON.parse(await readFile(path.join(f.storageDirectory, 'devops.json'), 'utf8'));
+    stored.links = [];
+    await writeFile(path.join(f.storageDirectory, 'devops.json'), JSON.stringify(stored));
+    f.options.features = () => [
+      { id: 'other-project-session', title: 'Recovered', ticketSource: source },
+    ];
+    const restarted = new DevOpsController(f.options);
+    await restarted.initialize();
+    expect(restarted.getState().links[0]).toMatchObject({
+      featureId: 'other-project-session',
+      ticketProjectKey: 'org/project',
+    });
+    await restarted.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
+    expect(f.options.createFeature).toHaveBeenCalledOnce();
+    await restarted.dispose();
+  });
+  it('rejects stale source, snapshot, target and unreceived comments before creation', async () => {
+    const f = await fixture();
+    await f.controller.handle({ type: 'devopsAuthenticate' });
+    await f.controller.handle({ type: 'devopsPrepareTicket', ticketId: 42 });
+    const plan = planFor(f.controller);
+    for (const patch of [
+      { sourceProjectKey: 'elsewhere/project' },
+      { snapshotId: randomUUID() },
+      { targetProjectId: 'missing' },
+      { commentIds: [999] },
+    ]) {
+      await f.controller.handle({
+        type: 'devopsCreateFeature',
+        ticketId: 42,
+        plan: { ...plan, ...patch },
+      });
+      expect(f.controller.getState().ticketCreateResult?.error).toBeTruthy();
+    }
+    expect(f.options.createFeature).not.toHaveBeenCalled();
+  });
+  it('returns a correlated creation error when the workspace guard refuses before reservation', async () => {
+    const f = await fixture();
+    await f.controller.handle({ type: 'devopsAuthenticate' });
+    await f.controller.handle({ type: 'devopsPrepareTicket', ticketId: 42 });
+    const plan = planFor(f.controller);
+    f.options.guard = () => {
+      throw new Error('Workspace non approuvé');
+    };
+    await f.controller.handle({ type: 'devopsCreateFeature', ticketId: 42, plan });
+    expect(f.controller.getState().ticketCreateResult).toEqual({
+      requestId: plan.requestId,
+      error: 'Workspace non approuvé',
+    });
+    expect(f.options.createFeature).not.toHaveBeenCalled();
+  });
+  it('distinguishes a failed detail from absent fields and comments', async () => {
+    const f = await fixture();
+    await f.controller.handle({ type: 'devopsAuthenticate' });
+    const http = f.options.http!;
+    f.options.http = async (url, init) =>
+      String(url).includes('/workitems/42?') ? new Response('', { status: 403 }) : http(url, init);
+    await f.controller.handle({ type: 'devopsPrepareTicket', ticketId: 42 });
+    expect(f.controller.getState().ticketDetailError?.message).toContain('refuse');
+    expect(f.controller.getState().ticketDetail).toBeUndefined();
+    expect(f.controller.getState().ticketPreparation).toBeUndefined();
+    expect(f.options.createFeature).not.toHaveBeenCalled();
   });
 });

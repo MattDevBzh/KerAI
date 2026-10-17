@@ -1,3 +1,4 @@
+import { ticketSourceSnapshotSchema } from './devopsTicketSchemas';
 import { mkdir, readFile, rename, open, unlink, readdir } from 'node:fs/promises';
 import {
   digest,
@@ -185,6 +186,7 @@ const feature = z
     teamRevision: z.number().int().nonnegative().optional(),
     discussionId: z.string().uuid().optional(),
     creationRequestId: z.string().uuid().optional(),
+    ticketSource: ticketSourceSnapshotSchema.optional(),
     teamLockedAt: z.string().optional(),
     descriptionRevision: z.number().int().nonnegative().optional(),
     descriptionVersions: z.array(editorialVersion).optional(),

@@ -147,13 +147,13 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
   await hosted(page, 'jardin-sombre');
   await themeState(page, 'jardin-sombre');
   await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   await expect(page.locator('html')).toHaveAttribute(
     'data-studio-theme-effective',
     'jardin-sombre',
   );
   expect(await page.evaluate(() => Reflect.get(window, 'persistedThemeView'))).toMatchObject({
-    view: 'dashboard',
+    view: 'sessions',
   });
   await navigate(page, 'Réglages');
   await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
@@ -374,7 +374,7 @@ for (const palette of palettes) {
         width,
       );
       await page.screenshot({ path: `${directory}/${palette.id}-${width}-settings.png` });
-      await navigate(page, 'Dashboard');
+      await navigate(page, 'Sessions');
       await expect(page.locator('.dashboard-page')).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         width,

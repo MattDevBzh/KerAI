@@ -1,4 +1,5 @@
 import { observationHtml, observationMarkdown } from './shared/observationReport';
+import { DashboardController } from './host/DashboardController';
 import { StudioHub } from './host/StudioHub';
 import { DiscussionService, type DiscussionProfile } from './host/DiscussionService';
 import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
@@ -6,7 +7,7 @@ import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
 import { sessionMarkdown } from './shared/sessionExport';
 import { DevOpsController } from './host/DevOpsController';
 import { devOpsMessageSchema } from './core/devopsSchemas';
-import { devOpsPlainText } from './shared/devopsText';
+import { type TicketTarget } from './shared/devopsTickets';
 import * as vscode from 'vscode';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -30,6 +31,7 @@ import { QuestService, type QuestFact } from './host/QuestService';
 import { studioQuestFacts, discussionQuestFacts } from './host/questFacts';
 
 let panel: vscode.WebviewPanel | undefined;
+let dashboardPanel: vscode.WebviewPanel | undefined;
 let service: StudioService | undefined;
 let devops: DevOpsController | undefined;
 let lease: WorkspaceLease | undefined;
@@ -71,6 +73,19 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   const send = (message: HostMessage) => {
     if (panel) void panel.webview.postMessage(message);
+    if (
+      dashboardPanel &&
+      [
+        'state',
+        'dashboardState',
+        'dashboardSaved',
+        'accountCredits',
+        'themeState',
+        'zoomState',
+        'error',
+      ].includes(message.type)
+    )
+      void dashboardPanel.webview.postMessage(message);
   };
   const getTheme = () =>
     normalizeTheme(vscode.workspace.getConfiguration('featureStudio').get('appearance.theme'));
@@ -119,7 +134,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const dedicated = dedicatedWindow.isDedicated(vscode.workspace.workspaceFile?.fsPath);
   const catalog = new ProjectCatalog(hubDirectory);
   let initialized = false;
-  const hub = new StudioHub(
+  const hub: StudioHub = new StudioHub(
     catalog,
     async (project?: StoredProject) => {
       const root = project?.path ?? dedicatedWindow.home;
@@ -168,6 +183,7 @@ export async function activate(context: vscode.ExtensionContext) {
         );
       next.on('errorNotice', (message) => report(new Error(message)));
       const controller = new DevOpsController({
+        assertReadable: () => next.assertTrusted(),
         root,
         storageDirectory: path.join(store.rootPath, 'devops'),
         secrets: context.secrets,
@@ -225,20 +241,92 @@ export async function activate(context: vscode.ExtensionContext) {
             );
           return profile.instructions;
         },
-        features: () => next.state.features,
-        createFeature: async (ticket) => {
-          const feature = await next.createFeature({
-            title: `#${ticket.id} — ${ticket.title}`,
-            description: [
-              devOpsPlainText(ticket.description),
-              'Critères d’acceptation :',
-              devOpsPlainText(ticket.acceptanceCriteria) || 'Non renseignés.',
-              `Source Azure DevOps : ${ticket.url}`,
-            ].join('\n\n'),
-            isolated: false,
-            projects: project ? [project] : undefined,
+        features: () => [
+          ...new Map(
+            [next, ...[...hub.entries.values()].map((entry) => entry.service)]
+              .flatMap((owner) => owner.state.features)
+              .map((feature) => [feature.id, feature]),
+          ).values(),
+        ],
+        ticketTargets: async () => {
+          const targets: TicketTarget[] = [];
+          for (const candidate of catalog.state.projects.filter((item) => !item.hidden)) {
+            try {
+              const entry = await hub.entry(candidate.id);
+              const target: TicketTarget = {
+                id: candidate.id,
+                name: candidate.name,
+                path: candidate.path,
+                branch: entry.service.state.workspace.branch,
+                canIsolate: false,
+                branches: [],
+              };
+              try {
+                const info = await entry.service.workspaces.inspectRepository();
+                Object.assign(target, {
+                  branch: info.branch,
+                  dirtyCount: info.dirtyCount,
+                  canIsolate: true,
+                  branches: await entry.service.workspaces.branchChoices(),
+                });
+              } catch (error) {
+                target.isolationReason = (error as Error).message;
+              }
+              targets.push(target);
+            } catch {
+              /* A missing/unavailable registered folder is not offered as a development target. */
+            }
+          }
+          return targets.sort(
+            (a, b) => Number(b.id === project?.id) - Number(a.id === project?.id),
+          );
+        },
+        createFeature: async (_ticket, plan, source, targetInfo) => {
+          const existing = [...hub.entries.values()]
+            .flatMap((entry) => entry.service.state.features)
+            .find(
+              (feature) =>
+                feature.ticketSource?.ticketId === source.ticketId &&
+                feature.ticketSource.projectKey === source.projectKey,
+            );
+          if (existing) return existing.id;
+          const projects = catalog.resolve([plan.targetProjectId]);
+          const target = await hub.entry(plan.targetProjectId);
+          const feature = await target.service.createFeature({
+            requestId: plan.requestId,
+            title: plan.title,
+            description: source.context,
+            isolated: plan.isolated,
+            projects,
+            ticketSource: source,
+            expectedCurrentBranch: plan.isolated ? undefined : targetInfo.branch,
+            worktreeChoice: plan.isolated
+              ? {
+                  baseRef: plan.baseRef!,
+                  baseCommit: plan.baseCommit!,
+                  branchName: plan.branchName!,
+                }
+              : undefined,
           });
           return feature.id;
+        },
+        ensureFeatureSaved: async (id) => {
+          const owner = [...hub.entries.values()].find((entry) =>
+            entry.service.state.features.some((feature) => feature.id === id),
+          );
+          if (!owner) throw new Error('La session liée est indisponible.');
+          await owner.service.withWorkspaceMutation(
+            'Enregistrement de la session liée au ticket',
+            () => owner.service.persist(),
+          );
+        },
+        openFeature: async (id) => {
+          const entry = await hub.activateFeature(id);
+          service = entry.service;
+          devops = entry.devops;
+          hub.publish();
+          send({ type: 'devopsState', state: devops.getState() });
+          send({ type: 'navigate', view: 'dashboard', featureId: id });
         },
       });
       await controller.initialize();
@@ -260,6 +348,34 @@ export async function activate(context: vscode.ExtensionContext) {
   hub.on('state', (state) =>
     send({ type: 'state', state: { ...state, favoriteAgentIds: favorites() } }),
   );
+  const dashboard = new DashboardController(
+    hubDirectory,
+    () =>
+      [...hub.entries.values()]
+        .filter(
+          (entry) =>
+            entry.project &&
+            !catalog.state.projects.find((p) => p.id === entry.project!.id)?.hidden,
+        )
+        .map((entry) => ({
+          id: entry.project!.id,
+          name:
+            catalog.state.projects.find((p) => p.id === entry.project!.id)?.name ??
+            entry.project!.name,
+          devops: entry.devops,
+        })),
+    (state) => send({ type: 'dashboardState', state }),
+  );
+  let cockpitDashboardVisible = false;
+  let dashboardReady = false;
+  const updateDashboardVisibility = () => {
+    dashboard.setVisible('cockpit', cockpitDashboardVisible && Boolean(panel?.visible));
+    dashboard.setVisible('control', dashboardReady && Boolean(dashboardPanel?.visible));
+    credits.setVisible(
+      (webviewReady && Boolean(panel?.visible)) ||
+        (dashboardReady && Boolean(dashboardPanel?.visible)),
+    );
+  };
   const discussions = new DiscussionService({
     directory: hubDirectory,
     workspacePath: dedicatedWindow.home,
@@ -308,6 +424,7 @@ export async function activate(context: vscode.ExtensionContext) {
     void quests.record(discussionQuestFacts(state));
   });
   disposeHub = async () => {
+    await dashboard.dispose();
     credits.setVisible(false);
     await discussions.dispose();
     await hub.dispose();
@@ -347,6 +464,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       await quests.initialize();
       await hub.initialize();
+      await dashboard.initialize();
       await discussions.initialize();
       for (const entry of hub.entries.values())
         await quests.record(studioQuestFacts(entry.service.snapshot()));
@@ -369,8 +487,85 @@ export async function activate(context: vscode.ExtensionContext) {
   };
 
   const notice = (message: string) => send({ type: 'notice', message });
-  const dispatch = async (raw: unknown): Promise<void | CheckpointComparison> => {
-    const message = parseMessage(raw);
+  const dispatch = async (
+    raw: unknown,
+    surface: 'cockpit' | 'control' = 'cockpit',
+  ): Promise<void | CheckpointComparison> => {
+    let message: ClientMessage;
+    try {
+      message = parseMessage(raw);
+    } catch (error) {
+      if (
+        raw &&
+        typeof raw === 'object' &&
+        'type' in raw &&
+        raw.type === 'dashboardSave' &&
+        'requestId' in raw &&
+        typeof raw.requestId === 'string' &&
+        raw.requestId.length <= 150
+      ) {
+        send({
+          type: 'dashboardSaved',
+          requestId: raw.requestId,
+          error: 'Réglages invalides : vérifie les champs et les limites des filtres.',
+        });
+        return;
+      }
+      throw error;
+    }
+    if (message.type.startsWith('dashboard')) {
+      await ensure();
+      switch (message.type) {
+        case 'dashboardVisible':
+          if (surface === 'cockpit') cockpitDashboardVisible = message.visible;
+          updateDashboardVisibility();
+          send({ type: 'dashboardState', state: dashboard.snapshot() });
+          return;
+        case 'dashboardRefresh':
+          await dashboard.refresh();
+          return;
+        case 'dashboardSave':
+          try {
+            await dashboard.save(message.config, message.revision);
+            send({ type: 'dashboardSaved', requestId: message.requestId });
+          } catch (error) {
+            send({ type: 'dashboardState', state: dashboard.snapshot() });
+            send({
+              type: 'dashboardSaved',
+              requestId: message.requestId,
+              error: redact((error as Error).message),
+            });
+          }
+          return;
+        case 'dashboardDetach':
+          await openDashboard();
+          return;
+        case 'dashboardFullscreen':
+          dashboardPanel?.reveal();
+          await vscode.commands.executeCommand('workbench.action.toggleFullScreen');
+          return;
+        case 'dashboardOpen': {
+          if (!(await open())) return;
+          if (message.featureId) await ensure(message.featureId);
+          else if (message.projectId) {
+            const entry = await hub.activateProject(message.projectId);
+            service = entry.service;
+            devops = entry.devops;
+          }
+          hub.publish();
+          if (devops) send({ type: 'devopsState', state: devops.getState() });
+          send({
+            type: 'navigate',
+            view: message.page ?? 'sessions',
+            featureId: message.featureId,
+            stepId: message.stepId,
+          });
+          if (message.ticketId && message.page === 'devops-tickets')
+            await devops?.handle({ type: 'devopsLoadTicket', ticketId: message.ticketId });
+          return;
+        }
+      }
+    }
     if (message.type === 'setZoom') {
       zoomWrites = zoomWrites.then(async () => {
         try {
@@ -675,7 +870,8 @@ export async function activate(context: vscode.ExtensionContext) {
         quests.publish();
         discussions.publish();
         webviewReady = true;
-        credits.setVisible(Boolean(panel?.visible));
+        updateDashboardVisibility();
+        send({ type: 'dashboardState', state: dashboard.snapshot() });
         if (dedicated) void drainRequests();
         sendTheme();
         sendZoom();
@@ -1563,10 +1759,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   };
 
-  const mount = async (target: vscode.WebviewPanel): Promise<void> => {
-    webviewReady = false;
-    credits.setVisible(false);
-    panel = target;
+  const setWebviewHtml = async (target: vscode.WebviewPanel, surface: 'cockpit' | 'control') => {
     target.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
     target.webview.options = {
       enableScripts: true,
@@ -1578,13 +1771,100 @@ export async function activate(context: vscode.ExtensionContext) {
     let html = await readFile(path.join(context.extensionPath, 'dist/webview/index.html'), 'utf8');
     const csp = `default-src 'none'; img-src ${target.webview.cspSource} data:; style-src ${target.webview.cspSource} 'unsafe-inline'; font-src ${target.webview.cspSource}; script-src 'nonce-${nonce}'; connect-src 'none'; base-uri ${target.webview.cspSource}; form-action 'none';`;
     html = html
-      .replace(/<html\b/, `<html data-studio-theme="${getTheme()}" data-studio-zoom="${getZoom()}"`)
+      .replace(
+        /<html\b/,
+        `<html data-studio-surface="${surface}" data-studio-theme="${getTheme()}" data-studio-zoom="${getZoom()}"`,
+      )
       .replace(
         '<head>',
         `<head><base href="${base}"><meta http-equiv="Content-Security-Policy" content="${csp}">`,
       )
       .replace(/<script\b/g, `<script nonce="${nonce}"`);
     target.webview.html = html;
+  };
+  const shutdownIfUnused = () => {
+    updateDashboardVisibility();
+    if (panel || dashboardPanel) return;
+    shuttingDown = (async () => {
+      await discussions.unload();
+      await hub.dispose();
+      await quests.flush();
+      await lease?.release();
+      lease = undefined;
+    })().finally(() => {
+      initialized = false;
+      service = undefined;
+      devops = undefined;
+      shuttingDown = undefined;
+    });
+  };
+  const mountDashboard = async (target: vscode.WebviewPanel) => {
+    dashboardPanel = target;
+    dashboardReady = false;
+    target.onDidDispose(
+      () => {
+        if (dashboardPanel === target) dashboardPanel = undefined;
+        dashboardReady = false;
+        shutdownIfUnused();
+      },
+      undefined,
+      context.subscriptions,
+    );
+    target.onDidChangeViewState(updateDashboardVisibility, undefined, context.subscriptions);
+    target.webview.onDidReceiveMessage(
+      (raw) => {
+        if (raw?.type === 'ready') {
+          dashboardReady = true;
+          hub.publish();
+          sendTheme();
+          sendZoom();
+          send({ type: 'dashboardState', state: dashboard.snapshot() });
+          updateDashboardVisibility();
+          void credits.refresh();
+          return;
+        }
+        if (
+          [
+            'dashboardVisible',
+            'dashboardRefresh',
+            'dashboardSave',
+            'dashboardOpen',
+            'dashboardFullscreen',
+          ].includes(raw?.type)
+        )
+          void dispatch(raw, 'control').catch(report);
+      },
+      undefined,
+      context.subscriptions,
+    );
+    await ensure();
+    await setWebviewHtml(target, 'control');
+  };
+  const openDashboard = async () => {
+    if (dashboardPanel) {
+      dashboardPanel.reveal();
+      return;
+    }
+    const commands = new Set(await vscode.commands.getCommands(true));
+    if (!commands.has('workbench.action.moveEditorToNewWindow'))
+      throw new Error(
+        'Cette version de VS Code ne permet pas de détacher le dashboard. Mets VS Code à jour.',
+      );
+    const target = vscode.window.createWebviewPanel(
+      'featureStudio.dashboard',
+      'Feature Studio · Tour de contrôle',
+      vscode.ViewColumn.Active,
+      { enableScripts: true, retainContextWhenHidden: true },
+    );
+    await mountDashboard(target);
+    target.reveal();
+    await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
+  };
+  const mount = async (target: vscode.WebviewPanel): Promise<void> => {
+    webviewReady = false;
+    panel = target;
+    updateDashboardVisibility();
+    await setWebviewHtml(target, 'cockpit');
     target.webview.onDidReceiveMessage(
       (raw) => {
         void dispatch(raw).catch(report);
@@ -1596,26 +1876,15 @@ export async function activate(context: vscode.ExtensionContext) {
       () => {
         if (panel === target) panel = undefined;
         webviewReady = false;
-        credits.setVisible(false);
-        shuttingDown = (async () => {
-          await discussions.unload();
-          await hub.dispose();
-          await quests.flush();
-          await lease?.release();
-          lease = undefined;
-        })().finally(() => {
-          initialized = false;
-          service = undefined;
-          devops = undefined;
-          shuttingDown = undefined;
-        });
+        cockpitDashboardVisible = false;
+        shutdownIfUnused();
       },
       undefined,
       context.subscriptions,
     );
     target.onDidChangeViewState(
       () => {
-        if (panel === target) credits.setVisible(webviewReady && target.visible);
+        if (panel === target) updateDashboardVisibility();
       },
       undefined,
       context.subscriptions,
@@ -1751,6 +2020,20 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   context.subscriptions.push(
     vscode.commands.registerCommand('featureStudio.open', open),
+    vscode.commands.registerCommand('featureStudio.openDashboard', async () => {
+      await ensure();
+      await openDashboard();
+    }),
+    vscode.window.registerWebviewPanelSerializer('featureStudio.dashboard', {
+      deserializeWebviewPanel: async (restored) => {
+        if (dashboardPanel) {
+          restored.dispose();
+          dashboardPanel.reveal();
+          return;
+        }
+        await mountDashboard(restored);
+      },
+    }),
     vscode.commands.registerCommand('featureStudio.analyzeSession', async () => {
       if (!(await open())) return;
       await showObservationPicker();
@@ -1826,6 +2109,21 @@ export async function activate(context: vscode.ExtensionContext) {
     getZoom,
     getQuestState: () => quests.snapshot(),
     getDevOpsState: () => devops?.getState(),
+    getDashboardState: () => dashboard.snapshot(),
+    getDashboardReady: () => dashboardReady,
+    dispatchDashboard: (message: ClientMessage) => {
+      if (
+        ![
+          'dashboardVisible',
+          'dashboardRefresh',
+          'dashboardSave',
+          'dashboardOpen',
+          'dashboardFullscreen',
+        ].includes(message.type)
+      )
+        throw new Error('La Tour de contrôle est une vue de suivi.');
+      return dispatch(message, 'control');
+    },
     dispatch: (message: ClientMessage) => dispatch(message),
   };
 }

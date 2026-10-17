@@ -9,6 +9,7 @@ import { resolveAvatar } from '../src/shared/avatars';
 import { featureStateKey } from '../src/shared/collaboration';
 import { teamSteps } from '../src/shared/team';
 import type { QuestState } from '../src/shared/quests';
+import type { DashboardState } from '../src/shared/dashboard';
 
 interface Api {
   getState(): StudioState | undefined;
@@ -18,6 +19,9 @@ interface Api {
   getTheme(): ThemeId;
   getQuestState(): QuestState;
   getDevOpsState(): DevOpsState | undefined;
+  getDashboardState(): DashboardState;
+  getDashboardReady(): boolean;
+  dispatchDashboard(message: ClientMessage): Promise<void | CheckpointComparison>;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
 }
 async function waitForAutomaticConnection(api: Api): Promise<void> {
@@ -715,6 +719,62 @@ async function smokeRun(): Promise<void> {
   assert.equal(
     api.getState()!.features.find((item) => item.id === proposed.id)?.criteria?.[0].text,
     'Keyboard navigation works',
+  );
+  const dashboard = api.getDashboardState();
+  const config = {
+    ...dashboard.config,
+    modules: dashboard.config.modules.filter(
+      (m) => m.kind === 'sessions' || m.kind === 'attention',
+    ),
+    refreshSeconds: 0,
+  };
+  config.modules[0].title = 'Sessions à suivre';
+  await api.dispatch({
+    type: 'dashboardSave',
+    config,
+    revision: dashboard.revision,
+    requestId: 'smoke-dashboard',
+  });
+  assert.equal(api.getDashboardState().config.modules[0].title, 'Sessions à suivre');
+  await vscode.commands.executeCommand('featureStudio.openDashboard');
+  for (let i = 0; i < 100 && !api.getDashboardReady(); i++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(
+    api.getDashboardReady(),
+    'The real auxiliary window loads the control dashboard with the same host',
+  );
+  assert.throws(
+    () =>
+      api.dispatchDashboard({
+        type: 'runStep',
+        featureId: proposed.id,
+        stepId: proposed.steps[0].id,
+      }),
+    /vue de suivi/,
+  );
+  const cockpit = vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .find((tab) => tab.label === 'Feature Studio' && tab.input instanceof vscode.TabInputWebview);
+  assert.ok(cockpit, 'The main cockpit and control dashboard coexist');
+  await vscode.window.tabGroups.close(cockpit);
+  assert.equal(
+    api.getState()!.features.find((f) => f.id === proposed.id)?.criteria?.[0].text,
+    'Keyboard navigation works',
+    'Closing the cockpit preserves the hub while the dashboard observes it',
+  );
+  await api.dispatchDashboard({
+    type: 'dashboardOpen',
+    featureId: proposed.id,
+    stepId: proposed.steps[0].id,
+  });
+  assert.ok(api.getState()!.features.some((f) => f.id === proposed.id));
+  assert.equal(api.getDashboardState().config.modules[0].title, 'Sessions à suivre');
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  await vscode.commands.executeCommand('featureStudio.open');
+  assert.equal(
+    api.getDashboardState().config.modules[0].title,
+    'Sessions à suivre',
+    'Layout survives closing and reopening both surfaces',
   );
   console.log(
     'PASS: activity-bar direct opening in the current window/sidebar dismissal/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',

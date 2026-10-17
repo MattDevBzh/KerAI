@@ -111,6 +111,24 @@ async function hosted(
   devops: DevOpsState = structuredClone(connected),
   view = 'dashboard',
 ) {
+  if (!devops.ticketSearch && devops.authenticated && devops.refreshedAt)
+    devops.ticketSearch = {
+      filters: {
+        query: '',
+        types: [],
+        states: [],
+        assignment: 'all',
+        identity: '',
+        tags: [],
+        areaPath: '',
+        iterationPath: '',
+      },
+      tickets: devops.tickets,
+      searchedAt: devops.refreshedAt,
+      hasMore: false,
+      limitReached: false,
+      omitted: 0,
+    };
   await page.addInitScript(
     ({ devops, state, view }) => {
       const messages: ClientMessage[] = [];
@@ -146,9 +164,7 @@ async function update(page: Page, changes: Partial<DevOpsState>) {
   }, changes);
 }
 
-test('enfants permanents, reprise de vue et configuration/livraison préservées', async ({
-  page,
-}) => {
+test('groupe DevOps, reprise de vue et configuration/livraison préservées', async ({ page }) => {
   await hosted(
     page,
     {
@@ -178,50 +194,15 @@ test('enfants permanents, reprise de vue et configuration/livraison préservées
   await navigate(page, 'Livraison');
   await expect(page.getByLabel('Intention du changement')).toHaveValue('garder mon brouillon');
   await navigate(page, 'Réglages');
+  await page
+    .getByRole('navigation', { name: 'Navigation principale' })
+    .getByRole('button', { name: 'DevOps', exact: true })
+    .click();
   await expect(page.getByRole('button', { name: 'PR', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tickets', exact: true })).toBeVisible();
   expect(
     (await messages(page)).filter((message) => !['ready', 'checkRuntime'].includes(message.type)),
   ).toEqual([]);
-});
-
-test('tickets : recherche tags, états personnalisés, liens du périmètre, tri et commentaires host', async ({
-  page,
-}) => {
-  await hosted(page);
-  await navigate(page, 'Tickets');
-  const dashboard = panel(page);
-  await expect(dashboard.getByRole('article').first()).toHaveAttribute('aria-label', 'Ticket 42');
-  await dashboard.getByLabel('Rechercher un ticket').fill('accessibilite');
-  await expect(dashboard.getByRole('article')).toHaveCount(1);
-  await expect(dashboard.getByRole('article')).toHaveAttribute('aria-label', 'Ticket 12');
-  await dashboard.getByLabel('Lien feature', { exact: true }).selectOption('linked');
-  await expect(dashboard.getByText('Aucun résultat pour ces filtres')).toBeVisible();
-  await dashboard.getByRole('button', { name: 'Réinitialiser les filtres', exact: true }).click();
-  await dashboard.getByLabel('État', { exact: true }).selectOption('Validation maison');
-  await expect(dashboard.getByRole('article')).toHaveAttribute('aria-label', 'Ticket 12');
-  await dashboard.getByRole('button', { name: 'Réinitialiser', exact: true }).click();
-  await dashboard.getByLabel('Trier par').selectOption('number');
-  await expect(dashboard.getByRole('article').first()).toHaveAttribute('aria-label', 'Ticket 65');
-  await dashboard.getByLabel('Trier par').selectOption('title');
-  await expect(dashboard.getByRole('article').first()).toHaveAttribute('aria-label', 'Ticket 12');
-  const card = dashboard.getByRole('article', { name: 'Ticket 42', exact: true });
-  await card.getByText('Description et critères d’acceptation').click();
-  await expect(card.getByText('Voir les prochaines étapes', { exact: true })).toBeVisible();
-  await expect(card.getByText('• Menus au clavier', { exact: true })).toBeVisible();
-  await card.getByText('Commentaires (charger)', { exact: true }).click();
-  expect(await messages(page)).toContainEqual({ type: 'devopsLoadTicket', ticketId: 42 });
-  await card.getByRole('button', { name: 'Créer une feature', exact: true }).click();
-  expect(await messages(page)).toContainEqual({ type: 'devopsCreateFeature', ticketId: 42 });
-  await card.getByLabel('Lier le ticket 42 à une feature').selectOption(demoState.features[1].id);
-  expect(await messages(page)).toContainEqual({
-    type: 'devopsLinkFeature',
-    ticketId: 42,
-    featureId: demoState.features[1].id,
-  });
-  expect(await page.evaluate(() => Reflect.get(window, 'injected'))).toBeUndefined();
-  await card.getByRole('button', { name: /Ouvrir la feature/ }).click();
-  await expect(page.getByRole('link', { name: 'Ticket #42', exact: true })).toBeVisible();
 });
 
 test('PR : branches, revue honnête, aperçu texte sûr et actions locales inchangées', async ({
@@ -265,61 +246,6 @@ test('PR : branches, revue honnête, aperçu texte sûr et actions locales incha
   expect(await page.evaluate(() => Reflect.get(window, 'injected'))).toBeUndefined();
   await dashboard.getByRole('button', { name: 'Actualiser', exact: true }).click();
   expect(await messages(page)).toContainEqual({ type: 'devopsRefresh' });
-});
-
-test('données inconnues, zéro reçu, API occupée, erreur et liste partielle restent explicites', async ({
-  page,
-}) => {
-  await hosted(page, {
-    ...structuredClone(connected),
-    tickets: [],
-    pullRequests: [],
-    refreshedAt: undefined,
-  });
-  await navigate(page, 'Tickets');
-  const dashboard = panel(page);
-  await expect(dashboard.getByText('Charge tes premières données')).toBeVisible();
-  await expect(dashboard.locator('.devops-stats strong')).toHaveText(['—', '—', '—', '—']);
-  await expect(dashboard.getByText('Données non chargées', { exact: true })).toBeVisible();
-  await update(page, { busy: true });
-  await expect(dashboard.getByText('Chargement en cours', { exact: true })).toBeVisible();
-  await expect(dashboard.getByRole('button', { name: 'Actualiser', exact: true })).toBeDisabled();
-  await update(page, { busy: false, error: 'Réseau indisponible' });
-  await expect(dashboard.getByRole('alert')).toContainText('Réseau indisponible');
-  await expect(dashboard.locator('.devops-stats strong')).toHaveText(['—', '—', '—', '—']);
-  await update(page, { error: undefined, refreshedAt: '2026-10-13T10:00:00Z' });
-  await expect(
-    dashboard.getByText('Aucun ticket assigné dans ce périmètre', { exact: true }),
-  ).toBeVisible();
-  await expect(dashboard.locator('.devops-stats strong')).toHaveText(['0', '0', '0', '0']);
-  await update(page, {
-    tickets: connected.tickets,
-    truncated: true,
-    error: 'Actualisation échouée',
-  });
-  await expect(dashboard.getByText(/Liste partielle/)).toBeVisible();
-  await expect(dashboard.getByRole('article')).toHaveCount(3);
-  await expect(dashboard.getByRole('alert')).toContainText('Actualisation échouée');
-});
-
-test('actualisation garde un filtre absent explicite et changement de périmètre réinitialise les filtres', async ({
-  page,
-}) => {
-  await hosted(page);
-  await navigate(page, 'Tickets');
-  const dashboard = panel(page);
-  await dashboard.getByLabel('État', { exact: true }).selectOption('Validation maison');
-  await update(page, { tickets: [connected.tickets[0]] });
-  await expect(dashboard.getByLabel('État', { exact: true })).toHaveValue('Validation maison');
-  await expect(dashboard.getByLabel('État', { exact: true }).locator('option:checked')).toHaveText(
-    'Validation maison (aucun élément)',
-  );
-  await expect(dashboard.getByText('Aucun résultat pour ces filtres')).toBeVisible();
-  await dashboard.getByLabel('Rechercher un ticket').fill('missing');
-  await update(page, { config: { ...config, repository: 'nouveau' } });
-  await expect(dashboard.getByLabel('État', { exact: true })).toHaveValue('all');
-  await expect(dashboard.getByLabel('Rechercher un ticket')).toHaveValue('');
-  await expect(dashboard.getByRole('article')).toHaveCount(1);
 });
 
 for (const theme of ['vscode-light', 'vscode-high-contrast', 'vscode-high-contrast-light'])

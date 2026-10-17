@@ -6,9 +6,9 @@
 
 Pars d’un besoin, choisis une équipe et avance étape par étape : challenge, plan, code, tests, relecture. Feature Studio rend visibles les instructions, le contexte, les permissions et les preuves de chaque agent. Tu peux personnaliser les parcours et emporter ta méthode dans un kit.
 
-**[Dernière version publiée](https://github.com/MattDevBzh/KerAI/releases/latest)** · [Télécharger le VSIX v1.11.0](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/feature-studio-1.11.0.vsix) · [Nouveautés](CHANGELOG.md) · [Guide complet](docs/GUIDE.md)
+**[Dernière version publiée](https://github.com/MattDevBzh/KerAI/releases/latest)** · [Télécharger le VSIX v1.12.0](https://github.com/MattDevBzh/KerAI/releases/download/v1.12.0/feature-studio-1.12.0.vsix) · [Nouveautés](CHANGELOG.md) · [Guide complet](docs/GUIDE.md)
 
-**Version actuelle : 1.11.0.** Zoom global Auto ou de 80 à 200 %, détection automatique de Copilot avec affichage du chemin, ouverture du cockpit dans la fenêtre courante et crédits du compte dans l’en-tête. Le menu compact, les dialogues et les détails des crédits s’adaptent aussi au zoom. [Nouveautés de v1.11.0](docs/releases/v1.11.0.md).
+**Version actuelle : 1.12.0.** Dashboard Métro, Tour de contrôle sur un second écran, modules filtrables et enregistrés, recherche de tickets Azure DevOps et préparation du développement, navigation regroupée. [Nouveautés de v1.12.0](docs/releases/v1.12.0.md).
 
 Cette version conserve la connexion au démarrage, les améliorations ergonomiques, les quêtes, les sept ambiances et les discussions liées aux comptes rendus.
 
@@ -16,19 +16,25 @@ Cette version conserve la connexion au démarrage, les améliorations ergonomiqu
 
 ## Commencer
 
-1. Télécharge le [VSIX v1.11.0 sur GitHub](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/feature-studio-1.11.0.vsix).
+1. Télécharge le [VSIX v1.12.0 sur GitHub](https://github.com/MattDevBzh/KerAI/releases/download/v1.12.0/feature-studio-1.12.0.vsix).
 2. Dans VS Code : **Extensions → … → Installer à partir du VSIX…**. Si une ancienne version tourne déjà, recharge la fenêtre.
 3. Ouvre ton dépôt et approuve le workspace. Clique sur l’icône **L’équipe** (trois agents) dans la barre latérale : Feature Studio s’ouvre directement dans un onglet de la fenêtre VS Code courante et enregistre ton projet.
 4. Dans **Réglages**, clique sur **Vérifier la connexion** pour contrôler le CLI, le compte et les modèles disponibles.
 5. Ouvre **Nouvelle session**, sélectionne tes projets et décris ton besoin. Compose ton équipe avec les avatars ou les équipes disponibles, puis prépare l’aperçu du contexte avant de lancer le premier agent.
 
-Après installation, la fiche **Feature Studio** dans Extensions doit afficher **1.11.0**. Installe directement le fichier `.vsix`, sans le décompresser. Son empreinte figure dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/SHA256SUMS). Pour la vérifier, calcule `shasum -a 256 feature-studio-1.11.0.vsix` sur macOS/Linux ou `Get-FileHash .\feature-studio-1.11.0.vsix -Algorithm SHA256` sur Windows, puis compare le résultat à la ligne du VSIX dans ce fichier.
+Après installation, la fiche **Feature Studio** dans Extensions doit afficher **1.12.0**. Installe directement le fichier `.vsix`, sans le décompresser. Son empreinte figure dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.12.0/SHA256SUMS). Pour la vérifier, calcule `shasum -a 256 feature-studio-1.12.0.vsix` sur macOS/Linux ou `Get-FileHash .\feature-studio-1.12.0.vsix -Algorithm SHA256` sur Windows, puis compare le résultat à la ligne du VSIX dans ce fichier.
 
 **Prérequis :** VS Code **1.110+**, Git et GitHub Copilot CLI installé et authentifié avec un accès au CLI. Le VSIX utilise le moteur Node de VS Code ; il ne nécessite pas une installation séparée de npm. L’extension utilise le CLI local et ton authentification Copilot. Elle possède son propre cockpit et peut coexister avec la vue Chat de GitHub Copilot.
 
 Le CLI est détecté automatiquement. Si un ancien chemin est invalide, clique sur **Réglages → Détection automatique** : le chemin réellement utilisé apparaît après le diagnostic. Un chemin complet dans `featureStudio.cliPath` reste prioritaire. [Installation et diagnostic du CLI](docs/COPILOT.md). Les appels aux modèles utilisent ton quota Copilot ; consulter, configurer et exporter un kit ne lance aucun agent.
 
 Le contrôle **Zoom** de l’en-tête et **Réglages → Apparence → Taille de l’interface** agrandissent ensemble les textes, boutons et avatars. **Auto** suit l’espace disponible ; un pourcentage fixe est conservé entre les projets et les réouvertures. Le compteur **Copilot** affiche les crédits du compte ; clique dessus pour consulter le renouvellement et les détails disponibles.
+
+Le menu regroupe **Parcours, Agents, Skills, Kits et Consommation** dans **Atelier**, et **Azure DevOps, Tickets, PR et Livraison** dans **DevOps**. Un seul groupe se déplie à la fois ; celui de la page restaurée s’ouvre automatiquement. La roue dentée de l’en-tête, à côté du compteur Copilot, ouvre les **Réglages**. La recherche **Aller à…** retrouve toutes les pages, y compris celles des groupes repliés et les réglages.
+
+## Sessions et Dashboard
+
+**Sessions** conserve la création et le travail avec les agents. **Dashboard** offre un suivi Métro avec six modules personnalisables : sessions, interventions, PR, tickets, consommation et activité. **Ouvrir dans une nouvelle fenêtre** détache la **Tour de contrôle** pour un second écran, avec plein écran et retour vers la bonne étape du cockpit. La disposition, les tailles et les filtres sont conservés ; les sessions suivent le moteur et Azure se rafraîchit toutes les 60 secondes par défaut. [Guide du dashboard](docs/DASHBOARD.md).
 
 ## Observateur de session
 
@@ -38,7 +44,7 @@ Pendant l’analyse, un bandeau animé indique la phase et les parties réelleme
 
 ## Discuter avec ses agents
 
-**Discussion**, juste après Dashboard, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
+**Discussion**, juste après Sessions, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
 
 Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche **Agent de discussion**. Ces profils sont proposés en priorité ; **Voir plus** révèle les autres agents. Les profils propres à un projet portent son nom dans la liste. Les instructions, skills et ton du profil accompagnent l’échange ; ajoute dans tes messages le contexte utile. Ce chat n’exécute pas de commandes et ne consulte pas automatiquement les fichiers des projets.
 
@@ -46,7 +52,7 @@ Les discussions sont enregistrées localement et retrouvées après rechargement
 
 ## Un choix de projet au bon endroit
 
-Dashboard, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
+Dashboard, Sessions, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
 
 Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
 
@@ -105,7 +111,7 @@ Le collecteur vise **Azure DevOps Services / Azure Repos Git**. Il lit les donn�
 - **Des validations visibles.** Livrables, questions, verdicts, preuves de tests et critères sont réunis. Le pilote s’arrête aux checkpoints et aux blocages.
 - **Une équipe qui corrige avec toi.** Depuis un compte rendu ou une remarque, choisis où reprendre et inspecte le contexte transmis. L’éditeur conserve l’original, tes versions et les corrections du besoin. En fin de parcours, choisis **Valider définitivement** ou **Faire une correction** ; ta validation réussie déclenche la célébration d’équipe.
 - **Des agents avec du répondant.** Active un roast léger, piquant ou sans pitié sur chaque profil. Les comptes rendus peuvent te taquiner ; les fichiers produits et les preuves restent précis.
-- **Azure DevOps et livraison.** Tableaux PR/tickets, liens aux sessions et préparation de commit, push et PR. Les écritures distantes ont leur confirmation hôte.
+- **Azure DevOps et livraison.** Recherche de tickets dans tout le projet, détail complet et préparation d’une session avec dépôt/worktree explicites, commentaires sélectionnés et copie du contexte importé. Tableau PR, liens aux sessions et préparation de commit, push et PR. Les écritures distantes ont leur confirmation hôte.
 - **Des profils personnalisables.** Agents et skills personnels ou propres au projet, vingt avatars de métiers, modèles découverts via le CLI, MCP et commandes de tests explicitement autorisés.
 - **Un cockpit à ton goût.** Trois univers en clair et sombre, Halloween et ses vingt costumes, suivi de VS Code, contraste élevé et navigation adaptée aux petits écrans.
 
@@ -138,14 +144,14 @@ npm run check           # Format, TypeScript, tests et builds
 npx playwright install chromium
 npm run test:ui         # Scénarios du cockpit dans Chromium
 npm run test:extension  # Vrai hôte VS Code, profil temporaire isolé
-npm run package         # releases/feature-studio-1.11.0.vsix
+npm run package         # releases/feature-studio-1.12.0.vsix
 ```
 
 **F5 → Feature Studio** ouvre l’hôte de développement. `npm run dev` fournit le frontend ; `http://127.0.0.1:5173/?demo=1` affiche les données de démonstration. Les opérations de fichiers et l’exécution des agents nécessitent l’extension.
 
 La [CI Linux et Windows](https://github.com/MattDevBzh/KerAI/actions/workflows/ci.yml) vérifie le code, l’interface, l’hôte VS Code et le packaging. La publication d’une nouvelle version depuis `main` attend la réussite des deux jobs ; elle vérifie l’intégrité ZIP, les versions du manifeste et du paquet, puis charge le contenu extrait du VSIX dans un vrai hôte VS Code. Le fichier publié est téléchargé à nouveau et son SHA-256 est contrôlé avant de rendre la release visible. Chaque nouvelle version doit fournir ses notes dans `docs/releases/v<version>.md` ; une release déjà publiée reste inchangée.
 
-Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Le VSIX 1.11.0 et son [SHA256SUMS](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/SHA256SUMS) sont joints à la [release GitHub](https://github.com/MattDevBzh/KerAI/releases/tag/v1.11.0) ; les anciens paquets conservés dans le dépôt sont documentés dans [releases](releases/README.md).
+Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles Azure DevOps utilisent des réponses simulées ; ils ne remplacent pas une recette sur ton compte. Le smoke Copilot réel est séparé et exige `FEATURE_STUDIO_LIVE_TEST=1`. Les résultats, plateformes et limites sont consignés dans [VALIDATION.md](docs/VALIDATION.md). Le VSIX 1.12.0 et son [SHA256SUMS](https://github.com/MattDevBzh/KerAI/releases/download/v1.12.0/SHA256SUMS) sont joints à la [release GitHub](https://github.com/MattDevBzh/KerAI/releases/tag/v1.12.0) ; les anciens paquets conservés dans le dépôt sont documentés dans [releases](releases/README.md).
 
 ## Licence et provenance
 
@@ -168,4 +174,4 @@ Les outils d’une session multi-projets demandent un `projectId` explicite. Les
 
 Le catalogue est conservé dans les données utilisateur de l’extension. En ouvrant le cockpit depuis une fenêtre de projet existante, ses dossiers sont enregistrés et son stockage de sessions existant est réutilisé. Si un dossier a d’abord été ajouté manuellement au nouveau catalogue, il conserve ce nouveau stockage. Aucun workflow, agent ou skill du projet n’est déplacé automatiquement.
 
-Pour changer l’icône à la main, télécharge [feature-studio.ico](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/feature-studio.ico), puis utilise **Propriétés → Raccourci → Changer d’icône**. Le menu natif du clic droit sur VS Code reste géré par Windows et VS Code. Vous pouvez épingler l’espace de travail « Feature Studio » lorsqu’il apparaît dans les éléments récents ; le raccourci du Bureau fonctionne indépendamment de cette liste. La réutilisation vise la même édition de VS Code et les mêmes données utilisateur. Une autre édition, un autre profil ou un environnement distant conserve son propre contexte. Le lancement natif Windows doit être vérifié sur le poste Windows ; les tests Linux couvrent le script généré et la configuration du cockpit.
+Pour changer l’icône à la main, télécharge [feature-studio.ico](https://github.com/MattDevBzh/KerAI/releases/download/v1.12.0/feature-studio.ico), puis utilise **Propriétés → Raccourci → Changer d’icône**. Le menu natif du clic droit sur VS Code reste géré par Windows et VS Code. Vous pouvez épingler l’espace de travail « Feature Studio » lorsqu’il apparaît dans les éléments récents ; le raccourci du Bureau fonctionne indépendamment de cette liste. La réutilisation vise la même édition de VS Code et les mêmes données utilisateur. Une autre édition, un autre profil ou un environnement distant conserve son propre contexte. Le lancement natif Windows doit être vérifié sur le poste Windows ; les tests Linux couvrent le script généré et la configuration du cockpit.

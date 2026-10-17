@@ -1,3 +1,10 @@
+import type {
+  TicketFilters,
+  TicketMetadata,
+  TicketSearch,
+  TicketPreparation,
+  TicketDevelopmentPlan,
+} from './devopsTickets';
 export interface DevOpsConfig {
   organization: string;
   project: string;
@@ -18,7 +25,26 @@ export interface DevOpsTicket {
   url: string;
   description: string;
   acceptanceCriteria: string;
-  comments: { id: number; author: string; text: string }[];
+  revision?: number;
+  fetchedAt?: string;
+  snapshotId?: string;
+  detailsLoaded?: boolean;
+  detailNotices?: string[];
+  extraFields?: { referenceName: string; name: string; value: string }[];
+  relations?: {
+    name: string;
+    kind: 'ticket' | 'pr' | 'attachment' | 'link';
+    url?: string;
+    reference?: string;
+  }[];
+  commentsError?: string;
+  comments: {
+    id: number;
+    author: string;
+    text: string;
+    createdDate?: string;
+    modifiedDate?: string;
+  }[];
   commentsLoaded?: boolean;
   commentsTruncated?: boolean;
 }
@@ -38,6 +64,8 @@ export interface DevOpsPullRequest {
   mergeStatus?: string;
 }
 export interface DevOpsLink {
+  ticketProjectKey?: string;
+  targetProjectId?: string;
   featureId: string;
   ticketId?: number;
   ticketUrl?: string;
@@ -85,6 +113,13 @@ export interface DeliveryChatEntry {
   at: string;
 }
 export interface DevOpsState {
+  ticketFilters?: TicketFilters;
+  ticketMetadata?: TicketMetadata;
+  ticketSearch?: TicketSearch;
+  ticketDetail?: DevOpsTicket;
+  ticketDetailError?: { ticketId: number; message: string };
+  ticketPreparation?: TicketPreparation;
+  ticketCreateResult?: { requestId: string; featureId?: string; error?: string };
   config?: DevOpsConfig;
   authenticated: boolean;
   account?: string;
@@ -113,7 +148,14 @@ export type DevOpsClientMessage =
       replaces?: { featureId: string; ticketId?: number };
     }
   | { type: 'devopsUnlinkPullRequest'; pullRequestId: number; featureId: string; ticketId?: number }
-  | { type: 'devopsCreateFeature'; ticketId: number }
+  | {
+      type: 'devopsSearchTickets';
+      sourceProjectKey: string;
+      filters: TicketFilters;
+      more?: boolean;
+    }
+  | { type: 'devopsPrepareTicket'; ticketId: number; sourceProjectKey?: string }
+  | { type: 'devopsCreateFeature'; ticketId: number; plan: TicketDevelopmentPlan }
   | { type: 'deliveryChat'; text: string }
   | { type: 'deliveryPreviewCommit'; paths: string[]; title?: string; intent?: string }
   | { type: 'deliveryCommit'; paths: string[]; title: string; fingerprint: string }

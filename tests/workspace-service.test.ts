@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, utimes, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -541,4 +542,72 @@ describe('StudioService isolated workspaces with real local Git and a fake agent
       await sourceLease.release();
     }
   });
+});
+
+it('persists the frozen ticket source and blank team, and retries a failed save without another worktree', async () => {
+  const f = await fixture();
+  const source = {
+    provider: 'azure-devops' as const,
+    projectKey: 'org/boards',
+    repositoryKey: 'org/boards/remote',
+    ticketId: 42,
+    revision: 8,
+    url: 'https://dev.azure.com/org/boards/_workitems/edit/42',
+    title: 'Source ticket',
+    fetchedAt: new Date().toISOString(),
+    importedAt: new Date().toISOString(),
+    snapshotId: randomUUID(),
+    targetProjectId: 'target',
+    commentIds: [3],
+    context: 'Exact frozen context with selected comment.',
+  };
+  const branch = (await f.service.workspaces.branchChoices())[0];
+  const create = {
+    requestId: randomUUID(),
+    title: 'Ticket in local project',
+    description: source.context,
+    ticketSource: source,
+    isolated: true,
+    worktreeChoice: {
+      baseRef: branch.ref,
+      baseCommit: branch.commit,
+      branchName: 'codex/ticket-source-fixture',
+    },
+  };
+  const saved = vi
+    .spyOn(f.service.store, 'save')
+    .mockRejectedValueOnce(new Error('Temporary store failure'));
+  await expect(f.service.createFeature(create)).rejects.toThrow('Temporary store failure');
+  const existing = f.service.engine.features.find(
+    (feature) => feature.creationRequestId === create.requestId,
+  )!;
+  const firstPath = existing.worktree!.path;
+  const retry = await f.service.createFeature(create);
+  expect(retry.id).toBe(existing.id);
+  expect(retry.worktree!.path).toBe(firstPath);
+  expect(retry.steps).toEqual([]);
+  expect(f.inputs).toEqual([]);
+  const reloaded = await new Store(f.storage).load();
+  expect(reloaded.features.find((feature) => feature.id === retry.id)?.ticketSource).toEqual(
+    source,
+  );
+  expect(
+    (await git(f.workspace, 'worktree', 'list', '--porcelain')).match(/worktree /g),
+  ).toHaveLength(2);
+  saved.mockRestore();
+});
+
+it('refuses current-folder creation if its branch changed after the ticket preparation', async () => {
+  const f = await fixture();
+  await git(f.workspace, 'switch', '-c', 'changed-after-preparation');
+  await expect(
+    f.service.createFeature({
+      title: 'Ticket',
+      description: 'Context',
+      isolated: false,
+      expectedCurrentBranch: 'fixture',
+    }),
+  ).rejects.toThrow('branche du dossier courant a changé');
+  expect(f.service.engine.features).toHaveLength(0);
+  expect(f.inputs).toEqual([]);
 });

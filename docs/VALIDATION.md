@@ -1,4 +1,13 @@
-# Validation et limites — v1.11.0, 17 octobre 2026
+# Validation et limites — v1.12.0, 17 octobre 2026
+
+## Dashboard, navigation et tickets — v1.12.0
+
+- `npm run check` réussi : format, TypeScript, **619 tests métier réussis**, 4 ignorés, puis compilation. Les tests qui utilisent de vrais dépôts Git et des archives sont limités à quatre processus parallèles pour éviter de saturer les entrées/sorties du poste ; leurs délais et assertions restent inchangés.
+- **174 scénarios Chromium réussis**, dont la navigation regroupée, les filtres et détails des tickets, la préparation d’une session, le dashboard Métro et la Tour de contrôle. Les modules couvrent la duplication, les filtres, les tailles, le déplacement, la persistance, les mises à jour des sessions et les largeurs de 1440, 1100, 820 et 390 px. Les anciennes préférences de navigation sont migrées vers Sessions.
+- Dans un vrai hôte VS Code Insiders sur macOS, le smoke couvre l’ouverture de la fenêtre auxiliaire, le refus des commandes d’exécution depuis cette vue de suivi, la fermeture du cockpit pendant le suivi, son retour à la bonne session et la conservation de la disposition après fermeture et réouverture.
+- Les tests du contrôleur vérifient une actualisation partagée entre les fenêtres, l’absence de requêtes concurrentes, l’arrêt des lectures lorsque les vues sont masquées, les filtres indépendants, les erreurs avec conservation de la date des dernières données et le refus des sauvegardes obsolètes.
+- Les recherches Azure utilisent une API simulée. Les droits du compte réel, ses données et ses éventuels champs personnalisés restent à vérifier dans le cockpit. La création depuis un ticket utilise de vrais dépôts Git locaux avec un agent simulé : contexte conservé, référence de départ vérifiée, dossier source préservé, reprises sans doublon et aucun lancement implicite. Aucun prompt Copilot payant n’est envoyé par cette recette.
+- La publication attend les validations Linux et Windows du commit de `main`, reconstruit le VSIX, contrôle son manifeste et son contenu, puis charge le paquet extrait dans VS Code. Les assets sont téléchargés de nouveau et leurs empreintes vérifiées avant publication. Le commit et la CI exacts figurent dans les [notes de release v1.12.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.12.0) ; le `SHA256SUMS` de la release concerne le paquet effectivement livré.
 
 ## Préparation et publication de la version 1.11.0
 

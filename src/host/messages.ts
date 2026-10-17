@@ -1,4 +1,5 @@
 import { ZOOM_LEVELS } from '../shared/zoom';
+import { dashboardMessageVariants } from '../core/dashboardSchemas';
 import { devOpsMessageVariants } from '../core/devopsSchemas';
 import { discussionMessageVariants, discussionFeaturePlanSchema } from '../core/discussionSchemas';
 import { z } from 'zod';
@@ -24,6 +25,7 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  ...dashboardMessageVariants,
   z.object({ type: z.literal('refreshQuests') }).strict(),
   ...discussionMessageVariants,
   ...kitMessageVariants,

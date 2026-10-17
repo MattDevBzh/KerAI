@@ -372,9 +372,9 @@ export function TicketCard({
         ))}
         <button
           disabled={busy}
-          onClick={() => dispatch({ type: 'devopsCreateFeature', ticketId: ticket.id })}
+          onClick={() => dispatch({ type: 'devopsPrepareTicket', ticketId: ticket.id })}
         >
-          Créer une feature
+          Préparer le développement
         </button>
         <select
           aria-label={`Lier le ticket ${ticket.id} à une feature`}

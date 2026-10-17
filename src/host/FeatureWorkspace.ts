@@ -409,7 +409,34 @@ export class FeatureWorkspace {
     }
     return target;
   }
-  async createWorktree(feature: Feature): Promise<FeatureWorktree> {
+  async branchChoices(): Promise<{ name: string; ref: string; commit: string }[]> {
+    const repository = await this.inspectRepository();
+    const raw = machineText(
+      await this.checkedGit(repository.root, [
+        'for-each-ref',
+        '--format=%(refname)%09%(objectname)',
+        'refs/heads/',
+        'refs/remotes/',
+      ]),
+    );
+    const branches = raw
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .slice(0, 2000)
+      .map((line) => {
+        const [ref, commit] = line.split('\t');
+        return { ref, commit, name: ref.replace(/^refs\/(heads|remotes)\//, '') };
+      })
+      .filter((branch) => /^[a-f0-9]{40,64}$/.test(branch.commit) && !branch.ref.endsWith('/HEAD'));
+    if (!branches.some((branch) => branch.ref === `refs/heads/${repository.branch}`))
+      branches.unshift({ name: repository.branch, ref: 'HEAD', commit: repository.head });
+    return branches;
+  }
+  async createWorktree(
+    feature: Feature,
+    choice?: { baseRef: string; baseCommit: string; branchName: string },
+  ): Promise<FeatureWorktree> {
     return this.serial(async () => {
       if (feature.worktree) {
         await this.validate(feature);
@@ -431,7 +458,38 @@ export class FeatureWorkspace {
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-+|-+$/g, '')
           .slice(0, 40) || 'feature';
-      const branch = `codex/feature-studio-${slug}-${featureId.parse(feature.id)}`;
+      const branch =
+        choice?.branchName ?? `codex/feature-studio-${slug}-${featureId.parse(feature.id)}`;
+      let baseCommit = repository.head,
+        baseBranch = repository.branch;
+      if (choice) {
+        if (
+          !choice.branchName ||
+          choice.branchName.length > 200 ||
+          choice.branchName.startsWith('-') ||
+          /[\x00-\x20]/.test(choice.branchName)
+        )
+          throw new Error('Nom de branche invalide.');
+        await this.checkedGit(repository.root, ['check-ref-format', '--branch', choice.branchName]);
+        if (!/^[a-f0-9]{40,64}$/.test(choice.baseCommit))
+          throw new Error('Commit de départ invalide.');
+        const selected = (await this.branchChoices()).find((item) => item.ref === choice.baseRef);
+        if (!selected || selected.commit !== choice.baseCommit)
+          throw new Error(
+            'La branche de départ a changé depuis la préparation. Rouvre le ticket pour actualiser son aperçu.',
+          );
+        baseCommit = machineText(
+          await this.checkedGit(repository.root, [
+            'rev-parse',
+            '--verify',
+            '--end-of-options',
+            `${selected.ref}^{commit}`,
+          ]),
+        ).trim();
+        if (baseCommit !== choice.baseCommit)
+          throw new Error('La branche de départ a changé. Actualise la préparation.');
+        baseBranch = selected.name;
+      }
       const hooks = await this.privatePath('empty-hooks', target);
       await mkdir(hooks, { recursive: true, mode: 0o700 });
       if ((await readdir(hooks)).length)
@@ -465,14 +523,14 @@ export class FeatureWorkspace {
         );
       await this.checkedGit(
         repository.root,
-        ['worktree', 'add', '-b', branch, '--', target, repository.head],
+        ['worktree', 'add', '-b', branch, '--', target, baseCommit],
         config,
       );
       const worktree: FeatureWorktree = {
         path: await realpath(target),
         branch,
-        baseBranch: repository.branch,
-        baseCommit: repository.head,
+        baseBranch,
+        baseCommit,
         createdAt: new Date().toISOString(),
       };
       await this.validate({ ...feature, branch, worktree });

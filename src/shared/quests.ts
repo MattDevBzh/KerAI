@@ -140,7 +140,7 @@ export const quests: readonly QuestDefinition[] = [
       'Un jardin de projets',
     ],
     (n) => `Créer ${n} session${n > 1 ? 's' : ''} de feature.`,
-    'Dashboard → Nouvelle session. Donnez un besoin concret à votre équipe.',
+    'Sessions → Nouvelle session. Donnez un besoin concret à votre équipe.',
     'dashboard',
   ),
   ...series(

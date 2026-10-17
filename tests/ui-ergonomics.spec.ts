@@ -18,7 +18,7 @@ test('compact navigation has labels, traps focus, closes with Escape and restore
   await expect(menu).toBeFocused();
   await expect(page.locator('.main-shell')).not.toHaveAttribute('inert');
   await menu.click();
-  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+  await navigation.getByRole('button', { name: 'Réglages', exact: true }).click();
   await expect(page.getByRole('main')).toBeFocused();
   await expect(
     page.getByRole('heading', { name: 'Les détails qui vous ressemblent.' }),
@@ -31,7 +31,7 @@ test('all sixteen screens reflow at 390px and navigation resets the page positio
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?demo=1');
   for (const screen of [
-    'Dashboard',
+    'Sessions',
     'Discussion',
     'Validation',
     'Consommation',
@@ -173,7 +173,7 @@ test('capture ergonomic changes in the light and dark cockpit', async ({ page },
       path: testInfo.outputPath(`${theme.includes('Clair') ? 'light' : 'dark'}-agents.png`),
     });
   }
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   await page.screenshot({ path: testInfo.outputPath('dashboard-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath('dashboard-compact.png') });

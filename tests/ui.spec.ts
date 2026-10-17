@@ -538,7 +538,7 @@ test('les raccourcis ouvrent les catalogues et une nouvelle session reste sans �
     .getByRole('button', { name: 'Explorer les parcours Choisir une méthode de travail' })
     .click();
   await expect(page.getByRole('button', { name: 'Nouveau parcours' })).toBeVisible();
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await expect(page.getByRole('radio', { name: 'Feature complète' })).toHaveCount(0);
 });
@@ -790,7 +790,7 @@ test('mémoire locale désactivée par défaut, opt-in sans sélection n’injec
     },
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   await page.locator('.session-card').first().click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
@@ -1101,7 +1101,7 @@ test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) 
     true,
   );
   await page.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await navigate(page, 'Dashboard');
+  await navigate(page, 'Sessions');
   await page.locator('.session-card').first().click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
