@@ -621,7 +621,10 @@ function ObservationReport({
           <header>
             <span className="observation-phase-number">{String(i + 1).padStart(2, '0')}</span>
             <div>
-              <h3>{phase.name}</h3>
+              <h3>
+                {phase.name}
+                {phase.status === 'skipped' ? ' — Passée, non exécutée' : ''}
+              </h3>
               <p>
                 {phase.agent} · {phase.models.join(', ') || 'Modèles non communiqués'} ·{' '}
                 {credits(phase.usage)}

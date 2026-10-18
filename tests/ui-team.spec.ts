@@ -81,6 +81,7 @@ test('compose by avatar drag, duplicate an agent, change its role and validate',
   await expect(page.locator('.team-member')).toHaveCount(1);
   await page.getByLabel('Rôle dans cette feature').fill('Cadrage personnalisé');
   await page.getByLabel('Permissions de l’intervention').selectOption('workspace-write');
+  await page.getByLabel('Participation de Cadrage personnalisé').selectOption('optional');
   await page.getByRole('button', { name: 'Dupliquer Cadrage personnalisé', exact: true }).click();
   await expect(page.locator('.team-member')).toHaveCount(2);
   await page.getByRole('button', { name: 'Valider l’équipe' }).click();
@@ -92,6 +93,9 @@ test('compose by avatar drag, duplicate an agent, change its role and validate',
   expect(saved.steps[0].artifact).not.toBe(saved.steps[1].artifact);
   expect(saved.steps[1].dependsOn).toEqual([saved.steps[0].id]);
   expect(saved.steps[0].policy).toBe('workspace-write');
+  expect(saved.steps[0].optional).toBe(true);
+  expect(saved.steps[1].optional).toBe(true);
+  expect(demoState.workflows[0].steps[0].optional).toBeUndefined();
   expect(messages.some((message: ClientMessage) => message.type === 'runStep')).toBe(false);
 });
 
@@ -131,7 +135,7 @@ test('a live execution locks an already open composer and disables submission', 
     window.postMessage({ type: 'state', state }, '*');
   });
   await expect(
-    page.getByText('Une exécution a commencé : l’équipe est désormais verrouillée.'),
+    page.getByText('Le parcours a commencé : l’équipe est désormais verrouillée.'),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Valider l’équipe' })).toBeDisabled();
 });

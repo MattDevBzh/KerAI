@@ -67,6 +67,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'workflowDeleteResult',
         'projectResult',
         'featureTeamResult',
+        'optionalStepResult',
         'agentFavoriteResult',
         'devopsState',
         'error',

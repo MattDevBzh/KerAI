@@ -15,8 +15,14 @@ export function orderedAgents(agents: AgentProfile[], favorites: string[] = []):
 }
 
 export function teamSteps(feature: Feature): WorkflowStep[] {
-  return feature.steps.map(({ status: _status, attempts: _attempts, ...step }) =>
-    structuredClone(step),
+  return feature.steps.map(
+    ({
+      status: _status,
+      attempts: _attempts,
+      optionalDecision: _decision,
+      optionalDecisionHistory: _history,
+      ...step
+    }) => structuredClone(step),
   );
 }
 

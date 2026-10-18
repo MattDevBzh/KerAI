@@ -84,6 +84,28 @@ Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistr�
 
 Dans **Parcours**, **Supprimer** retire le parcours du catalogue personnel pour tous les projets, après confirmation. Les sessions déjà créées et les fichiers de définition sont conservés. Réenregistrer explicitement une définition avec le même identifiant la rend de nouveau disponible.
 
+## Interventions obligatoires et facultatives
+
+Le caractère facultatif appartient à une **intervention dans un parcours**. Le même agent peut relire obligatoirement l’US et proposer facultativement une documentation. Les équipes existantes restent obligatoires par défaut.
+
+Dans **Parcours**, ouvre ou duplique une équipe et règle la **Participation** de chaque intervention. Dans une feature, ouvre **Composer mon équipe** ou **Modifier l’équipe** : le choix est directement visible sur chaque membre, avant de lancer le travail. L’adaptation concerne uniquement cette feature, même si elle reprend un modèle d’équipe. La composition se verrouille dès la première décision ou exécution ; les réglages d’intervention déjà disponibles restent accessibles.
+
+**En manuel**, une intervention facultative disponible propose **Passer cette intervention**. Ses préalables doivent être validés ou explicitement passés. Le bouton habituel permet de l’exécuter avec l’aperçu de lancement. Passer ne lance ni l’agent ni le pilote automatique.
+
+**Avec le pilote**, une intervention facultative jamais exécutée suspend le parcours avant tout appel de modèle. Une notification VS Code et un bandeau dans la feature proposent :
+
+- **Exécuter et continuer** : enregistrer ton choix puis reprendre les règles normales du pilote.
+- **Passer et continuer** : enregistrer le passage puis poursuivre les interventions suivantes.
+- **Décider plus tard** : garder le pilote en pause. Fermer la notification produit le même résultat.
+
+Les confirmations propres à l’intervention, checkpoints, budgets et limites de tentatives restent applicables après ton choix. La décision en attente est enregistrée ; fermer puis rouvrir le cockpit ne lance rien. Une notification devenue ancienne après une modification est refusée : utilise le bandeau actuel de la session.
+
+**Passée · non exécutée** signifie qu’aucune tentative et aucun livrable n’ont été produits. Le bilan liste ces interventions séparément des validations ; les exports conservent la date et l’historique des décisions. Les agents suivants reçoivent la liste des interventions passées pour éviter de supposer qu’elles ont produit un résultat. Les critères de réussite, les remarques bloquantes et les preuves exigées pour les interventions réellement exécutées restent nécessaires.
+
+On ne peut passer une intervention déjà tentée pour effacer un échec. Pour exécuter finalement une intervention passée, sélectionne-la et utilise **Exécuter finalement cette étape** : les interventions qui en dépendent devront être revues. Modifier le contexte, rejouer un préalable, inclure une intervention passée dans une correction ou restaurer des fichiers remet les choix concernés en attente tout en gardant leur historique.
+
+Pour ton parcours quotidien, tu peux par exemple garder **US → plan → code → tests → relecture** obligatoires, ajouter la **documentation** facultative avant la **PR**, puis alléger la composition avant le départ selon la tâche. Le choix facultatif ne déclenche aucune publication à lui seul.
+
 ## Choisir un parcours
 
 | Parcours         | Pour quoi ?                                                    | Étapes                                                    |
@@ -161,7 +183,7 @@ Ces points conservent le contenu et les permissions des fichiers inclus ; ils ne
 
 La création, la comparaison et la restauration Git n’ajoutent aucune requête IA. Elles ne publient rien. Les opérations sont verrouillées pendant une tentative ou une autre mutation ; le host recontrôle racine, branche et fichiers. Les buffers non enregistrés sont protégés dans la fenêtre VS Code courante seulement : les autres fenêtres et processus restent hors sandbox. [Périmètre, exclusions et limites détaillés](../docs/WORKSPACES.md).
 
-**Stockage v5 :** les formats v0 à v4 migrent en conservant leurs données connues. Les anciens binaires refusent le nouveau format. Il n’existe pas de migration inverse automatique. Les sessions possèdent leurs propres archives et états, avec un index léger.
+**Stockage v6 :** les formats v0 à v5 migrent en conservant leurs données connues. Les anciennes interventions restent obligatoires ; les choix facultatifs et demandes en attente sont conservés. Les anciens binaires refusent le nouveau format. Il n’existe pas de migration inverse automatique. Les sessions possèdent leurs propres archives et états, avec un index léger.
 
 ![Préparer une US et ses MCP — données de démonstration](../docs/images/launch-context.png)
 

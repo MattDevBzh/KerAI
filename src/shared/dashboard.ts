@@ -1,3 +1,4 @@
+import { stepResolved } from './optionalSteps';
 import type { DevOpsPullRequest, DevOpsTicket } from './devops';
 import { defaultTicketFilters, type TicketFilters } from './devopsTickets';
 import type { Feature, FeatureStep } from './types';
@@ -110,7 +111,7 @@ export function currentDashboardStep(feature: Feature): FeatureStep | undefined 
   return (
     feature.steps.find((s) => s.status === 'running' || s.status === 'waiting_input') ??
     feature.steps.find((s) => s.id === feature.activeStepId) ??
-    feature.steps.find((s) => s.status !== 'approved') ??
+    feature.steps.find((s) => !stepResolved(s)) ??
     feature.steps.at(-1)
   );
 }
@@ -144,6 +145,7 @@ export function dashboardFeatures(
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 export const dashboardAttention = (feature: Feature) =>
+  Boolean(feature.optionalRequest) ||
   feature.status === 'attention' ||
   feature.status === 'awaiting_final_validation' ||
   feature.steps.some((step) =>

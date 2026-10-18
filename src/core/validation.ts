@@ -1,3 +1,4 @@
+import { stepResolved } from '../shared/optionalSteps';
 import type { QualityKind } from '../shared/quality';
 import type { Attempt, Feature, FeatureStep, TestEvidence } from '../shared/types';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
@@ -90,9 +91,7 @@ export function approvalBlockers(
   if (!attempt.artifact?.content.trim()) blockers.push('Un livrable non vide est nécessaire.');
   if (attempt.questions.some((q) => !attempt.answers[q.id]?.trim()))
     blockers.push('Des questions restent ouvertes.');
-  if (
-    !step.dependsOn.every((dep) => feature.steps.find((s) => s.id === dep)?.status === 'approved')
-  )
+  if (!step.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep))))
     blockers.push('Une dépendance a été invalidée.');
   if (
     attempt.review?.verdict === 'changes_requested' ||
@@ -169,7 +168,7 @@ export function approvalBlockers(
     )
   )
     blockers.push('Aucune preuve de tests réellement exécutés par le host.');
-  const final = feature.steps.every((other) => other.id === step.id || other.status === 'approved');
+  const final = feature.steps.every((other) => other.id === step.id || stepResolved(other));
   if (final) {
     blockers.push(...featureCompletionBlockers(feature));
   }

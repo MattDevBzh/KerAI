@@ -47,6 +47,7 @@ const status = z.enum([
   'waiting_input',
   'awaiting_review',
   'approved',
+  'skipped',
   'failed',
   'cancelled',
   'stale',
@@ -167,6 +168,10 @@ const attempt = z.object({
 const feature = z
   .object({
     id: z.string(),
+    optionalRequest: z
+      .object({ id: z.string().uuid(), stepId: z.string(), stateKey: z.string().max(5000000) })
+      .strict()
+      .optional(),
     observations: z.array(observationSchema).optional(),
     traceWarnings: z.array(z.string()).optional(),
     projects: z
@@ -213,11 +218,59 @@ const feature = z
     checkpoints: z.array(checkpointSchema).max(10000).optional(),
     workspaceFileHashes: z.record(z.string(), z.string()).optional(),
     steps: z.array(
-      workflowSchema.shape.steps.element.extend({ status, attempts: z.array(attempt) }),
+      workflowSchema.shape.steps.element.extend({
+        status,
+        attempts: z.array(attempt),
+        optionalDecisionHistory: z
+          .array(
+            z
+              .object({
+                id: z.string().uuid(),
+                action: z.enum(['run', 'skip']),
+                at: z.string().datetime(),
+                author: z.literal('human'),
+              })
+              .strict(),
+          )
+          .optional(),
+        optionalDecision: z
+          .object({
+            id: z.string().uuid(),
+            action: z.enum(['run', 'skip']),
+            at: z.string().datetime(),
+            author: z.literal('human'),
+          })
+          .strict()
+          .optional(),
+      }),
     ),
   })
   .superRefine((value, context) => {
     const { steps } = value;
+    if (
+      steps.some(
+        (step) =>
+          (step.status === 'skipped' &&
+            (!step.optional || step.attempts.length || step.optionalDecision?.action !== 'skip')) ||
+          (step.optionalDecision &&
+            (!step.optional ||
+              (step.optionalDecision.action === 'skip' && step.status !== 'skipped'))) ||
+          step.attempts.some((item) => item.status === 'skipped'),
+      )
+    )
+      context.addIssue({ code: 'custom', message: 'Décision facultative incohérente.' });
+    if (
+      value.optionalRequest &&
+      !steps.some(
+        (step) =>
+          step.id === value.optionalRequest!.stepId &&
+          step.optional &&
+          !step.attempts.length &&
+          step.status === 'pending' &&
+          !step.optionalDecision,
+      )
+    )
+      context.addIssue({ code: 'custom', message: 'Décision attendue incohérente.' });
     if (
       value.projects &&
       (new Set(value.projects.map((project) => project.id)).size !== value.projects.length ||
@@ -234,7 +287,15 @@ const feature = z
       name: value.workflowName,
       description: '',
       icon: '',
-      steps: steps.map(({ status: _status, attempts: _attempts, ...step }) => step),
+      steps: steps.map(
+        ({
+          status: _status,
+          attempts: _attempts,
+          optionalDecision: _decision,
+          optionalDecisionHistory: _history,
+          ...step
+        }) => step,
+      ),
     });
     if (steps.length && !parsed.success)
       context.addIssue({ code: 'custom', message: 'Dépendances de session invalides.' });
@@ -252,7 +313,9 @@ const feature = z
       });
     if (steps.length && !steps.some((step) => step.id === value.activeStepId))
       context.addIssue({ code: 'custom', message: 'Étape active inconnue.' });
-    if (steps.some((step) => step.status !== 'pending' && !step.attempts.length))
+    if (
+      steps.some((step) => !['pending', 'skipped'].includes(step.status) && !step.attempts.length)
+    )
       context.addIssue({ code: 'custom', message: 'État sans tentative.' });
     if (
       value.autopilot &&
@@ -348,7 +411,7 @@ export const settingsSchema = z
   .strict();
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(5),
+    schemaVersion: z.literal(6),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -361,14 +424,14 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 5;
+  schemaVersion: 6;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
 }
 const indexSchema = z
   .object({
-    schemaVersion: z.literal(5),
+    schemaVersion: z.literal(6),
     entries: z
       .array(z.object({ id: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }))
       .refine(
@@ -395,7 +458,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 5,
+          schemaVersion: 6,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -411,11 +474,12 @@ export class Store {
       version !== 2 &&
       version !== 3 &&
       version !== 4 &&
-      version !== 5
+      version !== 5 &&
+      version !== 6
     )
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    if (version === 5) {
-      const index = indexSchema.parse(raw);
+    if (version === 5 || version === 6) {
+      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 6 });
       const deleted = new Set((await pendingDeletions(this.rootPath)).map((d) => d.featureId));
       const features: Feature[] = [];
       for (const entry of index.entries) {
@@ -431,13 +495,13 @@ export class Store {
         features.push(item);
       }
       raw = {
-        schemaVersion: 5,
+        schemaVersion: 6,
         features,
         settings: index.settings,
         memory: index.memory.filter((m) => !m.source || !deleted.has(m.source.featureId)),
       };
     }
-    const migration = version !== 5;
+    const migration = version !== 6;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -445,7 +509,7 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 5,
+        schemaVersion: 6,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
@@ -489,7 +553,7 @@ export class Store {
   }
   save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
     const snapshot = persistedSchema.parse({
-      schemaVersion: 5,
+      schemaVersion: 6,
       features: structuredClone(features),
       settings: structuredClone(settings),
       memory: structuredClone(memory),
@@ -517,7 +581,7 @@ export class Store {
           this.rootPath,
           'state.json',
           JSON.stringify({
-            schemaVersion: 5,
+            schemaVersion: 6,
             entries,
             settings: snapshot.settings,
             memory: snapshot.memory,

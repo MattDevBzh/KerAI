@@ -6,6 +6,7 @@ const model = z.string().max(500).optional();
 const reasoning = z.string().min(1).max(50).optional();
 export const discussionFeatureMemberSchema = z
   .object({
+    optional: z.boolean().optional(),
     agentId: z.string().min(1).max(150),
     name: z.string().trim().min(1).max(200),
     description: z.string().trim().min(1).max(4000),

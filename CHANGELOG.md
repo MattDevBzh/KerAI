@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.0 — 2026-10-18
+
+- Ajoute le choix obligatoire/facultatif par intervention dans les parcours réutilisables, les propositions issues d’une discussion et les compositions propres à une feature. Le modèle d’équipe reste intact quand on adapte une feature.
+- Suspend le pilote avant une intervention facultative jamais exécutée : notification VS Code et bandeau persistant avec exécution, passage ou décision différée. La fermeture et la réouverture conservent la pause.
+- Distingue clairement les interventions passées des interventions validées dans la session, les cartes, le Métro, le bilan, les exports et l’Observateur. Aucun livrable, test réussi ou lancement n’est inventé.
+- Conserve les décisions humaines et invalide les choix concernés après une modification du contexte, une correction en amont ou une restauration. Une intervention passée peut être exécutée ensuite, avec revalidation de ses dépendants.
+- Refuse les doubles décisions, les notifications obsolètes et le passage d’une intervention déjà tentée. Préserve les checkpoints, budgets, critères, remarques bloquantes et la validation finale humaine.
+- Migre le stockage vers la version 6 sans rendre facultatives les anciennes interventions. Corrige les validations finales avec étapes passées, l’affichage des refus de décision et les reprises de correction visant une étape passée.
+
 ## 1.12.0 — 2026-10-17
 
 - Dashboard Métro distinct de la page Sessions : progression réelle par étape, agent courant, attentes humaines, erreurs et durées sans estimation artificielle.

@@ -31,6 +31,7 @@ export type StepStatus =
   | 'waiting_input'
   | 'awaiting_review'
   | 'approved'
+  | 'skipped'
   | 'failed'
   | 'cancelled'
   | 'stale'
@@ -42,6 +43,7 @@ export type FeatureStatus =
   | 'awaiting_final_validation'
   | 'completed';
 export interface WorkflowStep {
+  optional?: boolean;
   requiredDevOpsEvidence?: boolean;
   requiredQuality?: import('./quality').QualityKind;
   id: string;
@@ -154,10 +156,13 @@ export interface Attempt {
   checkpointAfterId?: string;
 }
 export interface FeatureStep extends WorkflowStep {
+  optionalDecision?: { id: string; action: 'run' | 'skip'; at: string; author: 'human' };
+  optionalDecisionHistory?: NonNullable<FeatureStep['optionalDecision']>[];
   status: StepStatus;
   attempts: Attempt[];
 }
 export interface Feature {
+  optionalRequest?: { id: string; stepId: string; stateKey: string };
   ticketSource?: import('./devopsTickets').TicketSourceSnapshot;
   discussionId?: string;
   creationRequestId?: string;
@@ -270,7 +275,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6;
   workspace: {
     name: string;
     path: string;
@@ -334,6 +339,16 @@ export type ClientMessage =
       agentId?: string;
       model?: string;
       isolated?: boolean;
+    }
+  | {
+      type: 'resolveOptionalStep';
+      requestId?: string;
+      featureId: string;
+      stepId: string;
+      expectedStateKey: string;
+      decisionId?: string;
+      choice: 'run' | 'skip';
+      continueAutopilot?: boolean;
     }
   | {
       type: 'runStep';
@@ -452,6 +467,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'optionalStepResult'; requestId: string; error?: string }
   | import('./dashboard').DashboardHostMessage
   | { type: 'accountCredits'; state: import('./credits').AccountCredits }
   | { type: 'questState'; state: import('./quests').QuestState; earned?: string[] }

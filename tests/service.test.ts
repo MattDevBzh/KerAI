@@ -1125,3 +1125,173 @@ it('freezes a report discussion from the real execution archive and rejects stal
     'changé',
   );
 });
+
+async function optionalFixture() {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Choix facultatif',
+    description: '',
+    workflowId: 'single',
+  });
+  const template = { ...feature.steps[0] };
+  const { status: _status, attempts: _attempts, ...configuration } = template;
+  await f.service.saveFeatureTeam(feature.id, 0, [
+    {
+      ...configuration,
+      id: 'optional',
+      name: 'Documentation',
+      optional: true,
+      dependsOn: [],
+      artifact: 'docs.md',
+    },
+    {
+      ...configuration,
+      id: 'required',
+      name: 'Relecture',
+      optional: false,
+      dependsOn: ['optional'],
+      artifact: 'review.md',
+    },
+  ]);
+  await f.service.saveAutopilot(feature.id, {
+    checkpoints: [],
+    maxRuns: 3,
+    maxCorrectionCycles: 0,
+    stepInputs: {},
+  });
+  return { ...f, feature };
+}
+it('pauses optional work durably without inference, notifies once, then skips and continues', async () => {
+  const f = await optionalFixture();
+  const notified = vi.fn();
+  f.service.on('optionalStep', notified);
+  await f.service.startAutopilot(f.feature.id);
+  expect(f.inputs).toHaveLength(0);
+  expect(f.feature.status).toBe('attention');
+  expect(f.feature.autopilot?.status).toBe('paused');
+  const decision = f.feature.optionalRequest!;
+  expect(decision.stepId).toBe('optional');
+  expect((await new Store(f.storage).load()).features[0].optionalRequest).toEqual(decision);
+  await f.service.startAutopilot(f.feature.id);
+  expect(notified).toHaveBeenCalledTimes(1);
+  const message = {
+    type: 'resolveOptionalStep' as const,
+    featureId: f.feature.id,
+    stepId: decision.stepId,
+    decisionId: decision.id,
+    choice: 'skip' as const,
+    expectedStateKey: decision.stateKey,
+    continueAutopilot: true,
+  };
+  await f.service.resolveOptionalStep(message);
+  expect(f.inputs.map((input) => input.step.id)).toEqual(['required']);
+  expect(f.inputs[0].preparedPrompt).toContain('Documentation (optional)');
+  expect(f.feature.steps[0].attempts).toHaveLength(0);
+  expect(f.feature.autopilot?.runs).toBe(1);
+  expect(f.feature.status).toBe('awaiting_final_validation');
+  expect(f.feature.optionalRequest).toBeUndefined();
+  await expect(f.service.resolveOptionalStep(message)).rejects.toThrow('notification');
+  await f.service.finalizeFeature(f.feature.id, featureStateKey(f.feature));
+  expect(f.feature.status).toBe('completed');
+});
+it('executes an optional member only after the user choice, retaining normal checkpoints', async () => {
+  const f = await optionalFixture();
+  f.feature.autopilot!.checkpoints = ['optional'];
+  await f.service.startAutopilot(f.feature.id);
+  const decision = f.feature.optionalRequest!;
+  await f.service.resolveOptionalStep({
+    type: 'resolveOptionalStep',
+    featureId: f.feature.id,
+    stepId: decision.stepId,
+    decisionId: decision.id,
+    choice: 'run',
+    expectedStateKey: decision.stateKey,
+    continueAutopilot: true,
+  });
+  expect(f.inputs.map((input) => input.step.id)).toEqual(['optional']);
+  expect(f.feature.steps[0].status).toBe('awaiting_review');
+  expect(f.feature.autopilot?.status).toBe('paused');
+  expect(f.feature.steps[0].optionalDecisionHistory).toHaveLength(1);
+});
+it('rejects stale optional notifications, concurrent answers and untrusted decisions', async () => {
+  const f = await optionalFixture();
+  await f.service.startAutopilot(f.feature.id);
+  const decision = f.feature.optionalRequest!;
+  const message = {
+    type: 'resolveOptionalStep' as const,
+    featureId: f.feature.id,
+    stepId: decision.stepId,
+    decisionId: decision.id,
+    choice: 'skip' as const,
+    expectedStateKey: decision.stateKey,
+  };
+  f.feature.description += ' changed';
+  await expect(f.service.resolveOptionalStep(message)).rejects.toThrow('changé');
+  f.trust(false);
+  await expect(
+    f.service.resolveOptionalStep({ ...message, expectedStateKey: featureStateKey(f.feature) }),
+  ).rejects.toThrow();
+  f.trust(true);
+  const answers = await Promise.allSettled(
+    [1, 2].map(() =>
+      f.service.resolveOptionalStep({ ...message, expectedStateKey: featureStateKey(f.feature) }),
+    ),
+  );
+  expect(answers.filter((item) => item.status === 'fulfilled')).toHaveLength(1);
+  expect(f.feature.steps[0].optionalDecisionHistory).toHaveLength(1);
+  expect(f.inputs).toHaveLength(0);
+});
+it('rolls back an optional decision if its durable save fails', async () => {
+  const f = await optionalFixture();
+  await f.service.startAutopilot(f.feature.id);
+  const before = structuredClone(f.feature);
+  const decision = f.feature.optionalRequest!;
+  vi.spyOn(f.service.store, 'save').mockRejectedValueOnce(new Error('disk full'));
+  await expect(
+    f.service.resolveOptionalStep({
+      type: 'resolveOptionalStep',
+      featureId: f.feature.id,
+      stepId: decision.stepId,
+      decisionId: decision.id,
+      choice: 'skip',
+      expectedStateKey: decision.stateKey,
+    }),
+  ).rejects.toThrow('disk full');
+  expect(f.feature).toEqual(before);
+  expect(f.inputs).toHaveLength(0);
+});
+
+it('reopens an unresolved optional choice in pause without launching an agent', async () => {
+  const f = await optionalFixture();
+  await f.service.startAutopilot(f.feature.id);
+  const request = structuredClone(f.feature.optionalRequest!);
+  await f.service.dispose();
+  const reopened = new StudioService(
+    f.workspace,
+    resolve('defaults'),
+    new Store(f.storage),
+    () => true,
+  );
+  services.push(reopened);
+  const notified = vi.fn();
+  reopened.on('optionalStep', notified);
+  await reopened.initialize();
+  reopened.adapter = f.adapter;
+  await reopened.checkRuntime();
+  const feature = reopened.engine.getFeature(f.feature.id);
+  expect(feature.autopilot?.status).toBe('paused');
+  expect(feature.optionalRequest).toEqual(request);
+  expect(notified).not.toHaveBeenCalled();
+  expect(f.inputs).toHaveLength(0);
+  await reopened.resolveOptionalStep({
+    type: 'resolveOptionalStep',
+    featureId: feature.id,
+    stepId: request.stepId,
+    decisionId: request.id,
+    expectedStateKey: request.stateKey,
+    choice: 'skip',
+    continueAutopilot: true,
+  });
+  expect(f.inputs.map((input) => input.step.id)).toEqual(['required']);
+});

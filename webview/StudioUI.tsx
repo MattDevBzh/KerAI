@@ -1,3 +1,4 @@
+import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { searchText } from './Ergonomics';
 import { orderedAgents } from '../src/shared/team';
 import { toCredits, toNanoAiu, formatCredits } from '../src/shared/credits';
@@ -72,6 +73,9 @@ const blankLaunch = (step: FeatureStep) => ({
 export function attentionCount(state: StudioState) {
   return new Set([
     ...state.features
+      .filter((f) => !f.archived && f.optionalRequest)
+      .map((f) => `${f.id}:${f.optionalRequest!.stepId}`),
+    ...state.features
       .filter((f) => !f.archived && f.status === 'awaiting_final_validation')
       .map((f) => `${f.id}:final`),
     ...(state.humanRequests ?? []).map((r) => `${r.featureId}:${r.stepId}`),
@@ -101,13 +105,14 @@ export function AutopilotBar({
     [starting, setStarting] = useState(false);
   const auto = feature.autopilot;
   const blocked =
+    Boolean(feature.optionalRequest) ||
     Boolean(state.workspaceOperation) ||
     state.features.some((f) => f.steps.some((s) => s.status === 'running')) ||
     feature.archived ||
     !state.workspace.trusted ||
     state.runtime.state !== 'ready' ||
     (state.humanRequests ?? []).some((r) => r.featureId === feature.id) ||
-    !feature.steps.some((s) => s.status !== 'approved');
+    feature.steps.every(stepResolved);
   return (
     <>
       <section className={`autopilot-bar ${auto?.status ?? 'idle'}`}>
@@ -873,21 +878,25 @@ export function ValidationCenter({
     .filter((f) => !f.archived)
     .flatMap((feature) =>
       feature.steps
-        .filter((step) =>
-          ['awaiting_review', 'waiting_input', 'failed', 'stale', 'interrupted'].includes(
-            step.status,
-          ),
+        .filter(
+          (step) =>
+            step.id === feature.optionalRequest?.stepId ||
+            ['awaiting_review', 'waiting_input', 'failed', 'stale', 'interrupted'].includes(
+              step.status,
+            ),
         )
         .map((step) => ({ feature, step })),
     )
     .filter(
-      ({ step }) =>
+      ({ feature, step }) =>
         filter === 'all' ||
         (filter === 'review'
           ? step.status === 'awaiting_review'
-          : filter === 'question'
-            ? step.status === 'waiting_input'
-            : ['failed', 'stale', 'interrupted'].includes(step.status)),
+          : filter === 'optional'
+            ? step.id === feature.optionalRequest?.stepId
+            : filter === 'question'
+              ? step.status === 'waiting_input'
+              : ['failed', 'stale', 'interrupted'].includes(step.status)),
     );
   return (
     <div className="page validation-page">
@@ -924,6 +933,7 @@ export function ValidationCenter({
             <option value="all">Tous les points d’attention</option>
             <option value="review">Livrables à valider</option>
             <option value="question">Questions</option>
+            <option value="optional">Interventions facultatives</option>
             <option value="repair">À reprendre ou actualiser</option>
           </select>
         </label>
@@ -947,9 +957,7 @@ export function ValidationCenter({
                 </span>
                 <h3>Bilan final du parcours</h3>
                 <p>{feature.title}</p>
-                <span>
-                  {feature.steps.length} étapes validées · votre décision finale est attendue
-                </span>
+                <span>{progressLabel(feature)} · votre décision finale est attendue</span>
               </button>
             ))}
         {items.map(({ feature, step }) => {
@@ -967,13 +975,15 @@ export function ValidationCenter({
             >
               <span className="validation-kind">
                 <FileCheck2 size={17} />
-                {step.status === 'awaiting_review'
-                  ? 'Livrable à valider'
-                  : step.status === 'waiting_input'
-                    ? 'Réponse attendue'
-                    : step.status === 'stale'
-                      ? 'Contexte à actualiser'
-                      : 'Tentative à reprendre'}
+                {step.id === feature.optionalRequest?.stepId
+                  ? 'Intervention facultative à choisir'
+                  : step.status === 'awaiting_review'
+                    ? 'Livrable à valider'
+                    : step.status === 'waiting_input'
+                      ? 'Réponse attendue'
+                      : step.status === 'stale'
+                        ? 'Contexte à actualiser'
+                        : 'Tentative à reprendre'}
                 <ArrowUpRight size={15} />
               </span>
               <h3>{step.name}</h3>
@@ -2191,6 +2201,20 @@ function WorkflowEditor({
                     </label>
                   ))}
                 </fieldset>
+                <label className="field">
+                  <span>Participation de l’intervention</span>
+                  <select
+                    value={step.optional ? 'optional' : 'required'}
+                    onChange={(e) => update({ optional: e.target.value === 'optional' })}
+                  >
+                    <option value="required">Obligatoire</option>
+                    <option value="optional">Facultative</option>
+                  </select>
+                  <small>
+                    Une intervention facultative met le pilote en pause pour choisir de l’exécuter
+                    ou de la passer.
+                  </small>
+                </label>
                 <label className="field">
                   <span>Contexte initial du modèle</span>
                   <textarea

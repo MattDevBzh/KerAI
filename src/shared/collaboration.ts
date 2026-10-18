@@ -1,3 +1,4 @@
+import { stepResolved } from './optionalSteps';
 import type { Artifact, Feature, ReviewComment, ReviewReport } from './types';
 
 export interface EditorialVersion {
@@ -80,6 +81,8 @@ export function featureStateKey(feature: Feature): string {
       initialContext: step.initialContext,
       mcpServerIds: step.mcpServerIds,
       askBeforeRun: step.askBeforeRun,
+      optional: step.optional,
+      optionalDecision: step.optionalDecision,
       attempts: step.attempts.map((attempt) => ({
         id: attempt.id,
         revision: attempt.revision ?? 0,
@@ -198,7 +201,7 @@ export function previewCorrection(feature: Feature, request: CorrectionRequest):
     const missing = root.dependsOn.filter(
       (id) =>
         !impactedStepIds.includes(id) &&
-        feature.steps.find((step) => step.id === id)?.status !== 'approved',
+        !stepResolved(feature.steps.find((step) => step.id === id)),
     );
     if (missing.length)
       errors.push(
@@ -259,7 +262,7 @@ export function finalValidationReady(feature: Feature): boolean {
   return (
     !feature.archived &&
     feature.steps.length > 0 &&
-    feature.steps.every((step) => step.status === 'approved') &&
+    feature.steps.every(stepResolved) &&
     !(feature.criteria ?? []).some(
       (criterion) => criterion.status !== 'passed' || !criterion.evidence.trim(),
     ) &&

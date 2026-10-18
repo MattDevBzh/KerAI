@@ -72,6 +72,8 @@ test('fenêtre de contrôle, filtrage global, quota inconnu et actualisation exp
 });
 test('une mise à jour du moteur change la station sans actualisation Azure', async ({ page }) => {
   await installDashboardHost(page);
+  const metro = page.getByRole('article', { name: 'Une palette de commandes, enfin fluide' });
+  await expect(metro).toBeVisible();
   const before = (await messages(page)).filter((m) => m.type === 'dashboardRefresh').length;
   await page.evaluate(() => {
     const state = Reflect.get(window, 'studioFixture');
@@ -82,9 +84,7 @@ test('une mise à jour du moteur change la station sans actualisation Azure', as
     state.features[0].activeStepId = state.features[0].steps[1].id;
     window.postMessage({ type: 'state', state }, '*');
   });
-  await expect(
-    page.locator('.session-metro').first().getByRole('button', { name: 'Conception : Échec' }),
-  ).toBeVisible();
+  await expect(metro.getByRole('button', { name: 'Conception : Échec' })).toBeVisible();
   expect((await messages(page)).filter((m) => m.type === 'dashboardRefresh')).toHaveLength(before);
 });
 for (const width of [1440, 1100, 820, 390])
