@@ -78,6 +78,16 @@ async function fixture() {
     },
   };
 }
+// Real Git/checkpoint preparation can exceed Vitest's one-second polling default on Windows.
+// Fail immediately if execution ends early, and observe its rejection even when the wait fails.
+async function waitForInteraction(check: () => void, running: Promise<unknown>): Promise<void> {
+  await Promise.race([
+    vi.waitFor(check, { timeout: 10000 }),
+    running.then(() => {
+      throw new Error('Execution finished before the expected human interaction.');
+    }),
+  ]);
+}
 async function invoke(tools: Tool[], name: string, args: unknown) {
   const tool = tools.find((tool) => tool.name === name);
   if (!tool?.handler) throw new Error(`Missing tool ${name}`);
@@ -581,11 +591,14 @@ describe('manual context, human questions and MCP sessions', () => {
       return finished();
     });
     const running = f.service.runStep(feature.id, 'session', '', false, launch);
-    await vi.waitFor(() => expect(f.service.state.humanRequests).toHaveLength(1));
+    await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(1), running);
     const question = f.service.state.humanRequests![0];
     expect(question.kind).toBe('question');
     f.service.answerHumanRequest(question.id, 'US-207');
-    await vi.waitFor(() => expect(f.service.state.humanRequests![0]?.kind).toBe('mcp-permission'));
+    await waitForInteraction(
+      () => expect(f.service.state.humanRequests![0]?.kind).toBe('mcp-permission'),
+      running,
+    );
     expect(() =>
       f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'perhaps'),
     ).toThrow(/réponses proposées/);
@@ -611,7 +624,7 @@ describe('manual context, human questions and MCP sessions', () => {
       return finished();
     });
     const running = f.service.runStep(feature.id, 'session');
-    await vi.waitFor(() => expect(f.service.state.humanRequests).toHaveLength(1));
+    await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(1), running);
     f.service.cancel(feature.id);
     await running;
     expect(feature.steps[0].status).toBe('cancelled');
@@ -741,7 +754,7 @@ describe('bounded autopilot and local project memory', () => {
       return finished();
     });
     const running = f.service.startAutopilot(feature.id);
-    await vi.waitFor(() => expect(f.service.state.humanRequests).toHaveLength(1));
+    await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(1), running);
     expect(feature.autopilot?.status).toBe('paused');
     f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'Only export');
     await running;
