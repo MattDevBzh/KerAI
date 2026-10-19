@@ -1,0 +1,27 @@
+[
+  {
+    "asset": "assets/software-architect.png",
+    "source": "webview/public/avatars/software-architect/idle.png",
+    "sha256": "24557d6b902c1f56bee059a8fc372b95e7223a0a78fdfbef4ec79749a37bcc6b"
+  },
+  {
+    "asset": "assets/backend-developer.png",
+    "source": "webview/public/avatars/backend-developer/idle.png",
+    "sha256": "0a49d030e90e561c42514089f650693123278659c11a717c0f82e3c160bfa232"
+  },
+  {
+    "asset": "assets/qa-tester.png",
+    "source": "webview/public/avatars/qa-tester/idle.png",
+    "sha256": "88d799f6dc9e618f7b113c1108f418d28176032d4d226de4355004212a332d3a"
+  },
+  {
+    "asset": "assets/code-reviewer.png",
+    "source": "webview/public/avatars/code-reviewer/idle.png",
+    "sha256": "65d6081c571aff688011600c5936678b4cf9265428b19e490e259d423271294b"
+  },
+  {
+    "asset": "assets/logo.png",
+    "source": "resources/icon.png",
+    "sha256": "ee8f5141326cadbb1409fe33452a1ca0a0f7c2769a15be84a8880ecbfcdf3fee"
+  }
+]

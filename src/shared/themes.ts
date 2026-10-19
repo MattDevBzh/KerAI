@@ -7,6 +7,9 @@ export const THEME_IDS = [
   'guilde-clair',
   'guilde-sombre',
   'halloween',
+  'noob',
+  'matrix',
+  'dragonball',
 ] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
@@ -14,12 +17,34 @@ export interface ThemeDefinition {
   name: string;
   kind: string;
   description: string;
-  family: 'native' | 'jardin' | 'papier' | 'guilde' | 'event';
+  family: 'native' | 'jardin' | 'papier' | 'guilde' | 'event' | 'noob' | 'matrix' | 'dragonball';
   scheme?: 'light' | 'dark';
   /** A bundled seasonal pack, never a profile or a user-supplied path. */
-  avatarPack?: 'halloween';
+  avatarPack?: 'halloween' | 'dragonball';
 }
 export const themeDefinitions: Record<ThemeId, ThemeDefinition> = {
+  dragonball: {
+    name: 'Dragon Ball',
+    kind: 'Secret',
+    description: 'Le dojo des légendes · vingt guerriers du code',
+    family: 'dragonball',
+    scheme: 'dark',
+    avatarPack: 'dragonball',
+  },
+  noob: {
+    name: 'Noob',
+    kind: 'Récompense',
+    description: 'Papier quadrillé, post-it & premières idées',
+    family: 'noob',
+    scheme: 'light',
+  },
+  matrix: {
+    name: 'Matrix',
+    kind: 'Récompense',
+    description: 'Noir profond & pluie de code verte',
+    family: 'matrix',
+    scheme: 'dark',
+  },
   auto: {
     name: 'Suivre VS Code',
     kind: 'Automatique',

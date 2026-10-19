@@ -1,4 +1,44 @@
 /* Only native appearance consumes VS Code colors. Every surface uses studio tokens. */
+html[data-studio-theme-effective='noob'],
+html[data-studio-theme='noob']:not([data-studio-theme-effective]),
+.theme-preview-noob {
+  --bg: #f6f0dc;
+  --side: #eee5c9;
+  --panel: #fffdf3;
+  --panel-soft: #eee4bd;
+  --fg: #2c3d48;
+  --muted: #616151;
+  --border: #c5b68e;
+  --input-border: #897a58;
+  --coral: #326788;
+  --on-accent: #fff;
+  --accent-hover: #24516e;
+  --apricot: #795016;
+  --lavender: #715483;
+  --green: #326443;
+  --error: #a52e35;
+  color-scheme: light;
+}
+html[data-studio-theme-effective='matrix'],
+html[data-studio-theme='matrix']:not([data-studio-theme-effective]),
+.theme-preview-matrix {
+  --bg: #07130c;
+  --side: #091a10;
+  --panel: #10251a;
+  --panel-soft: #163321;
+  --fg: #dfffe8;
+  --muted: #9bc6a7;
+  --border: #3b6549;
+  --input-border: #77a587;
+  --coral: #91f5aa;
+  --on-accent: #092314;
+  --accent-hover: #b3ffc6;
+  --apricot: #e5d98f;
+  --lavender: #afdbd2;
+  --green: #a3f1a5;
+  --error: #ffb4ab;
+  color-scheme: dark;
+}
 :root {
   --input-fg: var(--vscode-input-foreground, var(--fg));
   --placeholder: var(--vscode-input-placeholderForeground, var(--muted));
@@ -25,9 +65,7 @@ html[data-studio-theme-effective='auto']:has(body.vscode-high-contrast-light) {
   color-scheme: light;
 }
 html[data-studio-theme-effective='jardin-clair'],
-html[data-studio-theme='jardin-clair']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
+html[data-studio-theme='jardin-clair']:not([data-studio-theme-effective]),
 .theme-preview-jardin-clair {
   --bg: #f1f5ec;
   --side: #e9efe4;
@@ -48,9 +86,7 @@ html[data-studio-theme='jardin-clair']:not([data-studio-theme-effective]):not(
 }
 
 html[data-studio-theme-effective='jardin-sombre'],
-html[data-studio-theme='jardin-sombre']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
+html[data-studio-theme='jardin-sombre']:not([data-studio-theme-effective]),
 .theme-preview-jardin-sombre {
   --bg: #132b26;
   --side: #122620;
@@ -71,9 +107,7 @@ html[data-studio-theme='jardin-sombre']:not([data-studio-theme-effective]):not(
 }
 
 html[data-studio-theme-effective='papier-clair'],
-html[data-studio-theme='papier-clair']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
+html[data-studio-theme='papier-clair']:not([data-studio-theme-effective]),
 .theme-preview-papier-clair {
   --bg: #f1ece2;
   --side: #eee8dc;
@@ -94,9 +128,7 @@ html[data-studio-theme='papier-clair']:not([data-studio-theme-effective]):not(
 }
 
 html[data-studio-theme-effective='papier-sombre'],
-html[data-studio-theme='papier-sombre']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
+html[data-studio-theme='papier-sombre']:not([data-studio-theme-effective]),
 .theme-preview-papier-sombre {
   --bg: #20242b;
   --side: #24282e;
@@ -117,9 +149,7 @@ html[data-studio-theme='papier-sombre']:not([data-studio-theme-effective]):not(
 }
 
 html[data-studio-theme-effective='guilde-clair'],
-html[data-studio-theme='guilde-clair']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
+html[data-studio-theme='guilde-clair']:not([data-studio-theme-effective]),
 .theme-preview-guilde-clair {
   --bg: #f0f3ed;
   --side: #e8eee5;
@@ -140,9 +170,7 @@ html[data-studio-theme='guilde-clair']:not([data-studio-theme-effective]):not(
 }
 
 html[data-studio-theme-effective='guilde-sombre'],
-html[data-studio-theme='guilde-sombre']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
+html[data-studio-theme='guilde-sombre']:not([data-studio-theme-effective]),
 .theme-preview-guilde-sombre {
   --bg: #171a30;
   --side: #17182c;
@@ -163,9 +191,7 @@ html[data-studio-theme='guilde-sombre']:not([data-studio-theme-effective]):not(
 }
 
 html[data-studio-theme-effective='halloween'],
-html[data-studio-theme='halloween']:not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ),
+html[data-studio-theme='halloween']:not([data-studio-theme-effective]),
 .theme-preview-halloween {
   --bg: #170f24;
   --side: #21152f;
@@ -185,17 +211,15 @@ html[data-studio-theme='halloween']:not([data-studio-theme-effective]):not(
   color-scheme: dark;
 }
 html[data-studio-theme-effective]:not([data-studio-theme-effective='auto']),
-html[data-studio-theme]:not([data-studio-theme='auto']):not([data-studio-theme-effective]):not(
-    :has(body.vscode-high-contrast, body.vscode-high-contrast-light)
-  ) {
+html[data-studio-theme]:not([data-studio-theme='auto']):not([data-studio-theme-effective]) {
   --input-fg: var(--fg);
   --placeholder: var(--muted);
   --focus: var(--coral);
   --link: var(--coral);
 }
-/* High contrast keeps VS Code's palette and reinforces all interactive outlines. */
-body.vscode-high-contrast,
-body.vscode-high-contrast-light {
+/* Following VS Code preserves its high-contrast palette and interactive outlines. */
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast,
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light {
   --coral: var(--vscode-textLink-foreground, var(--fg));
   --apricot: var(--vscode-textLink-foreground, var(--fg));
   --lavender: var(--vscode-textLink-foreground, var(--fg));
@@ -414,6 +438,95 @@ body.vscode-light .theme-preview-auto {
 .main-shell {
   position: relative;
   isolation: isolate;
+}
+html[data-studio-theme-family='noob'] {
+  --radius: 7px;
+}
+html[data-studio-theme-family='noob'] .main-shell {
+  background-image:
+    linear-gradient(#4579aa16 1px, transparent 1px),
+    linear-gradient(90deg, #4579aa16 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+html[data-studio-theme-family='noob']
+  :is(.library-card, .settings-card, .session-card, .reward-next) {
+  box-shadow: 3px 4px 0 #c6b98e42;
+  border-radius: 4px 12px 5px 9px;
+}
+html[data-studio-theme-family='noob'] .page-heading h1 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  text-decoration: underline;
+  text-decoration-color: #e9cc69;
+  text-decoration-thickness: 5px;
+  text-underline-offset: 7px;
+}
+html[data-studio-theme-family='noob'] .nav-item.active {
+  background: #f2dfa0;
+  color: #2c3d48;
+  border-radius: 2px 8px 3px 2px;
+}
+.noob-note {
+  position: absolute;
+  top: 24px;
+  right: 100px;
+  width: 130px;
+  height: 115px;
+  background: #e2bd4c;
+  transform: rotate(8deg);
+  box-shadow: 4px 7px 0 #57451b44;
+}
+.noob-note::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 32px;
+  width: 70px;
+  height: 22px;
+  background: #8da0aa99;
+  transform: rotate(-13deg);
+}
+html[data-studio-theme-family='matrix'] {
+  --radius: 4px;
+}
+html[data-studio-theme-family='matrix'] .main-shell {
+  background-image: linear-gradient(#7acc9020 1px, transparent 1px);
+  background-size: 100% 48px;
+}
+html[data-studio-theme-family='matrix'] :is(.page-heading h1, .eyebrow, .nav-heading) {
+  font-family: ui-monospace, monospace;
+}
+html[data-studio-theme-family='matrix'] :is(.library-card, .settings-card, .session-card) {
+  border-radius: 4px;
+  box-shadow: inset 0 1px #72d39222;
+}
+.matrix-rain {
+  height: 100%;
+  display: flex;
+  justify-content: space-around;
+  color: #8affad;
+  overflow: hidden;
+  mask-image: linear-gradient(transparent, #000 15%, #000 70%, transparent);
+}
+.matrix-rain span {
+  white-space: pre;
+  font:
+    20px/1.8 ui-monospace,
+    monospace;
+  animation: matrix-drift 14s linear infinite;
+}
+@keyframes matrix-drift {
+  from {
+    transform: translateY(-65%);
+  }
+  to {
+    transform: translateY(15%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .matrix-rain span {
+    animation: none;
+  }
 }
 .theme-scenery {
   position: absolute;

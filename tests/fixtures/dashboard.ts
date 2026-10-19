@@ -83,6 +83,18 @@ export async function installDashboardHost(page: Page, detached = false) {
   await page.addInitScript(
     ({ state, dashboard, detached }) => {
       const messages: ClientMessage[] = [];
+      let secret = localStorage.getItem('dashboard-secret') === 'true';
+      let theme = localStorage.getItem('dashboard-theme') ?? 'jardin-sombre';
+      const secretState = (requestId?: string, error?: string) =>
+        window.postMessage(
+          {
+            type: 'secretThemeState',
+            dragonBallUnlocked: secret,
+            requestId,
+            error,
+          },
+          '*',
+        );
       const stored = sessionStorage.getItem('dashboard-fixture');
       if (stored) Object.assign(dashboard, JSON.parse(stored));
       Object.assign(window, {
@@ -97,7 +109,9 @@ export async function installDashboardHost(page: Page, detached = false) {
             if (message.type === 'ready')
               setTimeout(() => {
                 window.postMessage({ type: 'state', state }, '*');
-                window.postMessage({ type: 'themeState', theme: 'jardin-sombre' }, '*');
+                window.postMessage({ type: 'themeState', theme }, '*');
+                window.postMessage({ type: 'livingHqState', enabled: true }, '*');
+                secretState();
                 window.postMessage(
                   {
                     type: 'accountCredits',
@@ -109,6 +123,26 @@ export async function installDashboardHost(page: Page, detached = false) {
                   '*',
                 );
               }, 0);
+            if (message.type === 'refreshSecretThemes') setTimeout(() => secretState(), 0);
+            if (message.type === 'unlockDragonBall' && !Reflect.get(window, 'dropSecret')) {
+              setTimeout(() => {
+                if (Reflect.get(window, 'rejectSecret')) {
+                  secretState(message.requestId, 'Stockage personnel indisponible.');
+                  return;
+                }
+                secret = true;
+                theme = 'dragonball';
+                localStorage.setItem('dashboard-secret', 'true');
+                localStorage.setItem('dashboard-theme', theme);
+                window.postMessage({ type: 'themeState', theme }, '*');
+                secretState(message.requestId);
+              }, 15);
+            }
+            if (message.type === 'setTheme') {
+              theme = message.theme;
+              localStorage.setItem('dashboard-theme', theme);
+              window.postMessage({ type: 'themeState', theme, requestId: message.requestId }, '*');
+            }
             if (message.type === 'dashboardVisible' || message.type === 'dashboardRefresh')
               setTimeout(
                 () => window.postMessage({ type: 'dashboardState', state: dashboard }, '*'),

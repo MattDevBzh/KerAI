@@ -6,6 +6,12 @@ export function ThemeScenery() {
   if (family === 'native') return null;
   return (
     <div className={`theme-scenery scenery-${family}`} aria-hidden="true">
+      {family === 'dragonball' && (
+        <>
+          <span className="dragon-orbit" />
+          <span className="dragon-kanji">悟</span>
+        </>
+      )}
       {family === 'jardin' && (
         <svg viewBox="0 0 550 260" fill="none">
           <circle cx="330" cy="50" r="95" fill="currentColor" opacity=".16" />
@@ -78,6 +84,28 @@ export function ThemeScenery() {
             fill="var(--bg)"
           />
         </svg>
+      )}
+      {family === 'noob' && (
+        <>
+          <i className="noob-note" />
+          <svg viewBox="0 0 550 260" fill="none">
+            <path
+              d="M220 190q80-90 160-45m-22-14 25 15-29 8M95 78l20 9-5 22-20-9zM140 55l4-17m-13 5 22 6"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+          </svg>
+        </>
+      )}
+      {family === 'matrix' && (
+        <div className="matrix-rain">
+          {Array.from({ length: 12 }, (_, i) => (
+            <span key={i} style={{ animationDelay: `${-i * 1.3}s` }}>
+              {i % 2 ? '01\n10\nア\n01\nネ\n11\nカ\n01' : 'ネ\n01\n00\nカ\n10\nア\n01\n10'}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );

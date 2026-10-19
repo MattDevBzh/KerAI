@@ -1,0 +1,187 @@
+.kitten-sprite {
+  display: block;
+  width: 90px;
+  height: 90px;
+  background-image: url('/rewards/kitten.png');
+  background-size: 300% 200%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+.kitten-sprite.resting {
+  background-position: 50% 100%;
+}
+.kitten-sprite.sleeping {
+  background-position: 100% 100%;
+}
+.kitten-sprite.walking {
+  animation: kitten-steps 0.64s steps(1, end) infinite;
+}
+@keyframes kitten-steps {
+  0% {
+    background-position: 0 0;
+  }
+  25% {
+    background-position: 50% 0;
+  }
+  50% {
+    background-position: 100% 0;
+  }
+  75% {
+    background-position: 0 100%;
+  }
+}
+.kitten-trail {
+  position: relative;
+  height: 83px;
+  margin: 8px 6px -12px;
+  pointer-events: none;
+}
+.kitten-position {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 84px;
+  transition: left 8s linear;
+}
+.kitten-position .kitten-sprite {
+  width: 84px;
+  height: 84px;
+}
+.kitten-position:is([data-phase='1'], [data-phase='2'], [data-phase='3']) {
+  left: calc(100% - 84px);
+}
+.kitten-position:is([data-phase='4'], [data-phase='5']) .kitten-sprite {
+  transform: scaleX(-1);
+}
+.kitten-trail[data-quiet] .kitten-position {
+  transition: none;
+}
+.reward-preview .kitten-sprite {
+  width: 110px;
+  height: 110px;
+}
+.eiffel-celebration {
+  position: relative;
+  margin: 20px 0;
+  width: 100%;
+  height: clamp(280px, 34vw, 420px);
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid #7c87b5;
+  background: #07163e;
+  isolation: isolate;
+}
+.eiffel-celebration > img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+.eiffel-celebration figcaption {
+  position: absolute;
+  inset: auto 0 0;
+  background: linear-gradient(transparent, #06112df2);
+  padding: 40px 24px 20px;
+  color: #fff5db;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.eiffel-celebration figcaption strong {
+  font-size: 21px;
+}
+.eiffel-celebration figcaption span {
+  font-size: 12px;
+  color: #e6e7fa;
+}
+.eiffel-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d6d6f5;
+  border-radius: 50%;
+  color: #fff;
+  background: #081433db;
+}
+.eiffel-close:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+.eiffel-fireworks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.firework {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  color: var(--spark-color);
+}
+.firework i {
+  position: absolute;
+  width: 4px;
+  height: 12px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: rotate(var(--angle)) translateY(-35px);
+  box-shadow:
+    0 0 6px #fff,
+    0 0 14px currentColor;
+}
+.animated .firework i {
+  animation: eiffel-burst 1.8s cubic-bezier(0.12, 0.65, 0.3, 1) var(--burst-delay) both;
+}
+@keyframes eiffel-burst {
+  0% {
+    transform: rotate(var(--angle)) translateY(0) scale(0.2);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  45% {
+    transform: rotate(var(--angle)) translateY(-60px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateY(-95px) scale(0.4);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kitten-position {
+    transition: none;
+  }
+  .kitten-sprite.walking {
+    animation: none;
+    background-position: 50% 100%;
+  }
+  .animated .firework i {
+    animation: none;
+  }
+}
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast .kitten-trail,
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light .kitten-trail {
+  display: none;
+}
+@media (forced-colors: active) {
+  .kitten-trail,
+  .eiffel-fireworks {
+    display: none;
+  }
+  .eiffel-celebration figcaption {
+    background: Canvas;
+    color: CanvasText;
+  }
+  .eiffel-celebration figcaption span {
+    color: CanvasText;
+  }
+}

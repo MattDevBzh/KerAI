@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { DashboardSecret, DragonBalls } from './SecretThemes';
+import { useThemeAppearance } from './ThemePicker';
 import {
   ArrowDown,
   ArrowUp,
@@ -146,6 +148,7 @@ export function DashboardUI({
   dispatch: (message: ClientMessage) => void;
 }) {
   const { state, save, pending, error } = useDashboard();
+  const { family } = useThemeAppearance();
   const config = state.config;
   const [customize, setCustomize] = useState(false),
     [editing, setEditing] = useState<DashboardModule>();
@@ -175,6 +178,28 @@ export function DashboardUI({
   const projects = studio.projectCatalog?.projects.filter((p) => !p.hidden) ?? [];
   return (
     <div className={`page overview-page ${detached ? 'control-mode' : ''}`}>
+      <DashboardSecret />
+      {family === 'dragonball' && (
+        <section className="dragon-hero" aria-label="Le dojo des légendes">
+          <div className="dragon-hero-copy">
+            <span className="eyebrow">CAPSULE CORP · FEATURE STUDIO</span>
+            <h2>
+              Le dojo
+              <br />
+              <em>des légendes.</em>
+            </h2>
+            <p>
+              Entraîne ton équipe. Concentre ton ki.
+              <br />
+              La prochaine transformation commence ici.
+            </p>
+            <DragonBalls />
+          </div>
+          <span className="dragon-hero-stamp" aria-hidden="true">
+            悟
+          </span>
+        </section>
+      )}
       <header className="overview-heading">
         <div>
           <span className="eyebrow">{detached ? 'TOUR DE CONTRÔLE' : 'SUIVI DES PROJETS'}</span>

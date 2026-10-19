@@ -1,5 +1,18 @@
 # Changelog
 
+## À paraître
+
+- **Thèmes réellement appliqués** : un thème explicite du cockpit garde ses couleurs, ses agents et ses décors même avec un thème VS Code classé « contraste élevé », comme Bearded Milkshake Vanilla Banana. Le suivi automatique de VS Code et les couleurs forcées du système restent disponibles. L’enregistrement automatique des thèmes est désormais indiqué près du choix et du bouton réservé aux réglages du projet.
+- **Approbation du projet** : les réglages affichent l’état réel de confiance et donnent accès à l’écran d’approbation de VS Code. Les modifications en cours restent dans le formulaire pendant cette étape ; aucun script n’est autorisé automatiquement.
+- **Dragon Ball, thème secret** : saisir ↑ ↑ ↓ ↓ ← → ← → sur le Dashboard révèle et active un dojo orange et bleu, Shenron, sept boules de cristal et vingt costumes avec poses de repos, travail et réussite. Le secret reste acquis entre projets, accessible ensuite dans les réglages ; les champs, dialogues et autres pages ignorent la combinaison.
+- **Six récompenses de trophées** : thème Noob à 5, titre Architecte du dimanche à 20, feu d’artifice devant la tour Eiffel à 40, thème Matrix à 70, titre Dresseur d’agents à 110 et chaton qui se promène dans le QG à 200. Les trophées déjà gagnés comptent et ne sont jamais dépensés.
+- **Prochain cadeau dans Quêtes** : aperçu, jauge entre deux paliers et nombre de trophées restants. Une seule récompense à venir est dévoilée ; les suivantes restent cachées. Les cadeaux acquis forment une collection avec activation facultative et choix personnels conservés entre les projets.
+- Les nouveaux thèmes habillent aussi le QG. Le chaton et les feux d’artifice respectent la réduction des animations et le contraste élevé ; la célébration suit la validation finale existante ou son bouton de relecture.
+- **QG vivant dans une session** : la case « Afficher le QG vivant » remplace uniquement la bande des agents par un atelier animé. Chaque poste sélectionne la même étape et son détail reste en dessous ; le Dashboard conserve sa vue habituelle.
+- **QG assorti au thème** : décors Jardin, Papier, Guilde et Halloween, lumière claire ou sombre, plans de travail et lampes coordonnés. Le mode automatique suit la palette de VS Code et le contraste élevé conserve une présentation épurée. Changer de thème préserve l’étape sélectionnée et les brouillons.
+- Préférence personnelle mémorisée dans VS Code pour tous les projets, retour à la bande classique en décochant et erreurs de sauvegarde explicites. Les brouillons du compte rendu restent conservés pendant le changement de vue.
+- Des décors partagés avec les vingt avatars et leurs états existants. Les postes suivent les étapes réelles, y compris les agents répétés, les questions humaines et les échecs. Réduction des animations, contraste élevé, costumes et petits écrans pris en charge.
+
 ## 1.12.0 — 2026-10-17
 
 - Dashboard Métro distinct de la page Sessions : progression réelle par étape, agent courant, attentes humaines, erreurs et durées sans estimation artificielle.
@@ -42,14 +55,12 @@
 - Identité d’exécution figée pour les nouveaux lancements : changer un agent, un modèle ou une skill après coup ne transforme pas les anciennes interventions en nouvelles preuves.
 - Pas de dépense ni de bonus pour l’instant ; les trophées s’accumulent. Les missions n’exécutent aucune action à votre place.
 
-
 ## 1.7.0 — 2026-10-16
 
 - Trois univers complets, chacun en clair et sombre : Jardin des idées, Papier vivant et Guilde pixel, avec décors, matières et cartes dédiés.
 - Halloween, un septième thème événement : vingt costumes dérivés des portraits existants, avec poses de repos, travail animé et réussite.
 - Les costumes suivent le thème sur les cartes, les discussions, les kits et le choix d’avatar ; les profils restent compatibles et les portraits originaux sont conservés.
 - Migration des cinq anciennes préférences, repli vers le portrait habituel si un asset manque, contraste élevé prioritaire et réduction des animations respectée.
-
 
 ## 1.6.0 — 2026-10-15
 
@@ -76,7 +87,6 @@
 - Choix de projet limité aux écrans qui en utilisent les données ; les réglages communs précèdent une liste de projets et leurs paramètres. Les sauvegardes ciblent explicitement le projet affiché.
 - Suppression confirmée des parcours du catalogue personnel, avec conservation des sessions et des fichiers de définition.
 - Tests de persistance, annulation, erreurs, consommation, profils, catalogue Copilot sans outils et interface dans les cinq thèmes, en contraste élevé et en fenêtre compacte.
-
 
 ## 1.4.1 — 2026-10-15
 

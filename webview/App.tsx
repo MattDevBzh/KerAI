@@ -7,6 +7,8 @@ import {
 } from './ObservationUI';
 import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
 import { TeamComposer } from './TeamComposer';
+import { SessionHq } from './SessionHq';
+import { SessionViewToggle, useSessionView } from './SessionViewPreference';
 import { AgentFavorite } from './AgentFavorite';
 import { orderedAgents, teamLocked } from '../src/shared/team';
 import { Avatar, AgentImage, avatarOptions } from './Avatar';
@@ -21,6 +23,7 @@ import { ThemePicker } from './ThemePicker';
 import { ZoomControls, ZoomSettings } from './ZoomControls';
 import { ThemeScenery } from './ThemeScenery';
 import { QuestCelebration, QuestsUI } from './QuestsUI';
+import { RewardTitle, RewardUnlockNotice } from './RewardsUI';
 import { emptyQuestState, type QuestState } from '../src/shared/quests';
 import { KitsUI } from './KitsUI';
 import { DashboardUI } from './DashboardUI';
@@ -769,6 +772,7 @@ export default function App() {
             </span>
           </div>
           <div className="topbar-actions">
+            <RewardTitle />
             <AccountCreditsBadge credits={accountCredits} />
             <button
               className={`icon-button settings-toggle ${view === 'settings' ? 'active' : ''}`}
@@ -802,8 +806,18 @@ export default function App() {
         )}
         {!state.workspace.trusted && (
           <div className="warning-banner">
-            <ShieldCheck size={16} /> Approuvez ce projet dans VS Code pour exécuter des agents ou
-            des scripts.
+            <ShieldCheck size={16} aria-hidden="true" />
+            <span>
+              Projet en consultation seule. Approuvez cet espace de travail dans VS Code pour
+              enregistrer les réglages du projet et exécuter des agents ou des scripts.
+            </span>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => dispatch({ type: 'manageWorkspaceTrust' })}
+            >
+              Gérer l’approbation dans VS Code <ArrowUpRight size={14} aria-hidden="true" />
+            </button>
           </div>
         )}
         {notice && (
@@ -833,6 +847,7 @@ export default function App() {
           </div>
         )}
         <main id="main-content" tabIndex={-1}>
+          <RewardUnlockNotice />
           <QuestCelebration
             ids={earnedQuests}
             onClose={() => setEarnedQuests([])}
@@ -2053,6 +2068,7 @@ function FeatureDetail({
     feature.steps[0];
   const [composing, setComposing] = useState(false),
     [teamPending, setTeamPending] = useState(false);
+  const { enabled: livingHq } = useSessionView();
   const closeTeam = () => {
     if (!teamPending) {
       setComposing(false);
@@ -2287,41 +2303,52 @@ function FeatureDetail({
       )}
       <div className="journey-heading">
         <span className="eyebrow">LE PARCOURS</span>
+        <SessionViewToggle />
         <span>
           {done} / {feature.steps.length} étapes validées
         </span>
       </div>
-      <div className="journey" role="navigation" aria-label="Étapes du parcours">
-        {feature.steps.map((s, i) => (
-          <button
-            key={s.id}
-            disabled={detailDirty}
-            onClick={() => selectStep(s.id)}
-            className={`journey-step ${s.status} ${s.id === step?.id ? 'current' : ''}`}
-            aria-current={s.id === step?.id ? 'step' : undefined}
-          >
-            <span className="journey-node">
-              <Avatar
-                agent={state.agents.find((a) => a.id === s.agentId)}
-                status={s.status}
-                small
-              />
-              {s.status === 'approved' && (
-                <span className="journey-check">
-                  <Check size={9} />
-                </span>
-              )}
-            </span>
-            <span>
-              <strong>
-                <span className="step-index">{String(i + 1).padStart(2, '0')} </span>
-                {s.name}
-              </strong>
-              <small>{statuses[s.status].label}</small>
-            </span>
-          </button>
-        ))}
-      </div>
+      {livingHq && feature.steps.length > 0 ? (
+        <SessionHq
+          feature={feature}
+          state={state}
+          selectedStepId={step?.id}
+          disabled={detailDirty}
+          selectStep={selectStep}
+        />
+      ) : (
+        <div className="journey" role="navigation" aria-label="Étapes du parcours">
+          {feature.steps.map((s, i) => (
+            <button
+              key={s.id}
+              disabled={detailDirty}
+              onClick={() => selectStep(s.id)}
+              className={`journey-step ${s.status} ${s.id === step?.id ? 'current' : ''}`}
+              aria-current={s.id === step?.id ? 'step' : undefined}
+            >
+              <span className="journey-node">
+                <Avatar
+                  agent={state.agents.find((a) => a.id === s.agentId)}
+                  status={s.status}
+                  small
+                />
+                {s.status === 'approved' && (
+                  <span className="journey-check">
+                    <Check size={9} />
+                  </span>
+                )}
+              </span>
+              <span>
+                <strong>
+                  <span className="step-index">{String(i + 1).padStart(2, '0')} </span>
+                  {s.name}
+                </strong>
+                <small>{statuses[s.status].label}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       {done === feature.steps.length && feature.steps.length > 0 && (
         <FinalSummary
           feature={feature}
@@ -4040,6 +4067,7 @@ function SettingsView({
       .filter(Boolean);
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (!state.workspace.trusted) return;
     dispatch({
       type: 'saveSettings',
       projectId: state.projectCatalog?.activeProjectId,
@@ -4575,9 +4603,25 @@ function SettingsView({
         )}
         <div className="settings-save" data-dirty={dirty}>
           <span role="status" aria-live="polite">
-            {dirty ? 'Modifications à enregistrer' : 'Configuration du projet'}
-            <small>Les scripts restent soumis à l’approbation de l’espace de travail.</small>
+            {dirty ? 'Réglages du projet modifiés' : 'Aucune modification des réglages du projet'}
+            {!automation && (
+              <small>Les thèmes s’enregistrent automatiquement dès leur sélection.</small>
+            )}
+            <small id="settings-trust-status">
+              {state.workspace.trusted
+                ? 'Projet approuvé dans VS Code. Les nouvelles commandes vous seront présentées à l’enregistrement.'
+                : 'Approbation requise dans VS Code pour enregistrer. Vos modifications sont conservées ici.'}
+            </small>
           </span>
+          {!state.workspace.trusted && (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => dispatch({ type: 'manageWorkspaceTrust' })}
+            >
+              Gérer l’approbation dans VS Code <ArrowUpRight size={14} aria-hidden="true" />
+            </button>
+          )}
           {dirty && (
             <button
               type="button"
@@ -4587,8 +4631,12 @@ function SettingsView({
               Annuler les modifications
             </button>
           )}
-          <button className="button primary" disabled={!dirty}>
-            Enregistrer les réglages <Check size={16} />
+          <button
+            className="button primary"
+            disabled={!dirty || !state.workspace.trusted}
+            aria-describedby="settings-trust-status"
+          >
+            Enregistrer les réglages du projet <Check size={16} />
           </button>
         </div>
       </form>

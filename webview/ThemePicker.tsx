@@ -7,33 +7,36 @@ import {
   type ThemeId,
 } from '../src/shared/themes';
 import { isDemo, isHosted, send, subscribe } from './bridge';
+import { themeReward } from '../src/shared/rewards';
+import { useRewards } from './RewardProvider';
+import { useSecretThemes } from './SecretThemes';
 
 interface ThemeContextValue {
   theme: ThemeId;
   pending: ThemeId | null;
-  highContrast: boolean;
+  forcedColors: boolean;
   status: string;
   error: string;
   choose: (theme: ThemeId) => void;
 }
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+export function useThemePreference() {
+  return { theme: useContext(ThemeContext)?.theme ?? 'auto' };
+}
 export function useThemeAppearance() {
   const value = useContext(ThemeContext);
-  const effective = value?.highContrast ? 'auto' : (value?.theme ?? 'auto');
+  const effective = value?.forcedColors ? 'auto' : (value?.theme ?? 'auto');
   return { theme: effective, ...themes[effective] };
 }
 
-const contrastMode = () =>
-  document.body.classList.contains('vscode-high-contrast') ||
-  document.body.classList.contains('vscode-high-contrast-light') ||
-  window.matchMedia('(forced-colors: active)').matches;
+const forcedColorMode = () => window.matchMedia('(forced-colors: active)').matches;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState(() =>
     normalizeTheme(document.documentElement.dataset.studioTheme),
   );
   const [pending, setPending] = useState<ThemeId | null>(null);
-  const [highContrast, setHighContrast] = useState(contrastMode);
+  const [forcedColors, setForcedColors] = useState(forcedColorMode);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const request = useRef<string | null>(null);
@@ -41,22 +44,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     const forced = window.matchMedia('(forced-colors: active)');
-    const update = () => setHighContrast(contrastMode());
-    const observer = new MutationObserver(update);
-    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    // Some ordinary editor themes declare uiTheme=hc-black. Only system-enforced
+    // colors override an explicit cockpit choice; "auto" still follows VS Code.
+    const update = () => setForcedColors(forcedColorMode());
     forced.addEventListener('change', update);
     return () => {
-      observer.disconnect();
       forced.removeEventListener('change', update);
     };
   }, []);
   useEffect(() => {
     document.documentElement.dataset.studioTheme = theme;
-    const effective = highContrast ? 'auto' : theme;
+    const effective = forcedColors ? 'auto' : theme;
     document.documentElement.dataset.studioThemeEffective = effective;
     document.documentElement.dataset.studioThemeFamily = themes[effective].family;
     document.documentElement.dataset.studioAvatarPack = themes[effective].avatarPack ?? '';
-  }, [theme, highContrast]);
+  }, [theme, forcedColors]);
   useEffect(() => {
     const unsubscribe = subscribe((message) => {
       if (message.type !== 'themeState') return;
@@ -67,7 +69,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         request.current = null;
         setPending(null);
         setError(message.error ?? '');
-        setStatus(message.error ? '' : 'Préférence personnelle enregistrée.');
+        setStatus(message.error ? '' : 'Thème enregistré automatiquement.');
       } else {
         setStatus('');
         setError('');
@@ -107,7 +109,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }, 15000);
   };
   return (
-    <ThemeContext.Provider value={{ theme, pending, highContrast, status, error, choose }}>
+    <ThemeContext.Provider value={{ theme, pending, forcedColors, status, error, choose }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -115,6 +117,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function ThemePicker() {
   const value = useContext(ThemeContext)!;
+  const { state: rewardState } = useRewards();
+  const { dragonBallUnlocked } = useSecretThemes();
+  const availableThemes = THEME_IDS.filter((id) => {
+    if (id === 'dragonball') return dragonBallUnlocked;
+    const reward = themeReward(id);
+    return !reward || (!rewardState?.error && rewardState?.unlocked.includes(reward));
+  });
   return (
     <section className="settings-card appearance-card" aria-labelledby="appearance-title">
       <div className="settings-card-title">
@@ -126,7 +135,7 @@ export function ThemePicker() {
           <p>
             {isDemo
               ? 'Explorez les thèmes pendant cette démonstration.'
-              : 'Votre préférence personnelle, dans tous vos projets.'}
+              : 'Enregistrement automatique, pour tous vos projets.'}
           </p>
         </div>
       </div>
@@ -139,7 +148,7 @@ export function ThemePicker() {
         aria-describedby="theme-help"
       >
         <legend className="sr-only">Thème du cockpit</legend>
-        {THEME_IDS.map((id) => (
+        {availableThemes.map((id) => (
           <label className={`theme-choice ${value.theme === id ? 'selected' : ''}`} key={id}>
             <input
               type="radio"
@@ -181,13 +190,21 @@ export function ThemePicker() {
         que vous choisissez un autre thème.
       </p>
       <p className="theme-help" id="theme-help">
+        {dragonBallUnlocked && (
+          <span className="dragon-theme-note">
+            ✦ Dragon Ball : ton dojo secret, vingt costumes et des auras de ki. Le thème est acquis
+            définitivement.
+            <br />
+          </span>
+        )}
         {isDemo
           ? 'Aperçu uniquement : aucun thème n’est enregistré.'
-          : 'Le choix est enregistré dès sa sélection, séparément des réglages des agents.'}
+          : 'Choisissez un thème : aucun clic sur Enregistrer les réglages du projet n’est nécessaire.'}
       </p>
-      {value.highContrast && (
+      {value.forcedColors && (
         <p className="theme-contrast-note">
-          Le contraste élevé de VS Code est prioritaire. Votre préférence est conservée.
+          Les couleurs forcées du système sont actives. Votre thème est mémorisé et réapparaîtra
+          quand ce mode sera désactivé.
         </p>
       )}
       <p className="theme-feedback" role={value.error ? 'alert' : 'status'} aria-live="polite">

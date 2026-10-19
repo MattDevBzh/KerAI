@@ -1,0 +1,120 @@
+{
+  "failures": [],
+  "measurements": [
+    {
+      "theme": "atelier",
+      "images": true,
+      "screens": [
+        {
+          "height": 800,
+          "bottom": 848,
+          "progressBottom": 813,
+          "inspectorBottom": 813,
+          "footerTop": 818,
+          "cardCount": 4
+        },
+        {
+          "height": 800,
+          "bottom": 1696,
+          "progressBottom": 1661,
+          "inspectorBottom": 1661,
+          "footerTop": 1666,
+          "cardCount": 4
+        }
+      ],
+      "horizontalOverflow": false
+    },
+    {
+      "theme": "orbite",
+      "images": true,
+      "screens": [
+        {
+          "height": 800,
+          "bottom": 848,
+          "progressBottom": 813,
+          "inspectorBottom": 814,
+          "footerTop": 818,
+          "cardCount": 4
+        },
+        {
+          "height": 800,
+          "bottom": 1696,
+          "progressBottom": 1661,
+          "inspectorBottom": 1662,
+          "footerTop": 1666,
+          "cardCount": 4
+        }
+      ],
+      "horizontalOverflow": false
+    },
+    {
+      "theme": "papier",
+      "images": true,
+      "screens": [
+        {
+          "height": 800,
+          "bottom": 848,
+          "progressBottom": 814,
+          "inspectorBottom": 814,
+          "footerTop": 818,
+          "cardCount": 4
+        },
+        {
+          "height": 800,
+          "bottom": 1696,
+          "progressBottom": 1662,
+          "inspectorBottom": 1662,
+          "footerTop": 1666,
+          "cardCount": 4
+        }
+      ],
+      "horizontalOverflow": false
+    },
+    {
+      "theme": "guilde",
+      "images": true,
+      "screens": [
+        {
+          "height": 800,
+          "bottom": 848,
+          "progressBottom": 815,
+          "inspectorBottom": 815,
+          "footerTop": 818,
+          "cardCount": 4
+        },
+        {
+          "height": 800,
+          "bottom": 1696,
+          "progressBottom": 1663,
+          "inspectorBottom": 1663,
+          "footerTop": 1666,
+          "cardCount": 4
+        }
+      ],
+      "horizontalOverflow": false
+    },
+    {
+      "theme": "jardin",
+      "images": true,
+      "screens": [
+        {
+          "height": 800,
+          "bottom": 848,
+          "progressBottom": 813,
+          "inspectorBottom": 813,
+          "footerTop": 818,
+          "cardCount": 4
+        },
+        {
+          "height": 800,
+          "bottom": 1696,
+          "progressBottom": 1661,
+          "inspectorBottom": 1661,
+          "footerTop": 1666,
+          "cardCount": 4
+        }
+      ],
+      "horizontalOverflow": false
+    }
+  ]
+}

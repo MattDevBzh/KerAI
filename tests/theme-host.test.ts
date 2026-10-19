@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostMessage, StudioState } from '../src/shared/types';
+import { DRAGON_BALL_CODE, DRAGON_BALL_UNLOCK_KEY } from '../src/shared/dragonBall';
 
 const host = vi.hoisted(() => {
   const messages: HostMessage[] = [];
@@ -27,7 +28,13 @@ const host = vi.hoisted(() => {
     state,
     disposable,
     theme: undefined as unknown,
+    questTrophies: 0,
+    rewardJson: undefined as string | undefined,
+    secretUnlocked: undefined as unknown,
+    secretWrites: 0,
+    failSecretWrite: false,
     zoom: undefined as unknown,
+    livingHq: undefined as unknown,
     cliPath: undefined as unknown,
     failWrite: false,
     writes: [] as unknown[][],
@@ -57,11 +64,25 @@ const host = vi.hoisted(() => {
 
 vi.mock('../src/host/QuestService', () => ({
   QuestService: class {
+    snapshot() {
+      return { counts: {}, completed: {}, trophies: host.questTrophies };
+    }
     on() {}
     async initialize() {}
     async record() {}
     async flush() {}
     publish() {}
+  },
+}));
+vi.mock('../src/host/SessionFiles', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/host/SessionFiles')>()),
+  readPrivate: async (_directory: string, file: string) => {
+    if (file === 'rewards.json' && host.rewardJson !== undefined) return host.rewardJson;
+    throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+  },
+  writePrivate: async (_directory: string, file: string, value: string) => {
+    if (host.failWrite) throw new Error('Préférences en lecture seule');
+    if (file === 'rewards.json') host.rewardJson = value;
   },
 }));
 vi.mock('../src/host/questFacts', () => ({
@@ -84,13 +105,16 @@ vi.mock('vscode', () => ({
           ? host.theme
           : key === 'appearance.zoom'
             ? host.zoom
-            : key === 'cliPath'
-              ? host.cliPath
-              : fallback,
+            : key === 'appearance.livingHq'
+              ? host.livingHq
+              : key === 'cliPath'
+                ? host.cliPath
+                : fallback,
       update: async (...args: unknown[]) => {
         host.writes.push(args);
         if (host.failWrite) throw new Error('Le profil est en lecture seule.');
         if (args[0] === 'appearance.zoom') host.zoom = args[1];
+        else if (args[0] === 'appearance.livingHq') host.livingHq = args[1];
         else if (args[0] === 'cliPath') host.cliPath = args[1];
         else host.theme = args[1];
         host.configurationChanged?.({
@@ -228,7 +252,13 @@ describe('personal theme host boundary', () => {
   beforeEach(async () => {
     vi.resetModules();
     host.theme = undefined;
+    host.questTrophies = 0;
+    host.rewardJson = undefined;
+    host.secretUnlocked = undefined;
+    host.secretWrites = 0;
+    host.failSecretWrite = false;
     host.zoom = undefined;
+    host.livingHq = undefined;
     host.cliPath = undefined;
     host.dedicated = false;
     host.mode = 3;
@@ -252,9 +282,177 @@ describe('personal theme host boundary', () => {
       extensionMode: host.mode,
       storageUri: { fsPath: '/storage' },
       globalStorageUri: { fsPath: '/global' },
+      globalState: {
+        get: (key: string) => (key === DRAGON_BALL_UNLOCK_KEY ? host.secretUnlocked : undefined),
+        update: async (key: string, value: unknown) => {
+          if (host.failSecretWrite) throw new Error('Stockage personnel indisponible');
+          expect(key).toBe(DRAGON_BALL_UNLOCK_KEY);
+          host.secretUnlocked = value;
+          host.secretWrites++;
+        },
+      },
       secrets: {},
     } as never);
   };
+  it('opens the native trust editor without granting trust, initializing a project or changing settings', async () => {
+    const api = await activate();
+    const before = structuredClone(host.state);
+    const initializations = host.initialize.mock.calls.length;
+    await api.dispatch({ type: 'manageWorkspaceTrust' });
+    expect(host.executeCommand).toHaveBeenCalledExactlyOnceWith('workbench.trust.manage');
+    expect(host.state).toEqual(before);
+    expect(host.state.workspace.trusted).toBe(false);
+    expect(host.writes).toHaveLength(0);
+    expect(host.initialize).toHaveBeenCalledTimes(initializations);
+    await expect(
+      api.dispatch({ type: 'manageWorkspaceTrust', trusted: true } as never),
+    ).rejects.toThrow();
+    expect(host.executeCommand).toHaveBeenCalledTimes(1);
+    host.executeCommand.mockRejectedValueOnce(new Error('Écran de confiance indisponible'));
+    await expect(api.dispatch({ type: 'manageWorkspaceTrust' })).rejects.toThrow(
+      'Écran de confiance indisponible',
+    );
+    expect(host.state.workspace.trusted).toBe(false);
+  });
+  it('keeps Dragon Ball hidden until the exact code, then persists it once without touching business state or trophies', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    host.theme = 'dragonball';
+    expect(api.getTheme()).toBe('auto');
+    await api.dispatch({ type: 'setTheme', theme: 'dragonball', requestId: 'locked' });
+    expect(host.writes).toHaveLength(0);
+    await expect(
+      api.dispatch({ type: 'unlockDragonBall', sequence: ['ArrowUp'], requestId: 'bad' }),
+    ).rejects.toThrow();
+    const before = structuredClone(host.state);
+    const initializations = host.initialize.mock.calls.length;
+    await api.dispatch({
+      type: 'unlockDragonBall',
+      sequence: DRAGON_BALL_CODE,
+      requestId: 'secret',
+    });
+    expect(api.getTheme()).toBe('dragonball');
+    expect(host.secretUnlocked).toBe(true);
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'secretThemeState',
+      requestId: 'secret',
+      dragonBallUnlocked: true,
+    });
+    await api.dispatch({ type: 'setTheme', theme: 'auto', requestId: 'normal' });
+    await api.dispatch({
+      type: 'unlockDragonBall',
+      sequence: DRAGON_BALL_CODE,
+      requestId: 'again',
+    });
+    expect(host.secretWrites).toBe(1);
+    expect(host.state).toEqual(before);
+    expect(host.questTrophies).toBe(0);
+    expect(host.initialize).toHaveBeenCalledTimes(initializations);
+    host.disposePanel?.();
+    await host.commands.get('featureStudio.open')!();
+    expect(api.getTheme()).toBe('dragonball');
+  });
+  it('never invents a secret unlock on storage failure and retains the earned secret if only activation fails', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    host.theme = 'papier-clair';
+    host.failSecretWrite = true;
+    await api.dispatch({ type: 'unlockDragonBall', sequence: DRAGON_BALL_CODE, requestId: 'disk' });
+    expect(host.secretUnlocked).toBeUndefined();
+    expect(host.writes).toHaveLength(0);
+    expect(host.messages.at(-1)).toMatchObject({
+      dragonBallUnlocked: false,
+      error: expect.any(String),
+    });
+    host.failSecretWrite = false;
+    host.failWrite = true;
+    await api.dispatch({
+      type: 'unlockDragonBall',
+      sequence: DRAGON_BALL_CODE,
+      requestId: 'config',
+    });
+    expect(host.secretUnlocked).toBe(true);
+    expect(api.getTheme()).toBe('papier-clair');
+    expect(host.messages.at(-1)).toMatchObject({
+      dragonBallUnlocked: true,
+      error: expect.any(String),
+    });
+    host.failWrite = false;
+    await api.dispatch({ type: 'setTheme', theme: 'dragonball', requestId: 'retry' });
+    expect(api.getTheme()).toBe('dragonball');
+  });
+  it('gates reward themes and cosmetics at the host, including direct settings and forged messages', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    host.theme = 'matrix';
+    expect(api.getTheme()).toBe('auto');
+    await api.dispatch({ type: 'setTheme', theme: 'matrix', requestId: 'locked-theme' });
+    expect(host.writes).toHaveLength(0);
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'themeState',
+      requestId: 'locked-theme',
+      theme: 'auto',
+      error: expect.stringContaining('pas encore'),
+    });
+    await api.dispatch({
+      type: 'setReward',
+      rewardId: 'kitten',
+      enabled: true,
+      requestId: 'locked-pet',
+    });
+    expect(api.getRewardState().selection.mascot).toBeNull();
+    expect(host.rewardJson).toBeUndefined();
+    await expect(
+      api.dispatch({
+        type: 'setReward',
+        rewardId: 'matrix',
+        enabled: true,
+        requestId: 'forged',
+        trophies: 200,
+      } as never),
+    ).rejects.toThrow();
+  });
+  it('applies earned rewards personally, keeps other slots and preserves confirmed values on write failure', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    host.questTrophies = 200;
+    const before = structuredClone(host.state);
+    await api.dispatch({ type: 'setReward', rewardId: 'noob', enabled: true, requestId: 'theme' });
+    expect(api.getTheme()).toBe('noob');
+    expect(host.writes.at(-1)).toEqual(['appearance.theme', 'noob', 1]);
+    await api.dispatch({
+      type: 'setReward',
+      rewardId: 'architecte',
+      enabled: true,
+      requestId: 'title',
+    });
+    await api.dispatch({ type: 'setReward', rewardId: 'kitten', enabled: true, requestId: 'pet' });
+    await api.dispatch({
+      type: 'setReward',
+      rewardId: 'dresseur',
+      enabled: true,
+      requestId: 'title-2',
+    });
+    expect(api.getRewardState().selection).toEqual({
+      title: 'dresseur',
+      celebration: null,
+      mascot: 'kitten',
+    });
+    host.failWrite = true;
+    await api.dispatch({
+      type: 'setReward',
+      rewardId: 'eiffel',
+      enabled: true,
+      requestId: 'failed',
+    });
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'rewardState',
+      requestId: 'failed',
+      error: expect.stringContaining('lecture seule'),
+    });
+    expect(api.getRewardState().selection.celebration).toBeNull();
+    expect(host.state).toEqual(before);
+  });
   it('resets a stale CLI path globally and leaves it unchanged if saving fails', async () => {
     const api = await activate();
     await host.commands.get('featureStudio.open')!();
@@ -334,6 +532,68 @@ describe('personal theme host boundary', () => {
     await host.commands.get('featureStudio.open')!();
     expect(host.createPanel).toHaveBeenCalledTimes(1);
     expect(host.executeCommand).toHaveBeenCalledWith('workbench.action.closeSidebar');
+  });
+  it('persists the session HQ globally, serializes choices and recovers after failed writes without running agents', async () => {
+    const api = await activate();
+    expect(api.getLivingHq()).toBe(false);
+    const before = api.getState();
+    await Promise.all([
+      api.dispatch({ type: 'setLivingHq', enabled: true, requestId: 'hq-first' }),
+      api.dispatch({ type: 'setLivingHq', enabled: false, requestId: 'hq-last' }),
+    ]);
+    expect(host.writes).toEqual([
+      ['appearance.livingHq', true, 1],
+      ['appearance.livingHq', false, 1],
+    ]);
+    expect(api.getLivingHq()).toBe(false);
+    expect(api.getState()).toEqual(before);
+    expect(host.initialize).not.toHaveBeenCalled();
+    await host.commands.get('featureStudio.open')!();
+    const opened = api.getState();
+    host.failWrite = true;
+    await api.dispatch({ type: 'setLivingHq', enabled: true, requestId: 'hq-failure' });
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'livingHqState',
+      enabled: false,
+      requestId: 'hq-failure',
+      error: 'Le profil est en lecture seule.',
+    });
+    host.failWrite = false;
+    await api.dispatch({ type: 'setLivingHq', enabled: true, requestId: 'hq-recovered' });
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'livingHqState',
+      enabled: true,
+      requestId: 'hq-recovered',
+    });
+    expect(api.getState()).toEqual(opened);
+  });
+  it('restores the HQ preference in HTML and follows personal configuration changes', async () => {
+    host.livingHq = true;
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    expect(host.panel.webview.html).toContain('data-studio-living-hq="true"');
+    await api.dispatch({ type: 'ready' });
+    expect(host.messages).toContainEqual(
+      expect.objectContaining({ type: 'livingHqState', enabled: true }),
+    );
+    host.livingHq = false;
+    host.configurationChanged?.({
+      affectsConfiguration: (key) => key === 'featureStudio.appearance.livingHq',
+    });
+    expect(host.messages.at(-1)).toMatchObject({ type: 'livingHqState', enabled: false });
+    host.livingHq = 'true';
+    expect(api.getLivingHq()).toBe(false);
+    await expect(
+      api.dispatch({ type: 'setLivingHq', enabled: 'true', requestId: 'bad' } as never),
+    ).rejects.toThrow();
+    await expect(
+      api.dispatch({
+        type: 'setLivingHq',
+        enabled: true,
+        requestId: 'bad',
+        target: 'workspace',
+      } as never),
+    ).rejects.toThrow();
   });
   it('persists zoom globally without a project or agent run and restores the saved value on failure', async () => {
     const api = await activate();

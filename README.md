@@ -34,6 +34,12 @@ Le menu regroupe **Parcours, Agents, Skills, Kits et Consommation** dans **Ateli
 
 ## Sessions et Dashboard
 
+Dans les sources en cours de développement, un thème secret **Dragon Ball** se débloque sur le Dashboard avec **↑ ↑ ↓ ↓ ← → ← →**. Le cockpit, le QG et les vingt agents changent d’univers ; le thème reste ensuite disponible dans les réglages. [Le dojo secret](docs/WORKFLOWS.md#le-thème-secret-dragon-ball).
+
+Dans les sources en cours de développement, **Quêtes** propose six récompenses à débloquer avec les trophées : thèmes, titres, célébration et mascotte. Une seule récompense à venir apparaît avec son aperçu, sa jauge et le nombre de trophées restants. Les trophées existants comptent, sans dépense ; les cadeaux débloqués s’activent à ton choix depuis la collection. [Les six paliers](docs/WORKFLOWS.md#quêtes-et-récompenses).
+
+Dans les sources en cours de développement, **Afficher le QG vivant**, en haut du parcours d’une session, remplace la bande des agents par un atelier animé. Son décor, ses bureaux et ses lumières suivent le thème choisi : Jardin, Papier, Guilde, Halloween ou la palette de VS Code. Clique sur un poste pour sélectionner l’étape dont le détail reste en dessous ; décoche pour revenir à la bande classique. Ce choix personnel est mémorisé pour tous les projets. [Utilisation du QG](docs/WORKFLOWS.md#bande-des-agents-ou-qg-vivant).
+
 **Sessions** conserve la création et le travail avec les agents. **Dashboard** offre un suivi Métro avec six modules personnalisables : sessions, interventions, PR, tickets, consommation et activité. **Ouvrir dans une nouvelle fenêtre** détache la **Tour de contrôle** pour un second écran, avec plein écran et retour vers la bonne étape du cockpit. La disposition, les tailles et les filtres sont conservés ; les sessions suivent le moteur et Azure se rafraîchit toutes les 60 secondes par défaut. [Guide du dashboard](docs/DASHBOARD.md).
 
 ## Observateur de session
@@ -129,10 +135,10 @@ Les données de session restent dans le stockage local de l’extension. Le PAT 
 | Configurer Azure DevOps et préparer une livraison   | [Livraison](docs/devops-delivery.md)                                    |
 | Connecter Copilot et des MCP                        | [Copilot](docs/COPILOT.md) · [MCP](docs/MCP.md)                         |
 | Vérifier une interface avec Playwright              | [Kit de recette](defaults/quality/README.md)                            |
-| Analyser et supprimer une session | [Observateur](docs/OBSERVATEUR.md) |
+| Analyser et supprimer une session                   | [Observateur](docs/OBSERVATEUR.md)                                      |
 | Comprendre les mesures de consommation              | [Consommation](docs/consumption.md)                                     |
 | Lire l’architecture et les résultats de recette     | [Architecture](docs/ARCHITECTURE.md) · [Validation](docs/VALIDATION.md) |
-| Consulter les priorités et corrections ergonomiques | [Audit ergonomique](docs/ERGONOMIE.md) |
+| Consulter les priorités et corrections ergonomiques | [Audit ergonomique](docs/ERGONOMIE.md)                                  |
 
 ## Développer et vérifier
 
@@ -156,7 +162,6 @@ Les tests automatiques n’envoient aucun prompt Copilot payant. Les contrôles 
 ## Licence et provenance
 
 Feature Studio est sous [licence MIT](LICENSE). Le kit Copilot d’origine est conservé avec son [inventaire et sa provenance](defaults/PROVENANCE.md). Les dépendances sont documentées dans [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), les sources des avatars dans [design/avatars](design/avatars/professions/PROMPTS.md), et le logo approuvé dans [design/logo-team](design/logo-team/PROMPT.md).
-
 
 ## Fenêtre dédiée et espaces de travail
 

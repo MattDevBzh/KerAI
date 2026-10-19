@@ -448,13 +448,15 @@
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
-body:is(.vscode-high-contrast, .vscode-high-contrast-light)
+html[data-studio-theme-effective='auto']
+  body:is(.vscode-high-contrast, .vscode-high-contrast-light)
   .devops-dashboard
   :is(.devops-card, .devops-hero, .devops-empty, .devops-stats > div, .devops-filters) {
   background: var(--bg);
   border-color: var(--fg);
 }
-body:is(.vscode-high-contrast, .vscode-high-contrast-light)
+html[data-studio-theme-effective='auto']
+  body:is(.vscode-high-contrast, .vscode-high-contrast-light)
   .devops-dashboard
   :is(
     .devops-muted,

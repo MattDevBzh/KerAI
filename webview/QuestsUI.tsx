@@ -23,6 +23,7 @@ import {
 } from '../src/shared/quests';
 import { isDemo, send } from './bridge';
 import './quests.css';
+import { RewardsUI } from './RewardsUI';
 const categories: QuestCategory[] = [
   'Premiers pas',
   'Composition',
@@ -161,7 +162,7 @@ export function QuestsUI({
             <span>quêtes accomplies</span>
           </div>
           <progress max={quests.length} value={done} aria-label="Quêtes accomplies" />
-          <p>Chaque quête rapporte de 1 à 10 trophées. Les bonus viendront plus tard.</p>
+          <p>Chaque quête rapporte de 1 à 10 trophées et te rapproche du prochain cadeau.</p>
         </div>
         <div className="quest-overview-note">
           <Sparkles size={22} />
@@ -172,6 +173,7 @@ export function QuestsUI({
           </p>
         </div>
       </section>
+      <RewardsUI progression={state} />
       {isDemo && (
         <p className="muted quest-demo">
           Démonstration : les quêtes sont consultables, aucune récompense personnelle n’est

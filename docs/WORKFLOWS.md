@@ -2,7 +2,60 @@
 
 Feature Studio fournit trois parcours : `feature` (specs → plan → dev → tests → review), `code-review` (review seule) et `single` (un seul agent, une conversation, un livrable ; développement par défaut). Le mode manuel reste disponible. Le pilote est local, désactivé tant que vous ne le configurez et ne le démarrez pas.
 
+## Apparence et enregistrement
+
+Le thème choisi est enregistré automatiquement dans le profil personnel et appliqué dans tous les projets. Le bouton **Enregistrer les réglages du projet** concerne uniquement les paramètres du projet : il reste grisé quand seul le thème a changé.
+
+Un thème explicite de Feature Studio garde ses couleurs, ses costumes et ses décors même si le thème VS Code se déclare à contraste élevé. **Suivre VS Code** retrouve la palette native, y compris son contraste élevé. Le mode de couleurs forcées du système reste prioritaire et indique clairement pourquoi le thème est temporairement masqué.
+
+## Approbation de l’espace de travail
+
+En consultation seule, le bandeau du cockpit et le bas des **Réglages** ou **Automatisations** proposent **Gérer l’approbation dans VS Code**. Ce bouton ouvre l’écran de confiance natif ; il ne donne aucune autorisation à votre place. Le cockpit reçoit la décision de VS Code et actualise son état.
+
+Les modifications du formulaire restent affichées pendant cette étape. Après approbation, cliquez sur **Enregistrer les réglages**. Un projet déjà approuvé l’indique explicitement. L’ajout ou la modification de commandes de test, de hooks actifs ou de connexions MCP actives conserve sa confirmation avant enregistrement.
+
+## Quêtes et récompenses
+
+Dans **Quêtes**, la carte **Prochain cadeau** montre uniquement la prochaine récompense : petite illustration, nombre de trophées encore nécessaires et jauge entre le dernier palier et le suivant. Les cadeaux ultérieurs restent cachés, y compris dans le choix des thèmes. Les trophées déjà obtenus comptent immédiatement et ne sont jamais dépensés.
+
+| Trophées cumulés | Récompense                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| 5                | **Noob**, un thème de premier atelier : papier quadrillé, post-it, ruban adhésif et gribouillis |
+| 20               | Titre **Architecte du dimanche**                                                                |
+| 40               | Célébration **Feu d’artifice devant la tour Eiffel**                                            |
+| 70               | Thème **Matrix**, noir et vert avec pluie de code                                               |
+| 110              | Titre **Dresseur d’agents**                                                                     |
+| 200              | Mascotte **Chaton**, qui marche, se pose et dort dans le QG                                     |
+
+Un nouveau déblocage propose **Activer** ou **Plus tard**. Tous les cadeaux obtenus restent dans **Mes récompenses**, où ils peuvent être activés ou désactivés. Un seul titre et un seul thème sont choisis à la fois. Les thèmes gagnés deviennent également disponibles dans les réglages. Atteindre 200 affiche la collection complète et un message de parcours terminé.
+
+Le titre apparaît dans l’en-tête. Le chaton nécessite la vue **QG vivant** d’une session et se déplace dans une bande réservée au pied des postes. Le feu d’artifice utilise les commandes de célébration existantes : validation finale réussie ou relecture explicite, avec la case de célébration activée. Réouvrir une session terminée ne le rejoue pas automatiquement. Les animations réduites conservent une présentation statique ; les couleurs forcées du système masquent les effets décoratifs.
+
+Ces choix personnels sont partagés entre projets. Le registre de trophées `quests.json` reste la seule source de déblocage ; `rewards.json` conserve les choix de titre, célébration et mascotte dans le stockage personnel du cockpit. Le thème utilise le réglage VS Code existant. Une écriture refusée conserve le dernier choix confirmé et affiche une erreur. Activer une récompense ne lance pas d’agent et ne modifie pas une session.
+
 ## Étapes et historique
+
+### Le thème secret Dragon Ball
+
+Depuis **Dashboard** ou sa **Tour de contrôle** détachée, clique dans le contenu puis saisis **↑ ↑ ↓ ↓ ← → ← →** avec les flèches du clavier. Une pause de plus de quatre secondes entre deux touches, une autre touche ou un changement de page interrompt la combinaison. Les touches maintenues ne comptent qu’une fois ; les champs de saisie, listes et fenêtres de dialogue ignorent le code.
+
+La découverte est enregistrée dans le profil personnel VS Code avant l’activation. Une apparition de Shenron confirme **Dragon Ball est débloqué et activé**. Ferme-la avec **Entrer dans le dojo**, la croix ou Échap. Le thème conserve ensuite sa place dans **Réglages → L’ambiance du cockpit**, même si tu choisis un autre univers. Il ne dépend d’aucun palier de trophées et n’ajoute pas de septième cadeau à la jauge des quêtes.
+
+Le cockpit prend une palette bleu nuit, orange et cyan ; le Dashboard accueille le dojo, le QG sa terrasse Capsule Corp et les vingt personnages leurs costumes Dragon Ball. Les poses suivent les états réels : repos, travail avec aura de ki et réussite avec boule de cristal. Les identités, profils, équipes et comptes rendus restent conservés. Les couleurs forcées du système utilisent les portraits habituels ; la réduction des animations garde les poses statiques. La [provenance des cinq visuels et leurs prompts](../design/dragonball/PROMPTS.md) est conservée dans le dépôt.
+
+### Bande des agents ou QG vivant
+
+Dans l’écran d’une session, la case **Afficher le QG vivant**, à côté de **LE PARCOURS**, remplace uniquement la bande des agents par un atelier. Chaque poste correspond à une intervention du parcours : un même agent peut avoir plusieurs postes. Clique sur un poste pour sélectionner son étape ; le compte rendu, les fichiers, les preuves et les commandes restent dans le panneau de détail en dessous. Décoche la case pour retrouver la bande classique, avec la même étape sélectionnée.
+
+La vue suit les états enregistrés : au travail, attente de réponse, à valider, validée, à venir, échec, annulation, interruption ou étape à actualiser. Une question interactive arrête l’animation de travail jusqu’à sa résolution. Dans une archive, le dernier état est présenté sans animation de travail. Cliquer sur un poste n’exécute ni ne valide l’agent. Un brouillon en cours empêche de changer d’étape ; basculer entre les deux vues conserve ce brouillon.
+
+Le choix est enregistré dans les réglages personnels de VS Code (`featureStudio.appearance.livingHq`), partagé par toutes les sessions et tous les projets, et désactivé par défaut. En cas d’échec de sauvegarde, la préférence confirmée est rétablie et le motif s’affiche près de la case. Le Dashboard et la Tour de contrôle gardent leur présentation habituelle.
+
+Le QG suit automatiquement le thème choisi dans **Réglages → L’ambiance du cockpit** : jardin et bois, atelier papier crème, salle de guilde indigo ou atelier Halloween. Les modes clairs et sombres adaptent la lumière, les plans de travail et les lampes ; **Suivre VS Code** utilise un atelier neutre accordé aux couleurs de l’éditeur. Aucun réglage supplémentaire n’est nécessaire. Le changement conserve l’étape sélectionnée et les brouillons.
+
+Le QG réutilise les vingt avatars, leurs costumes et leurs images de repos, travail et réussite. Les quatre décors sont partagés par toute l’équipe : aucune variante supplémentaire des avatars n’est générée. Il respecte les animations réduites et les couleurs forcées du système, qui masquent le décor. La [provenance du décor original](../design/qg/PROMPT.md) et les [prompts des déclinaisons](../design/qg/THEMES.md) sont conservés dans le dépôt.
+
+### Déroulement du parcours
 
 Une dépendance doit être approuvée avant son étape suivante. Chaque run ou reprise crée une tentative et respecte le maximum de l'étape. La reprise peut conserver la session CLI ; retour humain, réponses et livrable précédent sont transmis au nouveau run. Les anciennes tentatives restent consultables.
 

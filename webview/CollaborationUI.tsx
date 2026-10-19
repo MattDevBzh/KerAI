@@ -13,6 +13,8 @@ import { featureCompletionBlockers } from '../src/core/validation';
 import { featureStateKey, previewCorrection } from '../src/shared/collaboration';
 import { hasActiveRun } from './GitWorkspaceUI';
 import { subscribe, celebrationEnabled, saveCelebrationEnabled } from './bridge';
+import { useRewards } from './RewardProvider';
+import { EiffelCelebration } from './RewardEffects';
 import './collaboration.css';
 
 import { AgentImage } from './Avatar';
@@ -349,6 +351,12 @@ export function CelebrationControls({
   state: StudioState;
   feature: Feature;
 }) {
+  const { state: rewardState } = useRewards();
+  const eiffel =
+    !rewardState?.error &&
+    rewardState?.selection.celebration === 'eiffel' &&
+    rewardState.unlocked.includes('eiffel');
+  const [sceneDismissed, setSceneDismissed] = useState(false);
   const [enabled, setEnabled] = useState(celebrationEnabled),
     [active, setActive] = useState(false);
   const previous = useRef('');
@@ -367,16 +375,32 @@ export function CelebrationControls({
   useEffect(() => {
     if (!token || token === previous.current) return;
     previous.current = token;
-    if (enabled && !reduced) setActive(true);
+    if (enabled && !reduced) {
+      setSceneDismissed(false);
+      setActive(true);
+    }
   }, [token, enabled, reduced]);
   useEffect(() => {
     if (!active) return;
-    const timer = window.setTimeout(() => setActive(false), 2400);
+    const timer = window.setTimeout(() => setActive(false), eiffel ? 6500 : 2400);
     return () => window.clearTimeout(timer);
-  }, [active]);
+  }, [active, eiffel]);
   return (
     <>
-      <Celebration state={state} feature={feature} active={active && enabled && !reduced} />
+      <Celebration
+        state={state}
+        feature={feature}
+        active={active && enabled && !reduced && !eiffel}
+      />
+      {eiffel && enabled && !sceneDismissed && (active || reduced) && (
+        <EiffelCelebration
+          animated={active && !reduced}
+          onClose={() => {
+            setSceneDismissed(true);
+            setActive(false);
+          }}
+        />
+      )}
       <div className="celebration-controls">
         <label className="inline-check">
           <input
@@ -394,6 +418,7 @@ export function CelebrationControls({
           className="text-button"
           disabled={!enabled || reduced}
           onClick={() => {
+            setSceneDismissed(false);
             setActive(false);
             window.requestAnimationFrame(() => setActive(true));
           }}

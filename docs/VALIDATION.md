@@ -1,5 +1,57 @@
 # Validation et limites — v1.12.0, 17 octobre 2026
 
+## Thèmes masqués par Bearded et enregistrement des réglages — correctif local, 17 octobre 2026
+
+- Diagnostic dans le cockpit installé : projet déjà approuvé, thème enregistré, mais message de priorité au contraste élevé. Le manifeste local de Bearded Theme Milkshake Vanilla Banana déclare `uiTheme: hc-black`, ce qui forçait le thème effectif à `auto`.
+- Les thèmes explicitement choisis dans Feature Studio conservent désormais leur palette, leurs portraits et leurs décors sous les classes VS Code `vscode-high-contrast` et `vscode-high-contrast-light`. **Suivre VS Code** garde la palette native. Les couleurs forcées du système restent prioritaires avec une explication visible.
+- Le choix du thème annonce son enregistrement automatique. Le bouton **Enregistrer les réglages du projet** explique pourquoi il reste grisé après un simple changement d’apparence. L’état de confiance remplace le texte d’approbation inconditionnel ; l’écran natif est accessible sans approbation implicite ni perte du brouillon.
+- `npm run check` réussi : format, TypeScript, **637 tests métier réussis**, 4 ignorés, compilation. `npm run test:ui` réussi : **206 scénarios**. Les nouvelles vérifications couvrent les refus et l’accès à l’écran d’approbation, les brouillons conservés, Dragon Ball et Halloween sous la classification Bearded, les vingt costumes, le QG, le suivi automatique et les couleurs forcées.
+- Captures vérifiées : `design/proposals/2026-10-17-theme-fix/dragonball-bearded-reglages.png` et `qg-dragonball.png`. Les captures documentaires régénérées par la recette ont été remises à leur état antérieur.
+- Paquet `releases/local/feature-studio-1.12.0-themes-fix-local.vsix` : 40 334 153 octets, SHA-256 `1a535b127b5f00de944539d4b93a045080397f47ca79d6272e579f7bd6d7aa24`. Archive intègre, bundles extension/webview et neuf fichiers de décors/planches comparés octet par octet aux sources.
+- Le contenu extrait de ce VSIX exact a passé le test natif dans VS Code Insiders sur macOS (`PASS`, sortie 0), incluant l’ouverture réelle de l’écran de confiance sans changement de confiance ni initialisation métier. Profil et projet isolés ; aucune installation dans le profil habituel ni appel IA payant.
+- Correctif local non publié. Ce compte rendu a été complété après la construction du paquet ; aucune nouvelle CI Linux ou Windows n’est attestée.
+
+## Dragon Ball, thème secret — évolution locale, 17 octobre 2026
+
+- Format, TypeScript et compilation réussis ; **636 tests métier réussis**, 4 ignorés. Après le dernier ajustement de cadrage des portraits, TypeScript et les **79 tests ciblés** du protocole, des thèmes et des avatars ont également réussi.
+- **203 scénarios Chromium réussis sur la campagne complète**, dont sept pour le secret : séquence exacte, erreurs, pause, touches maintenues, champs de saisie, navigation, persistance, refus/expiration, réponse étrangère, vingt portraits, trois poses, image absente, contraste élevé, animations réduites, petits écrans et Tour de contrôle détachée. La campagne précédente avait signalé trois appels de lecture superflus au démarrage ; ils ont été supprimés avant cette campagne réussie.
+- Le déblocage est mémorisé dans le profil personnel VS Code ; un choix de thème direct reste refusé tant que le secret n’est pas acquis. Un échec de sauvegarde conserve le thème confirmé. Le code ne lance aucun agent, ne modifie pas les profils et n’accorde aucun trophée. Les six récompenses et leur jauge restent indépendantes.
+- Cinq fichiers image_gen : un décor et quatre planches transparentes couvrant vingt agents × trois poses distinctes. Les fichiers restent intacts ; le cadrage SVG suit leurs gouttières transparentes et masque les cellules voisines. Les portraits habituels et Halloween restent inchangés. Prompts et fichiers dans `design/dragonball/PROMPTS.md`.
+- Captures de l’interface réelle avec données de recette dans `design/proposals/2026-10-17-dragonball/` : Dashboard 1440/390 px, révélation, vingt costumes et QG.
+- Paquet `releases/local/feature-studio-1.12.0-dragonball-local.vsix` construit (38,46 Mio), archive intègre, cinq décors, deux récompenses et quatre planches Dragon Ball vérifiés octet par octet. Les 60 fichiers des avatars habituels et les 60 fichiers Halloween sont identiques aux sources. SHA-256 : `17d4152c5b2a5fe0cb260529e4e46adea28d4cec3fa9d85047ee0bbe42492971`, conservé aussi dans son fichier `.sha256`.
+- Le contenu extrait de ce **VSIX exact** a passé `npm run test:extension` dans VS Code Insiders sur macOS : thème secret refusé avant découverte, code accepté, préférence globale enregistrée, choix ultérieurs et contrôles existants réussis. Projet et profil isolés, aucun prompt Copilot payant, aucune installation dans le profil habituel. Ce compte rendu a été complété après construction du paquet.
+- Évolution locale non publiée ; aucune nouvelle CI Linux ou Windows n’est attestée par ce lot.
+
+## Six récompenses de trophées — évolution locale, 17 octobre 2026
+
+- `npm run check` réussi : format, TypeScript, **632 tests métier réussis**, 4 ignorés, puis compilation.
+- **195 scénarios d’interface vérifiés** : la campagne Chromium complète a réussi 194 cas et révélé une course dans le test de rechargement, qui coupait sa simulation avant l’accusé de sauvegarde. Après ajout de l’attente explicite, les neuf scénarios des récompenses ont réussi. Les autres cas n’ont pas été modifiés.
+- Seuils 5/20/40/70/110/200, un seul cadeau futur visible, jauge par intervalle, anciens trophées pris en compte, activation facultative, titres exclusifs, conservation des choix, erreurs et expiration vérifiés. Les contrôles hôte refusent les récompenses verrouillées, les messages forgés et un registre illisible ; les écritures concurrentes préservent les autres choix.
+- Recette des thèmes Noob et Matrix à 1440 et 390 px, du chaton dans le QG, de la célébration Eiffel, du contraste élevé et des animations réduites. Captures dans `design/proposals/2026-10-17-recompenses/` ; données de recette, sans ajout de trophées au profil habituel.
+- Deux images issues de l’outil intégré image_gen, avec prompts dans `design/rewards/PROMPTS.md`. La tour Eiffel est un décor et les feux d’artifice sont animés dans l’interface ; le chaton utilise six poses d’une planche transparente. Les vingt avatars restent inchangés.
+- Paquet `releases/local/feature-studio-1.12.0-rewards-local.vsix` construit (26,44 Mio), archive intègre, deux images de récompenses et quatre décors identiques aux sources, 60 fichiers des vingt avatars vérifiés octet par octet. SHA-256 : `a4643631e4a8787070aaed2e81caee6d014971b4acf88eb613727c7c854d7b3f`, également conservé dans son fichier `.sha256`.
+- Le contenu extrait de ce **VSIX exact** a passé `npm run test:extension` dans VS Code Insiders sur macOS : activation et ouverture du cockpit, protocole et préférences, refus des récompenses verrouillées, conservation des données métier et contrôles existants. Profil, projet et stockage isolés ; aucun prompt Copilot payant et aucune installation dans le profil habituel.
+- Évolution locale non publiée ; aucune nouvelle CI Linux ou Windows n’est attestée par ce lot. Ce compte rendu de recette a été complété après construction du paquet.
+
+## QG par thème — évolution locale, 17 octobre 2026
+
+- Format, TypeScript et compilation vérifiés ; **21 scénarios Chromium réussis** : les 10 scénarios du QG et les 11 scénarios des thèmes existants, dont les petits écrans, la réduction des animations et les contrastes élevés.
+- Recette visuelle complémentaire des sept thèmes et du mode automatique sous VS Code clair et sombre : **9 captures** dans `design/proposals/2026-10-17-qg-vivant/themes/`. Les changements de thème conservent la sélection et le brouillon du compte rendu ; les deux contrastes élevés masquent les décors et costumes, puis le retour au thème Halloween les restaure. Aucune erreur de page ou commande d’exécution observée pendant cette recette.
+- Quatre décors partagés, dont trois nouvelles variantes issues d’image_gen ; les images des avatars restent inchangées. Les filtres et calques d’éclairage affectent uniquement le décor. Prompts et chemins des images dans `design/qg/THEMES.md`.
+- Paquet `releases/local/feature-studio-1.12.0-qg-themes-local.vsix` construit (23,04 Mo), archive vérifiée, quatre décors présents et 60 fichiers des vingt avatars identiques aux sources. SHA-256 : `1d08cfe59379538ee20b9ba545fbaefca3c1f9b8b74debbb8786cf6a338d9458`, conservé aussi dans le fichier `.sha256` associé.
+- Le contenu extrait de ce paquet exact a passé `npm run test:extension` dans VS Code Insiders sur macOS avec profil et projet isolés. Aucun prompt Copilot payant ni installation dans le profil habituel.
+- Évolution locale non publiée ; aucune nouvelle CI Linux ou Windows n’est attestée par ce lot.
+
+## QG de session — évolution locale, 17 octobre 2026
+
+- `npm run check` réussi : format, TypeScript, **624 tests métier réussis**, 4 ignorés, puis compilation.
+- **40 scénarios Chromium ciblés réussis**, dont 10 pour le QG : remplacement de la bande, sélection du détail, persistance entre sessions et rechargements, refus et expiration de sauvegarde, conservation du brouillon, états réels et questions humaines, vingt avatars et interventions répétées, profils absents, équipe vide, thèmes, largeurs de 1440/1100/390 px, clavier, contraste élevé et animations réduites. Les 30 autres couvrent la collaboration, les validations, la composition, les thèmes et la navigation existants.
+- La préférence est validée à la frontière hôte et écrite uniquement dans le profil personnel, avec accusé de réception et traitement ordonné des écritures. Le contrôle conserve l’état des sessions et ne lance aucun agent.
+- Le décor `webview/public/qg/atelier.png` est partagé par tous les postes ; les vingt avatars, leurs GIF et leurs costumes existants restent inchangés. Captures de l’interface réelle sous Chromium avec données de recette : `design/proposals/2026-10-17-qg-vivant/03-qg-session.png` et `04-qg-papier.png`.
+- Paquet local `releases/local/feature-studio-1.12.0-qg-local.vsix` construit et contrôlé : archive intègre, préférence personnelle désactivée par défaut, décor présent et 60 fichiers des vingt avatars identiques aux sources. SHA-256 : `f55631ae6a9f7a9114fdeccbe54e589a67a680083fcd4732ed38baf847abf144` (également dans le fichier `.sha256` associé).
+- Le contenu extrait de ce paquet exact a passé `npm run test:extension` dans VS Code Insiders sur macOS, avec profil et projet isolés, y compris la persistance de la préférence et la conservation de l’état métier. Aucun prompt Copilot payant ni installation dans le profil habituel.
+- Cette évolution est locale et non publiée. Les validations distantes de la release v1.12.0 ci-dessous ne portent pas sur ces changements.
+
 ## Dashboard, navigation et tickets — v1.12.0
 
 - `npm run check` réussi : format, TypeScript, **619 tests métier réussis**, 4 ignorés, puis compilation. Le parallélisme respecte les capacités du poste, avec un plafond de quatre processus pour les tests qui sollicitent fortement Git et les archives. Les deux suites d’intégration des worktrees disposent de 60 secondes par scénario sous Windows ; elles vérifient les chemins décodés et les permissions réellement disponibles sur la plateforme, avec les mêmes contrôles de conservation des fichiers et des index.
@@ -48,7 +100,6 @@
 - 14 scénarios Chromium réussis : réglages CLI et chemin Windows à 390 px, zoom automatique de 1440 à 3840 px, zoom fixe à 200 %, persistance, erreur d’enregistrement, composition d’équipe, discussions liées aux rapports et propositions ajustables.
 - Le lancement réel sur Windows, l’authentification du compte et la compatibilité du CLI installé restent à vérifier avec **Vérifier la connexion**. Aucun prompt Copilot payant envoyé pendant cette recette.
 
-
 ## Discussions et sessions reliées — v1.9.0
 
 - `npm run check` réussi : format, TypeScript, **567 tests métier réussis**, 4 ignorés, puis compilation.
@@ -59,7 +110,6 @@
 - VSIX 1.9.0 local vérifié (intégrité ZIP, version et point d’entrée), extrait puis chargé dans VS Code Insiders sur macOS. Le smoke vérifie notamment une création avec équipe et critères, une requête répétée sans doublon, aucun lancement implicite et la conservation après fermeture/réouverture.
 - Les tests utilisent un runtime simulé : aucun prompt Copilot payant n’est envoyé. Le comportement rédactionnel d’un modèle réel reste à apprécier sur un échange utilisateur.
 - Les nouveaux tests de discussions et d’archives sont inclus dans le job Windows. Les validations Linux/Windows du commit exact et le smoke du paquet construit en CI précèdent la publication ; les checksums de la release concernent le VSIX effectivement livré.
-
 
 ## Quêtes et trophées — v1.8.0
 
@@ -72,7 +122,6 @@
 
 La v1.7.0 a été publiée depuis `5eeb363d91cac68b4e96f8e766b7d84eaf645c9e` après [CI réussie](https://github.com/MattDevBzh/KerAI/actions/runs/38820001893). Son VSIX et son icône ont été téléchargés depuis la release et leurs SHA-256 vérifiés.
 
-
 ## Sept ambiances et Halloween — v1.7.0
 
 - `npm run check` réussi : format, TypeScript, 545 tests réussis et 4 ignorés, puis build. Deux délais dépassés lors d’un premier passage simultané avec Chromium ont disparu lors de la relance complète sans concurrence.
@@ -80,7 +129,6 @@ La v1.7.0 a été publiée depuis `5eeb363d91cac68b4e96f8e766b7d84eaf645c9e` apr
 - Vingt costumes : transparence, dimensions, quatre images animées distinctes et boucle ; changement de thème, contraste élevé et repli sur le portrait original testés. Planches et rendus bureau inspectés visuellement.
 - VSIX 1.7.0 local vérifié : ZIP intègre, version exacte et 60 assets saisonniers inclus. Smoke réussi du paquet extrait dans VS Code Insiders sur macOS, sans prompt Copilot payant.
 - La CI Linux et Windows et le smoke du paquet construit en CI précèdent la publication. La release contient le commit exact, le VSIX et son SHA256SUMS.
-
 
 ## Observateur intégré à la v1.5.0 et animation de scan
 
@@ -144,7 +192,6 @@ La relecture statique ciblée d’Astra high a identifié deux défauts après c
 Les tests d’analyse utilisent un adaptateur Copilot simulé et de vrais fichiers temporaires. Ils vérifient les contrats, la comptabilité et les contrôles d’accès ; ils ne constituent pas une mesure de qualité sur un compte Copilot réel. Aucun prompt payant ni opération distante Azure DevOps n’a été exécuté. Les crédits des fixtures ne sont pas une facture réelle. Le contrôle natif de suppression est couvert par le protocole et l’UI simulée ; sa confirmation reste une interaction humaine.
 
 Le paquet de travail 1.2.0 de cette branche n’a pas été publié ; la livraison intégrée porte le numéro 1.6.0. Le nouveau stockage v5 refuse les anciens binaires ; les données antérieures connues sont migrées, les traces déjà perdues restent explicitement manquantes.
-
 
 ## Vérifications locales de v1.1.1
 

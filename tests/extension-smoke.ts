@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import type { ClientMessage, StudioState, CheckpointComparison } from '../src/shared/types';
 import type { DevOpsConfig, DevOpsState } from '../src/shared/devops';
 import { THEME_IDS, type ThemeId } from '../src/shared/themes';
+import { themeReward, type RewardState } from '../src/shared/rewards';
+import { DRAGON_BALL_CODE } from '../src/shared/dragonBall';
 import { resolveAvatar } from '../src/shared/avatars';
 import { featureStateKey } from '../src/shared/collaboration';
 import { teamSteps } from '../src/shared/team';
@@ -17,7 +19,9 @@ interface Api {
   getLauncherVisible(): boolean;
   getLauncherReady(): boolean;
   getTheme(): ThemeId;
+  getLivingHq(): boolean;
   getQuestState(): QuestState;
+  getRewardState(): RewardState;
   getDevOpsState(): DevOpsState | undefined;
   getDashboardState(): DashboardState;
   getDashboardReady(): boolean;
@@ -72,8 +76,47 @@ async function smokeRun(): Promise<void> {
   assert.equal(api.getState(), undefined, 'Activation alone never initializes the store');
   assert.equal(api.getDevOpsState(), undefined, 'Activation alone never initializes DevOps');
   assert.equal(api.getUiReady(), false, 'Activation alone never opens the cockpit webview');
+  assert.ok((await vscode.commands.getCommands(true)).includes('workbench.trust.manage'));
+  const wasTrusted = vscode.workspace.isTrusted;
+  await api.dispatch({ type: 'manageWorkspaceTrust' });
+  assert.equal(vscode.workspace.isTrusted, wasTrusted, 'Opening the trust editor grants nothing');
+  assert.equal(api.getState(), undefined, 'Managing trust never initializes a business session');
   assert.equal(api.getTheme(), 'auto', 'The isolated user profile starts in automatic mode');
-  for (const theme of THEME_IDS) {
+  assert.equal(api.getLivingHq(), false);
+  assert.equal(
+    contributions.configuration.properties['featureStudio.appearance.livingHq'].scope,
+    'application',
+  );
+  for (const enabled of [true, false]) {
+    await api.dispatch({ type: 'setLivingHq', enabled, requestId: `hq-${enabled}` });
+    const preference = vscode.workspace
+      .getConfiguration('featureStudio')
+      .inspect<boolean>('appearance.livingHq');
+    assert.equal(preference?.globalValue, enabled);
+    assert.equal(preference?.workspaceValue, undefined);
+    assert.equal(api.getLivingHq(), enabled);
+    assert.equal(api.getState(), undefined, 'The HQ checkbox never initializes a business session');
+  }
+  for (const backdrop of ['atelier', 'papier', 'guilde', 'halloween', 'dragonball'])
+    assert.ok(await readFile(join(extension.extensionPath, `dist/webview/qg/${backdrop}.png`)));
+  for (const image of ['eiffel', 'kitten'])
+    assert.ok(await readFile(join(extension.extensionPath, `dist/webview/rewards/${image}.png`)));
+  for (let sheet = 1; sheet <= 4; sheet++)
+    assert.ok(
+      await readFile(
+        join(extension.extensionPath, `dist/webview/avatar-events/dragonball/team-${sheet}.png`),
+      ),
+    );
+  await api.dispatch({ type: 'setTheme', theme: 'dragonball', requestId: 'locked-dragonball' });
+  assert.notEqual(api.getTheme(), 'dragonball');
+  await api.dispatch({
+    type: 'unlockDragonBall',
+    sequence: DRAGON_BALL_CODE,
+    requestId: 'secret-dragonball',
+  });
+  assert.equal(api.getTheme(), 'dragonball');
+  assert.equal(api.getState(), undefined, 'The secret code never initializes a business session');
+  for (const theme of THEME_IDS.filter((theme) => !themeReward(theme))) {
     await api.dispatch({
       type: 'setTheme',
       theme,
@@ -92,6 +135,17 @@ async function smokeRun(): Promise<void> {
       'Changing appearance never initializes the business store',
     );
   }
+  const previousTheme = api.getTheme();
+  await api.dispatch({ type: 'setTheme', theme: 'matrix', requestId: 'locked-matrix' });
+  assert.equal(api.getTheme(), previousTheme, 'A direct message cannot select an unearned theme');
+  await api.dispatch({
+    type: 'setReward',
+    rewardId: 'kitten',
+    enabled: true,
+    requestId: 'locked-kitten',
+  });
+  assert.equal(api.getRewardState().selection.mascot, null);
+  assert.equal(api.getState(), undefined, 'Reward choices never initialize the business store');
   await assert.rejects(
     api.dispatch({
       type: 'setTheme',
@@ -107,7 +161,7 @@ async function smokeRun(): Promise<void> {
       key: 'cliPath',
     } as unknown as ClientMessage),
   );
-  assert.equal(api.getTheme(), 'halloween', 'Invalid requests preserve the recorded choice');
+  assert.equal(api.getTheme(), previousTheme, 'Invalid requests preserve the recorded choice');
   await vscode.workspace
     .getConfiguration('featureStudio')
     .update(

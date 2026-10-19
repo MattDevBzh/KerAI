@@ -115,7 +115,10 @@
             "papier-sombre",
             "guilde-clair",
             "guilde-sombre",
-            "halloween"
+            "halloween",
+            "noob",
+            "matrix",
+            "dragonball"
           ],
           "enumDescriptions": [
             "Suivre VS Code, avec priorité au contraste élevé.",
@@ -125,7 +128,10 @@
             "Papier vivant — sombre, ardoise et pervenche.",
             "Guilde pixel — clair, ivoire et menthe.",
             "Guilde pixel — sombre, indigo et lavande.",
-            "Halloween — événement sombre, avec vingt costumes d’agents."
+            "Halloween — événement sombre, avec vingt costumes d’agents.",
+            "Noob — récompense débloquée à 5 trophées.",
+            "Matrix — récompense débloquée à 70 trophées.",
+            "Dragon Ball — thème secret à découvrir, avec vingt costumes et un dojo."
           ],
           "default": "auto",
           "scope": "application",
@@ -163,6 +169,12 @@
           "default": [],
           "scope": "application",
           "description": "Agents favoris, affichés en premier dans les catalogues et sélecteurs de Feature Studio."
+        },
+        "featureStudio.appearance.livingHq": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Remplacer la bande des agents de chaque session par le QG vivant. Le détail de l’étape reste en dessous. Préférence personnelle commune à tous les projets."
         },
         "featureStudio.appearance.zoom": {
           "type": [

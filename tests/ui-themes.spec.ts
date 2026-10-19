@@ -6,6 +6,7 @@ import type { ClientMessage } from '../src/shared/types';
 import type { ThemeId } from '../src/shared/themes';
 
 import { THEME_IDS, themeDefinitions } from '../src/shared/themes';
+import { emptyRewardSelection, unlockedRewards } from '../src/shared/rewards';
 const palettes = THEME_IDS.filter((id) => id !== 'auto').map((id) => ({
   id,
   ...themeDefinitions[id],
@@ -38,7 +39,7 @@ async function hosted(
     state.features[0].steps[1].status = 'running';
   }
   await page.addInitScript(
-    ({ state, theme, native, colors }) => {
+    ({ state, theme, native, colors, rewardState }) => {
       const sent: ClientMessage[] = [];
       Object.assign(window, {
         themeMessages: sent,
@@ -51,6 +52,11 @@ async function hosted(
               setTimeout(() => {
                 window.postMessage({ type: 'state', state }, '*');
                 window.postMessage({ type: 'themeState', theme }, '*');
+                window.postMessage({ type: 'rewardState', state: rewardState }, '*');
+                window.postMessage(
+                  { type: 'secretThemeState', dragonBallUnlocked: theme === 'dragonball' },
+                  '*',
+                );
               }, 0);
           },
         }),
@@ -80,7 +86,17 @@ async function hosted(
         document.head.append(defaults);
       });
     },
-    { state, theme, native, colors: nativeColors[native] },
+    {
+      state,
+      theme,
+      native,
+      colors: nativeColors[native],
+      rewardState: {
+        ready: true,
+        selection: emptyRewardSelection(),
+        unlocked: unlockedRewards({ trophies: theme === 'matrix' ? 70 : theme === 'noob' ? 5 : 0 }),
+      },
+    },
   );
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'L’ambiance du cockpit' })).toBeVisible();
@@ -113,17 +129,13 @@ test('huit choix accessibles : ack, erreur corrélée et brouillon de réglages 
   expect(request).toMatchObject({ type: 'setTheme', theme: 'jardin-clair' });
   expect(request.requestId).toBeTruthy();
   await expect(page.getByRole('radio', { name: 'Guilde pixel — Sombre' })).toBeDisabled();
-  await expect(page.getByText('Préférence personnelle enregistrée.', { exact: true })).toHaveCount(
-    0,
-  );
+  await expect(page.getByText('Thème enregistré automatiquement.', { exact: true })).toHaveCount(0);
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
   await themeState(page, 'guilde-sombre', 'unrelated');
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
   await themeState(page, 'jardin-clair', request.requestId);
   await expect(page.getByRole('radio', { name: 'Jardin des idées — Clair' })).toBeChecked();
-  await expect(
-    page.getByText('Préférence personnelle enregistrée.', { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText('Thème enregistré automatiquement.', { exact: true })).toBeVisible();
   await expect(draft).toHaveValue('37');
   await expect(page.getByRole('radio', { name: 'Jardin des idées — Clair' })).toBeFocused();
   await page.keyboard.press('ArrowRight');
@@ -141,7 +153,7 @@ test('huit choix accessibles : ack, erreur corrélée et brouillon de réglages 
   expect(messages.filter((m) => m.type === 'saveSettings')).toHaveLength(0);
 });
 
-test('config externe, valeur invalide, navigation et contraste élevé conservent la préférence', async ({
+test('les thèmes explicites restent visibles avec un thème VS Code contrasté, le mode automatique le suit', async ({
   page,
 }) => {
   await hosted(page, 'jardin-sombre');
@@ -159,11 +171,14 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
   await expect(page.getByRole('radio', { name: 'Jardin des idées — Sombre' })).toBeChecked();
   for (const native of ['vscode-high-contrast', 'vscode-high-contrast-light']) {
     await page.evaluate((native) => (document.body.className = native), native);
-    await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
+    await expect(page.locator('html')).toHaveAttribute(
+      'data-studio-theme-effective',
+      'jardin-sombre',
+    );
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'jardin-sombre');
-    await expect(
-      page.getByText('Le contraste élevé de VS Code est prioritaire.', { exact: false }),
-    ).toBeVisible();
+    await expect(page.locator('.theme-contrast-note')).toHaveCount(0);
+    await themeState(page, 'auto');
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
     const colors = await page.locator('body').evaluate((body) => {
       const style = getComputedStyle(body);
       return {
@@ -175,6 +190,8 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
     });
     expect(colors.border).toBe(colors.native);
     expect(colors.accent).toBe(colors.nativeAccent);
+    await themeState(page, 'jardin-sombre');
+    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(19, 43, 38)');
   }
   await page.evaluate(() => (document.body.className = 'vscode-light'));
   await expect(page.locator('html')).toHaveAttribute(
@@ -183,6 +200,7 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
   );
   await page.emulateMedia({ forcedColors: 'active' });
   await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'auto');
+  await expect(page.locator('.theme-contrast-note')).toContainText('couleurs forcées du système');
   await page.emulateMedia({ forcedColors: 'none' });
   await expect(page.locator('html')).toHaveAttribute(
     'data-studio-theme-effective',
@@ -190,6 +208,43 @@ test('config externe, valeur invalide, navigation et contraste élevé conserven
   );
   await themeState(page, 'invalid-theme');
   await expect(page.getByRole('radio', { name: 'Suivre VS Code — Automatique' })).toBeChecked();
+});
+
+test('Dragon Ball puis Halloween changent immédiatement un cockpit Bearded sans enregistrer les réglages du projet', async ({
+  page,
+}, info) => {
+  await hosted(page, 'dragonball', 'light');
+  await page.evaluate(() => {
+    document.body.className = 'vscode-high-contrast';
+    document.documentElement.style.setProperty('--vscode-editor-background', '#ede8da');
+    document.documentElement.style.setProperty('--vscode-textLink-foreground', '#92771e');
+  });
+  const save = page.getByRole('button', { name: 'Enregistrer les réglages du projet' });
+  await expect(save).toBeDisabled();
+  await expect(page.locator('.settings-save')).toContainText(
+    'Les thèmes s’enregistrent automatiquement',
+  );
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(9, 23, 41)');
+  await page.getByRole('radio', { name: 'Halloween — Événement' }).click();
+  const halloween = await lastThemeRequest(page);
+  await themeState(page, 'halloween', halloween.requestId);
+  await expect(page.locator('html')).toHaveAttribute('data-studio-theme-effective', 'halloween');
+  await expect(page.getByText('Thème enregistré automatiquement.', { exact: true })).toBeVisible();
+  await expect(save).toBeDisabled();
+  await page.getByRole('radio', { name: 'Dragon Ball — Secret' }).click();
+  const dragonball = await lastThemeRequest(page);
+  await themeState(page, 'dragonball', dragonball.requestId);
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(9, 23, 41)');
+  await expect(page.locator('body')).toHaveClass('vscode-high-contrast');
+  await expect(save).toBeDisabled();
+  expect(
+    await page.evaluate(() =>
+      (Reflect.get(window, 'themeMessages') as ClientMessage[]).some(
+        (message) => message.type === 'saveSettings',
+      ),
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: info.outputPath('dragonball-bearded-reglages.png') });
 });
 
 test('le mode automatique suit le thème natif et les radios sont utilisables au clavier en démo', async ({
@@ -398,7 +453,10 @@ test('Halloween habille les agents seulement quand choisi, avec repli et contras
   await themeState(page, 'halloween');
   await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
   await page.evaluate(() => (document.body.className = 'vscode-high-contrast'));
+  await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
+  await page.emulateMedia({ forcedColors: 'active' });
   await expect(portrait).toHaveAttribute('src', /^\/avatars\//);
+  await page.emulateMedia({ forcedColors: 'none' });
   await page.evaluate(() => (document.body.className = 'vscode-dark'));
   await expect(portrait).toHaveAttribute('src', /avatar-events\/halloween\//);
   await portrait.dispatchEvent('error');

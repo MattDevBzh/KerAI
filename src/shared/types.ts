@@ -292,8 +292,17 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | { type: 'refreshSecretThemes' }
+  | { type: 'unlockDragonBall'; sequence: readonly string[]; requestId: string }
   | import('./dashboard').DashboardClientMessage
   | { type: 'refreshQuests' }
+  | { type: 'refreshRewards' }
+  | {
+      type: 'setReward';
+      rewardId: import('./rewards').RewardId;
+      enabled: boolean;
+      requestId: string;
+    }
   | import('./observation').ObservationClientMessage
   | import('./projects').ProjectClientMessage
   | import('./collaboration').CollaborationClientMessage
@@ -307,6 +316,7 @@ export type ClientMessage =
       steps: WorkflowStep[];
     }
   | { type: 'setAgentFavorite'; agentId: string; favorite: boolean; requestId: string }
+  | { type: 'setLivingHq'; enabled: boolean; requestId: string }
   | { type: 'setZoom'; zoom: ZoomPreference; requestId: string }
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
   | { type: 'installQualityKit'; featureId?: string }
@@ -317,6 +327,7 @@ export type ClientMessage =
         | 'refresh'
         | 'checkRuntime'
         | 'autoDetectCli'
+        | 'manageWorkspaceTrust'
         | 'installKit'
         | 'migrateUserKit'
         | 'openSettings';
@@ -452,9 +463,16 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'secretThemeState'; dragonBallUnlocked: boolean; requestId?: string; error?: string }
   | import('./dashboard').DashboardHostMessage
   | { type: 'accountCredits'; state: import('./credits').AccountCredits }
   | { type: 'questState'; state: import('./quests').QuestState; earned?: string[] }
+  | {
+      type: 'rewardState';
+      state: import('./rewards').RewardState;
+      requestId?: string;
+      error?: string;
+    }
   | import('./observation').ObservationHostMessage
   | import('./discussions').DiscussionHostMessage
   | { type: 'workflowDeleteResult'; requestId: string; error?: string; cancelled?: boolean }
@@ -483,6 +501,7 @@ export type HostMessage =
       error?: string;
     }
   | import('./kits').KitHostMessage
+  | { type: 'livingHqState'; enabled: boolean; requestId?: string; error?: string }
   | { type: 'zoomState'; zoom: ZoomPreference; requestId?: string; error?: string }
   | { type: 'themeState'; theme: ThemeId; requestId?: string; error?: string }
   | ({ type: 'profileSaveResult'; requestId: string; error?: string } & Partial<

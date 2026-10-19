@@ -8,6 +8,8 @@ import { settingsSchema } from '../core/store';
 import { avatarSchema } from '../core/registry';
 import type { ClientMessage } from '../shared/types';
 import { THEME_IDS } from '../shared/themes';
+import { REWARD_IDS } from '../shared/rewards';
+import { DRAGON_BALL_CODE } from '../shared/dragonBall';
 import { workflowSchema } from '../core/workflow';
 import { kitMessageVariants } from '../core/kitSchemas';
 import { ROAST_LEVELS } from '../shared/roast';
@@ -25,8 +27,28 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('refreshSecretThemes') }).strict(),
+  z
+    .object({
+      type: z.literal('unlockDragonBall'),
+      sequence: z
+        .array(z.string().max(20))
+        .length(8)
+        .refine((keys) => keys.every((key, index) => key === DRAGON_BALL_CODE[index])),
+      requestId: id,
+    })
+    .strict(),
   ...dashboardMessageVariants,
   z.object({ type: z.literal('refreshQuests') }).strict(),
+  z.object({ type: z.literal('refreshRewards') }).strict(),
+  z
+    .object({
+      type: z.literal('setReward'),
+      rewardId: z.enum(REWARD_IDS),
+      enabled: z.boolean(),
+      requestId: id,
+    })
+    .strict(),
   ...discussionMessageVariants,
   ...kitMessageVariants,
   z
@@ -75,6 +97,7 @@ export const messageSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
+  z.object({ type: z.literal('setLivingHq'), enabled: z.boolean(), requestId: id }).strict(),
   z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),
   z
     .object({
@@ -91,6 +114,7 @@ export const messageSchema = z.discriminatedUnion('type', [
         'refresh',
         'checkRuntime',
         'autoDetectCli',
+        'manageWorkspaceTrust',
         'installKit',
         'migrateUserKit',
         'openSettings',

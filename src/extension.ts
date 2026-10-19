@@ -28,6 +28,9 @@ import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/
 import { normalizeTheme } from './shared/themes';
 import { normalizeZoom } from './shared/zoom';
 import { QuestService, type QuestFact } from './host/QuestService';
+import { RewardService } from './host/RewardService';
+import { DRAGON_BALL_UNLOCK_KEY } from './shared/dragonBall';
+import { rewardById, themeReward, unlockedRewards } from './shared/rewards';
 import { studioQuestFacts, discussionQuestFacts } from './host/questFacts';
 
 let panel: vscode.WebviewPanel | undefined;
@@ -81,20 +84,36 @@ export async function activate(context: vscode.ExtensionContext) {
         'dashboardSaved',
         'accountCredits',
         'themeState',
+        'rewardState',
+        'secretThemeState',
         'zoomState',
         'error',
       ].includes(message.type)
     )
       void dashboardPanel.webview.postMessage(message);
   };
-  const getTheme = () =>
-    normalizeTheme(vscode.workspace.getConfiguration('featureStudio').get('appearance.theme'));
+  const dragonBallUnlocked = () => context.globalState.get(DRAGON_BALL_UNLOCK_KEY) === true;
+  const sendSecrets = (requestId?: string, error?: string) =>
+    send({ type: 'secretThemeState', dragonBallUnlocked: dragonBallUnlocked(), requestId, error });
+  const getTheme = () => {
+    const theme = normalizeTheme(
+      vscode.workspace.getConfiguration('featureStudio').get('appearance.theme'),
+    );
+    if (theme === 'dragonball' && !dragonBallUnlocked()) return 'auto';
+    const reward = themeReward(theme);
+    return reward && !unlockedRewards(quests.snapshot()).includes(reward) ? 'auto' : theme;
+  };
   const sendTheme = (requestId?: string, error?: string) =>
     send({ type: 'themeState', theme: getTheme(), requestId, error });
   const getZoom = () =>
     normalizeZoom(vscode.workspace.getConfiguration('featureStudio').get('appearance.zoom'));
   const sendZoom = (requestId?: string, error?: string) =>
     send({ type: 'zoomState', zoom: getZoom(), requestId, error });
+  const getLivingHq = () =>
+    vscode.workspace.getConfiguration('featureStudio').get('appearance.livingHq') === true;
+  const sendLivingHq = (requestId?: string, error?: string) =>
+    send({ type: 'livingHqState', enabled: getLivingHq(), requestId, error });
+  let livingHqWrites = Promise.resolve();
   let zoomWrites = Promise.resolve();
   // Theme writes share a queue so fast successive choices keep their requested order.
   let themeWrites = Promise.resolve();
@@ -118,6 +137,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('featureStudio.launcher', launcher),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('featureStudio.appearance.zoom')) sendZoom();
+      if (event.affectsConfiguration('featureStudio.appearance.livingHq')) sendLivingHq();
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
       if (event.affectsConfiguration('featureStudio.favoriteAgentIds')) service?.publish();
     }),
@@ -127,7 +147,19 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   const hubDirectory = path.join(context.globalStorageUri.fsPath, 'cockpit');
   const quests = new QuestService(hubDirectory);
-  quests.on('state', (state, earned: string[]) => send({ type: 'questState', state, earned }));
+  const rewards = new RewardService(hubDirectory, () => quests.snapshot());
+  const sendRewards = (requestId?: string, error?: string) =>
+    send({ type: 'rewardState', state: rewards.snapshot(), requestId, error });
+  rewards.on('state', () => sendRewards());
+  quests.on('state', (state, earned: string[]) => {
+    send({ type: 'questState', state, earned });
+    rewards.publish();
+    sendTheme();
+  });
+  const refreshPersonalRewards = async () => {
+    await quests.initialize();
+    await rewards.initialize();
+  };
   const recordQuest = (metric: QuestFact['metric'], key: string) =>
     quests.record([{ metric, key }]);
   const dedicatedWindow = new DedicatedWindow(hubDirectory);
@@ -429,6 +461,7 @@ export async function activate(context: vscode.ExtensionContext) {
     await discussions.dispose();
     await hub.dispose();
     await quests.flush();
+    await rewards.flush();
     initialized = false;
   };
   const bootstrap = async (): Promise<void> => {
@@ -462,7 +495,7 @@ export async function activate(context: vscode.ExtensionContext) {
           );
         }
       }
-      await quests.initialize();
+      await refreshPersonalRewards();
       await hub.initialize();
       await dashboard.initialize();
       await discussions.initialize();
@@ -512,6 +545,11 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       throw error;
+    }
+    if (message.type === 'manageWorkspaceTrust') {
+      // Open VS Code's own decision screen, including in restricted or busy workspaces.
+      await vscode.commands.executeCommand('workbench.trust.manage');
+      return;
     }
     if (message.type.startsWith('dashboard')) {
       await ensure();
@@ -566,6 +604,84 @@ export async function activate(context: vscode.ExtensionContext) {
         }
       }
     }
+    if (message.type === 'refreshSecretThemes') {
+      sendSecrets();
+      sendTheme();
+      return;
+    }
+    if (message.type === 'unlockDragonBall') {
+      const result = themeWrites.then(async () => {
+        try {
+          if (!dragonBallUnlocked()) await context.globalState.update(DRAGON_BALL_UNLOCK_KEY, true);
+          await vscode.workspace
+            .getConfiguration('featureStudio')
+            .update('appearance.theme', 'dragonball', vscode.ConfigurationTarget.Global);
+          sendTheme();
+          sendSecrets(message.requestId);
+        } catch (error) {
+          sendSecrets(
+            message.requestId,
+            redact(error instanceof Error ? error.message : String(error)),
+          );
+        }
+      });
+      themeWrites = result.catch(() => undefined);
+      await result;
+      return;
+    }
+    if (message.type === 'refreshRewards') {
+      await refreshPersonalRewards();
+      return;
+    }
+    if (message.type === 'setReward') {
+      try {
+        await refreshPersonalRewards();
+        rewards.assertUnlocked(message.rewardId);
+        const reward = rewardById.get(message.rewardId)!;
+        if (reward.kind === 'theme') {
+          // Share the theme queue with the ordinary picker; no business session is initialized.
+          const result = themeWrites.then(async () => {
+            rewards.assertUnlocked(message.rewardId);
+            const next = message.enabled
+              ? normalizeTheme(message.rewardId)
+              : getTheme() === message.rewardId
+                ? 'auto'
+                : getTheme();
+            await vscode.workspace
+              .getConfiguration('featureStudio')
+              .update('appearance.theme', next, vscode.ConfigurationTarget.Global);
+            sendTheme();
+            if (initialized && next !== 'auto') await recordQuest('theme', next);
+          });
+          themeWrites = result.catch(() => undefined);
+          await result;
+        } else await rewards.set(message.rewardId, message.enabled);
+        sendRewards(message.requestId);
+      } catch (error) {
+        sendRewards(
+          message.requestId,
+          redact(error instanceof Error ? error.message : String(error)),
+        );
+      }
+      return;
+    }
+    if (message.type === 'setLivingHq') {
+      livingHqWrites = livingHqWrites.then(async () => {
+        try {
+          await vscode.workspace
+            .getConfiguration('featureStudio')
+            .update('appearance.livingHq', message.enabled, vscode.ConfigurationTarget.Global);
+          sendLivingHq(message.requestId);
+        } catch (error) {
+          sendLivingHq(
+            message.requestId,
+            redact(error instanceof Error ? error.message : String(error)),
+          );
+        }
+      });
+      await livingHqWrites;
+      return;
+    }
     if (message.type === 'setZoom') {
       zoomWrites = zoomWrites.then(async () => {
         try {
@@ -586,6 +702,13 @@ export async function activate(context: vscode.ExtensionContext) {
     if (message.type === 'setTheme') {
       themeWrites = themeWrites.then(async () => {
         try {
+          if (message.theme === 'dragonball' && !dragonBallUnlocked())
+            throw new Error('Ce thème secret n’est pas encore débloqué.');
+          const reward = themeReward(message.theme);
+          if (reward) {
+            await refreshPersonalRewards();
+            rewards.assertUnlocked(reward);
+          }
           await vscode.workspace
             .getConfiguration('featureStudio')
             .update('appearance.theme', message.theme, vscode.ConfigurationTarget.Global);
@@ -867,6 +990,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'ready':
+        sendSecrets();
         quests.publish();
         discussions.publish();
         webviewReady = true;
@@ -875,6 +999,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (dedicated) void drainRequests();
         sendTheme();
         sendZoom();
+        sendLivingHq();
         current.publish();
         if (devops) send({ type: 'devopsState', state: devops.getState() });
         return;
@@ -883,7 +1008,7 @@ export async function activate(context: vscode.ExtensionContext) {
         await current.refresh();
         return;
       case 'refreshQuests':
-        await quests.initialize();
+        await refreshPersonalRewards();
         for (const entry of hub.entries.values())
           await quests.record(studioQuestFacts(entry.service.snapshot()));
         await quests.record(discussionQuestFacts(discussions.snapshot()));
@@ -1773,7 +1898,7 @@ export async function activate(context: vscode.ExtensionContext) {
     html = html
       .replace(
         /<html\b/,
-        `<html data-studio-surface="${surface}" data-studio-theme="${getTheme()}" data-studio-zoom="${getZoom()}"`,
+        `<html data-studio-surface="${surface}" data-studio-theme="${getTheme()}" data-studio-zoom="${getZoom()}" data-studio-living-hq="${getLivingHq()}"`,
       )
       .replace(
         '<head>',
@@ -1789,6 +1914,7 @@ export async function activate(context: vscode.ExtensionContext) {
       await discussions.unload();
       await hub.dispose();
       await quests.flush();
+      await rewards.flush();
       await lease?.release();
       lease = undefined;
     })().finally(() => {
@@ -1817,6 +1943,8 @@ export async function activate(context: vscode.ExtensionContext) {
           dashboardReady = true;
           hub.publish();
           sendTheme();
+          sendRewards();
+          sendSecrets();
           sendZoom();
           send({ type: 'dashboardState', state: dashboard.snapshot() });
           updateDashboardVisibility();
@@ -1830,6 +1958,8 @@ export async function activate(context: vscode.ExtensionContext) {
             'dashboardSave',
             'dashboardOpen',
             'dashboardFullscreen',
+            'unlockDragonBall',
+            'refreshSecretThemes',
           ].includes(raw?.type)
         )
           void dispatch(raw, 'control').catch(report);
@@ -2107,7 +2237,9 @@ export async function activate(context: vscode.ExtensionContext) {
     getLauncherReady: () => launcher.isReady,
     getTheme,
     getZoom,
+    getLivingHq,
     getQuestState: () => quests.snapshot(),
+    getRewardState: () => rewards.snapshot(),
     getDevOpsState: () => devops?.getState(),
     getDashboardState: () => dashboard.snapshot(),
     getDashboardReady: () => dashboardReady,

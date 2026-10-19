@@ -1,0 +1,462 @@
+/* Secret Capsule Corp dojo: all surfaces retain the shared accessibility tokens. */
+html[data-studio-theme-effective='dragonball'],
+html[data-studio-theme='dragonball']:not([data-studio-theme-effective]),
+.theme-preview-dragonball {
+  --bg: #091729;
+  --side: #0c2039;
+  --panel: #102741;
+  --panel-soft: #183652;
+  --fg: #fff4df;
+  --muted: #bacddd;
+  --border: #48667c;
+  --input-border: #859db0;
+  --coral: #ffae42;
+  --on-accent: #181e2b;
+  --accent-hover: #ffc16b;
+  --apricot: #ffd578;
+  --lavender: #77d8fa;
+  --green: #9ee3ad;
+  --error: #ffb4a8;
+  color-scheme: dark;
+}
+html[data-studio-theme-family='dragonball'] {
+  --radius: 14px;
+}
+html[data-studio-theme-family='dragonball'] .main-shell {
+  background-image:
+    radial-gradient(ellipse at 85% 0, #167dcc22, transparent 50%),
+    linear-gradient(135deg, transparent 49.7%, #7bdcff06 50%, transparent 50.3%);
+  background-size:
+    auto,
+    38px 38px;
+}
+html[data-studio-theme-family='dragonball'] .sidebar {
+  border-right: 2px solid #ef9f38;
+  background-image: linear-gradient(160deg, #173f61 0%, transparent 45%);
+}
+html[data-studio-theme-family='dragonball'] .brand-mark {
+  filter: drop-shadow(0 0 7px #72dbfb70);
+}
+html[data-studio-theme-family='dragonball'] .topbar {
+  border-bottom: 2px solid #48667c;
+}
+html[data-studio-theme-family='dragonball'] .nav-item.active {
+  color: #fff4df;
+  background: linear-gradient(110deg, #b84e16, #7a380e);
+  border-left: 4px solid #ffdc81;
+  box-shadow: inset 0 1px #ffd57844;
+}
+html[data-studio-theme-family='dragonball'] :is(.page-heading h1, .overview-heading h1) {
+  font-weight: 850;
+  letter-spacing: -1px;
+  text-shadow: 2px 3px 0 #0006;
+}
+html[data-studio-theme-family='dragonball'] .button.primary {
+  background: linear-gradient(135deg, #ffca66, #ff9d32);
+  border-color: #ffdd88;
+  box-shadow: 0 3px 0 #87431d;
+}
+html[data-studio-theme-family='dragonball'] .button.primary:hover {
+  filter: brightness(1.1);
+}
+html[data-studio-theme-family='dragonball']
+  :is(.library-card, .overview-module, .session-card, .settings-card) {
+  border-top: 2px solid #507a98;
+  box-shadow:
+    0 8px 22px #0002,
+    inset 0 1px #79e6ff0c;
+}
+html[data-studio-theme-family='dragonball'] .module-header {
+  background: linear-gradient(100deg, #234b6d, #102741);
+}
+.scenery-dragonball {
+  opacity: 0.14;
+}
+.dragon-orbit {
+  position: absolute;
+  border: 2px solid #8de9ff;
+  border-radius: 50%;
+  width: 250px;
+  height: 250px;
+  right: 35px;
+  top: 15px;
+  box-shadow:
+    0 0 0 18px #8de9ff12,
+    0 0 0 20px #8de9ff66;
+}
+.dragon-kanji {
+  position: absolute;
+  right: 80px;
+  top: 50px;
+  font-size: 160px;
+  font-weight: 900;
+  color: #ffca62;
+}
+.dragon-hero {
+  position: relative;
+  isolation: isolate;
+  min-height: 335px;
+  overflow: hidden;
+  border: 1px solid #d6a65b;
+  border-radius: 18px;
+  margin-bottom: 30px;
+  background: #0c2039 url('/qg/dragonball.png') center 20% / cover;
+  box-shadow: 0 14px 36px #0004;
+}
+.dragon-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, #061a30f5 0%, #08213dcc 35%, #0a264c20 75%);
+}
+.dragon-hero-copy {
+  padding: 32px 38px;
+  max-width: 530px;
+}
+.dragon-hero .eyebrow {
+  color: #afefff;
+  letter-spacing: 2px;
+  font-size: 10px;
+}
+.dragon-hero h2 {
+  font-size: clamp(36px, 3.6vw, 58px);
+  line-height: 1;
+  letter-spacing: -2px;
+  margin: 16px 0;
+  font-weight: 900;
+  color: #fff9e8;
+  text-shadow: 3px 4px #08203c;
+}
+.dragon-hero h2 em {
+  color: #ffc45b;
+  font-style: italic;
+}
+.dragon-hero p {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #e1f2ff;
+}
+.dragon-hero-stamp {
+  position: absolute;
+  right: 26px;
+  bottom: 24px;
+  width: 65px;
+  height: 65px;
+  display: grid;
+  place-items: center;
+  border: 4px solid #172337;
+  border-radius: 50%;
+  background: #ffe9b7;
+  color: #142137;
+  font-size: 43px;
+  font-weight: 900;
+  box-shadow: 0 0 0 4px #ffab3d;
+  transform: rotate(-10deg);
+}
+.dragon-balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 19px 0 4px;
+}
+.dragon-ball {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 30% 24%,
+    #fffbd2 0%,
+    #ffd574 24%,
+    #f99916 62%,
+    #b74605 100%
+  );
+  border: 1px solid #ffe597;
+  box-shadow:
+    0 0 12px #ffab3d44,
+    inset -2px -3px 3px #8c390a66;
+}
+.dragon-ball i {
+  color: #b32209;
+  font-size: 7px;
+  font-style: normal;
+  line-height: 1;
+  text-align: center;
+  max-width: 24px;
+  overflow-wrap: anywhere;
+  letter-spacing: -1px;
+}
+.dragon-reveal-backdrop {
+  background: #020b18db;
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+}
+.dragon-reveal {
+  position: relative;
+  width: min(850px, 95vw);
+  max-height: 92dvh;
+  overflow: auto;
+  border: 2px solid #ffc465;
+  border-radius: 24px;
+  background: #081b32;
+  color: #fff2d7;
+  box-shadow:
+    0 0 90px #1395ff44,
+    0 0 30px #ffb44444;
+  animation: dragon-arrival 0.65s ease-out both;
+}
+.dragon-reveal-art {
+  height: 230px;
+  background:
+    linear-gradient(0deg, #081b32, transparent 65%),
+    url('/qg/dragonball.png') center 18% / cover;
+}
+.dragon-reveal-copy {
+  position: relative;
+  text-align: center;
+  padding: 0 34px 32px;
+  margin-top: -14px;
+}
+.dragon-reveal .eyebrow {
+  color: #9deaff;
+  letter-spacing: 3px;
+  font-size: 11px;
+}
+.dragon-reveal h2 {
+  color: #fff4dc;
+  font-size: clamp(32px, 4vw, 50px);
+  line-height: 1.1;
+  margin: 13px 0;
+  letter-spacing: -1.6px;
+}
+.dragon-reveal h2 em {
+  color: #ffc65d;
+}
+.dragon-reveal .dragon-balls {
+  justify-content: center;
+  margin: 20px 0;
+}
+.dragon-reveal p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #d6e7f6;
+}
+.dragon-reveal .dragon-reveal-hint {
+  font-size: 12px;
+  color: #a8c5dc;
+}
+.dragon-reveal .button {
+  margin-top: 12px;
+}
+.dragon-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #fff7;
+  border-radius: 50%;
+  background: #081b32e6;
+  color: white;
+  display: grid;
+  place-items: center;
+}
+.dragon-close:focus-visible {
+  outline: 3px solid #ffc65d;
+  outline-offset: 3px;
+}
+.dragon-feedback {
+  position: fixed;
+  z-index: 1100;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(90vw, 550px);
+  padding: 16px 22px;
+  border: 1px solid var(--coral);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--fg);
+  box-shadow: 0 8px 35px #0006;
+}
+.dragon-theme-note {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--coral);
+}
+html[data-studio-theme-effective='auto']
+  body:is(.vscode-high-contrast, .vscode-high-contrast-light)
+  .dragon-reveal {
+  background: var(--panel);
+  color: var(--fg);
+  border-color: var(--fg);
+  box-shadow: none;
+}
+html[data-studio-theme-effective='auto']
+  body:is(.vscode-high-contrast, .vscode-high-contrast-light)
+  .dragon-reveal
+  :is(h2, em, p, .eyebrow, .dragon-reveal-hint) {
+  color: var(--fg);
+}
+html[data-studio-theme-effective='auto']
+  body:is(.vscode-high-contrast, .vscode-high-contrast-light)
+  :is(.dragon-reveal-art, .dragon-reveal .dragon-balls) {
+  display: none;
+}
+html[data-studio-theme-effective='auto']
+  body:is(.vscode-high-contrast, .vscode-high-contrast-light)
+  .dragon-reveal-copy {
+  padding-top: 38px;
+  margin: 0;
+}
+svg[data-agent-art='dragonball'] {
+  overflow: hidden;
+  image-rendering: pixelated;
+}
+html[data-studio-theme-family='dragonball'] .pixel-avatar.running {
+  background: radial-gradient(ellipse, #3cc8ff35, #ffad3322 50%, transparent 75%);
+  border-color: #ffcf64;
+  box-shadow: 0 0 15px #65dfff44;
+}
+html[data-studio-theme-family='dragonball'] svg[data-pose='working.gif'] {
+  animation: dragon-ki 1.8s ease-in-out infinite;
+}
+html[data-studio-theme-family='dragonball'] .pixel-avatar.approved {
+  border-color: #ffd16f;
+  background: radial-gradient(ellipse, #ffc76625, transparent 75%);
+}
+.session-hq[data-hq-theme='dragonball'] {
+  --hq-room-bg: #153651;
+  --hq-backdrop-filter: none;
+  --hq-backdrop-opacity: 1;
+  --hq-station-bg: #08274644;
+  --hq-station-hover: #082746aa;
+  --hq-station-selected: #08274666;
+  --hq-station-border: #e9b76c;
+  --hq-selection: #ffd075;
+  --hq-desk-top: #fff3c4;
+  --hq-desk-front: #2b5675;
+  --hq-desk-edge: #ffd075;
+  --hq-lamp-bg: #0b243e;
+  --hq-lamp-fg: #ffd26d;
+  --hq-lamp-border: #d7a75d;
+  --hq-working-light: #8be8ff;
+}
+.session-hq[data-hq-theme='dragonball'] .hq-backdrop {
+  opacity: 1;
+  filter: none;
+  object-position: center 20%;
+}
+.session-hq[data-hq-theme='dragonball'] .hq-room {
+  background: #0a2944;
+}
+.session-hq[data-hq-theme='dragonball'] .hq-scenery::after {
+  background: linear-gradient(0deg, #061c3877, #09284422);
+}
+.session-hq[data-hq-theme='dragonball'] .hq-station {
+  border-color: transparent;
+}
+.session-hq[data-hq-theme='dragonball'] .hq-station.selected {
+  box-shadow:
+    inset 0 0 0 2px #ffd075,
+    0 0 22px #64dfff66;
+  background: #08274666;
+}
+.session-hq[data-hq-theme='dragonball'] .hq-station-title,
+.session-hq[data-hq-theme='dragonball'] .hq-nameplate {
+  background: #08243ef0;
+  border-color: #e9b76c;
+  color: #fff3dc;
+}
+.session-hq[data-hq-theme='dragonball'] .hq-status {
+  color: #d0edfa;
+}
+.session-hq[data-hq-theme='dragonball'] .hq-desk {
+  background: linear-gradient(#fff3c4, #d4ac70 40%, #2b5675 42%);
+  border-color: #f8d285;
+}
+@keyframes dragon-arrival {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dragon-ki {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px #83e3ff55);
+  }
+  50% {
+    filter: drop-shadow(0 0 6px #ffd16fcc);
+  }
+}
+@media (max-width: 650px) {
+  .dragon-hero {
+    min-height: 350px;
+    background-position: 68% center;
+  }
+  .dragon-hero-copy {
+    padding: 25px 22px;
+  }
+  .dragon-hero::before {
+    background: linear-gradient(90deg, #061a30ed, #08213cb0);
+  }
+  .dragon-hero-stamp {
+    display: none;
+  }
+  .dragon-reveal-art {
+    height: 170px;
+  }
+  .dragon-reveal-copy {
+    padding: 0 18px 24px;
+  }
+  .dragon-reveal h2 {
+    font-size: 32px;
+  }
+  .dragon-balls {
+    gap: 7px;
+  }
+  .dragon-ball {
+    width: 28px;
+    height: 28px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dragon-reveal,
+  html[data-studio-theme-family='dragonball'] svg[data-pose='working.gif'] {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .dragon-reveal {
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+    border-color: CanvasText;
+  }
+  .dragon-reveal :is(h2, em, p, .eyebrow, .dragon-reveal-hint) {
+    color: CanvasText;
+  }
+  .dragon-reveal-art,
+  .dragon-reveal .dragon-balls {
+    display: none;
+  }
+  .dragon-reveal-copy {
+    padding-top: 30px;
+    margin: 0;
+  }
+  .dragon-close {
+    background: ButtonFace;
+    color: ButtonText;
+    border-color: ButtonText;
+  }
+}

@@ -603,6 +603,17 @@ svg {
 }
 .warning-banner {
   color: var(--coral);
+  flex-wrap: wrap;
+}
+.warning-banner > svg {
+  flex-shrink: 0;
+}
+.warning-banner > span {
+  flex: 1 1 260px;
+}
+.warning-banner > .button {
+  white-space: normal;
+  text-align: left;
 }
 main {
   flex: 1;
@@ -2013,7 +2024,7 @@ main {
   overflow: hidden;
   color: var(--lavender);
 }
-.pixel-avatar img {
+.pixel-avatar :is(img, svg[data-agent-art]) {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -2069,7 +2080,7 @@ main {
   border-color: var(--coral);
   background: color-mix(in srgb, var(--coral) 8%, transparent);
 }
-.avatar-picker img {
+.avatar-picker :is(img, svg[data-agent-art]) {
   height: 76px;
   width: 76px;
   object-fit: contain;
@@ -2083,7 +2094,7 @@ main {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.avatar-picker svg {
+.avatar-picker svg:not([data-agent-art]) {
   position: absolute;
   top: 3px;
   right: 3px;
@@ -2302,6 +2313,7 @@ main {
   position: sticky;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 20px;
   align-items: center;
@@ -2313,6 +2325,10 @@ main {
 }
 .settings-save > span {
   font-size: 12px;
+  flex: 1 1 240px;
+}
+.settings-save .button {
+  white-space: normal;
 }
 .settings-save small {
   display: block;
@@ -2489,21 +2505,21 @@ html[data-studio-theme-effective='auto'] body.vscode-light {
   --green: #397757;
   color-scheme: light;
 }
-body.vscode-high-contrast,
-body.vscode-high-contrast-light {
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast,
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light {
   --border: var(--vscode-contrastBorder, var(--fg));
   --input-border: var(--vscode-contrastBorder, var(--fg));
 }
-body.vscode-high-contrast .button,
-body.vscode-high-contrast-light .button {
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast .button,
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light .button {
   border: 1px solid var(--vscode-contrastBorder, var(--fg));
 }
-body.vscode-high-contrast .nav-item.active,
-body.vscode-high-contrast-light .nav-item.active {
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast .nav-item.active,
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light .nav-item.active {
   outline: 1px solid var(--vscode-contrastActiveBorder, var(--apricot));
 }
-body.vscode-high-contrast .badge,
-body.vscode-high-contrast-light .badge {
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast .badge,
+html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light .badge {
   border: 1px solid currentColor;
 }
 @container studio (min-width: 1450px) {
@@ -2765,7 +2781,7 @@ body.vscode-high-contrast-light .badge {
   .avatar-picker {
     grid-template-columns: repeat(auto-fit, minmax(85px, 1fr));
   }
-  .avatar-picker img {
+  .avatar-picker :is(img, svg[data-agent-art]) {
     width: 55px;
     height: 55px;
   }
@@ -3204,6 +3220,7 @@ body.vscode-high-contrast-light .badge {
   }
   .settings-save > span {
     font-size: 12px;
+    flex-basis: auto;
   }
   .command-editor,
   .hook-editor {
@@ -3248,7 +3265,7 @@ body.vscode-high-contrast-light .badge {
   .avatar-picker {
     gap: 7px;
   }
-  .avatar-picker img {
+  .avatar-picker :is(img, svg[data-agent-art]) {
     height: 46px;
     width: 46px;
   }

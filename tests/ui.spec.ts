@@ -389,6 +389,55 @@ test('nouveau hook désactivé par défaut, activation uniquement après action 
     settings: { hooks: [{ enabled: true }] },
   });
 });
+for (const screen of ['Réglages', 'Automatisations']) {
+  test(`${screen} : accès à l’approbation et conservation du brouillon jusqu’au retour de VS Code`, async ({
+    page,
+  }) => {
+    const state = fresh();
+    state.workspace.trusted = false;
+    if (screen === 'Automatisations') await page.setViewportSize({ width: 390, height: 844 });
+    await hosted(page, state);
+    await navigate(page, screen);
+    if (screen === 'Automatisations') {
+      await page.getByRole('button', { name: 'Ajouter un hook' }).click();
+      await page.getByLabel('Nom du hook').fill('Mon brouillon conservé');
+      await page.getByLabel('Exécutable', { exact: true }).fill('node');
+    } else {
+      await page
+        .getByRole('spinbutton', { name: 'Durée maximale d’une tentative minutes' })
+        .fill('31');
+    }
+    const footer = page.locator('.settings-save');
+    const save = footer.getByRole('button', { name: 'Enregistrer les réglages' });
+    await expect(footer).toContainText('Approbation requise dans VS Code');
+    await expect(save).toBeDisabled();
+    await footer.getByRole('button', { name: 'Gérer l’approbation dans VS Code' }).click();
+    expect((await messages(page)).at(-1)).toEqual({ type: 'manageWorkspaceTrust' });
+    // Opening or dismissing the native screen is not an approval.
+    await expect(save).toBeDisabled();
+    expect((await messages(page)).some((message) => message.type === 'saveSettings')).toBe(false);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      page.viewportSize()!.width,
+    );
+    state.workspace.trusted = true;
+    await page.evaluate((next) => window.postMessage({ type: 'state', state: next }, '*'), state);
+    await expect(page.locator('.warning-banner')).toHaveCount(0);
+    await expect(footer).toContainText('Projet approuvé dans VS Code');
+    await expect(
+      footer.getByRole('button', { name: 'Gérer l’approbation dans VS Code' }),
+    ).toHaveCount(0);
+    await expect(save).toBeEnabled();
+    await save.click();
+    expect((await messages(page)).at(-1)).toMatchObject({
+      type: 'saveSettings',
+      settings:
+        screen === 'Automatisations'
+          ? { hooks: [{ name: 'Mon brouillon conservé', command: 'node', enabled: false }] }
+          : { timeoutMinutes: 31 },
+    });
+  });
+}
+
 test('aucun run en espace non approuvé, runtime indisponible ou dépendance non validée', async ({
   page,
 }) => {
