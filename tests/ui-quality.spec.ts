@@ -158,19 +158,19 @@ test('qualité : contre-exemple lisible, preuves sélectionnées par id et aucun
   await page.screenshot({ path: 'test-results/quality-mobile.png', fullPage: true });
 });
 
-test('qualité : exigence de rapport visible et enregistrée dans l’éditeur parcours', async ({
+test('qualité : les exigences enregistrées restent conservées avec les profils hérités', async ({
   page,
 }) => {
-  await hosted(page, structuredClone(demoState));
+  const state = structuredClone(demoState);
+  state.workflows[0].steps[0].requiredQuality = 'visual';
+  await hosted(page, state);
   await navigate(page, 'Parcours');
-  await page.getByRole('button', { name: 'Nouveau parcours' }).click();
-  await page.getByLabel('Nom du parcours').fill('Recette dédiée');
-  await page.getByLabel('Rapport qualité requis').selectOption('visual');
-  await expect(
-    page.getByText('Les agents de recette visuelle et contre-exemples conservent leur exigence', {
-      exact: false,
-    }),
-  ).toBeVisible();
+  await page
+    .locator('.workflow-library-card')
+    .first()
+    .getByRole('button', { name: 'Ouvrir l’éditeur' })
+    .click();
+  await expect(page.getByLabel('Rapport qualité requis')).toHaveCount(0);
   await page.getByRole('button', { name: 'Enregistrer le parcours' }).click();
   const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveWorkflow' }>;
   expect(saved.type).toBe('saveWorkflow');

@@ -358,6 +358,8 @@ export const messageSchema = z.discriminatedUnion('type', [
           instructions: text.min(1),
           tools: z.array(short).max(30),
           model: short.optional(),
+          reasoning: short.optional(),
+          policy: z.enum(['read-only', 'workspace-write', 'tests']).optional(),
           skills: z.array(id).max(50),
           nickname: z.string().max(80).optional(),
           avatar: avatarSchema.optional(),

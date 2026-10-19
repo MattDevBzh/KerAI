@@ -43,6 +43,8 @@ export type FeatureStatus =
   | 'awaiting_final_validation'
   | 'completed';
 export interface WorkflowStep {
+  /** Resolve the agent profile at launch; only model/reasoning are member overrides. */
+  inheritAgent?: boolean;
   optional?: boolean;
   requiredDevOpsEvidence?: boolean;
   requiredQuality?: import('./quality').QualityKind;
@@ -207,6 +209,8 @@ export interface AgentProfile {
   instructions: string;
   tools: string[];
   model?: string;
+  reasoning?: string;
+  policy?: PolicyProfile;
   source: 'bundled' | 'user' | 'workspace';
   path: string;
   skills: string[];
@@ -446,6 +450,8 @@ export type ClientMessage =
         instructions: string;
         tools: string[];
         model?: string;
+        reasoning?: string;
+        policy?: PolicyProfile;
         skills: string[];
         nickname?: string;
         avatar?: string;

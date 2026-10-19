@@ -15,8 +15,49 @@ import { demoState } from '../webview/demo';
 import { WorkflowEngine } from '../src/core/workflow';
 import { finalValidationReady } from '../src/shared/collaboration';
 import { parseMessage } from '../src/host/messages';
+import { inheritTeamProfiles, resolveAgentProfile } from '../src/shared/agentInheritance';
 
 describe('feature team composition', () => {
+  it('inherits the live solo profile and only keeps explicit team model/reasoning overrides', () => {
+    const agent = {
+      ...structuredClone(demoState.agents[0]),
+      model: 'original',
+      reasoning: 'high',
+      skills: ['live-skill'],
+      policy: 'read-only' as const,
+    };
+    const solo = agentStep(agent);
+    expect(solo.model).toBeUndefined();
+    expect(solo.reasoning).toBeUndefined();
+    expect(solo.skills).toEqual([]);
+    agent.model = 'updated';
+    agent.reasoning = 'medium';
+    agent.skills = ['changed-skill'];
+    expect(resolveAgentProfile(solo, agent)).toMatchObject({
+      model: 'updated',
+      reasoning: 'medium',
+      skills: ['changed-skill'],
+    });
+    const [member] = inheritTeamProfiles(
+      [{ ...solo, skills: ['stale-copy'], model: 'team-model', reasoning: '' }],
+      [agent],
+    );
+    expect(resolveAgentProfile(member, agent)).toMatchObject({
+      model: 'team-model',
+      reasoning: 'medium',
+      skills: ['changed-skill'],
+    });
+    expect(resolveAgentProfile({ ...member, model: ' ', reasoning: 'low' }, agent)).toMatchObject({
+      model: 'updated',
+      reasoning: 'low',
+    });
+    const state = structuredClone(demoState);
+    state.agents = [agent];
+    expect(effectiveTeamModel(solo, state.features[0], state)).toMatchObject({
+      modelId: 'updated',
+      reasoning: 'medium',
+    });
+  });
   it('copies a complete team twice without identity, artifact or dependency collisions', () => {
     const template = structuredClone(demoState.workflows[0]);
     const before = structuredClone(template);

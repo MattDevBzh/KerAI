@@ -318,6 +318,9 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
   await page.getByLabel('Nom du profil').fill('Quality companion');
   await page.getByLabel('Instructions', { exact: false }).fill('Vérifie les critères de réussite.');
   await page.getByRole('checkbox', { name: 'Contexte vide par défaut' }).check();
+  await page.getByLabel('Modèle', { exact: true }).selectOption('real-model');
+  await page.getByLabel('Réflexion par défaut de l’agent').selectOption('high');
+  await page.getByLabel('Permissions par défaut de l’agent').selectOption('workspace-write');
   await page.getByRole('button', { name: 'Enregistrer le profil' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'saveAgent',
@@ -326,6 +329,9 @@ test('édition agent : pseudo libre et avatar enregistrés, modal utilisable au 
       id: 'quality-companion',
       nickname: 'Capitaine Bug',
       avatar: 'release-manager',
+      model: 'real-model',
+      reasoning: 'high',
+      policy: 'workspace-write',
     },
   });
   await page.getByRole('button', { name: 'Nouvel agent' }).click();
@@ -1039,36 +1045,49 @@ test('budgets : conversion des crédits vers le stockage nano-AIU et valeurs abs
     },
   });
 });
-test('éditeur visuel : étapes, dépendances et réorganisation clavier sans YAML', async ({
+test('éditeur visuel : profils hérités, seules les surcharges modèle et réflexion sont configurables', async ({
   page,
 }) => {
-  await hosted(page);
+  const state = fresh();
+  state.agents[0].model = 'base-model';
+  state.agents[0].reasoning = 'high';
+  state.agents[0].skills = ['ai-plan'];
+  await hosted(page, state);
   await navigate(page, 'Parcours');
   await page.getByRole('button', { name: 'Nouveau parcours' }).click();
   await page.getByLabel('Nom du parcours').fill('Mon parcours');
-  await page.getByLabel('Nom de l’étape').fill('Explorer');
+  await expect(page.getByLabel('Modèle de l’intervention')).toHaveValue('');
+  await expect(page.getByLabel('Niveau de réflexion')).toHaveValue('');
+  await expect(page.getByLabel('Paramètres hérités de l’agent')).toContainText(
+    state.skills.find((skill) => skill.id === 'ai-plan')?.name || 'ai-plan',
+  );
+  for (const name of [
+    'Nom de l’étape',
+    'Description de l’étape',
+    'Permissions de l’étape',
+    'Nom du fichier livrable',
+    'Skills de l’étape',
+  ])
+    await expect(page.getByLabel(name, { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Étape', exact: true }).click();
-  await page.getByLabel('Nom de l’étape').fill('Construire');
-  await page.getByLabel('Permissions de l’étape').selectOption('workspace-write');
-  await page.getByLabel('Nom du fichier livrable').fill('construction.txt');
-  await expect(
-    page.getByText('le livrable doit être un fichier .md.', { exact: false }),
-  ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Enregistrer le parcours' })).toBeDisabled();
-  await page.getByLabel('Nom du fichier livrable').fill('construction.md');
-  await page.getByRole('button', { name: 'Monter Construire' }).click();
-  await expect(page.locator('.workflow-node').first()).toContainText('Construire');
+  await page.getByLabel('Agent de l’étape').selectOption(state.agents[1].id);
+  await page.getByLabel('Modèle de l’intervention').selectOption('real-model');
+  await page.getByLabel('Niveau de réflexion').selectOption('low');
+  await page.getByRole('button', { name: `Monter ${state.agents[1].name}`, exact: true }).click();
   await page.getByRole('button', { name: 'Enregistrer le parcours' }).click();
   const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveWorkflow' }>;
   expect(saved.type).toBe('saveWorkflow');
-  expect(saved.workflow.id).toBe('mon-parcours');
   expect(saved.workflow.steps[0]).toMatchObject({
-    name: 'Construire',
-    policy: 'workspace-write',
-    artifact: 'construction.md',
+    agentId: state.agents[1].id,
+    model: 'real-model',
+    reasoning: 'low',
+    inheritAgent: true,
+    skills: [],
     dependsOn: [saved.workflow.steps[1].id],
   });
-  expect(saved.workflow.steps[1].name).toBe('Explorer');
+  expect(saved.workflow.steps[1].model).toBeUndefined();
+  expect(saved.workflow.steps[1].reasoning).toBeUndefined();
+  expect(saved.workflow.steps[1].skills).toEqual([]);
 });
 async function labelCapture(page: Page) {
   await page.evaluate(() => {

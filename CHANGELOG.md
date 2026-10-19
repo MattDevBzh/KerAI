@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.0 — 2026-10-19
+
+- Les agents ajoutés seuls et les membres d’équipes reprennent leur profil courant au lancement : instructions, skills, outils, permissions, contexte par défaut et ton. Les anciennes copies de skills dans les modèles d’équipe ne masquent plus le profil.
+- Dans la composition et l’édition d’une équipe, seuls le modèle et le niveau de réflexion du membre peuvent être remplacés. Les autres paramètres sont affichés en lecture seule et se modifient dans Agents. Les champs « Hériter » restent vides dans l’équipe ; chacun reprend indépendamment la valeur courante du profil.
+- Ajout de la réflexion et des permissions par défaut dans l’éditeur d’agent. Les récapitulatifs et les lancements utilisent les mêmes valeurs ; modifier un profil après un aperçu nécessite de recalculer cet aperçu.
+- Les modèles d’équipes existants sont adaptés à leur lecture. Les sessions déjà enregistrées conservent leur définition jusqu’à une modification explicite de leur équipe ; aucune tentative passée n’est réécrite.
+
 ## 1.15.0 — 2026-10-19
 
 - Relecture distante Git : outils dédiés pour récupérer deux branches dans un cache utilisateur bare, figer leurs commits, parcourir les diffs et lire le contexte sans checkout.

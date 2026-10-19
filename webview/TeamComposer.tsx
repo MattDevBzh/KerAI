@@ -1,3 +1,5 @@
+import { inheritTeamProfiles } from '../src/shared/agentInheritance';
+import { AgentModelOverrides } from './AgentModelOverrides';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
   ArrowDown,
@@ -35,7 +37,7 @@ const dragType = 'application/x-feature-studio-team';
 const policies = {
   'read-only': 'Lecture seule',
   'workspace-write': 'Écriture dans le projet',
-  tests: 'Tests autorisés',
+  tests: 'Tests préautorisés',
 };
 
 export function TeamComposer({
@@ -51,7 +53,9 @@ export function TeamComposer({
   onClose: () => void;
   onPendingChange: (pending: boolean) => void;
 }) {
-  const [steps, setSteps] = useState(() => orderTeam(teamSteps(feature)));
+  const [steps, setSteps] = useState(() =>
+    orderTeam(inheritTeamProfiles(teamSteps(feature), state.agents)),
+  );
   const [revision] = useState(feature.teamRevision ?? 0);
   const [search, setSearch] = useState(''),
     [editing, setEditing] = useState('');
@@ -107,7 +111,11 @@ export function TeamComposer({
         }
         const team = state.workflows.find((team) => team.id === item.id);
         if (!team) throw new Error('Cette équipe n’est plus disponible.');
-        return insertTeam(steps, instantiateTeam(orderTeam(team.steps)), at);
+        return insertTeam(
+          steps,
+          instantiateTeam(orderTeam(inheritTeamProfiles(team.steps, state.agents))),
+          at,
+        );
       },
       item.kind === 'member' ? 'Intervention déplacée.' : 'Composition mise à jour.',
     );
@@ -337,86 +345,7 @@ export function TeamComposer({
       {selected && (
         <fieldset className="team-settings" disabled={disabled}>
           <legend>Intervention : {selected.name}</legend>
-          <div className="field-row">
-            <label className="field">
-              <span>Rôle dans cette feature</span>
-              <input
-                value={selected.name}
-                maxLength={200}
-                onChange={(event) => update({ name: event.target.value })}
-              />
-            </label>
-            <label className="field">
-              <span>Permissions de l’intervention</span>
-              <select
-                value={selected.policy}
-                onChange={(event) =>
-                  update({ policy: event.target.value as WorkflowStep['policy'] })
-                }
-              >
-                {Object.entries(policies).map(([id, name]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className="field">
-            <span>Mission</span>
-            <textarea
-              rows={2}
-              value={selected.description}
-              onChange={(event) => update({ description: event.target.value })}
-            />
-          </label>
-          <div className="field-row">
-            <label className="field">
-              <span>Modèle de l’intervention</span>
-              <select
-                value={selected.model ?? ''}
-                onChange={(event) =>
-                  update({ model: event.target.value || undefined, reasoning: undefined })
-                }
-              >
-                <option value="">Hériter du profil / des réglages</option>
-                {selected.model &&
-                  !state.runtime.models.some((model) => model.id === selected.model) && (
-                    <option value={selected.model}>{selected.model} · configuré</option>
-                  )}
-                {state.runtime.models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Niveau de réflexion</span>
-              <select
-                value={selected.reasoning ?? ''}
-                onChange={(event) => update({ reasoning: event.target.value || undefined })}
-              >
-                <option value="">Automatique</option>
-                {[
-                  ...new Set([
-                    ...(selected.reasoning ? [selected.reasoning] : []),
-                    ...(state.runtime.models.find(
-                      (model) =>
-                        model.id ===
-                        (selected.model ||
-                          state.agents.find((agent) => agent.id === selected.agentId)?.model ||
-                          state.settings.defaultModel),
-                    )?.reasoningEfforts ?? []),
-                  ]),
-                ].map((effort) => (
-                  <option key={effort} value={effort}>
-                    {effort}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <AgentModelOverrides step={selected} state={state} onChange={update} />
           {feature.budget?.modelProfile && feature.budget.modelProfile !== 'current' && (
             <p className="muted">Le profil du budget de la feature a priorité sur ces choix.</p>
           )}

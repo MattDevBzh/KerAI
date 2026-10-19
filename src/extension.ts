@@ -1,3 +1,4 @@
+import { inheritTeamProfiles } from './shared/agentInheritance';
 import { resolvePersonalReviewReport } from './host/PersonalReviewTools';
 import { observationHtml, observationMarkdown } from './shared/observationReport';
 import { DashboardController } from './host/DashboardController';
@@ -1808,6 +1809,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       case 'saveWorkflow': {
         current.assertTrusted();
+        message.workflow.steps = inheritTeamProfiles(message.workflow.steps, current.state.agents);
         if (
           message.workflow.steps.some(
             (step) =>

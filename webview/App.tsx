@@ -1,3 +1,5 @@
+import { agentPolicy } from '../src/shared/agentInheritance';
+import { AgentProfileSummary, AgentModelOverrides } from './AgentModelOverrides';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { OptionalStepChoice, SkippedInterventions } from './OptionalStepsUI';
 import { CatalogSearch, searchText, useDialogAccessibility } from './Ergonomics';
@@ -1702,18 +1704,20 @@ function ModelSelect({
   value,
   onChange,
   label = 'Modèle',
+  emptyLabel = 'Automatique · choix du CLI',
 }: {
   state: StudioState;
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  emptyLabel?: string;
 }) {
   return (
     <label className="field">
       <span>{label}</span>
       <div className="select-wrap">
         <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-          <option value="">Automatique · choix du CLI</option>
+          <option value="">{emptyLabel}</option>
           {value && !state.runtime.models.some((m) => m.id === value) && (
             <option value={value}>{value} · configuré</option>
           )}
@@ -1886,7 +1890,14 @@ function CreateModal({
                     onChange={(event) =>
                       setTeam(
                         team.map((item, i) =>
-                          i === index ? { ...item, agentId: event.target.value } : item,
+                          i === index
+                            ? {
+                                ...item,
+                                agentId: event.target.value,
+                                model: undefined,
+                                reasoning: undefined,
+                              }
+                            : item,
                         ),
                       )
                     }
@@ -1901,54 +1912,13 @@ function CreateModal({
                     ))}
                   </select>
                 </label>
-                <label className="field">
-                  <span>Intervention {index + 1}</span>
-                  <input
-                    maxLength={200}
-                    value={member.name}
-                    onChange={(event) =>
-                      setTeam(
-                        team.map((item, i) =>
-                          i === index ? { ...item, name: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>Mission {index + 1}</span>
-                  <textarea
-                    maxLength={4000}
-                    rows={2}
-                    value={member.description}
-                    onChange={(event) =>
-                      setTeam(
-                        team.map((item, i) =>
-                          i === index ? { ...item, description: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>Autorisations {index + 1}</span>
-                  <select
-                    value={member.policy}
-                    onChange={(event) =>
-                      setTeam(
-                        team.map((item, i) =>
-                          i === index
-                            ? { ...item, policy: event.target.value as typeof member.policy }
-                            : item,
-                        ),
-                      )
-                    }
-                  >
-                    <option value="read-only">Lecture seule</option>
-                    <option value="workspace-write">Écriture dans le projet</option>
-                    <option value="tests">Tests autorisés</option>
-                  </select>
-                </label>
+                <AgentModelOverrides
+                  step={member}
+                  state={state}
+                  onChange={(patch) =>
+                    setTeam(team.map((item, i) => (i === index ? { ...item, ...patch } : item)))
+                  }
+                />
                 <label className="field">
                   <span>Participation de {member.name}</span>
                   <select
@@ -2650,6 +2620,7 @@ function StepPanel({
     step.attempts.length < step.maxAttempts;
   const next = feature.steps.find((s) => s.dependsOn.includes(step.id) && !stepResolved(s));
   const agent = state.agents.find((a) => a.id === step.agentId);
+  const displayPolicy = step.inheritAgent && agent ? agentPolicy(agent) : step.policy;
   const unanswered = latest?.questions.filter((q) => !latest.answers[q.id]) ?? [];
   const blocked = !state.workspace.trusted
     ? 'Le projet doit être approuvé dans VS Code.'
@@ -2727,7 +2698,7 @@ function StepPanel({
             <span>
               {step.model || agent?.model || state.settings.defaultModel || 'Modèle automatique'}
               <span className="inline-dot" />
-              {policyLabels[step.policy]}
+              {policyLabels[displayPolicy]}
             </span>
           </div>
           <button
@@ -3440,11 +3411,11 @@ function StepPanel({
         <div className="step-policy">
           <ShieldCheck size={16} />
           <div>
-            <strong>{policyLabels[step.policy]}</strong>
+            <strong>{policyLabels[displayPolicy]}</strong>
             <p>
-              {step.policy === 'read-only'
+              {displayPolicy === 'read-only'
                 ? 'Cette étape est destinée à analyser et proposer.'
-                : step.policy === 'tests'
+                : displayPolicy === 'tests'
                   ? 'Seules les commandes de test configurées sont autorisées.'
                   : 'L’agent peut modifier les fichiers du projet pendant cette étape.'}
             </p>
@@ -3480,7 +3451,11 @@ function StepConfig({
   const [initialContext, setInitialContext] = useState(step.initialContext ?? '');
   const [mcpServerIds, setMcpServerIds] = useState(step.mcpServerIds ?? []);
   const [askBeforeRun, setAskBeforeRun] = useState(step.askBeforeRun ?? false);
-  const efforts = state.runtime.models.find((m) => m.id === model)?.reasoningEfforts ?? [];
+  const profile = state.agents.find((a) => a.id === agent);
+  const efforts =
+    state.runtime.models.find(
+      (m) => m.id === (model || profile?.model || state.settings.defaultModel),
+    )?.reasoningEfforts ?? [];
   return (
     <form
       className="step-config"
@@ -3490,15 +3465,22 @@ function StepConfig({
           agentId: agent,
           model: model || undefined,
           reasoning: reasoning || undefined,
-          skills,
+          skills: step.inheritAgent ? [] : skills,
           maxAttempts,
+          initialContext,
+          mcpServerIds,
+          askBeforeRun,
         });
       }}
     >
       <div className="field-row">
         <label className="field">
           <span>Profil de l’agent</span>
-          <select value={agent} onChange={(e) => setAgent(e.target.value)}>
+          <select
+            disabled={step.inheritAgent}
+            value={agent}
+            onChange={(e) => setAgent(e.target.value)}
+          >
             {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -3509,6 +3491,7 @@ function StepConfig({
         <ModelSelect
           state={state}
           value={model}
+          emptyLabel={`Hériter de l’agent (${profile?.model || state.settings.defaultModel || 'Automatique'})`}
           onChange={(v) => {
             setModel(v);
             setReasoning('');
@@ -3519,7 +3502,7 @@ function StepConfig({
         <label className="field">
           <span>Effort de raisonnement</span>
           <select value={reasoning} onChange={(e) => setReasoning(e.target.value)}>
-            <option value="">Automatique</option>
+            <option value="">Hériter de l’agent ({profile?.reasoning || 'Automatique'})</option>
             {reasoning && !efforts.includes(reasoning) && (
               <option value={reasoning}>{reasoning} · configuré</option>
             )}
@@ -3563,27 +3546,31 @@ function StepConfig({
         />
         <span>Demander un contexte humain avant exécution automatique</span>
       </label>
-      <fieldset className="skill-options">
-        <legend>Skills pour cette étape</legend>
-        {state.skills.length ? (
-          state.skills.map((s) => (
-            <label key={s.id}>
-              <input
-                type="checkbox"
-                checked={skills.includes(s.id)}
-                onChange={(e) =>
-                  setSkills(
-                    e.target.checked ? [...skills, s.id] : skills.filter((id) => id !== s.id),
-                  )
-                }
-              />
-              {s.name}
-            </label>
-          ))
-        ) : (
-          <span className="muted">Aucune skill disponible dans ce projet.</span>
-        )}
-      </fieldset>
+      {step.inheritAgent && profile ? (
+        <AgentProfileSummary agent={profile} state={state} />
+      ) : (
+        <fieldset className="skill-options">
+          <legend>Skills pour cette étape</legend>
+          {state.skills.length ? (
+            state.skills.map((s) => (
+              <label key={s.id}>
+                <input
+                  type="checkbox"
+                  checked={skills.includes(s.id)}
+                  onChange={(e) =>
+                    setSkills(
+                      e.target.checked ? [...skills, s.id] : skills.filter((id) => id !== s.id),
+                    )
+                  }
+                />
+                {s.name}
+              </label>
+            ))
+          ) : (
+            <span className="muted">Aucune skill disponible dans ce projet.</span>
+          )}
+        </fieldset>
+      )}
       <button className="button secondary small" disabled={!agent}>
         Enregistrer la configuration <Check size={14} />
       </button>
@@ -3617,6 +3604,10 @@ function AgentEditor({
   const [instructions, setInstructions] = useState(source?.instructions ?? '');
   const [tools, setTools] = useState(source?.tools.join(', ') ?? '');
   const [model, setModel] = useState(source?.model ?? '');
+  const [reasoning, setReasoning] = useState(source?.reasoning ?? '');
+  const [policy, setPolicy] = useState<NonNullable<AgentProfile['policy']>>(
+    source ? agentPolicy(source) : 'read-only',
+  );
   const [skills, setSkills] = useState(source?.skills ?? []);
   const [emptyContextByDefault, setEmptyContextByDefault] = useState(
     source?.emptyContextByDefault ?? false,
@@ -3641,6 +3632,8 @@ function AgentEditor({
             instructions: string;
             tools: string;
             model: string;
+            reasoning: string;
+            policy: NonNullable<AgentProfile['policy']>;
             skills: string[];
             emptyContextByDefault: boolean;
             discussionAgent: boolean;
@@ -3671,6 +3664,8 @@ function AgentEditor({
         instructions,
         tools,
         model,
+        reasoning,
+        policy,
         skills,
         emptyContextByDefault,
         discussionAgent,
@@ -3688,6 +3683,8 @@ function AgentEditor({
         avatar: resolveAvatar(existing.avatar, existing.id),
         tools: existing.tools.join(', '),
         model: existing.model ?? '',
+        reasoning: existing.reasoning ?? '',
+        policy: agentPolicy(existing),
         emptyContextByDefault: existing.emptyContextByDefault ?? false,
         discussionAgent: existing.discussionAgent ?? false,
         roastLevel: normalizeRoastLevel(existing.roastLevel),
@@ -3701,6 +3698,8 @@ function AgentEditor({
       setInstructions(chosen.instructions);
       setTools(chosen.tools);
       setModel(chosen.model);
+      setReasoning(chosen.reasoning);
+      setPolicy(chosen.policy);
       setSkills(chosen.skills);
       setEmptyContextByDefault(chosen.emptyContextByDefault);
       setDiscussionAgent(chosen.discussionAgent);
@@ -3742,6 +3741,8 @@ function AgentEditor({
                   .map((s) => s.trim())
                   .filter(Boolean),
                 model: model || undefined,
+                reasoning,
+                policy,
                 skills,
                 nickname: nickname.trim() || undefined,
                 avatar,
@@ -3862,7 +3863,48 @@ function AgentEditor({
                 restent applicables.
               </small>
             </label>
-            <ModelSelect state={state} value={model} onChange={setModel} />
+            <ModelSelect
+              state={state}
+              value={model}
+              onChange={(value) => {
+                setModel(value);
+                setReasoning('');
+              }}
+            />
+          </div>
+          <div className="field-row">
+            <label className="field">
+              <span>Réflexion par défaut de l’agent</span>
+              <select value={reasoning} onChange={(e) => setReasoning(e.target.value)}>
+                <option value="">Automatique</option>
+                {[
+                  ...new Set([
+                    ...(reasoning ? [reasoning] : []),
+                    ...(state.runtime.models.find(
+                      (m) => m.id === (model || state.settings.defaultModel),
+                    )?.reasoningEfforts ?? []),
+                  ]),
+                ].map((effort) => (
+                  <option key={effort} value={effort}>
+                    {effort}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Permissions par défaut de l’agent</span>
+              <select
+                value={policy}
+                onChange={(e) => setPolicy(e.target.value as NonNullable<AgentProfile['policy']>)}
+              >
+                <option value="read-only">Lecture seule</option>
+                <option value="workspace-write">Écriture dans le projet</option>
+                <option value="tests">Tests préautorisés</option>
+              </select>
+              <small>
+                Les outils demandés et les commandes de test autorisées restent nécessaires.
+              </small>
+            </label>
           </div>
           <label className="discussion-agent-toggle">
             <input

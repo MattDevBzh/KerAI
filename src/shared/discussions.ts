@@ -1,6 +1,8 @@
 import type { AgentProfile, Usage, PolicyProfile } from './types';
 
 export interface DiscussionFeatureMember {
+  model?: string;
+  reasoning?: string;
   optional?: boolean;
   agentId: string;
   name: string;

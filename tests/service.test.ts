@@ -1,3 +1,4 @@
+import { agentPolicy } from '../src/shared/agentInheritance';
 import { featureStateKey } from '../src/shared/collaboration';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
@@ -78,6 +79,61 @@ async function fixture() {
     },
   };
 }
+
+it('launches with the current base profile, rejects stale previews and keeps only team model overrides', async () => {
+  const f = await fixture();
+  const user = join(f.root, 'personal');
+  Object.defineProperty(f.service.registry, 'userPath', { value: user });
+  await mkdir(join(user, 'agents'), { recursive: true });
+  await mkdir(join(user, 'skills/live-skill'), { recursive: true });
+  await writeFile(
+    join(user, 'skills/live-skill/SKILL.md'),
+    '---\nname: live-skill\ndescription: Live\n---\nLIVE_SKILL_INSTRUCTIONS',
+  );
+  const writeAgent = async (model: string, reasoning: string, instructions: string) =>
+    writeFile(
+      join(user, 'agents/fs-dev.agent.md'),
+      `---\n${JSON.stringify({ name: 'Live developer', description: 'Live role', tools: ['read'], model, reasoning, policy: 'read-only', skills: ['live-skill'], emptyContextByDefault: false, roastLevel: 'off' })}\n---\n${instructions}`,
+    );
+  await writeAgent('first-model', 'high', 'INITIAL_PROFILE');
+  await f.service.refresh();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Live inheritance',
+    description: '',
+    workflowId: 'single',
+  });
+  const step = feature.steps[0];
+  expect(step.inheritAgent).toBe(true);
+  expect(step.model).toBeUndefined();
+  expect(step.skills).toEqual([]);
+  const preview = await f.service.previewRun(feature.id, step.id);
+  expect(preview.prompt).toContain('LIVE_SKILL_INSTRUCTIONS');
+  await writeAgent('updated-model', 'low', 'UPDATED_PROFILE');
+  await expect(
+    f.service.runStep(feature.id, step.id, '', false, undefined, preview.fingerprint),
+  ).rejects.toThrow();
+  expect(f.adapter.run).not.toHaveBeenCalled();
+  step.skills = ['stale-copy-must-not-run'];
+  await f.service.runStep(feature.id, step.id);
+  expect(f.inputs[0].step).toMatchObject({
+    model: 'updated-model',
+    reasoning: 'low',
+    skills: ['live-skill'],
+    policy: 'read-only',
+    description: 'Live role',
+  });
+  expect(f.inputs[0].agent).toMatchObject({ instructions: 'UPDATED_PROFILE', tools: ['read'] });
+  expect(f.inputs[0].preparedPrompt).toContain('LIVE_SKILL_INSTRUCTIONS');
+  step.model = 'team-model';
+  step.reasoning = '';
+  await f.service.runStep(feature.id, step.id);
+  expect(f.inputs[1].step).toMatchObject({
+    model: 'team-model',
+    reasoning: 'low',
+    skills: ['live-skill'],
+  });
+});
 // Real Git/checkpoint preparation can exceed Vitest's one-second polling default on Windows.
 // Fail immediately if execution ends early, and observe its rejection even when the wait fails.
 async function waitForInteraction(check: () => void, running: Promise<unknown>): Promise<void> {
@@ -289,6 +345,8 @@ describe('StudioService execution gates', () => {
       description: '',
       workflowId: 'single',
     });
+    // Legacy sessions retain their explicit step skills.
+    feature.steps[0].inheritAgent = false;
     feature.steps[0].skills.push('missing-custom-skill');
     await expect(f.service.runStep(feature.id, 'session')).rejects.toThrow(/skill|compétence/i);
     expect(f.adapter.run).not.toHaveBeenCalled();
@@ -301,6 +359,8 @@ describe('StudioService execution gates', () => {
       description: '',
       workflowId: 'single',
     });
+    // Legacy sessions retain their explicit step skills.
+    feature.steps[0].inheritAgent = false;
     feature.steps[0].skills.push('missing-step-skill');
     const agent = f.service.state.agents.find((a) => a.id === feature.steps[0].agentId)!;
     const user = await mkdtemp(join(tmpdir(), 'studio-missing-skills-user-'));
@@ -349,6 +409,8 @@ describe('StudioService execution gates', () => {
     const user = await mkdtemp(join(tmpdir(), 'studio-restored-skill-'));
     roots.push(user);
     Object.defineProperty(f.service.registry, 'userPath', { value: user });
+    // Legacy sessions retain their explicit step skills.
+    feature.steps[0].inheritAgent = false;
     feature.steps[0].skills.push('restored-skill');
     expect((await f.service.previewRun(feature.id, 'session')).errors.join(' ')).toContain(
       'restored-skill',
@@ -1092,7 +1154,10 @@ it('creates an adjusted discussion proposal atomically with pending criteria and
     title: 'Besoin ajusté',
     criteria: [{ text: 'Entrée ouvre le résultat', status: 'pending', evidence: '' }],
   });
-  expect(feature.steps.map((step) => step.policy)).toEqual(['read-only', 'workspace-write']);
+  expect(feature.steps.map((step) => step.policy)).toEqual([
+    agentPolicy(f.service.state.agents[0]),
+    agentPolicy(f.service.state.agents[0]),
+  ]);
   expect(feature.steps[1].dependsOn).toEqual([feature.steps[0].id]);
   expect(feature.steps.every((step) => !step.attempts.length)).toBe(true);
   expect(f.adapter.run).not.toHaveBeenCalled();
@@ -1199,7 +1264,7 @@ it('pauses optional work durably without inference, notifies once, then skips an
   };
   await f.service.resolveOptionalStep(message);
   expect(f.inputs.map((input) => input.step.id)).toEqual(['required']);
-  expect(f.inputs[0].preparedPrompt).toContain('Documentation (optional)');
+  expect(f.inputs[0].preparedPrompt).toContain(`${f.feature.steps[0].name} (optional)`);
   expect(f.feature.steps[0].attempts).toHaveLength(0);
   expect(f.feature.autopilot?.runs).toBe(1);
   expect(f.feature.status).toBe('awaiting_final_validation');

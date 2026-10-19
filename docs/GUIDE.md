@@ -58,6 +58,16 @@ La progression est personnelle, commune aux projets et enregistrée localement d
 
 Si le fichier de progression est illisible, le carnet le signale et le conserve. **Relire la progression** retente sa lecture ; le compteur affiche un tiret au lieu d’inventer un total. Les trophées ne sont jamais dépensés : ils débloquent six cadeaux aux seuils de 5, 20, 40, 70, 110 et 200. **Prochain cadeau** montre le seul palier à venir ; **Mes récompenses** permet d’activer ou de retirer les thèmes, titres, la célébration Eiffel et le chaton déjà acquis. [Consulter les récompenses](WORKFLOWS.md#quêtes-et-récompenses). La démo présente le carnet sans enregistrer de récompense personnelle.
 
+## Héritage des profils dans une équipe
+
+Un agent ajouté seul et un agent ajouté depuis une équipe reprennent le profil du menu **Agents** au lancement : instructions, skills, outils, permissions, contexte vide par défaut et ton. Dans une équipe, seuls **Modèle de l’intervention** et **Niveau de réflexion** peuvent remplacer les valeurs du profil. Les autres paramètres sont affichés en lecture seule ; modifie-les dans **Agents**. L’ajout, le retrait, l’ordre et la participation obligatoire ou facultative restent des choix de composition.
+
+Le choix **Hériter de l’agent** laisse le champ vide dans l’équipe. Modèle et réflexion héritent indépendamment : tu peux remplacer l’un et conserver l’autre. Les valeurs sont relues à chaque lancement ; si tu changes le profil après avoir préparé l’aperçu, recalcule l’aperçu. Un profil de modèle explicitement activé dans le budget de la feature garde sa priorité, signalée dans le compositeur.
+
+L’éditeur **Agents** propose maintenant une réflexion et des permissions par défaut. Pour les profils anciens sans permissions explicites, les outils demandés déterminent le profil : `execute` ou `studio_run_test` sélectionne les tests préautorisés, sinon un outil d’édition sélectionne l’écriture dans le projet, et les autres profils restent en lecture seule. Une commande de test doit toujours être autorisée dans les réglages du projet.
+
+Les modèles d’équipes déjà enregistrés sont adaptés automatiquement à leur lecture, en conservant leurs remplacements explicites de modèle et de réflexion. Les anciennes sessions conservent leur définition : avant leur premier lancement, ouvre **Modifier l’équipe**, puis valide pour activer l’héritage. Une session dont la composition est verrouillée conserve ses réglages historiques ; crée une nouvelle session pour utiliser une nouvelle composition. Les exécutions archivées ne changent pas.
+
 ## Discuter avec ses agents
 
 **Discussion**, juste après Sessions, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
@@ -78,7 +88,7 @@ Les anciens lancements sans archives ne permettent pas de recréer leur contexte
 
 Après avoir échangé avec l’agent, clique **Créer une feature**. L’agent prépare une proposition à partir de la conversation, avec le modèle choisi ; cet appel est comptabilisé dans la consommation du chat. La proposition utilise les agents disponibles du projet actif et n’exécute aucun outil.
 
-Un formulaire présente le titre, le besoin, les critères de réussite (un par ligne) et les interventions proposées. Choisis les projets, ajuste les missions, remplace ou retire des agents, change leur ordre et vérifie leurs autorisations. La proposition et les ajustements de la vue sont conservés ; une erreur de création laisse le formulaire ouvert. **Actualiser la proposition** demande une nouvelle synthèse des échanges.
+Un formulaire présente le titre, le besoin, les critères de réussite (un par ligne) et les interventions proposées. Choisis les projets, remplace ou retire des agents, change leur ordre et vérifie les paramètres hérités de leur profil. Seuls leur modèle et leur réflexion peuvent être remplacés pour cette équipe. La proposition et les ajustements de la vue sont conservés ; une erreur de création laisse le formulaire ouvert. **Actualiser la proposition** demande une nouvelle synthèse des échanges.
 
 **Créer la feature** enregistre une session en brouillon, ses critères encore à vérifier et l’équipe relue. Aucun agent ne démarre automatiquement. Tu retrouves les réglages complets dans **Composer mon équipe**, puis l’aperçu habituel avant lancement. **Discussion d’origine** revient à l’échange ayant préparé la feature.
 
@@ -129,7 +139,7 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 ### Développer une feature
 
 1. Clique **Nouvelle session**, choisis le parcours, donne un titre et décris le résultat attendu. **L’espace de cette session** propose un **Worktree isolé** pour une feature ou une session libre, et le **Dossier courant** pour une relecture. Tu peux changer ce choix avant la création.
-2. Ouvre une étape. **Configurer** permet de choisir l’agent, le modèle réellement proposé par le CLI, les skills, le raisonnement lorsqu’il est disponible et la limite de tentatives.
+2. Ouvre une étape. **Configurer** permet de régler le modèle réellement proposé par le CLI, la réflexion et la limite de tentatives. Pour les équipes liées aux profils, les skills et les autres paramètres proviennent du menu Agents ; les anciennes sessions conservent leurs réglages historiques.
 3. Clique **Exécuter cette étape** : colle ta **US, demande ou contexte initial**, choisis les MCP utiles, puis **Préparer l’aperçu**. Relis les sources et le prompt assemblé ; **Lancer cette étape** démarre ensuite la vraie session. Le même dialogue apparaît pour une reprise ou une nouvelle tentative. Tout changement invalide l’aperçu précédent.
 4. Si l’agent utilise `studio_ask_human`, sa question apparaît pendant l’exécution : réponds et clique **Transmettre la réponse**. L’appel attend réellement ta réponse. Si le modèle termine plutôt avec un bloc de questions, réponds au formulaire puis **Reprendre la session**. Les échanges sont conservés.
 5. Relis le **Livrable**. Tu peux éditer son Markdown et l’enregistrer, ou donner un feedback pour une nouvelle tentative.

@@ -1,3 +1,4 @@
+import { inheritTeamProfiles, resolveAgentProfile } from '../shared/agentInheritance';
 import { EventEmitter } from 'node:events';
 import { basename, join } from 'node:path';
 import { open, readFile, realpath } from 'node:fs/promises';
@@ -381,7 +382,7 @@ export class StudioService extends EventEmitter {
               ...member,
               id: ids[index],
               skills: [],
-              model: agent.model,
+              inheritAgent: true,
               maxAttempts: 3,
               artifact: `${ids[index]}.md`,
               dependsOn: index ? [ids[index - 1]] : [],
@@ -404,10 +405,16 @@ export class StudioService extends EventEmitter {
           'La branche du dossier courant a changé. Rouvre la préparation du ticket avant de créer la session.',
         );
       // Do not publish a partially created feature while Git prepares its checkout.
-      const feature = new WorkflowEngine().createFeature(workflow, {
-        ...input,
-        branch: info.branch,
-      });
+      const feature = new WorkflowEngine().createFeature(
+        workflow
+          ? { ...workflow, steps: inheritTeamProfiles(workflow.steps, this.state.agents) }
+          : undefined,
+        {
+          ...input,
+          branch: info.branch,
+        },
+      );
+      feature.steps = inheritTeamProfiles(feature.steps, this.state.agents);
       feature.discussionId = input.discussionId;
       feature.creationRequestId = input.requestId;
       feature.ticketSource = input.ticketSource ? structuredClone(input.ticketSource) : undefined;
@@ -465,7 +472,8 @@ export class StudioService extends EventEmitter {
             steps,
           }).steps
         : [];
-      assertTeamOrder(validated);
+      const inherited = inheritTeamProfiles(validated, this.state.agents);
+      assertTeamOrder(inherited);
       const artifacts = new Set<string>();
       for (const step of validated) {
         if (!this.state.agents.some((agent) => agent.id === step.agentId))
@@ -476,7 +484,7 @@ export class StudioService extends EventEmitter {
         artifacts.add(artifact);
       }
       const previous = structuredClone(feature);
-      feature.steps = validated.map((step) => ({
+      feature.steps = inherited.map((step) => ({
         ...structuredClone(step),
         status: 'pending',
         attempts: [],
@@ -834,7 +842,8 @@ export class StudioService extends EventEmitter {
     const step = feature.steps.find((item) => item.id === stepId)!;
     const agent = this.state.agents.find((item) => item.id === step.agentId);
     if (!agent) throw new Error('Agent introuvable.');
-    const skillIds = [...new Set([...agent.skills, ...step.skills])];
+    Object.assign(step, resolveAgentProfile(step, agent));
+    const skillIds = step.skills;
     const selected = launchSchema.parse(
       launch ?? {
         ...emptyLaunch(),
