@@ -1,3 +1,5 @@
+import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
+import { OptionalStepChoice, SkippedInterventions } from './OptionalStepsUI';
 import { CatalogSearch, searchText, useDialogAccessibility } from './Ergonomics';
 import {
   ObservationPanel,
@@ -140,6 +142,7 @@ const statuses: Record<StepStatus, { label: string; tone: string }> = {
   waiting_input: { label: 'Votre réponse', tone: 'apricot' },
   awaiting_review: { label: 'À valider', tone: 'apricot' },
   approved: { label: 'Validée', tone: 'green' },
+  skipped: { label: 'Passée · non exécutée', tone: 'apricot' },
   failed: { label: 'Échec', tone: 'coral' },
   cancelled: { label: 'Annulée', tone: 'neutral' },
   stale: { label: 'À actualiser', tone: 'apricot' },
@@ -1487,7 +1490,7 @@ function Sessions({
           <div className="session-list">
             {features.map((f, i) => {
               const status = featureStatus[f.status];
-              const approved = f.steps.filter((s) => s.status === 'approved').length;
+              const resolved = f.steps.filter(stepResolved).length;
               const active = f.steps.find((s) => s.id === f.activeStepId);
               return (
                 <button
@@ -1516,8 +1519,9 @@ function Sessions({
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={f.steps.length || 1}
-                    aria-valuenow={approved}
-                    aria-label={`${approved} étapes validées sur ${f.steps.length}`}
+                    aria-valuenow={resolved}
+                    aria-label={progressLabel(f)}
+                    aria-valuetext={progressLabel(f)}
                   >
                     {f.steps.map((s) => (
                       <span
@@ -1528,9 +1532,7 @@ function Sessions({
                     ))}
                   </div>
                   <div className="session-summary">
-                    <span>
-                      {approved} / {f.steps.length} étapes validées
-                    </span>
+                    <span>{progressLabel(f)}</span>
                     <time dateTime={f.updatedAt}>Mis à jour le {date(f.updatedAt)}</time>
                   </div>
                   <div className="session-bottom">
@@ -1540,7 +1542,7 @@ function Sessions({
                     </span>
                     <span>
                       {f.status === 'completed'
-                        ? `${approved} / ${f.steps.length} étapes`
+                        ? progressLabel(f)
                         : f.status === 'awaiting_final_validation'
                           ? 'Valider le bilan final'
                           : (active?.name ?? 'Préparation')}
@@ -1947,6 +1949,25 @@ function CreateModal({
                     <option value="tests">Tests autorisés</option>
                   </select>
                 </label>
+                <label className="field">
+                  <span>Participation de {member.name}</span>
+                  <select
+                    aria-label={`Participation de l’intervention ${index + 1}`}
+                    value={member.optional ? 'optional' : 'required'}
+                    onChange={(event) =>
+                      setTeam(
+                        team.map((item, i) =>
+                          i === index
+                            ? { ...item, optional: event.target.value === 'optional' }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="required">Obligatoire</option>
+                    <option value="optional">Facultative</option>
+                  </select>
+                </label>
                 <div className="discussion-source-actions">
                   <button
                     type="button"
@@ -2075,7 +2096,6 @@ function FeatureDetail({
       onDirtyChange(false);
     }
   };
-  const done = feature.steps.filter((s) => s.status === 'approved').length;
   const [correction, setCorrection] = useState<{
     sourceStepId: string;
     feedback: string;
@@ -2275,6 +2295,24 @@ function FeatureDetail({
       <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
       <TicketSourceCard feature={feature} />
       <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
+      <SkippedInterventions feature={feature} />
+      {feature.optionalRequest &&
+        (() => {
+          const optionalStep = feature.steps.find(
+            (item) => item.id === feature.optionalRequest!.stepId,
+          );
+          return optionalStep ? (
+            <OptionalStepChoice
+              key={feature.optionalRequest!.id}
+              feature={feature}
+              step={optionalStep}
+              state={state}
+              dispatch={dispatch}
+              automatic
+              busy={busy || detailDirty}
+            />
+          ) : null;
+        })()}
       <div className="feature-control-band">
         {!!feature.steps.length && (
           <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
@@ -2285,7 +2323,7 @@ function FeatureDetail({
         <div className="feature-team-heading">
           <h2>Votre équipe</h2>
           {teamLocked(feature) ? (
-            <span className="muted">Composition verrouillée depuis la première exécution</span>
+            <span className="muted">Composition verrouillée depuis le début du parcours</span>
           ) : (
             <button
               className="button secondary small"
@@ -2304,9 +2342,7 @@ function FeatureDetail({
       <div className="journey-heading">
         <span className="eyebrow">LE PARCOURS</span>
         <SessionViewToggle />
-        <span>
-          {done} / {feature.steps.length} étapes validées
-        </span>
+        <span>{progressLabel(feature)}</span>
       </div>
       {livingHq && feature.steps.length > 0 ? (
         <SessionHq
@@ -2343,13 +2379,16 @@ function FeatureDetail({
                   <span className="step-index">{String(i + 1).padStart(2, '0')} </span>
                   {s.name}
                 </strong>
-                <small>{statuses[s.status].label}</small>
+                <small>
+                  {statuses[s.status].label}
+                  {s.optional && s.status !== 'skipped' ? ' · Facultative' : ''}
+                </small>
               </span>
             </button>
           ))}
         </div>
       )}
-      {done === feature.steps.length && feature.steps.length > 0 && (
+      {feature.steps.length > 0 && feature.steps.every(stepResolved) && (
         <FinalSummary
           feature={feature}
           state={state}
@@ -2599,8 +2638,8 @@ function StepPanel({
     hasActiveRun(state) ||
     Boolean(state.workspaceOperation) ||
     state.features.some((item) => item.autopilot?.status === 'running');
-  const unlocked = step.dependsOn.every(
-    (id) => feature.steps.find((s) => s.id === id)?.status === 'approved',
+  const unlocked = step.dependsOn.every((id) =>
+    stepResolved(feature.steps.find((s) => s.id === id)),
   );
   const canRun =
     state.workspace.trusted &&
@@ -2609,7 +2648,7 @@ function StepPanel({
     unlocked &&
     !feature.archived &&
     step.attempts.length < step.maxAttempts;
-  const next = feature.steps.find((s) => s.dependsOn.includes(step.id) && s.status !== 'approved');
+  const next = feature.steps.find((s) => s.dependsOn.includes(step.id) && !stepResolved(s));
   const agent = state.agents.find((a) => a.id === step.agentId);
   const unanswered = latest?.questions.filter((q) => !latest.answers[q.id]) ?? [];
   const blocked = !state.workspace.trusted
@@ -2625,10 +2664,14 @@ function StepPanel({
             : '';
   const run = (resume = false) => {
     const action = () => setLaunchResume(resume);
-    if ((latest || step.status === 'approved') && !resume)
+    if ((latest || stepResolved(step)) && !resume)
       confirm(
-        step.status === 'approved' ? 'Rejouer une étape validée ?' : 'Relancer cette étape ?',
-        step.status === 'approved'
+        step.status === 'skipped'
+          ? 'Exécuter cette intervention passée ?'
+          : step.status === 'approved'
+            ? 'Rejouer une étape validée ?'
+            : 'Relancer cette étape ?',
+        stepResolved(step)
           ? 'Une nouvelle tentative sera créée. Les étapes suivantes deviennent à actualiser et devront être validées à nouveau. Les fichiers déjà modifiés restent présents.'
           : 'Une nouvelle tentative sera ajoutée à l’historique. Les modifications éventuelles du projet restent présentes.',
         action,
@@ -2649,6 +2692,24 @@ function StepPanel({
         />
       )}
       <section className="workbench">
+        {step.status === 'skipped' && (
+          <div className="optional-notice skipped-notice" role="status">
+            <strong>Passée par décision humaine — non exécutée</strong>
+            <p>
+              Aucun livrable ni preuve de test.{' '}
+              {step.optionalDecision?.at ? date(step.optionalDecision.at) : ''}
+            </p>
+          </div>
+        )}
+        {!feature.optionalRequest && (
+          <OptionalStepChoice
+            feature={feature}
+            step={step}
+            state={state}
+            dispatch={dispatch}
+            busy={running || dirty}
+          />
+        )}
         <div className="workbench-heading">
           <div>
             <span className="eyebrow">
@@ -3177,7 +3238,7 @@ function StepPanel({
                     <CheckCircle2 size={18} />{' '}
                     {feature.status === 'completed'
                       ? 'Décision finale enregistrée — session terminée'
-                      : `Étape validée. ${featureCompletionBlockers(feature).join(' ') || (feature.steps.every((item) => item.status === 'approved') ? 'Le bilan final attend votre décision.' : 'D’autres étapes restent à valider.')}`}
+                      : `Étape validée. ${featureCompletionBlockers(feature).join(' ') || (feature.steps.every(stepResolved) ? 'Le bilan final attend votre décision.' : 'D’autres étapes restent à valider.')}`}
                   </div>
                 )}
                 <button
@@ -3266,7 +3327,11 @@ function StepPanel({
                     onClick={() => run()}
                   >
                     <Play size={14} />
-                    {latest ? 'Nouvelle tentative' : 'Exécuter cette étape'}
+                    {step.status === 'skipped'
+                      ? 'Exécuter finalement cette étape'
+                      : latest
+                        ? 'Nouvelle tentative'
+                        : 'Exécuter cette étape'}
                   </button>
                 )}
               </>

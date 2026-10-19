@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { stepResolved, optionalChoiceAvailable } from '../shared/optionalSteps';
 import { z } from 'zod';
 import type { Attempt, Feature, FeatureStep, RunEvent, RunResult, Workflow } from '../shared/types';
 import { qualityKindSchema } from './qualitySchemas';
@@ -46,6 +47,7 @@ export const workflowSchema = z
             initialContext: z.string().max(60000).optional(),
             mcpServerIds: z.array(id).max(256).optional(),
             askBeforeRun: z.boolean().optional(),
+            optional: z.boolean().optional(),
           })
           .strict(),
       )
@@ -149,12 +151,14 @@ export class WorkflowEngine {
     return attempt;
   }
   private touch(feature: Feature) {
+    if (feature.optionalRequest && feature.optionalRequest.stateKey !== featureStateKey(feature))
+      delete feature.optionalRequest;
     if (feature.finalValidation && feature.finalValidation.stateKey !== featureStateKey(feature))
       delete feature.finalValidation;
     feature.updatedAt = new Date().toISOString();
     feature.status = !feature.steps.length
       ? 'draft'
-      : feature.steps.every((s) => s.status === 'approved')
+      : feature.steps.every(stepResolved)
         ? featureCompletionBlockers(feature).length
           ? 'attention'
           : feature.finalValidation
@@ -168,8 +172,8 @@ export class WorkflowEngine {
     const correction = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
     if (correction) {
       if (
-        correction.impactedStepIds.every(
-          (id) => feature.steps.find((step) => step.id === id)?.status === 'approved',
+        correction.impactedStepIds.every((id) =>
+          stepResolved(feature.steps.find((step) => step.id === id)),
         )
       ) {
         correction.status = 'completed';
@@ -182,8 +186,8 @@ export class WorkflowEngine {
     }
     const next = feature.steps.find(
       (s) =>
-        s.status !== 'approved' &&
-        s.dependsOn.every((dep) => feature.steps.find((d) => d.id === dep)?.status === 'approved'),
+        !stepResolved(s) &&
+        s.dependsOn.every((dep) => stepResolved(feature.steps.find((d) => d.id === dep))),
     );
     if (next) feature.activeStepId = next.id;
   }
@@ -196,7 +200,11 @@ export class WorkflowEngine {
     if (feature.steps.some((step) => step.status === 'running'))
       throw new Error('Arrête la tentative avant de restaurer les fichiers.');
     for (const step of feature.steps) {
-      if (!step.attempts.length) continue;
+      if (!step.attempts.length) {
+        step.status = 'pending';
+        delete step.optionalDecision;
+        continue;
+      }
       step.status = 'stale';
       const attempt = step.attempts.at(-1)!;
       attempt.revision = (attempt.revision ?? 0) + 1;
@@ -230,17 +238,45 @@ export class WorkflowEngine {
         }
     }
     for (const step of feature.steps)
-      if (step.id !== stepId && invalid.has(step.id) && step.status !== 'pending')
-        step.status = 'stale';
+      if (
+        step.id !== stepId &&
+        invalid.has(step.id) &&
+        (step.status !== 'pending' || step.optionalDecision)
+      ) {
+        step.status = step.attempts.length ? 'stale' : 'pending';
+        delete step.optionalDecision;
+      }
+  }
+  decideOptionalStep(
+    featureId: string,
+    stepId: string,
+    action: 'run' | 'skip',
+    expectedStateKey: string,
+  ): void {
+    const [feature, step] = this.pair(featureId, stepId);
+    if (featureStateKey(feature) !== expectedStateKey)
+      throw new Error('La session a changé. Relis la décision actuelle.');
+    if (!optionalChoiceAvailable(feature, step))
+      throw new Error(
+        'Seule une intervention facultative disponible et jamais exécutée peut être choisie.',
+      );
+    if (feature.autopilot?.status === 'running')
+      throw new Error('Mets le pilote en pause avant de choisir.');
+    if (step.optionalDecision) throw new Error('Cette décision est déjà enregistrée.');
+    if (action === 'skip') step.status = 'skipped';
+    const at = new Date().toISOString();
+    step.optionalDecision = { id: randomUUID(), action, at, author: 'human' };
+    (step.optionalDecisionHistory ??= []).push(structuredClone(step.optionalDecision));
+    feature.teamLockedAt ??= at;
+    delete feature.optionalRequest;
+    this.touch(feature);
   }
   beginRun(featureId: string, stepId: string, feedback = '', resume = false): Attempt {
     const [feature, step] = this.pair(featureId, stepId);
     if (feature.archived) throw new Error('La session est archivée.');
     if (feature.steps.some((s) => s.status === 'running'))
       throw new Error('Une tentative est déjà en cours.');
-    if (
-      !step.dependsOn.every((dep) => feature.steps.find((s) => s.id === dep)?.status === 'approved')
-    )
+    if (!step.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep))))
       throw new Error('Les étapes préalables doivent être validées.');
     if (step.attempts.length >= step.maxAttempts)
       throw new Error('Nombre maximal de tentatives atteint.');
@@ -258,6 +294,16 @@ export class WorkflowEngine {
     if (resume && previous!.questions.some((q) => !previous!.answers[q.id]?.trim()))
       throw new Error('Répondre aux questions avant de reprendre.');
     this.invalidate(feature, step.id);
+    delete feature.optionalRequest;
+    if (step.optional && !step.attempts.length && step.optionalDecision?.action !== 'run') {
+      step.optionalDecision = {
+        id: randomUUID(),
+        action: 'run',
+        at: new Date().toISOString(),
+        author: 'human',
+      };
+      (step.optionalDecisionHistory ??= []).push(structuredClone(step.optionalDecision));
+    }
     const answerBindings = boundAnswers(
       (previous?.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0)
         ? previous
@@ -482,6 +528,10 @@ export class WorkflowEngine {
       for (const candidate of feature.steps) {
         this.invalidate(feature, candidate.id);
         if (candidate.attempts.length) candidate.status = 'stale';
+        else {
+          candidate.status = 'pending';
+          delete candidate.optionalDecision;
+        }
       }
       if (feature.activeCorrectionId) {
         const cycle = feature.corrections?.find((item) => item.id === feature.activeCorrectionId);
@@ -512,7 +562,10 @@ export class WorkflowEngine {
     };
     for (const root of cycle.rootStepIds) this.invalidate(feature, root);
     for (const step of feature.steps)
-      if (cycle.impactedStepIds.includes(step.id) && step.attempts.length) step.status = 'stale';
+      if (cycle.impactedStepIds.includes(step.id)) {
+        step.status = step.attempts.length ? 'stale' : 'pending';
+        if (!step.attempts.length) delete step.optionalDecision;
+      }
     feature.corrections ??= [];
     feature.corrections.push(cycle);
     feature.activeCorrectionId = cycle.id;
@@ -613,9 +666,10 @@ export class WorkflowEngine {
     if (initialContext !== undefined) step.initialContext = initialContext;
     if (mcpServerIds !== undefined) step.mcpServerIds = [...mcpServerIds];
     if (askBeforeRun !== undefined) step.askBeforeRun = askBeforeRun;
-    if (changed && step.attempts.length) {
+    if (changed && (step.attempts.length || step.optionalDecision)) {
       this.invalidate(feature, step.id);
-      step.status = 'stale';
+      step.status = step.attempts.length ? 'stale' : 'pending';
+      delete step.optionalDecision;
     }
     this.touch(feature);
   }

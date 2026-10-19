@@ -245,6 +245,28 @@ export function TeamComposer({
                     <dd>{effective.reasoning}</dd>
                   </dl>
                   <small className="team-policy">{policies[step.policy]}</small>
+                  <label className="field team-participation">
+                    <span>Participation</span>
+                    <select
+                      aria-label={`Participation de ${step.name}`}
+                      disabled={disabled}
+                      value={step.optional ? 'optional' : 'required'}
+                      onChange={(event) =>
+                        apply(
+                          () =>
+                            steps.map((item) =>
+                              item.id === step.id
+                                ? { ...item, optional: event.target.value === 'optional' }
+                                : item,
+                            ),
+                          'Participation modifiée.',
+                        )
+                      }
+                    >
+                      <option value="required">Obligatoire</option>
+                      <option value="optional">Facultative</option>
+                    </select>
+                  </label>
                   {effective.profile && <small>Profil de budget : {effective.profile}</small>}
                   <div className="team-member-actions">
                     <button
@@ -500,7 +522,7 @@ export function TeamComposer({
         {(locked || stale) && (
           <p className="team-error" role="alert">
             {locked
-              ? 'Une exécution a commencé : l’équipe est désormais verrouillée.'
+              ? 'Le parcours a commencé : l’équipe est désormais verrouillée.'
               : 'L’équipe a changé. Fermez puis rouvrez ce panneau.'}
           </p>
         )}
@@ -529,7 +551,7 @@ export function TeamComposer({
           <span className="muted">
             {!steps.length
               ? 'La feature restera sans équipe.'
-              : 'Modifiable jusqu’à la première exécution.'}
+              : 'Modifiable jusqu’à la première décision ou exécution.'}
           </span>
           <button className="button secondary" disabled={pending} onClick={onClose}>
             Annuler

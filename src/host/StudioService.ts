@@ -132,6 +132,7 @@ export class StudioService extends EventEmitter {
     if (!('featureId' in message) || !message.featureId) return;
     const tracked = new Set([
       'runStep',
+      'resolveOptionalStep',
       'approveStep',
       'rejectStep',
       'answerQuestions',
@@ -227,7 +228,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -451,7 +452,7 @@ export class StudioService extends EventEmitter {
       const feature = this.engine.getFeature(featureId);
       if (feature.archived) throw new Error('Réactive la feature avant de modifier son équipe.');
       if (teamLocked(feature))
-        throw new Error('L’équipe est verrouillée : une première exécution a déjà commencé.');
+        throw new Error('L’équipe est verrouillée : le parcours a déjà commencé.');
       if ((feature.teamRevision ?? 0) !== expectedRevision)
         throw new Error('L’équipe a changé. Ferme le panneau puis rouvre la composition actuelle.');
       const validated = steps.length
@@ -486,6 +487,7 @@ export class StudioService extends EventEmitter {
       feature.status = 'draft';
       feature.updatedAt = new Date().toISOString();
       delete feature.autopilot;
+      delete feature.optionalRequest;
       delete feature.finalValidation;
       try {
         await this.persist();
@@ -1432,6 +1434,46 @@ export class StudioService extends EventEmitter {
       this.schedule();
     }
   }
+  async resolveOptionalStep(
+    message: Extract<import('../shared/types').ClientMessage, { type: 'resolveOptionalStep' }>,
+  ): Promise<void> {
+    await this.workspaceAction(
+      message.featureId,
+      'Choix de l’intervention facultative',
+      async () => {
+        const feature = this.engine.getFeature(message.featureId);
+        if (
+          message.decisionId &&
+          (feature.optionalRequest?.id !== message.decisionId ||
+            feature.optionalRequest.stepId !== message.stepId)
+        )
+          throw new Error('Cette notification n’est plus actuelle. Consulte la session.');
+        if (
+          message.continueAutopilot &&
+          (!message.decisionId || !feature.autopilot || feature.autopilot.status !== 'paused')
+        )
+          throw new Error('Le pilote doit attendre cette décision avant de continuer.');
+        const previous = structuredClone(feature);
+        try {
+          this.engine.decideOptionalStep(
+            feature.id,
+            message.stepId,
+            message.choice,
+            message.expectedStateKey,
+          );
+          await this.persist();
+        } catch (error) {
+          Object.keys(feature).forEach((key) => {
+            delete (feature as unknown as Record<string, unknown>)[key];
+          });
+          Object.assign(feature, previous);
+          throw error;
+        }
+      },
+    );
+    if (message.continueAutopilot) await this.startAutopilot(message.featureId);
+  }
+  private notifiedOptional = new Set<string>();
   async startAutopilot(featureId: string): Promise<void> {
     this.assertTrusted();
     if (this.active || this.automation || this.workspaceTask)
@@ -1458,6 +1500,20 @@ export class StudioService extends EventEmitter {
         const action = nextAutopilotAction(feature);
         if (action.kind === 'pause') {
           this.pauseAutopilot(featureId, action.reason);
+          if (action.optionalStepId) {
+            feature.activeStepId = action.optionalStepId;
+            feature.status = 'attention';
+            const stateKey = featureStateKey(feature);
+            if (
+              feature.optionalRequest?.stateKey !== stateKey ||
+              feature.optionalRequest.stepId !== action.optionalStepId
+            )
+              feature.optionalRequest = {
+                id: randomUUID(),
+                stepId: action.optionalStepId,
+                stateKey,
+              };
+          }
           break;
         }
         if (action.kind === 'complete') {
@@ -1498,6 +1554,11 @@ export class StudioService extends EventEmitter {
       this.automation = undefined;
       try {
         await this.persist();
+        const request = feature.optionalRequest;
+        if (request && !this.disposed && !this.notifiedOptional.has(request.id)) {
+          this.notifiedOptional.add(request.id);
+          this.emit('optionalStep', feature.id, structuredClone(request));
+        }
       } finally {
         complete();
       }
@@ -1675,7 +1736,7 @@ export class StudioService extends EventEmitter {
           throw new Error(
             'Valide toutes les étapes, les critères et les remarques bloquantes avant de terminer.',
           );
-        for (const step of feature.steps) {
+        for (const step of feature.steps.filter((item) => item.status !== 'skipped')) {
           const blockers = approvalBlockers(
             feature,
             { ...step, status: 'awaiting_review' },

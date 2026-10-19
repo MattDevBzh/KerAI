@@ -57,13 +57,21 @@ Le QG réutilise les vingt avatars, leurs costumes et leurs images de repos, tra
 
 ### Déroulement du parcours
 
-Une dépendance doit être approuvée avant son étape suivante. Chaque run ou reprise crée une tentative et respecte le maximum de l'étape. La reprise peut conserver la session CLI ; retour humain, réponses et livrable précédent sont transmis au nouveau run. Les anciennes tentatives restent consultables.
+Une dépendance doit être approuvée ou explicitement passée avant son étape suivante. Un passage facultatif satisfait l’ordre du parcours sans constituer une approbation ou une preuve. Chaque run ou reprise crée une tentative et respecte le maximum de l'étape. La reprise peut conserver la session CLI ; retour humain, réponses et livrable précédent sont transmis au nouveau run. Les anciennes tentatives restent consultables.
 
 Les questions finales placent l'étape en `waiting_input`. Enregistrer les réponses ne termine pas le travail : lancez une reprise pour que l'agent complète son livrable. Les questions interactives via `studio_ask_human` attendent la réponse pendant la tentative ; cette interaction suspend la progression du pilote. Les questions et réponses réellement échangées sont conservées avec le résultat. Le délai maximal de la tentative continue pendant cette attente humaine.
 
-Relancer une étape rend tous ses dépendants transitifs `stale`, sans effacer leurs résultats historiques. Les branches indépendantes restent valides. Modifier un livrable approuvé demande une nouvelle validation. Modifier agent, modèle, effort, skills, contexte initial ou MCP après une tentative invalide aussi l'étape et ses descendants. Modifier seulement le maximum de tentatives ou `askBeforeRun` conserve les livrables.
+Relancer une étape rend ses dépendants transitifs déjà tentés `stale` et remet les interventions facultatives non tentées à `pending`, sans effacer leurs résultats ou décisions historiques. Les branches indépendantes restent valides. Modifier un livrable approuvé demande une nouvelle validation. Modifier agent, modèle, effort, skills, contexte initial ou MCP après une tentative invalide aussi l'étape et ses descendants. Modifier seulement le maximum de tentatives ou `askBeforeRun` conserve les livrables.
 
 Le maximum d'une étape est compris entre 1 et 100 et ne peut descendre sous son historique enregistré. Les configurations et livrables ne se modifient pas pendant la tentative concernée ; le pilote doit être en pause avant une action manuelle concurrente. Échec, annulation et interruption conservent leurs états réels.
+
+## Participation facultative
+
+Le champ `optional` appartient à l’intervention ; absent ou faux, elle reste obligatoire. Il est modifiable dans les parcours et dans la composition de la feature jusqu’à la première décision ou exécution. La feature garde sa propre copie du modèle.
+
+Une intervention facultative disponible et jamais tentée peut être **Passée** manuellement, sans démarrer le pilote. En automatique, le pilote s’arrête avant cette intervention, persiste sa demande et propose de l’exécuter, de la passer ou de décider plus tard. Une fermeture de notification ou un redémarrage ne répond pas à la place de l’humain. Le centre de validation retrouve ces décisions en attente.
+
+Une intervention passée ne possède ni tentative ni livrable. La suite reçoit cette information explicitement et les bilans ne la comptent pas comme validée. Les erreurs, annulations ou interruptions déjà enregistrées ne peuvent pas être transformées en passage. Les choix invalidés restent dans l’historique ; une intervention passée choisie comme racine de correction redevient disponible.
 
 ## Corriger un compte rendu et le besoin
 
@@ -83,7 +91,7 @@ La correction utilise le même moteur que les exécutions ordinaires et respecte
 
 ## Décision finale
 
-Une fois toutes les étapes approuvées et les blocages résolus, la session attend une **validation finale**. Deux actions sont proposées : **Valider définitivement** ou **Faire une correction**. Le pilote attend cette décision humaine ; l’approbation de la dernière étape ne termine pas à elle seule la session.
+Une fois toutes les interventions approuvées ou explicitement passées et les blocages résolus, la session attend une **validation finale**. Deux actions sont proposées : **Valider définitivement** ou **Faire une correction**. Le pilote attend cette décision humaine ; l’approbation de la dernière étape ne termine pas à elle seule la session.
 
 La validation finale porte sur la version relue et revérifie les preuves contre les fichiers réels. Si les comptes rendus, critères, remarques ou fichiers ont changé, elle est refusée ou doit être refaite. Le clic réussi termine la session et déclenche la célébration avec l’équipe. La célébration peut être rejouée explicitement ; les effets peuvent être désactivés et respectent la réduction des mouvements. Les anciennes sessions sans validation finale explicite attendent cette décision lorsqu’elles sont rouvertes.
 
@@ -109,7 +117,7 @@ Chaque correction relance la cible et invalide ses descendants. Le nombre de cyc
 
 Question, permission MCP humaine, erreur, annulation, interruption, limite atteinte, preuve absente/obsolète ou confirmation requise suspend la progression. « Demander la pause » laisse la tentative en cours terminer ; l'arrêt d'exécution l'annule. Une réponse interactive ne réactive pas le pilote : reprenez-le explicitement après l'échange.
 
-Après redémarrage, le pilote reste en pause et le CLI doit être revérifié. Une tentative `failed`, `cancelled` ou `interrupted` exige une reprise manuelle de l'étape avant de repartir en automatique. L'application ne relance pas une erreur au seul clic de démarrage du pilote. Pour préparer la décision finale, toutes les étapes doivent être approuvées, les critères présents doivent être satisfaits avec une preuve renseignée et aucun commentaire bloquant ne doit rester ouvert. **Valider définitivement** reste une action humaine séparée.
+Après redémarrage, le pilote reste en pause et le CLI doit être revérifié. Une tentative `failed`, `cancelled` ou `interrupted` exige une reprise manuelle de l'étape avant de repartir en automatique. L'application ne relance pas une erreur au seul clic de démarrage du pilote. Pour préparer la décision finale, toutes les interventions doivent être approuvées ou explicitement passées, les critères présents doivent être satisfaits avec une preuve renseignée et aucun commentaire bloquant ne doit rester ouvert. **Valider définitivement** reste une action humaine séparée.
 
 ## Centre de validation et preuves
 

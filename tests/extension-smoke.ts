@@ -715,7 +715,7 @@ async function smokeRun(): Promise<void> {
     api.getState()?.features.find((f) => f.id === feature.id)?.title,
     'Smoke extension host',
   );
-  assert.equal(api.getState()?.schemaVersion, 5);
+  assert.equal(api.getState()?.schemaVersion, 6);
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-observer'));
   await api.dispatch({
     type: 'previewObservation',
@@ -747,6 +747,7 @@ async function smokeRun(): Promise<void> {
         name: 'Review the need',
         description: 'Check the acceptance criteria',
         policy: 'read-only',
+        optional: true,
       },
     ],
   };
@@ -768,11 +769,45 @@ async function smokeRun(): Promise<void> {
     0,
     'Creating a reviewed proposal never launches an agent',
   );
+  assert.equal(proposed.steps[0].optional, true, 'Reviewed team choices reach the host');
+  await api.dispatch({
+    type: 'resolveOptionalStep',
+    requestId: 'smoke-optional',
+    featureId: proposed.id,
+    stepId: proposed.steps[0].id,
+    expectedStateKey: featureStateKey(proposed),
+    choice: 'skip',
+  });
+  for (
+    let retry = 0;
+    retry < 100 &&
+    api.getState()!.features.find((item) => item.id === proposed.id)!.steps[0].status !== 'skipped';
+    retry++
+  )
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  const skipped = api.getState()!.features.find((item) => item.id === proposed.id)!.steps[0];
+  assert.equal(skipped.status, 'skipped', 'A real host persists a manual optional decision');
+  assert.equal(
+    skipped.attempts.length,
+    0,
+    'Skipping never fabricates an attempt or starts a model',
+  );
+  assert.equal(skipped.optionalDecision?.author, 'human');
+  assert.equal(
+    api.getState()!.features.find((item) => item.id === proposed.id)!.status,
+    'attention',
+    'Unverified criteria still block completion',
+  );
   await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
   await vscode.commands.executeCommand('featureStudio.open');
   assert.equal(
     api.getState()!.features.find((item) => item.id === proposed.id)?.criteria?.[0].text,
     'Keyboard navigation works',
+  );
+  assert.equal(
+    api.getState()!.features.find((item) => item.id === proposed.id)!.steps[0].status,
+    'skipped',
+    'Skipped state survives closing and reopening',
   );
   const dashboard = api.getDashboardState();
   const config = {
@@ -831,7 +866,7 @@ async function smokeRun(): Promise<void> {
     'Layout survives closing and reopening both surfaces',
   );
   console.log(
-    'PASS: activity-bar direct opening in the current window/sidebar dismissal/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v5 close/reopen, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
+    'PASS: activity-bar direct opening in the current window/sidebar dismissal/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v6 close/reopen, optional team override/manual skip without inference/persistence, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );
 }
 

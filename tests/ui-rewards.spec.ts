@@ -357,3 +357,21 @@ test('le feu d’artifice célèbre une session finalisée, se ferme et respecte
   await expect(page.getByRole('button', { name: 'Rejouer la célébration' })).toBeDisabled();
   await noBusinessCommands(page);
 });
+
+test('rouvrir une session terminée en mouvement réduit ne rejoue pas le feu d’artifice', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await hosted(page, {
+    trophies: 200,
+    session: true,
+    completed: true,
+    selection: { ...emptyRewardSelection(), celebration: 'eiffel' },
+  });
+  await expect(page.getByRole('button', { name: 'Rejouer la célébration' })).toBeDisabled();
+  await expect(page.locator('.eiffel-celebration')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Rejouer la célébration' })).toBeDisabled();
+  await expect(page.locator('.eiffel-celebration')).toHaveCount(0);
+  await noBusinessCommands(page);
+});

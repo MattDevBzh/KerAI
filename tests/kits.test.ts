@@ -40,6 +40,26 @@ function file(path: string, content: string): KitFile {
   };
 }
 describe('portable kit dependency and file contracts', () => {
+  it('roundtrips optional intervention defaults through a portable team kit', async () => {
+    const source = await fixture();
+    const workflow = structuredClone(
+      (await source.registry.load()).workflows.find((item) => item.steps.length > 1)!,
+    );
+    workflow.id = 'optional-team';
+    workflow.steps[0].optional = true;
+    await source.registry.saveWorkflow(workflow);
+    const bundle = await source.kits.compose(metadata, ['workflow:optional-team']);
+    const destination = await fixture();
+    const preview = await destination.kits.preview(bundle);
+    expect(preview.canInstall).toBe(true);
+    await destination.kits.install(preview.token);
+    const restored = (await destination.registry.load()).workflows.find(
+      (item) => item.id === workflow.id,
+    )!;
+    expect(restored.steps[0].optional).toBe(true);
+    expect(restored.steps[1].optional).toBeUndefined();
+  });
+
   it('offers two independent presets including original Copilot profiles and DevOps resources', async () => {
     const f = await fixture();
     const catalog = await f.kits.catalog();

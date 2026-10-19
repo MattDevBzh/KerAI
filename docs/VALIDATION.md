@@ -1,4 +1,15 @@
-# Validation et limites — v1.12.0, 17 octobre 2026
+# Validation et limites — v1.13.0, 18 octobre 2026
+
+## Interventions facultatives — v1.13.0
+
+- `npm run check` réussi sur macOS : format, TypeScript, **638 tests métier réussis**, 4 ignorés, puis compilation. Les contrôles complets sont exécutés séparément des scénarios navigateur ; les tests d’archives écrivent et relisent réellement plus de 3 000 événements.
+- **178 scénarios Chromium réussis**. Les nouveaux cas couvrent la participation dans la composition, le choix facultatif du pilote, la décision différée et la réouverture, les doubles clics, le refus puis la nouvelle décision, le passage manuel, le bilan honnête et l’accès depuis le centre de validation. Le test de mise à jour du Métro cible désormais l’identité de la session, indépendamment de son rang dans la liste.
+- Les tests du service attendent les demandes humaines jusqu’à 10 secondes, avec échec immédiat si l’exécution se termine avant la demande ; la préparation Git sous Windows peut dépasser le délai implicite de 1 seconde des assertions. Ils utilisent un agent simulé et de vrais dossiers/dépôts : pause sans appel, notification unique, reprise après choix, checkpoint conservé, refus des anciennes notifications et réponses concurrentes, absence de confiance, retour à l’état précédent si la sauvegarde échoue et redémarrage sans lancement implicite.
+- Les tests du moteur couvrent les dépendances après passage, l’interdiction de passer une intervention déjà tentée, les critères encore bloquants, la réactivation, les invalidations après correction/restauration et la conservation de l’historique. Ils vérifient aussi le contexte transmis aux agents suivants, les copies d’équipes et l’aller-retour des kits avec participation facultative.
+- Le smoke dans un vrai hôte VS Code Insiders sur macOS vérifie la création d’une équipe facultative depuis une proposition, le passage par le protocole hôte, l’absence de tentative ou de prompt payant et la conservation du choix après fermeture/réouverture. Les critères non vérifiés continuent à bloquer la fin de session.
+- Le stockage v6 conserve le parcours et les décisions, migre les index v5 et les formats antérieurs, et refuse les états incohérents. Les interventions des anciennes sessions restent obligatoires par défaut.
+- La CI Linux et Windows du commit livré est une vérification distincte des tests locaux. La publication attend ces jobs, contrôle les versions du VSIX, charge son contenu extrait dans VS Code et vérifie les empreintes après téléchargement. La [release v1.13.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.13.0) donne le commit et la CI correspondants ; son `SHA256SUMS` porte sur le paquet réellement publié.
+- Les tests n’envoient aucun prompt Copilot payant. Ils prouvent les transitions, la persistance et l’intégration UI/hôte, pas la qualité d’une réponse produite par un modèle réel pour une US donnée.
 
 ## Thèmes masqués par Bearded et enregistrement des réglages — correctif local, 17 octobre 2026
 

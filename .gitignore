@@ -6,3 +6,9 @@ playwright-report/
 .vscode-test/
 .DS_Store
 *.log
+
+# New packages are attached to GitHub releases; historical tracked assets stay in Git.
+/releases/*.vsix
+/releases/*.vsix.sha256
+/releases/local/
+/releases/published/

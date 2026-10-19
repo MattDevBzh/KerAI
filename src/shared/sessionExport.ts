@@ -26,7 +26,16 @@ export function sessionMarkdown(feature: Feature, workspacePath: string): string
       `Point de restauration : ${checkpoint.label} · ${checkpoint.kind} · ${checkpoint.createdAt} · ${checkpoint.fileCount} fichiers · ${checkpoint.excludedCount} exclusions · ${checkpoint.id}`,
     );
   for (const step of feature.steps) {
-    parts.push(`## ${step.name} — ${step.status}`);
+    parts.push(
+      `## ${step.name} — ${step.status === 'skipped' ? 'Passée par l’humain — non exécutée' : step.status}`,
+    );
+    if (step.optional) parts.push('Intervention facultative.');
+    for (const decision of step.optionalDecisionHistory ?? [])
+      parts.push(
+        `Décision humaine : ${decision.action === 'skip' ? 'Passer sans exécuter' : 'Exécuter'} · ${decision.at}${decision.id === step.optionalDecision?.id ? ' · décision actuelle' : ' · historique'}`,
+      );
+    if (step.status === 'skipped')
+      parts.push('Aucun livrable ni preuve de tests : cette intervention n’a pas été exécutée.');
     for (const [index, attempt] of step.attempts.entries()) {
       parts.push(
         `### Tentative ${index + 1}\n${attempt.startedAt} · ${attempt.model || 'modèle non communiqué'} · ${attempt.status}`,

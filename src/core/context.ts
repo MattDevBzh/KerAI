@@ -143,6 +143,16 @@ export function promptSections(input: RunInput): PromptSection[] {
       'memory',
       `Mémoire validée du projet · ${entry.title} (${entry.category}, ${entry.updatedAt}) :\n${entry.content}`,
     );
+  const skipped = input.feature.steps.filter(
+    (step) => step.status === 'skipped' && step.id !== input.step.id,
+  );
+  if (skipped.length)
+    add(
+      'skipped-interventions',
+      'Interventions passées par l’humain',
+      'system',
+      `Interventions explicitement passées, sans exécution ni livrable :\n${skipped.map((step) => `- ${step.name} (${step.id}), ${step.optionalDecision?.at ?? 'date inconnue'}`).join('\n')}\nNe les présente pas comme validées ou testées. Signale tout livrable manquant nécessaire à ta mission.`,
+    );
   for (const step of input.feature.steps) {
     const attempt = step.attempts.at(-1);
     if (

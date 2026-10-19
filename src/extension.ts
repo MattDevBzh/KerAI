@@ -187,6 +187,39 @@ export async function activate(context: vscode.ExtensionContext) {
         () => vscode.workspace.isTrusted,
       );
       await next.initialize();
+      next.on(
+        'optionalStep',
+        (
+          featureId: string,
+          request: NonNullable<import('./shared/types').Feature['optionalRequest']>,
+        ) => {
+          const feature = next.engine.getFeature(featureId);
+          const step = feature.steps.find((item) => item.id === request.stepId)!;
+          void vscode.window
+            .showInformationMessage(
+              `${feature.title} — ${step.name} est facultative. Le pilote attend ton choix.`,
+              'Exécuter et continuer',
+              'Passer et continuer',
+              'Décider plus tard',
+            )
+            .then((choice) => {
+              if (choice !== 'Exécuter et continuer' && choice !== 'Passer et continuer') return;
+              const message: Extract<ClientMessage, { type: 'resolveOptionalStep' }> = {
+                type: 'resolveOptionalStep',
+                featureId,
+                stepId: request.stepId,
+                decisionId: request.id,
+                expectedStateKey: request.stateKey,
+                choice: choice === 'Exécuter et continuer' ? 'run' : 'skip',
+                continueAutopilot: true,
+              };
+              void next
+                .recordHumanAction(message)
+                .then(() => next.resolveOptionalStep(message))
+                .catch(report);
+            });
+        },
+      );
       next.on('persisted', (state) => {
         void quests.record(studioQuestFacts(state));
       });
@@ -1819,6 +1852,23 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       case 'saveAutopilot':
         await current.saveAutopilot(message.featureId, message.config);
+        return;
+      case 'resolveOptionalStep':
+        void current
+          .resolveOptionalStep(message)
+          .then(() => {
+            if (message.requestId)
+              send({ type: 'optionalStepResult', requestId: message.requestId });
+          })
+          .catch((error) => {
+            if (message.requestId)
+              send({
+                type: 'optionalStepResult',
+                requestId: message.requestId,
+                error: redact((error as Error).message),
+              });
+            report(error);
+          });
         return;
       case 'startAutopilot':
         void current.startAutopilot(message.featureId).catch(report);

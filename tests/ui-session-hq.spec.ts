@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import { avatarOptions } from '../src/shared/avatars';
+import { featureStateKey } from '../src/shared/collaboration';
 import type { ClientMessage, StudioState } from '../src/shared/types';
 
 const toggle = (page: Page) => page.getByRole('checkbox', { name: 'Afficher le QG vivant' });
@@ -65,6 +66,59 @@ async function hosted(
   await expect(toggle(page)).toBeVisible();
   if (enabled) await expect(qg(page)).toBeVisible();
 }
+
+test('le QG conserve le choix facultatif et distingue un passage de la validation finale', async ({
+  page,
+}, testInfo) => {
+  const state = structuredClone(demoState);
+  const feature = state.features[0];
+  feature.steps = [feature.steps[0]];
+  const step = feature.steps[0];
+  step.optional = true;
+  step.status = 'pending';
+  step.attempts = [];
+  feature.activeStepId = step.id;
+  feature.status = 'attention';
+  feature.optionalRequest = {
+    id: 'hq-optional-choice',
+    stepId: step.id,
+    stateKey: featureStateKey(feature),
+  };
+  await hosted(page, { state });
+  await expect(qg(page)).toContainText('Choix facultatif attendu');
+  await expect(qg(page)).toContainText('1 en attente de toi');
+  await page
+    .getByRole('region', { name: 'Décision facultative attendue' })
+    .getByRole('button', { name: 'Passer et continuer' })
+    .click();
+  await expect
+    .poll(async () => (await messages(page)).filter((m) => m.type === 'resolveOptionalStep'))
+    .toHaveLength(1);
+  step.status = 'skipped';
+  step.optionalDecision = {
+    id: 'hq-skipped',
+    action: 'skip',
+    at: feature.updatedAt,
+    author: 'human',
+  };
+  delete feature.optionalRequest;
+  feature.status = 'awaiting_final_validation';
+  await page.evaluate((data) => window.postMessage({ type: 'state', state: data }, '*'), state);
+  await expect(qg(page)).toContainText('Passée · non exécutée');
+  await expect(qg(page).locator('.status-approved')).toHaveCount(0);
+  await expect(qg(page).locator('img[src$="approved.png"]')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Interventions passées' })).toBeVisible();
+  await expect(page.getByText('0 validée · 1 passée / 1 intervention').first()).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Valider définitivement', exact: true }),
+  ).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('hq-optional-skipped.png'), fullPage: true });
+  await toggle(page).uncheck();
+  await expect(page.locator('.journey-step')).toContainText('Passée · non exécutée');
+  expect((await messages(page)).some((m) => ['runStep', 'approveStep'].includes(m.type))).toBe(
+    false,
+  );
+});
 
 test('la case remplace uniquement la bande, conserve le détail et persiste entre les sessions et au rechargement', async ({
   page,

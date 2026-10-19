@@ -1,3 +1,4 @@
+import { progressLabel } from '../src/shared/optionalSteps';
 import { useEffect, useId, useRef, useState } from 'react';
 import { DashboardSecret, DragonBalls } from './SecretThemes';
 import { useThemeAppearance } from './ThemePicker';
@@ -50,6 +51,7 @@ const labels: Record<StepStatus, string> = {
   waiting_input: 'Attend ta réponse',
   awaiting_review: 'À valider',
   approved: 'Validée',
+  skipped: 'Passée · non exécutée',
   failed: 'Échec',
   cancelled: 'Annulée',
   stale: 'À actualiser',
@@ -669,7 +671,6 @@ function SessionMetro({
   const current = currentDashboardStep(feature),
     attempt = current?.attempts.at(-1),
     agent = studio.agents.find((a) => a.id === dashboardAgentId(feature));
-  const done = feature.steps.filter((s) => s.status === 'approved').length;
   return (
     <article className="session-metro" aria-label={feature.title}>
       <div className="metro-title">
@@ -685,9 +686,11 @@ function SessionMetro({
         <span className={`metro-status status-${current?.status ?? 'pending'}`}>
           {feature.status === 'completed'
             ? 'Terminée'
-            : current
-              ? labels[current.status]
-              : 'Équipe à choisir'}
+            : feature.optionalRequest
+              ? 'Choix facultatif attendu'
+              : current
+                ? labels[current.status]
+                : 'Équipe à choisir'}
         </span>
       </div>
       <ol className="metro-track" aria-label="Étapes de la session">
@@ -731,9 +734,7 @@ function SessionMetro({
           <span>{current?.name ?? 'Choisis les agents dans la session.'}</span>
         </div>
         <div className="metro-progress">
-          <span>
-            {done} / {feature.steps.length} étapes validées
-          </span>
+          <span>{progressLabel(feature)}</span>
           <small>
             {current?.status === 'running'
               ? `en cours · ${elapsed(attempt?.startedAt, now) || 'durée indisponible'}`

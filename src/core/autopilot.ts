@@ -1,3 +1,4 @@
+import { stepResolved } from '../shared/optionalSteps';
 import type { Feature } from '../shared/types';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { budgetBlockReason } from './budgets';
@@ -12,7 +13,7 @@ export type AutopilotAction =
   | { kind: 'run'; stepId: string; feedback?: string; resume?: boolean }
   | { kind: 'approve'; stepId: string }
   | { kind: 'correct'; stepId: string; feedback: string }
-  | { kind: 'pause'; reason: string }
+  | { kind: 'pause'; reason: string; optionalStepId?: string }
   | { kind: 'complete' };
 export function nextAutopilotAction(feature: Feature): AutopilotAction {
   const pilot = feature.autopilot;
@@ -40,27 +41,27 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
     )
   )
     return pause('Des questions humaines attendent une réponse.');
-  if (feature.steps.every((step) => step.status === 'approved')) {
+  if (feature.steps.every(stepResolved)) {
     const blockers = featureCompletionBlockers(feature);
     return blockers.length
       ? pause(blockers.join(' '))
       : feature.finalValidation
         ? { kind: 'complete' }
-        : pause('Parcours validé : attends le clic humain « Valider définitivement ».');
+        : pause('Bilan prêt : attends le clic humain « Valider définitivement ».');
   }
   if (
     correction &&
     feature.steps.find((step) => step.id === correction.sourceStepId)?.status === 'awaiting_review'
   )
     return pause('La correction est prête pour une nouvelle relecture humaine.');
-  if (correction && scopedSteps.every((step) => step.status === 'approved'))
+  if (correction && scopedSteps.every(stepResolved))
     return pause(
       'Correction relue : valide les étapes restantes puis confirme la validation définitive.',
     );
   const available = scopedSteps.filter(
     (step) =>
-      step.status !== 'approved' &&
-      step.dependsOn.every((dep) => feature.steps.find((s) => s.id === dep)?.status === 'approved'),
+      !stepResolved(step) &&
+      step.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep))),
   );
   const step =
     available.find((s) => s.status === 'waiting_input') ??
@@ -119,11 +120,13 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
         !target ||
         target.id === step.id ||
         !upstream(step.id) ||
-        !target.dependsOn.every(
-          (dep) => feature.steps.find((s) => s.id === dep)?.status === 'approved',
-        )
+        !target.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep)))
       )
         return pause('Route de correction indisponible.');
+      if (target.optional && !target.attempts.length && target.optionalDecision?.action !== 'run')
+        return pause(
+          'L’intervention de correction facultative n’a pas été choisie. Lance-la explicitement avant de reprendre.',
+        );
       if (target.askBeforeRun)
         return pause('La correction exige une confirmation avant exécution.');
       if (target.attempts.length >= target.maxAttempts)
@@ -151,6 +154,12 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
     const blockers = approvalBlockers(feature, step, 'autopilot');
     return blockers.length ? pause(blockers.join(' ')) : { kind: 'approve', stepId: step.id };
   }
+  if (step.optional && !step.attempts.length && !step.optionalDecision)
+    return {
+      kind: 'pause',
+      reason: `Intervention facultative : ${step.name}. Choisis de l’exécuter ou de la passer.`,
+      optionalStepId: step.id,
+    };
   if (needsDevOpsEvidence(step))
     return pause(
       'Mets en place et lance le test hors production, puis renseigne ses références dans le lancement manuel de la validation DevOps.',

@@ -398,6 +398,18 @@ export const messageSchema = z.discriminatedUnion('type', [
     .object({ type: z.literal('saveAutopilot'), featureId: id, config: autopilotConfigSchema })
     .strict(),
   z.object({ type: z.enum(['startAutopilot', 'pauseAutopilot']), featureId: id }).strict(),
+  z
+    .object({
+      type: z.literal('resolveOptionalStep'),
+      requestId: id.optional(),
+      featureId: id,
+      stepId: id,
+      expectedStateKey: z.string().max(5000000),
+      decisionId: id.optional(),
+      choice: z.enum(['run', 'skip']),
+      continueAutopilot: z.boolean().optional(),
+    })
+    .strict(),
   z.object({ type: z.literal('saveBudget'), featureId: id, budget: budgetSchema }).strict(),
   z
     .object({

@@ -4,6 +4,24 @@ import { demoState } from '../webview/demo';
 import { parseMessage } from '../src/host/messages';
 
 describe('session HQ projection', () => {
+  it('distinguishes a skipped intervention and a pending optional choice from successful work', () => {
+    const step = structuredClone(demoState.features[0].steps[0]);
+    step.optional = true;
+    step.attempts = [];
+    step.status = 'skipped';
+    expect(sessionHqStation(step, demoState.agents)).toMatchObject({
+      status: 'skipped',
+      label: 'Passée · non exécutée',
+    });
+    step.status = 'pending';
+    expect(sessionHqStation(step, demoState.agents, false, true)).toMatchObject({
+      status: 'waiting_input',
+      label: 'Choix facultatif attendu',
+    });
+    expect(sessionHqStation(step, demoState.agents).label).toBe('À venir · Facultative');
+    expect(step.status).toBe('pending');
+    expect(step.attempts).toEqual([]);
+  });
   it('uses recorded execution identity even when the agent was reconfigured or removed', () => {
     const step = structuredClone(demoState.features[0].steps[0]);
     step.attempts[0].profileSnapshot = {

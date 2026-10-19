@@ -1,6 +1,6 @@
 # Changelog
 
-## À paraître
+## 1.14.0 — 2026-10-19
 
 - **Thèmes réellement appliqués** : un thème explicite du cockpit garde ses couleurs, ses agents et ses décors même avec un thème VS Code classé « contraste élevé », comme Bearded Milkshake Vanilla Banana. Le suivi automatique de VS Code et les couleurs forcées du système restent disponibles. L’enregistrement automatique des thèmes est désormais indiqué près du choix et du bouton réservé aux réglages du projet.
 - **Approbation du projet** : les réglages affichent l’état réel de confiance et donnent accès à l’écran d’approbation de VS Code. Les modifications en cours restent dans le formulaire pendant cette étape ; aucun script n’est autorisé automatiquement.
@@ -12,6 +12,15 @@
 - **QG assorti au thème** : décors Jardin, Papier, Guilde et Halloween, lumière claire ou sombre, plans de travail et lampes coordonnés. Le mode automatique suit la palette de VS Code et le contraste élevé conserve une présentation épurée. Changer de thème préserve l’étape sélectionnée et les brouillons.
 - Préférence personnelle mémorisée dans VS Code pour tous les projets, retour à la bande classique en décochant et erreurs de sauvegarde explicites. Les brouillons du compte rendu restent conservés pendant le changement de vue.
 - Des décors partagés avec les vingt avatars et leurs états existants. Les postes suivent les étapes réelles, y compris les agents répétés, les questions humaines et les échecs. Réduction des animations, contraste élevé, costumes et petits écrans pris en charge.
+
+## 1.13.0 — 2026-10-18
+
+- Ajoute le choix obligatoire/facultatif par intervention dans les parcours réutilisables, les propositions issues d’une discussion et les compositions propres à une feature. Le modèle d’équipe reste intact quand on adapte une feature.
+- Suspend le pilote avant une intervention facultative jamais exécutée : notification VS Code et bandeau persistant avec exécution, passage ou décision différée. La fermeture et la réouverture conservent la pause.
+- Distingue clairement les interventions passées des interventions validées dans la session, les cartes, le Métro, le bilan, les exports et l’Observateur. Aucun livrable, test réussi ou lancement n’est inventé.
+- Conserve les décisions humaines et invalide les choix concernés après une modification du contexte, une correction en amont ou une restauration. Une intervention passée peut être exécutée ensuite, avec revalidation de ses dépendants.
+- Refuse les doubles décisions, les notifications obsolètes et le passage d’une intervention déjà tentée. Préserve les checkpoints, budgets, critères, remarques bloquantes et la validation finale humaine.
+- Migre le stockage vers la version 6 sans rendre facultatives les anciennes interventions. Corrige les validations finales avec étapes passées, l’affichage des refus de décision et les reprises de correction visant une étape passée.
 
 ## 1.12.0 — 2026-10-17
 

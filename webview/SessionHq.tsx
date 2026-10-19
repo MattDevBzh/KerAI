@@ -7,6 +7,7 @@ import {
   MessageCircle,
   Pause,
   RefreshCw,
+  SkipForward,
   Sparkles,
   TriangleAlert,
   X,
@@ -35,6 +36,7 @@ const statusIcons = {
   waiting_input: MessageCircle,
   awaiting_review: Pause,
   approved: Check,
+  skipped: SkipForward,
   failed: TriangleAlert,
   cancelled: X,
   stale: RefreshCw,
@@ -64,6 +66,7 @@ export function SessionHq({
       state.humanRequests?.some(
         (request) => request.featureId === feature.id && request.stepId === step.id,
       ),
+      feature.optionalRequest?.stepId === step.id,
     ),
   }));
   const working = stations.filter((station) => station.status === 'running').length;

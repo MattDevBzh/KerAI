@@ -1,3 +1,4 @@
+import { progressLabel } from '../src/shared/optionalSteps';
 import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -300,7 +301,9 @@ export function Celebration({
   feature: Feature;
   active: boolean;
 }) {
-  const participants = new Set(feature.steps.map((step) => step.agentId));
+  const participants = new Set(
+    feature.steps.filter((step) => step.status === 'approved').map((step) => step.agentId),
+  );
   const agents = state.agents
     .filter((agent) => participants.has(agent.id))
     .sort((a, b) => Number(participants.has(b.id)) - Number(participants.has(a.id)));
@@ -356,7 +359,6 @@ export function CelebrationControls({
     !rewardState?.error &&
     rewardState?.selection.celebration === 'eiffel' &&
     rewardState.unlocked.includes('eiffel');
-  const [sceneDismissed, setSceneDismissed] = useState(false);
   const [enabled, setEnabled] = useState(celebrationEnabled),
     [active, setActive] = useState(false);
   const previous = useRef('');
@@ -375,16 +377,13 @@ export function CelebrationControls({
   useEffect(() => {
     if (!token || token === previous.current) return;
     previous.current = token;
-    if (enabled && !reduced) {
-      setSceneDismissed(false);
-      setActive(true);
-    }
-  }, [token, enabled, reduced]);
+    if (enabled && (!reduced || eiffel)) setActive(true);
+  }, [token, enabled, reduced, eiffel]);
   useEffect(() => {
-    if (!active) return;
+    if (!active || (eiffel && reduced)) return;
     const timer = window.setTimeout(() => setActive(false), eiffel ? 6500 : 2400);
     return () => window.clearTimeout(timer);
-  }, [active, eiffel]);
+  }, [active, eiffel, reduced]);
   return (
     <>
       <Celebration
@@ -392,14 +391,8 @@ export function CelebrationControls({
         feature={feature}
         active={active && enabled && !reduced && !eiffel}
       />
-      {eiffel && enabled && !sceneDismissed && (active || reduced) && (
-        <EiffelCelebration
-          animated={active && !reduced}
-          onClose={() => {
-            setSceneDismissed(true);
-            setActive(false);
-          }}
-        />
+      {eiffel && enabled && active && (
+        <EiffelCelebration animated={!reduced} onClose={() => setActive(false)} />
       )}
       <div className="celebration-controls">
         <label className="inline-check">
@@ -418,7 +411,6 @@ export function CelebrationControls({
           className="text-button"
           disabled={!enabled || reduced}
           onClick={() => {
-            setSceneDismissed(false);
             setActive(false);
             window.requestAnimationFrame(() => setActive(true));
           }}
@@ -458,7 +450,7 @@ export function FinalSummary({
   const reasons = [
     ...featureCompletionBlockers(feature),
     ...feature.steps
-      .filter((step) => !step.attempts.at(-1)?.artifact)
+      .filter((step) => step.status !== 'skipped' && !step.attempts.at(-1)?.artifact)
       .map((step) => `${step.name} : compte rendu absent de l’historique conservé.`),
   ];
   if (state.workspaceOperation)
@@ -476,10 +468,10 @@ export function FinalSummary({
       <p>
         {finalized
           ? 'Votre décision finale est enregistrée pour cette version de la session.'
-          : 'Toutes les étapes sont validées. Relisez le bilan, puis confirmez cette version ou demandez une correction.'}
+          : 'Chaque intervention a été validée ou explicitement passée. Relisez le bilan, puis confirmez cette version ou demandez une correction.'}
       </p>
       <div className="final-summary">
-        <span>{feature.steps.length} étapes validées</span>
+        <span>{progressLabel(feature)}</span>
         <span>
           {feature.steps.reduce((sum, s) => sum + s.attempts.length, 0)} tentatives conservées
         </span>
@@ -491,8 +483,10 @@ export function FinalSummary({
           {feature.steps.map((step) => (
             <li key={step.id}>
               {step.name} ·{' '}
-              {state.agents.find((a) => a.id === step.agentId)?.nickname || step.agentId} · version{' '}
-              {(step.attempts.at(-1)?.revision ?? 0) + 1}
+              {state.agents.find((a) => a.id === step.agentId)?.nickname || step.agentId} ·{' '}
+              {step.status === 'skipped'
+                ? 'Passée par l’humain — non exécutée'
+                : `version ${(step.attempts.at(-1)?.revision ?? 0) + 1}`}
             </li>
           ))}
         </ul>

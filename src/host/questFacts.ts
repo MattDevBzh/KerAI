@@ -29,7 +29,12 @@ export function studioQuestFacts(state: StudioState): QuestFact[] {
     const key = `${scope}:${feature.id}`;
     add('featuresCreated', key);
     if (feature.steps.some((step) => step.attempts.length)) add('featuresLaunched', key);
-    if (feature.status === 'completed' && feature.finalValidation) add('featuresCompleted', key);
+    if (
+      feature.status === 'completed' &&
+      feature.finalValidation &&
+      feature.steps.some((step) => step.attempts.some(succeeded))
+    )
+      add('featuresCompleted', key);
     if (feature.worktree) add('isolated', key);
     if ((feature.projects?.length ?? 0) > 1) add('multiProject', key);
     if (feature.archived) add('archive', key);

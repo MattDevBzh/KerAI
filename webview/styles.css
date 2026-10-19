@@ -3385,3 +3385,71 @@ html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light .badge 
     height: 15px;
   }
 }
+
+/* Optional interventions retain an explicit, non-successful state in every journey. */
+.optional-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
+  margin: 12px 0;
+  border: 2px solid var(--apricot);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+.optional-notice > div {
+  flex: 1;
+  min-width: 0;
+}
+.optional-notice > svg {
+  flex-shrink: 0;
+}
+.optional-notice p {
+  margin: 6px 0;
+}
+.optional-notice small {
+  display: block;
+}
+.optional-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.skipped-notice {
+  border-style: dashed;
+}
+.journey-step.skipped .journey-node {
+  outline: 2px dashed var(--apricot);
+  border-radius: 50%;
+}
+.journey-step.skipped small {
+  color: var(--fg);
+  font-weight: 700;
+}
+.segmented-progress > .skipped {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--apricot),
+    var(--apricot) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+.team-participation {
+  margin: 8px 0;
+}
+.station-skipped .metro-dot {
+  border: 2px dashed var(--apricot);
+}
+.station-skipped button {
+  text-decoration: none;
+}
+@media (forced-colors: active) {
+  .optional-notice,
+  .station-skipped .metro-dot {
+    border-color: CanvasText;
+  }
+}
