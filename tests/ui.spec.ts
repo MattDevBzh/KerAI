@@ -263,6 +263,18 @@ test('le compte rendu modifié est enregistré avant validation de sa révision 
   });
   await expect(page.getByText('Prêt pour votre regard.')).toBeVisible();
 });
+test('le rapport personnel distant ouvre son identifiant via le bridge', async ({ page }) => {
+  const state = fresh();
+  const id = '9f5e28f3-6ae3-4b29-965a-1aeb42091ead';
+  state.features[0].steps[1].attempts[0].artifact!.content = `# Relecture distante\n\n[Ouvrir le rapport personnel](feature-studio-review:${id})`;
+  await hosted(page, state);
+  await page.locator('.session-card').filter({ hasText: 'Une palette de commandes' }).click();
+  await page.getByRole('button', { name: 'Ouvrir le rapport personnel' }).click();
+  expect((await messages(page)).at(-1)).toEqual({
+    type: 'openPersonalReviewReport',
+    sessionId: id,
+  });
+});
 test('les questions structurées sont répondues et les diffs utilisent le bridge', async ({
   page,
 }) => {

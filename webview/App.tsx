@@ -89,7 +89,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import Markdown from 'react-markdown';
+import Markdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {
   AgentProfile,
@@ -2997,13 +2997,32 @@ function StepPanel({
                   <article className="markdown">
                     <Markdown
                       remarkPlugins={[remarkGfm]}
+                      urlTransform={(url) =>
+                        /^feature-studio-review:[a-f0-9-]{36}$/.test(url)
+                          ? url
+                          : defaultUrlTransform(url)
+                      }
                       components={{
-                        a: ({ href, children }) => (
-                          <a href={href} target="_blank" rel="noreferrer">
-                            {children}
-                            <ExternalLink size={11} />
-                          </a>
-                        ),
+                        a: ({ href, children }) =>
+                          /^feature-studio-review:[a-f0-9-]{36}$/.test(href ?? '') ? (
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() =>
+                                dispatch({
+                                  type: 'openPersonalReviewReport',
+                                  sessionId: href!.slice('feature-studio-review:'.length),
+                                })
+                              }
+                            >
+                              {children}
+                            </button>
+                          ) : (
+                            <a href={href} target="_blank" rel="noreferrer">
+                              {children}
+                              <ExternalLink size={11} />
+                            </a>
+                          ),
                       }}
                     >
                       {historic ? attempt.artifact.content : content}

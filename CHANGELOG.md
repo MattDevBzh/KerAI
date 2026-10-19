@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.15.0 — 2026-10-19
+
+- Relecture distante Git : outils dédiés pour récupérer deux branches dans un cache utilisateur bare, figer leurs commits, parcourir les diffs et lire le contexte sans checkout.
+- Lecture des documents personnels d'agents, skills et templates, avec pagination, sans ouvrir l'accès aux secrets ou à un shell.
+- Écriture et ouverture des rapports personnels depuis un agent en lecture seule, sans modifier le projet. Les capacités distantes sont activées explicitement dans le profil de l'agent.
+- Les sessions utilisent le moteur fourni par l'extension ; aucun script personnel n'est exécuté. La méthode de relecture et le template restent ceux du profil personnel existant.
+
 ## 1.14.0 — 2026-10-19
 
 - **Thèmes réellement appliqués** : un thème explicite du cockpit garde ses couleurs, ses agents et ses décors même avec un thème VS Code classé « contraste élevé », comme Bearded Milkshake Vanilla Banana. Le suivi automatique de VS Code et les couleurs forcées du système restent disponibles. L’enregistrement automatique des thèmes est désormais indiqué près du choix et du bouton réservé aux réglages du projet.

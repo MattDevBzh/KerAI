@@ -23,3 +23,13 @@ await build({
   legalComments: 'none',
   logLevel: 'info',
 });
+
+await build({
+  entryPoints: ['src/host/remoteReviewWorker.mjs'],
+  outfile: 'dist/remote-review-worker.cjs',
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  target: 'node22',
+  logLevel: 'info',
+});

@@ -288,6 +288,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deleteFeature'), featureId: id }).strict(),
   z.object({ type: z.literal('openDiff'), path: short, featureId: id.optional() }).strict(),
   z.object({ type: z.literal('openFile'), path: short, featureId: id.optional() }).strict(),
+  z.object({ type: z.literal('openPersonalReviewReport'), sessionId: z.string().uuid() }).strict(),
   z
     .object({ type: z.literal('openFeatureWorkspace'), featureId: id, projectId: id.optional() })
     .strict(),

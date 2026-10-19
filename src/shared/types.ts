@@ -410,6 +410,7 @@ export type ClientMessage =
   | { type: 'archiveFeature'; featureId: string; archived: boolean }
   | { type: 'openDiff'; path: string; featureId?: string }
   | { type: 'openFile'; path: string; featureId?: string }
+  | { type: 'openPersonalReviewReport'; sessionId: string }
   | { type: 'openFeatureWorkspace'; featureId: string; projectId?: string }
   | { type: 'createCheckpoint'; featureId: string; label: string; projectId?: string }
   | {

@@ -29,6 +29,7 @@ import { WorkflowEngine, validateWorkflow } from '../core/workflow';
 import { assertTeamOrder, teamLocked } from '../shared/team';
 import { boundAnswers } from '../core/questions';
 import { gitInfo, ToolHost } from './ToolHost';
+import { PersonalReviewTools } from './PersonalReviewTools';
 import { runProcess, redact } from './process';
 import { emptyLaunch, previewContext, selectMemory } from '../core/context';
 import { defaultBudget, budgetBlockReason } from '../core/budgets';
@@ -811,7 +812,14 @@ export class StudioService extends EventEmitter {
         ? new MultiProjectTools(input, callbacks, signal, this.projectInspector)
         : new ToolHost(input, callbacks, signal, this.devopsInspector);
     this.toolHosts.set(input.attempt.id, host);
-    return await host.createTools();
+    const personal = new PersonalReviewTools(
+      this.registry.userPath,
+      join(this.registry.defaultsPath, '..', 'dist', 'remote-review-worker.cjs'),
+      input,
+      callbacks,
+      signal,
+    );
+    return [...(await host.createTools()), ...personal.createTools()];
   }
   private prepareInput(
     featureId: string,

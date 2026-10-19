@@ -1,3 +1,4 @@
+import { resolvePersonalReviewReport } from './host/PersonalReviewTools';
 import { observationHtml, observationMarkdown } from './shared/observationReport';
 import { DashboardController } from './host/DashboardController';
 import { StudioHub } from './host/StudioHub';
@@ -1739,6 +1740,14 @@ export async function activate(context: vscode.ExtensionContext) {
           output.appendLine(`Fichiers préservés :\n${result.conflicts.join('\n')}`);
           output.show(true);
         }
+        return;
+      }
+      case 'openPersonalReviewReport': {
+        const requested = await resolvePersonalReviewReport(
+          current.registry.userPath,
+          message.sessionId,
+        );
+        await vscode.window.showTextDocument(vscode.Uri.file(requested));
         return;
       }
       case 'openFile': {
