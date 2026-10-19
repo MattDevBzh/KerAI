@@ -731,72 +731,80 @@ describe('manual context, human questions and MCP sessions', () => {
 });
 
 describe('bounded autopilot and local project memory', () => {
-  it('runs to a human checkpoint then completes with a real host test receipt and bounded measured calls', async () => {
-    const f = await fixture();
-    await f.service.checkRuntime();
-    await f.service.saveSettings({
-      ...f.service.state.settings,
-      testCommands: [
-        {
-          id: 'unit',
-          name: 'Unit',
-          command: process.execPath,
-          args: ['-e', 'console.log("passed")'],
+  // Five agent steps create real Git checkpoints and spawn a host test process.
+  // Allow for slower Windows disk/process latency without changing runtime limits.
+  it(
+    'runs to a human checkpoint then completes with a real host test receipt and bounded measured calls',
+    async () => {
+      const f = await fixture();
+      await f.service.checkRuntime();
+      await f.service.saveSettings({
+        ...f.service.state.settings,
+        testCommands: [
+          {
+            id: 'unit',
+            name: 'Unit',
+            command: process.execPath,
+            args: ['-e', 'console.log("passed")'],
+          },
+        ],
+      });
+      const feature = await f.service.createFeature({
+        title: 'Autopilot',
+        description: '',
+        workflowId: 'feature',
+      });
+      await f.service.saveAutopilot(feature.id, {
+        checkpoints: ['plan'],
+        maxRuns: 5,
+        maxCorrectionCycles: 0,
+        reviewStepId: 'review',
+        correctionStepId: 'dev',
+        stepInputs: {
+          specs: {
+            initialContext: 'My initial US',
+            mcpServerIds: [],
+            memoryIds: [],
+            useProjectMemory: false,
+          },
         },
-      ],
-    });
-    const feature = await f.service.createFeature({
-      title: 'Autopilot',
-      description: '',
-      workflowId: 'feature',
-    });
-    await f.service.saveAutopilot(feature.id, {
-      checkpoints: ['plan'],
-      maxRuns: 5,
-      maxCorrectionCycles: 0,
-      reviewStepId: 'review',
-      correctionStepId: 'dev',
-      stepInputs: {
-        specs: {
-          initialContext: 'My initial US',
-          mcpServerIds: [],
-          memoryIds: [],
-          useProjectMemory: false,
-        },
-      },
-    });
-    f.run(async (input, callbacks, signal) => {
-      if (input.step.id === 'tests') {
-        const tools = await f.service.getTools(input, callbacks, signal);
-        expect((await invoke(tools, 'studio_run_test', { id: 'unit' })).resultType).toBe('success');
-      }
-      return {
-        ...finished(),
-        ...(input.step.id === 'review'
-          ? { review: { verdict: 'pass' as const, summary: 'Reviewed', findings: [] } }
-          : {}),
-      };
-    });
-    await f.service.startAutopilot(feature.id);
-    expect(f.inputs.map((input) => input.step.id)).toEqual(['specs', 'plan']);
-    expect(f.inputs[0].preparedPrompt).toContain('My initial US');
-    expect(feature.autopilot?.status).toBe('paused');
-    expect(feature.steps[0].status).toBe('approved');
-    const plan = feature.steps[1].attempts[0];
-    await f.service.approveStep(feature.id, 'plan', plan.id, plan.revision ?? 0);
-    await f.service.startAutopilot(feature.id);
-    expect(feature.status).toBe('awaiting_final_validation');
-    await f.service.finalizeFeature(feature.id, featureStateKey(feature));
-    expect(feature.status).toBe('completed');
-    expect(feature.autopilot?.runs).toBe(5);
-    expect(feature.autopilot?.status).toBe('completed');
-    expect(feature.steps[3].attempts[0].evidence?.[0]).toMatchObject({
-      source: 'host',
-      exitCode: 0,
-      stdout: 'passed\n',
-    });
-    expect(f.inputs).toHaveLength(5);
-  });
+      });
+      f.run(async (input, callbacks, signal) => {
+        if (input.step.id === 'tests') {
+          const tools = await f.service.getTools(input, callbacks, signal);
+          expect((await invoke(tools, 'studio_run_test', { id: 'unit' })).resultType).toBe(
+            'success',
+          );
+        }
+        return {
+          ...finished(),
+          ...(input.step.id === 'review'
+            ? { review: { verdict: 'pass' as const, summary: 'Reviewed', findings: [] } }
+            : {}),
+        };
+      });
+      await f.service.startAutopilot(feature.id);
+      expect(f.inputs.map((input) => input.step.id)).toEqual(['specs', 'plan']);
+      expect(f.inputs[0].preparedPrompt).toContain('My initial US');
+      expect(feature.autopilot?.status).toBe('paused');
+      expect(feature.steps[0].status).toBe('approved');
+      const plan = feature.steps[1].attempts[0];
+      await f.service.approveStep(feature.id, 'plan', plan.id, plan.revision ?? 0);
+      await f.service.startAutopilot(feature.id);
+      expect(feature.status).toBe('awaiting_final_validation');
+      await f.service.finalizeFeature(feature.id, featureStateKey(feature));
+      expect(feature.status).toBe('completed');
+      expect(feature.autopilot?.runs).toBe(5);
+      expect(feature.autopilot?.status).toBe('completed');
+      expect(feature.steps[3].attempts[0].evidence?.[0]).toMatchObject({
+        source: 'host',
+        exitCode: 0,
+        stdout: 'passed\n',
+      });
+      expect(f.inputs).toHaveLength(5);
+    },
+    process.platform === 'win32' ? 60000 : 15000,
+  );
   it('pauses on human questions without automatically advancing after the answer', async () => {
     const f = await fixture();
     await f.service.checkRuntime();
