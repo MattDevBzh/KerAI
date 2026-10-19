@@ -79,6 +79,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'checkpointComparison',
         'stepApprovalResult',
         'artifactSaveResult',
+        'agentReportExported',
         'correctionResult',
         'featureFinalizationResult',
         'profileSaveResult',

@@ -334,6 +334,15 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('exportFeature'), featureId: id }).strict(),
   z
     .object({
+      type: z.literal('exportAgentReport'),
+      ...step,
+      requestId: id,
+      attemptId: id,
+      revision: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('saveAgent'),
       requestId: z.string().min(1).max(100),
       options: z

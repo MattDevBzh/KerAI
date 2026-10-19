@@ -1,5 +1,6 @@
 import { agentPolicy } from '../src/shared/agentInheritance';
 import { AgentProfileSummary, AgentModelOverrides } from './AgentModelOverrides';
+import { AgentReportDownload } from './AgentReportDownload';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { OptionalStepChoice, SkippedInterventions } from './OptionalStepsUI';
 import { CatalogSearch, searchText, useDialogAccessibility } from './Ergonomics';
@@ -2830,6 +2831,14 @@ function StepPanel({
                     {attempt.artifact.name}
                     {historic && <em>Tentative précédente</em>}
                   </span>
+                  <AgentReportDownload
+                    key={attempt.id}
+                    featureId={feature.id}
+                    stepId={step.id}
+                    attempt={attempt}
+                    unsaved={dirty || savePending}
+                    dispatch={dispatch}
+                  />
                   <button
                     className="text-button"
                     disabled={

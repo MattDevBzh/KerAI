@@ -7,11 +7,13 @@ import { DiscussionService, type DiscussionProfile } from './host/DiscussionServ
 import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
 import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
 import { sessionMarkdown } from './shared/sessionExport';
+import { agentReport } from './shared/agentReport';
 import { DevOpsController } from './host/DevOpsController';
 import { devOpsMessageSchema } from './core/devopsSchemas';
 import { type TicketTarget } from './shared/devopsTickets';
 import * as vscode from 'vscode';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises';
 import { stringify } from 'yaml';
@@ -816,6 +818,37 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (error) {
         send({
           type: 'projectResult',
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
+    if (message.type === 'exportAgentReport') {
+      try {
+        const current = await ensure(message.featureId);
+        const report = agentReport(
+          current.engine.getFeature(message.featureId),
+          message.stepId,
+          message.attemptId,
+          message.revision,
+        );
+        const destination = await vscode.window.showSaveDialog({
+          title: 'Télécharger le compte rendu de l’agent',
+          saveLabel: 'Enregistrer le Markdown',
+          defaultUri: vscode.Uri.file(path.join(homedir(), report.filename)),
+          filters: { Markdown: ['md'] },
+        });
+        if (destination)
+          await vscode.workspace.fs.writeFile(destination, Buffer.from(report.content, 'utf8'));
+        send({
+          type: 'agentReportExported',
+          requestId: message.requestId,
+          cancelled: !destination,
+        });
+      } catch (error) {
+        send({
+          type: 'agentReportExported',
           requestId: message.requestId,
           error: redact((error as Error).message),
         });

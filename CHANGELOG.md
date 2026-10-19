@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.1 — 2026-10-19
+
+- Ajoute **Télécharger .md** dans le Livrable d’une étape : enregistrement du Markdown intégral dans le fichier choisi, avec un nom proposé pour la feature, l’étape, la tentative et la version.
+- L’export suit la tentative affichée, y compris une ancienne tentative. Les brouillons non enregistrés et les tentatives encore en cours doivent être terminés avant le téléchargement. Une version devenue obsolète est signalée.
+- Aucun appel d’agent ni crédit consommé pour cet export. Publication sans suites de tests à la demande de l’utilisateur ; compilation et intégrité de l’archive contrôlées.
+
 ## 1.16.0 — 2026-10-19
 
 - Les agents ajoutés seuls et les membres d’équipes reprennent leur profil courant au lancement : instructions, skills, outils, permissions, contexte par défaut et ton. Les anciennes copies de skills dans les modèles d’équipe ne masquent plus le profil.

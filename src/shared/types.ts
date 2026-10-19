@@ -440,6 +440,14 @@ export type ClientMessage =
     }
   | { type: 'exportFeature'; featureId: string }
   | {
+      type: 'exportAgentReport';
+      requestId: string;
+      featureId: string;
+      stepId: string;
+      attemptId: string;
+      revision: number;
+    }
+  | {
       type: 'saveAgent';
       requestId: string;
       options: import('./profiles').ProfileSaveOptions;
@@ -534,6 +542,7 @@ export type HostMessage =
   | { type: 'state'; state: StudioState }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
+  | { type: 'agentReportExported'; requestId: string; cancelled?: boolean; error?: string }
   | { type: 'runPreview'; requestId: string; preview: RunPreview }
   | {
       type: 'stepApprovalResult';
