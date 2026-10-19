@@ -12,8 +12,9 @@ import { Store } from '../src/core/store';
 import { sha256 } from '../src/host/PolicyEngine';
 import { WorkspaceLease } from '../src/host/WorkspaceLease';
 
-// These integration scenarios start many real Git processes; Windows process startup is slower.
-if (process.platform === 'win32') vi.setConfig({ testTimeout: 60_000 });
+// Capture/restore scenarios chain several real runs, fsyncs and Git comparisons.
+// A loaded Windows runner can exceed one minute without any assertion failing.
+if (process.platform === 'win32') vi.setConfig({ testTimeout: 120_000 });
 
 const execute = promisify(execFile);
 const roots: string[] = [],
