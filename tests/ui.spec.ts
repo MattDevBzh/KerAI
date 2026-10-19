@@ -1160,7 +1160,11 @@ test('captures documentées : lancement avec US/MCP et éditeur de parcours', as
     .filter({ hasText: 'Feature complète' })
     .getByRole('button', { name: 'Ouvrir l’éditeur' })
     .click();
-  await page.getByRole('button', { name: 'Configurer l’étape Conception' }).click();
+  const design = state.workflows.find((workflow) => workflow.name === 'Feature complète')!.steps[1];
+  const designer = state.agents.find((agent) => agent.id === design.agentId)!;
+  await page
+    .getByRole('button', { name: `Configurer l’étape ${designer.name}`, exact: true })
+    .click();
   await page.setViewportSize({ width: 1440, height: 1320 });
   await labelCapture(page);
   await page.evaluate(() => window.scrollTo(0, 0));
