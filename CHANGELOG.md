@@ -13,6 +13,9 @@
 - Préférence personnelle mémorisée dans VS Code pour tous les projets, retour à la bande classique en décochant et erreurs de sauvegarde explicites. Les brouillons du compte rendu restent conservés pendant le changement de vue.
 - Des décors partagés avec les vingt avatars et leurs états existants. Les postes suivent les étapes réelles, y compris les agents répétés, les questions humaines et les échecs. Réduction des animations, contraste élevé, costumes et petits écrans pris en charge.
 
+- Intègre les interventions facultatives de la v1.13 dans le QG : choix humain attendu, passage non exécuté et validation finale cohérente. Corrige la réapparition de la célébration Eiffel en mouvement réduit à la réouverture d’une session terminée.
+- Vérifie avant publication les fonctionnalités des bundles et tous les visuels inclus dans le VSIX, pour détecter les nouveautés absentes du paquet.
+
 ## 1.13.0 — 2026-10-18
 
 - Ajoute le choix obligatoire/facultatif par intervention dans les parcours réutilisables, les propositions issues d’une discussion et les compositions propres à une feature. Le modèle d’équipe reste intact quand on adapte une feature.

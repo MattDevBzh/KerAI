@@ -4,7 +4,7 @@
 
 ## Installation
 
-1. Télécharge [feature-studio-1.11.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/feature-studio-1.11.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.11.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.14.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.14.0/feature-studio-1.14.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.14.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -28,7 +28,13 @@ Afficher le volet seul ne démarre aucune session et n’appelle aucun modèle. 
 
 En haut de **Réglages**, **L’ambiance du cockpit** propose **Suivre VS Code**, puis **Jardin des idées**, **Papier vivant** et **Guilde pixel**, chacun en clair et sombre. Le septième thème, **Halloween**, transforme le décor et habille les vingt personnages (repos, travail animé et réussite). Ce thème événement est entièrement facultatif, sans activation automatique à une date donnée. Les portraits habituels reviennent dès que tu choisis une autre ambiance. Si un costume ne se charge pas, le portrait original prend le relais.
 
-Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Le contraste élevé de VS Code reste prioritaire, avec ta préférence conservée pour son retour. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
+Clique une carte : le thème s’applique dès l’enregistrement confirmé, sans redémarrer le cockpit. Ta préférence est personnelle, conservée dans le réglage utilisateur VS Code `featureStudio.appearance.theme` et partagée entre tes projets ; ce choix n’écrit aucun fichier du projet et n’invalide pas le travail en cours. Un thème explicite conserve ses couleurs et costumes même avec un thème VS Code classé à contraste élevé, comme Bearded Milkshake Vanilla Banana. **Suivre VS Code** reprend la palette de l’éditeur ; les couleurs forcées du système restent prioritaires. Dans la démonstration, le choix sert uniquement d’aperçu pendant la session et n’est pas enregistré.
+
+Le thème secret **Dragon Ball** se découvre sur **Dashboard** ou sa Tour de contrôle en saisissant **↑ ↑ ↓ ↓ ← → ← →**, hors des champs de saisie et des dialogues. Après la révélation, il reste disponible dans les réglages et habille les vingt agents. [Le dojo secret](WORKFLOWS.md#le-thème-secret-dragon-ball).
+
+## Afficher le QG vivant
+
+Dans une session, coche **Afficher le QG vivant**, à côté de **LE PARCOURS**. Chaque poste ouvre le détail de son intervention ; le décor suit le thème. Les questions humaines, choix facultatifs et interventions passées restent visibles avec leur état réel. La case conserve ton choix entre projets et permet de revenir à la bande classique, sans perdre la sélection ni un brouillon. Elle est désactivée par défaut. [Utilisation du QG](WORKFLOWS.md#bande-des-agents-ou-qg-vivant).
 
 ## Agrandir l’interface
 
@@ -46,11 +52,11 @@ Le menu **Quêtes** affiche ton total de trophées. Le carnet propose **100 quê
 
 Les premières missions couvrent la création et le lancement d’une feature. D’autres invitent à répondre aux questions, relire et valider les rapports, les modifier, commenter, créer des checkpoints, écrire des skills, enrichir la mémoire ou utiliser l’Observateur. **Les six fantastiques** exige six agents différents qui terminent leurs interventions avec succès, de suite, dans une même feature : un échec ou une annulation interrompt la série. Des relances du même agent ne suffisent pas.
 
-Les récompenses sont automatiques, une seule fois par quête. Une réponse d’agent en échec, un aperçu de lancement ou une sauvegarde répétée ne simulent pas une action réussie. Les checkpoints automatiques ne remplacent pas les checkpoints manuels demandés. Les trophées sont conservés même si tu archives ou supprimes ensuite une session.
+Les trophées sont attribués automatiquement, une seule fois par quête. Une réponse d’agent en échec, un aperçu de lancement ou une sauvegarde répétée ne simulent pas une action réussie. Les checkpoints automatiques ne remplacent pas les checkpoints manuels demandés. Les trophées sont conservés même si tu archives ou supprimes ensuite une session.
 
 La progression est personnelle, commune aux projets et enregistrée localement dans le stockage du cockpit (`quests.json`). Les sessions encore présentes et les profils personnels disponibles peuvent compléter des quêtes à l’installation. L’historique ne permet pas de reconstruire toutes les actions anciennes (par exemple les exports et les créations de parcours) ; celles-ci sont comptées à partir de cette version. Les identités d’exécution des nouveaux lancements sont figées pour éviter de réinterpréter une ancienne intervention après modification de l’étape.
 
-Si le fichier de progression est illisible, le carnet le signale et le conserve. **Relire la progression** retente sa lecture ; le compteur affiche un tiret au lieu d’inventer un total. Les trophées ne sont ni dépensés ni associés à des bonus dans cette version. La démo présente le carnet sans enregistrer de récompense personnelle.
+Si le fichier de progression est illisible, le carnet le signale et le conserve. **Relire la progression** retente sa lecture ; le compteur affiche un tiret au lieu d’inventer un total. Les trophées ne sont jamais dépensés : ils débloquent six cadeaux aux seuils de 5, 20, 40, 70, 110 et 200. **Prochain cadeau** montre le seul palier à venir ; **Mes récompenses** permet d’activer ou de retirer les thèmes, titres, la célébration Eiffel et le chaton déjà acquis. [Consulter les récompenses](WORKFLOWS.md#quêtes-et-récompenses). La démo présente le carnet sans enregistrer de récompense personnelle.
 
 ## Discuter avec ses agents
 

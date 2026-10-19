@@ -1,4 +1,4 @@
-# Architecture — évolution v1.1
+# Architecture — Feature Studio v1.14
 
 Feature Studio est une extension locale VS Code : un webview React transmet des intentions validées à un hôte Node. Le moteur métier ne dépend ni de VS Code ni du CLI. Les contrats sont définis dans `src/shared/types.ts`, `src/shared/evolutions.ts`, `src/shared/collaboration.ts`, `src/shared/workspaces.ts`, `src/shared/profiles.ts`, `src/shared/quality.ts` et `src/shared/devops.ts` ; le host conserve l'autorité sur les exécutions, permissions et écritures.
 
@@ -7,7 +7,7 @@ flowchart LR
     UI[Webview React] -->|messages validés| VS[Extension VS Code]
     VS --> Service[StudioService]
     Service --> Core[Moteur, contexte, budgets, validation, autopilote]
-    Service --> Store[Store JSON v4]
+    Service --> Store[Store JSON v6]
     Service --> GitSpace[FeatureWorkspace]
     GitSpace --> Git[Git local / worktree frère]
     GitSpace --> Points[Objets SHA-256 et manifestes privés]
@@ -38,7 +38,7 @@ flowchart LR
 | `src/core/context.ts`           | Sélection locale de mémoire, compilation du prompt, aperçu et empreinte de lancement                                                               |
 | `src/core/budgets.ts`           | Agrégats de consommation mesurée et blocage entre tentatives                                                                                       |
 | `src/core/validation.ts`        | Critères, commentaires et preuves nécessaires à une approbation                                                                                    |
-| `src/core/store.ts`             | État v3 validé, migrations v0/v1/v2, sauvegarde atomique et récupération                                                                           |
+| `src/core/store.ts`             | État v6 validé, migrations des versions antérieures, sauvegarde atomique et récupération                                                                           |
 | `src/core/registry.ts`          | Catalogue embarqué/utilisateur/projet, priorités, versions, sauvegardes avec révision attendue, YAML strict, installation additive du kit          |
 | `src/core/evolutionSchemas.ts`  | Schémas des contextes, MCP, budgets, pilote, preuves, relectures et mémoire                                                                        |
 | `src/core/workspaceSchemas.ts`  | Schémas des liaisons worktree et métadonnées des points de restauration                                                                            |
@@ -147,3 +147,11 @@ Les suppressions enregistrent d’abord un manifeste durable sans transcript. L�
 Le pilote produit une pause avec `optionalStepId` avant le premier lancement facultatif. Le service persiste un `optionalRequest` puis émet la notification après libération de l’exécution. `resolveOptionalStep` prend la réservation habituelle et le verrou du workspace, vérifie le jeton d’état et la demande, puis persiste le choix avant une éventuelle reprise. Un échec de sauvegarde restaure l’état précédent. Une réponse concurrente ou obsolète ne peut lancer la suite une seconde fois. Le webview et la notification utilisent le même contrat.
 
 Les invalidations effacent le choix courant concerné, conservent son historique et ramènent une intervention non tentée à `pending`. Les interventions déjà tentées restent `stale` et ne deviennent pas passables. La reprise d’une tentative conserve son historique sans fabriquer une nouvelle décision humaine.
+
+## Apparence et récompenses personnelles
+
+`QuestService` conserve les faits et trophées acquis dans `quests.json`. `RewardService` calcule les six déblocages depuis ce registre et conserve uniquement les choix de titre, célébration et mascotte dans `rewards.json`, avec validation, écritures ordonnées et verrou de fichier. Une récompense verrouillée ou un registre illisible ne permet pas une activation.
+
+Le thème et le QG utilisent les réglages personnels de VS Code ; la découverte Dragon Ball utilise `globalState`. L’hôte valide les messages et accuse les sauvegardes. Les composants React conservent le dernier choix confirmé en cas d’erreur et ne changent ni les profils ni les décisions métier. Le QG projette les états de chaque intervention, notamment les questions et choix humains, les passages facultatifs et l’identité réellement exécutée.
+
+Le stockage des sessions reste en version 6. Les migrations, trophées existants et décisions facultatives de la v1.13 sont conservés. Le contrôle du VSIX vérifie les commandes hôte/interface et les assets publics avant publication.

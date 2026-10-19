@@ -12,3 +12,4 @@ playwright-report/
 /releases/*.vsix.sha256
 /releases/local/
 /releases/published/
+/scripts/__pycache__/

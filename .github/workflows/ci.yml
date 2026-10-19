@@ -19,7 +19,7 @@ jobs:
       - run: npx vitest run tests/devops-cli-catalog.test.ts
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot.cmd
-      - run: npx vitest run tests/optional-steps.test.ts tests/core-store.test.ts tests/autopilot.test.ts tests/service.test.ts tests/workflow-collaboration.test.ts tests/dashboard.test.ts tests/devops-tickets-api.test.ts tests/devops-controller.test.ts tests/workspaces.test.ts tests/workspace-service.test.ts tests/quests.test.ts tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/discussions.test.ts tests/discussion-context.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts tests/devops-delivery.test.ts tests/explorer.test.ts tests/credits.test.ts tests/cockpit-launcher.test.ts tests/account-credits-monitor.test.ts tests/theme-host.test.ts tests/shortcut-icon.test.ts
+      - run: npx vitest run tests/optional-steps.test.ts tests/core-store.test.ts tests/autopilot.test.ts tests/service.test.ts tests/workflow-collaboration.test.ts tests/dashboard.test.ts tests/devops-tickets-api.test.ts tests/devops-controller.test.ts tests/workspaces.test.ts tests/workspace-service.test.ts tests/quests.test.ts tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/discussions.test.ts tests/discussion-context.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts tests/devops-delivery.test.ts tests/explorer.test.ts tests/credits.test.ts tests/cockpit-launcher.test.ts tests/account-credits-monitor.test.ts tests/theme-host.test.ts tests/shortcut-icon.test.ts tests/rewards.test.ts tests/dragonball.test.ts tests/session-hq.test.ts
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -40,6 +40,7 @@ jobs:
       - run: npm run test:ui
       - run: xvfb-run -a npm run test:extension
       - run: mkdir -p releases && npm run package
+      - run: python3 scripts/verify-vsix.py --match-build
       - uses: actions/upload-artifact@v4
         if: vars.FEATURE_STUDIO_UPLOAD_ARTIFACTS == 'true'
         with:
@@ -115,27 +116,14 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         run: |
           python3 - <<'PY'
-          import hashlib, json, os, shutil, zipfile
-          from pathlib import Path, PurePosixPath
-          from xml.etree import ElementTree
+          import hashlib, json, os, shutil, subprocess
+          from pathlib import Path
 
           package = json.loads(Path('package.json').read_text())
-          lock = json.loads(Path('package-lock.json').read_text())
           version = package['version']
-          assert lock['version'] == lock['packages']['']['version'] == version
           vsix = Path(f'releases/feature-studio-{version}.vsix')
           extracted = Path(os.environ['RUNNER_TEMP']) / 'feature-studio-vsix'
-          with zipfile.ZipFile(vsix) as archive:
-              assert archive.testzip() is None, 'Corrupt VSIX archive'
-              for name in archive.namelist():
-                  assert not PurePosixPath(name).is_absolute() and '..' not in PurePosixPath(name).parts
-              embedded = json.loads(archive.read('extension/package.json'))
-              assert (embedded['name'], embedded['publisher'], embedded['version']) == (package['name'], package['publisher'], version)
-              manifest = ElementTree.fromstring(archive.read('extension.vsixmanifest'))
-              identity = manifest.find('.//{*}Identity')
-              assert identity is not None and identity.attrib['Version'] == version
-              assert archive.read('extension/' + embedded['main'].removeprefix('./')), 'Missing extension entry point'
-              archive.extractall(extracted)
+          subprocess.run(['python3', 'scripts/verify-vsix.py', str(vsix), '--match-build', '--extract', str(extracted)], check=True)
           output = Path(os.environ['RUNNER_TEMP']) / 'feature-studio-release'
           output.mkdir(exist_ok=True)
           shutil.copy2(vsix, output / vsix.name)

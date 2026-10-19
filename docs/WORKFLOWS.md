@@ -12,7 +12,7 @@ Un thème explicite de Feature Studio garde ses couleurs, ses costumes et ses d�
 
 En consultation seule, le bandeau du cockpit et le bas des **Réglages** ou **Automatisations** proposent **Gérer l’approbation dans VS Code**. Ce bouton ouvre l’écran de confiance natif ; il ne donne aucune autorisation à votre place. Le cockpit reçoit la décision de VS Code et actualise son état.
 
-Les modifications du formulaire restent affichées pendant cette étape. Après approbation, cliquez sur **Enregistrer les réglages**. Un projet déjà approuvé l’indique explicitement. L’ajout ou la modification de commandes de test, de hooks actifs ou de connexions MCP actives conserve sa confirmation avant enregistrement.
+Les modifications du formulaire restent affichées pendant cette étape. Après approbation, cliquez sur **Enregistrer les réglages du projet**. Un projet déjà approuvé l’indique explicitement. L’ajout ou la modification de commandes de test, de hooks actifs ou de connexions MCP actives conserve sa confirmation avant enregistrement.
 
 ## Quêtes et récompenses
 
@@ -47,7 +47,7 @@ Le cockpit prend une palette bleu nuit, orange et cyan ; le Dashboard accueille 
 
 Dans l’écran d’une session, la case **Afficher le QG vivant**, à côté de **LE PARCOURS**, remplace uniquement la bande des agents par un atelier. Chaque poste correspond à une intervention du parcours : un même agent peut avoir plusieurs postes. Clique sur un poste pour sélectionner son étape ; le compte rendu, les fichiers, les preuves et les commandes restent dans le panneau de détail en dessous. Décoche la case pour retrouver la bande classique, avec la même étape sélectionnée.
 
-La vue suit les états enregistrés : au travail, attente de réponse, à valider, validée, à venir, échec, annulation, interruption ou étape à actualiser. Une question interactive arrête l’animation de travail jusqu’à sa résolution. Dans une archive, le dernier état est présenté sans animation de travail. Cliquer sur un poste n’exécute ni ne valide l’agent. Un brouillon en cours empêche de changer d’étape ; basculer entre les deux vues conserve ce brouillon.
+La vue suit les états enregistrés : au travail, attente de réponse, à valider, validée, à venir, passage facultatif non exécuté, échec, annulation, interruption ou étape à actualiser. Une question interactive arrête l’animation de travail jusqu’à sa résolution. Dans une archive, le dernier état est présenté sans animation de travail. Cliquer sur un poste n’exécute ni ne valide l’agent. Un brouillon en cours empêche de changer d’étape ; basculer entre les deux vues conserve ce brouillon.
 
 Le choix est enregistré dans les réglages personnels de VS Code (`featureStudio.appearance.livingHq`), partagé par toutes les sessions et tous les projets, et désactivé par défaut. En cas d’échec de sauvegarde, la préférence confirmée est rétablie et le motif s’affiche près de la case. Le Dashboard et la Tour de contrôle gardent leur présentation habituelle.
 

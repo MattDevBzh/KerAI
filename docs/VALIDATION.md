@@ -1,4 +1,19 @@
-# Validation et limites — v1.13.0, 18 octobre 2026
+# Validation et limites — v1.14.0, 19 octobre 2026
+
+
+## Intégration des travaux locaux — v1.14.0
+
+- Inventaire des deux dossiers de travail, des branches locales et distantes et des stashes : les anciennes branches étaient déjà incluses dans la v1.13 (`a75f2914c8cbb00f5b0913570ebc4329fc9eb0ce`). Les nouveautés visuelles et correctifs non commités du dossier principal ont été enregistrés, puis fusionnés avec cette base. Aucun stash ne contenait un autre lot.
+- Les lots récupérés couvrent le QG et ses décors, les six récompenses et leurs préférences, Dragon Ball et ses vingt costumes, les thèmes explicites sous Bearded et l’approbation native du projet. Les sources, tests, visuels, prompts et anciennes propositions graphiques sont versionnés. Les deux captures différentes du second dossier sont conservées dans `design/proposals/2026-10-18-v1.13/`.
+- Les anciens paquets et téléchargements locaux sont conservés octet pour octet : 24 fichiers dans le dossier principal, 132 dans le second dossier. Les nouveaux paquets sont ignorés par Git et distribués dans les releases GitHub ; les anciens paquets déjà suivis restent dans l’historique et leur `releases/SHA256SUMS` est conservé.
+- Le QG prend en charge l’état `skipped`, l’attente d’un choix facultatif et le bilan avec interventions passées. Le scénario d’intégration vérifie le choix, le poste, les compteurs, la validation finale disponible et le retour à la bande classique. Une intervention passée ne devient ni une tentative ni une réussite.
+- La célébration Eiffel ne réapparaît plus à la réouverture d’une session terminée quand le mouvement réduit est actif. Le scénario vérifie l’ouverture et le rechargement sans commande métier.
+- Le vérificateur `scripts/verify-vsix.py` contrôle les versions, le manifeste, les quatre commandes de fonctionnalité dans les bundles hôte et interface, les préférences déclarées, les notes de version et tous les visuels publics octet pour octet. Avec `--match-build`, il compare aussi chaque fichier compilé. Les jobs de validation et de publication l’exécutent avant le smoke du paquet ; Windows couvre aussi les nouveaux tests de récompenses, Dragon Ball et QG.
+- Validation locale : `npm run check` réussi avec **657 tests métier réussis, 4 ignorés**, vérification TypeScript, format et compilation. La campagne complète Chromium a réussi **212 scénarios**. Les captures du QG avec passage facultatif, du chaton, de Matrix et des dashboards figurent dans `design/proposals/2026-10-19-v1.14/`.
+- Paquet local contrôlé : **40 351 762 octets**, SHA-256 `1f9bd49d83774adc2f55295232cfcd0df0e78d0098962784e90c98263332f10b`. Les **138 fichiers compilés** et **131 assets publics** correspondent aux sources. Deux archives volontairement incomplètes (une planche Dragon Ball absente, puis sa commande absente du bundle interface) ont été refusées par le vérificateur.
+- Le **VSIX local exact, extrait**, a passé le smoke natif dans VS Code Insiders sur macOS (sortie 0) : activation et cockpit, préférences/thèmes/secrets/récompenses, QG, parcours facultatifs, conservation des données et contrôles Git existants. Le projet et le profil sont isolés et aucun prompt Copilot payant n’est envoyé. Ce compte rendu a été complété après construction du paquet local.
+- La publication attend les jobs Linux et Windows du commit livré, puis reconstruit et contrôle le VSIX, le charge dans VS Code et vérifie les empreintes après téléchargement. Le paquet distribué possède son propre `SHA256SUMS` ; la [release v1.14.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.14.0) porte le commit et le lien de CI exacts.
+- Les contrôles locaux, la CI et le paquet publié restent des preuves distinctes. Les comptes rendus datés du 17 et du 18 octobre décrivent les recettes historiques ; ils sont conservés pour la traçabilité.
 
 ## Interventions facultatives — v1.13.0
 
