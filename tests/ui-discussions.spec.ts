@@ -190,6 +190,7 @@ test('navigation order and project selector match each page; common settings pre
   await expect(nav.getByRole('button')).toHaveText([
     'Dashboard',
     'Sessions',
+    'Stats',
     'Discussion',
     'Validation',
     'Atelier',
@@ -198,7 +199,7 @@ test('navigation order and project selector match each page; common settings pre
     'Mémoire',
     'Quêtes—',
   ]);
-  for (const name of ['Sessions', 'Discussion', 'Validation', 'Consommation']) {
+  for (const name of ['Sessions', 'Stats', 'Discussion', 'Validation', 'Consommation']) {
     await navigate(page, name);
     await expect(page.getByLabel('Projet actif', { exact: true })).toHaveCount(0);
   }
