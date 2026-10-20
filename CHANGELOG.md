@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.19.0 — 2026-10-20
+
+- **Mode pair** dans les étapes : contexte confirmé, conversation dédiée et organisation proposée avant tout accès aux outils du projet.
+- Rythmes **Guidé**, **Par lots** et **Autonome après cadrage**. Les messages ajustent le plan ; un bouton autorise le prochain lot. Les pauses libèrent le projet.
+- **Continuer en solo** depuis une pause ou pendant un tour : relais après la réponse en cours, avec les décisions et le travail existants. Quitter la page conserve le rythme convenu.
+- Contexte et profil figés, conversation persistante, reprise explicite après interruption, contrôles de révision et protection des modifications humaines entre les lots.
+- Une seule tentative pour toute la conversation ; crédits cumulés sans double comptage. Chaque tour compte dans le budget de runs. Validation du livrable par les contrôles existants, puis retour à la session.
+- Cette livraison inclut également la page **Stats** introduite dans les sources 1.18.0.
+
 ## 1.18.0 — 2026-10-20
 
 - **Stats** : nouvelle page dans la navigation principale avec filtres par projet, parcours et période, dates personnalisées inclusives et regroupement par jour, semaine ou mois. Les filtres restent mémorisés au retour d’une session.

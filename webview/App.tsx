@@ -118,6 +118,7 @@ import {
 import { demoState } from './demo';
 import { QualityCommandFields, QualitySetup } from './QualityUI';
 import brandIcon from '../resources/icon.png';
+import { PairWorkspace } from './PairWorkspace';
 import { LaunchDialog, HumanRequests, McpSettings, McpPicker } from './ExecutionUI';
 import './evolution.css';
 import {
@@ -2231,6 +2232,11 @@ function StepPanel({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [config, setConfig] = useState(false);
   const [launchResume, setLaunchResume] = useState<boolean | null>(null);
+  const [pairLaunch, setPairLaunch] = useState(false);
+  const [pairOpen, setPairOpen] = useState(Boolean(latest?.pair && step.status !== 'approved'));
+  useEffect(() => {
+    if (latest?.pair && step.status !== 'approved') setPairOpen(true);
+  }, [latest?.id]);
   const [approvalPending, setApprovalPending] = useState(false);
   const [approvalError, setApprovalError] = useState('');
   const approvalReasons =
@@ -2291,8 +2297,11 @@ function StepPanel({
           : feature.archived
             ? 'Restaurez la session pour poursuivre.'
             : '';
-  const run = (resume = false) => {
-    const action = () => setLaunchResume(resume);
+  const run = (resume = false, pair = false) => {
+    const action = () => {
+      setPairLaunch(pair);
+      setLaunchResume(resume);
+    };
     if ((latest || stepResolved(step)) && !resume)
       confirm(
         step.status === 'skipped'
@@ -2307,6 +2316,18 @@ function StepPanel({
       );
     else action();
   };
+  if (pairOpen && latest?.pair && !historic)
+    return (
+      <PairWorkspace
+        key={latest.id}
+        feature={feature}
+        step={step}
+        state={state}
+        dispatch={dispatch}
+        back={() => setPairOpen(false)}
+        confirm={confirm}
+      />
+    );
   return (
     <div className="step-layout">
       {launchResume !== null && (
@@ -2314,6 +2335,7 @@ function StepPanel({
           feature={feature}
           step={step}
           state={state}
+          pair={pairLaunch}
           resume={launchResume}
           feedback={feedback}
           dispatch={dispatch}
@@ -2338,6 +2360,18 @@ function StepPanel({
             dispatch={dispatch}
             busy={running || dirty}
           />
+        )}
+        {latest?.pair && (
+          <div className="pair-status">
+            <strong>Cette étape dispose d’une conversation en mode pair.</strong>
+            <button
+              className="button secondary small"
+              disabled={dirty || historic}
+              onClick={() => setPairOpen(true)}
+            >
+              Ouvrir le mode pair
+            </button>
+          </div>
         )}
         <div className="workbench-heading">
           <div>
@@ -2869,6 +2903,15 @@ function StepPanel({
             </label>
           )}
           <div className="decision-actions">
+            {step.status !== 'running' && (
+              <button
+                className="button secondary"
+                disabled={!canRun || dirty}
+                onClick={() => run(false, true)}
+              >
+                <MessageSquare size={15} /> Démarrer en mode pair
+              </button>
+            )}
             {step.status === 'running' ? (
               <button
                 className="button secondary"

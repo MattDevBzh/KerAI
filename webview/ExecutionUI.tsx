@@ -1,3 +1,4 @@
+import { pairPaces, PAIR_PACES, type PairPace } from '../src/shared/pair';
 import { useDialogAccessibility } from './Ergonomics';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
@@ -131,6 +132,7 @@ export function McpPicker({
   );
 }
 export function LaunchDialog({
+  pair = false,
   feature,
   step,
   state,
@@ -144,6 +146,7 @@ export function LaunchDialog({
   state: StudioState;
   resume: boolean;
   feedback: string;
+  pair?: boolean;
   dispatch: Dispatch;
   onClose: () => void;
 }) {
@@ -151,6 +154,7 @@ export function LaunchDialog({
   const previous = step.attempts.at(-1)?.launch;
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
+    ...(pair ? { pairPace: 'batches' as const } : {}),
     ...(previous?.devopsTest
       ? { devopsTest: { ...previous.devopsTest, isolationConfirmed: false } }
       : {}),
@@ -276,7 +280,13 @@ export function LaunchDialog({
 
   return (
     <StudioDialog
-      title={resume ? 'Reprendre avec le bon contexte.' : 'Le prochain pas commence ici.'}
+      title={
+        pair
+          ? 'Préparer le travail en mode pair.'
+          : resume
+            ? 'Reprendre avec le bon contexte.'
+            : 'Le prochain pas commence ici.'
+      }
       subtitle={`${step.name} · ${feature.title}. Vérifiez les instructions avant de confier le travail à l’agent.`}
       onClose={onClose}
       className="launch-dialog"
@@ -284,6 +294,25 @@ export function LaunchDialog({
       <div className="launch-grid">
         <div className="launch-inputs">
           <span className="eyebrow">VOTRE INTENTION</span>
+          {pair && (
+            <label className="field">
+              <span>Rythme proposé</span>
+              <select
+                value={launch.pairPace}
+                onChange={(event) => update({ pairPace: event.target.value as PairPace })}
+              >
+                {PAIR_PACES.map((pace) => (
+                  <option key={pace} value={pace}>
+                    {pairPaces[pace].label}
+                  </option>
+                ))}
+              </select>
+              <small>
+                L’agent proposera une organisation. Tu pourras l’ajuster avant d’autoriser le
+                travail.
+              </small>
+            </label>
+          )}
           {needsDevOpsEvidence(step) && (
             <DevOpsTestForm
               value={launch.devopsTest}
@@ -611,7 +640,11 @@ export function LaunchDialog({
           }}
         >
           <Play size={14} />
-          {resume ? 'Lancer la reprise' : 'Lancer cette étape'}
+          {pair
+            ? 'Démarrer le cadrage en pair'
+            : resume
+              ? 'Lancer la reprise'
+              : 'Lancer cette étape'}
         </button>
       </div>
     </StudioDialog>

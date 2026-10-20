@@ -1,3 +1,5 @@
+import { pairIntroduction } from './pair';
+import { pairPaces } from '../shared/pair';
 import { createHash } from 'node:crypto';
 import { boundAnswers } from './questions';
 import { correctionContext } from '../shared/collaboration';
@@ -279,6 +281,13 @@ export function promptSections(input: RunInput): PromptSection[] {
       'system',
       'À la fin de cette relecture, ajoute exactement un bloc feature-studio-review. Ne mets pass que si tu ne relèves aucune correction nécessaire. Les constats du modèle restent des constats de relecture et ne remplacent pas les preuves de tests hôtes. Format :\n```feature-studio-review\n{"verdict":"pass","summary":"Bilan précis","findings":[]}\n```\n' +
         'Sinon verdict="changes_requested" et findings=[{"id":"finding_1","severity":"blocking","message":"Correction attendue","file":"src/example.ts","line":1}]. severity vaut info, warning ou blocking ; file et line sont facultatifs.',
+    );
+  if (launch?.pairPace)
+    add(
+      'pair',
+      'Travail en mode pair',
+      'system',
+      `${pairIntroduction}\nRythme proposé : ${pairPaces[launch.pairPace].label}.`,
     );
   const mode = launch?.contextMode ?? (input.agent.emptyContextByDefault ? 'empty' : 'all');
   return sections.map((section) => {

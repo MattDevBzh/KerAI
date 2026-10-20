@@ -1,0 +1,184 @@
+.pair-workspace {
+  min-width: 0;
+  width: 100%;
+}
+.pair-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.pair-title {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex: 1;
+  min-width: 180px;
+}
+.pair-title h2 {
+  margin: 5px 0;
+}
+.pair-title p,
+.pair-status p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.pair-title .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pair-credit {
+  color: var(--muted);
+  font-size: 12px;
+}
+.pair-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 24px;
+}
+.pair-conversation,
+.pair-sidebar {
+  min-width: 0;
+}
+.pair-status,
+.pair-card,
+.pair-composer {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+}
+.pair-status {
+  border-left: 4px solid var(--coral);
+}
+.pair-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 0;
+}
+.pair-message {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pair-user {
+  margin-left: 8%;
+  border-left: 3px solid var(--coral);
+}
+.pair-assistant {
+  margin-right: 3%;
+}
+.pair-message .eyebrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pair-stream {
+  white-space: pre-wrap;
+}
+.pair-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.pair-card h3 {
+  margin-top: 0;
+}
+.pair-card > .button {
+  width: 100%;
+  margin-top: 12px;
+}
+.pair-card > .text-button {
+  margin-top: 16px;
+}
+.pair-paces {
+  border: 0;
+  padding: 0;
+  margin: 16px 0;
+  min-width: 0;
+}
+.pair-paces legend {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.pair-paces label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+.pair-paces label.selected {
+  border-color: var(--coral);
+}
+.pair-paces input {
+  margin-top: 4px;
+  flex: 0 0 auto;
+}
+.pair-paces small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.pair-context {
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.pair-files {
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+.pair-files button {
+  text-align: left;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+@media (max-width: 1000px) {
+  .pair-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pair-paces {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pair-paces label {
+    flex: 1 1 200px;
+  }
+}
+@media (max-width: 520px) {
+  .pair-status,
+  .pair-card,
+  .pair-composer,
+  .pair-message {
+    padding: 14px;
+  }
+  .pair-heading {
+    gap: 14px;
+  }
+  .pair-title {
+    flex-basis: 100%;
+  }
+  .pair-user,
+  .pair-assistant {
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .pair-grid {
+    gap: 16px;
+  }
+}

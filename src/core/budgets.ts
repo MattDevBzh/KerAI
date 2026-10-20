@@ -18,7 +18,7 @@ export function usageTotals(feature: Feature): UsageTotals {
   };
   for (const step of feature.steps)
     for (const attempt of step.attempts) {
-      totals.runs++;
+      totals.runs += attempt.pair?.turns ?? 1;
       if (measured(attempt.usage?.inputTokens)) totals.inputTokens += attempt.usage.inputTokens;
       if (measured(attempt.usage?.outputTokens)) totals.outputTokens += attempt.usage.outputTokens;
       if (

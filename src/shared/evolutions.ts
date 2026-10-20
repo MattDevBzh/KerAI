@@ -20,6 +20,7 @@ export interface McpCatalog {
   checkedAt?: string;
 }
 export interface RunLaunchOptions {
+  pairPace?: import('./pair').PairPace;
   devopsTest?: import('./devopsKit').DevOpsTestTarget;
   initialContext: string;
   mcpServerIds: string[];

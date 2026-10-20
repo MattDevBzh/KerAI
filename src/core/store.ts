@@ -1,3 +1,4 @@
+import { pairStateSchema } from './pair';
 import { ticketSourceSnapshotSchema } from './devopsTicketSchemas';
 import { mkdir, readFile, rename, open, unlink, readdir } from 'node:fs/promises';
 import {
@@ -100,6 +101,7 @@ const correctionCycle = z.object({
   }),
 });
 const attempt = z.object({
+  pair: pairStateSchema.optional(),
   profileSnapshot: z
     .object({
       agentId: z.string(),

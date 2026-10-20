@@ -87,6 +87,8 @@ export function approvalBlockers(
   const blockers: string[] = [],
     attempt = step.attempts.at(-1);
   if (!attempt) return ['Aucune tentative à valider.'];
+  if (step.attempts.at(-1)?.pair && step.attempts.at(-1)!.pair!.phase !== 'review')
+    blockers.push('Termine le travail en mode pair et prépare le livrable avant de valider.');
   if (step.status !== 'awaiting_review') blockers.push('Cette étape attend un résultat à relire.');
   if (!attempt.artifact?.content.trim()) blockers.push('Un livrable non vide est nécessaire.');
   if (attempt.questions.some((q) => !attempt.answers[q.id]?.trim()))

@@ -25,6 +25,7 @@ const path = z
   .refine((value) => !value.includes('\0'), 'Chemin invalide.');
 export const launchSchema = z
   .object({
+    pairPace: z.enum(['guided', 'batches', 'autonomous']).optional(),
     devopsTest: devOpsTestTargetSchema.optional(),
     initialContext: z.string().max(60000),
     mcpServerIds: uniqueIds,

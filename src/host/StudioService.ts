@@ -1,3 +1,5 @@
+import { pairPrompt, pairSourceKey, pairTurnSchema, addPairUsage } from '../core/pair';
+import type { PairTurn } from '../shared/pair';
 import { inheritTeamProfiles, resolveAgentProfile } from '../shared/agentInheritance';
 import { EventEmitter } from 'node:events';
 import { basename, join } from 'node:path';
@@ -73,7 +75,7 @@ import {
   type SessionStorageInfo,
 } from '../shared/observation';
 import { prepareObservation, runObservation, observationSource } from './SessionObserver';
-import { sessionDirectory } from './SessionFiles';
+import { sessionDirectory, readPrivate, writePrivate, digest } from './SessionFiles';
 import {
   pendingDeletions,
   markDeletion,
@@ -134,6 +136,7 @@ export class StudioService extends EventEmitter {
     if (!('featureId' in message) || !message.featureId) return;
     const tracked = new Set([
       'runStep',
+      'pairTurn',
       'resolveOptionalStep',
       'approveStep',
       'rejectStep',
@@ -1031,6 +1034,72 @@ export class StudioService extends EventEmitter {
       automated,
     );
   }
+  private pairInputPath(featureId: string, attemptId: string): string {
+    return `${sessionDirectory(featureId)}/pair-${digest(attemptId)}.json`;
+  }
+  private async readPairInput(
+    featureId: string,
+    stepId: string,
+    attemptId: string,
+  ): Promise<RunInput> {
+    this.assertTrusted();
+    const attempt = this.engine.getStep(featureId, stepId).attempts.find((a) => a.id === attemptId);
+    if (!attempt?.pair) throw new Error('Conversation pair introuvable.');
+    const text = await readPrivate(
+      this.store.rootPath,
+      this.pairInputPath(featureId, attemptId),
+      20000000,
+    );
+    if (sha256(text) !== attempt.pair.inputHash)
+      throw new Error('Le contexte pair enregistré a changé. Prépare une nouvelle tentative.');
+    const input = JSON.parse(text) as RunInput;
+    if (
+      input.feature.id !== featureId ||
+      input.step.id !== stepId ||
+      input.attempt.id !== attemptId
+    )
+      throw new Error('Le contexte pair ne correspond pas à cette étape.');
+    return input;
+  }
+  async pairContext(featureId: string, stepId: string, attemptId: string): Promise<string> {
+    return (await this.readPairInput(featureId, stepId, attemptId)).preparedPrompt ?? '';
+  }
+  async pairTurn(featureId: string, stepId: string, command: PairTurn): Promise<void> {
+    const turn = pairTurnSchema.parse(command);
+    this.assertTrusted();
+    const step = this.engine.getStep(featureId, stepId),
+      attempt = step.attempts.at(-1);
+    if (
+      turn.action === 'solo' &&
+      this.active?.featureId === featureId &&
+      this.active.stepId === stepId &&
+      step.status === 'running'
+    ) {
+      if (
+        !attempt?.pair ||
+        attempt.id !== turn.attemptId ||
+        attempt.pair.revision !== turn.expectedRevision ||
+        !attempt.pair.organizationApproved
+      )
+        throw new Error(
+          'Le relais solo exige une organisation validée et la conversation courante.',
+        );
+      if (attempt.pair.soloRequested) throw new Error('Le relais solo est déjà demandé.');
+      attempt.pair.soloRequested = true;
+      attempt.pair.revision++;
+      attempt.pair.messages.push({
+        id: randomUUID(),
+        at: new Date().toISOString(),
+        role: 'user',
+        content: redact(`Après le tour en cours, continue en solo. ${turn.message}`),
+      });
+      await this.persist();
+      return;
+    }
+    await this.workspaceAction(featureId, 'Travail en mode pair', () =>
+      this.executeRun(featureId, stepId, '', false, undefined, undefined, false, turn),
+    );
+  }
   private async executeRun(
     featureId: string,
     stepId: string,
@@ -1039,6 +1108,7 @@ export class StudioService extends EventEmitter {
     launch?: RunLaunchOptions,
     previewFingerprint?: string,
     automated = false,
+    pairTurn?: PairTurn,
   ): Promise<void> {
     this.assertTrusted();
     if (this.automation && !automated)
@@ -1065,8 +1135,52 @@ export class StudioService extends EventEmitter {
       );
     Object.assign(this.state, await this.registry.load());
     this.assertTrusted();
-    const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
-    if (input.launch?.editableExistingFiles?.length && !previewFingerprint)
+    let input: RunInput;
+    const previous = step.attempts.at(-1);
+    if (pairTurn) {
+      if (
+        !previous?.pair ||
+        previous.id !== pairTurn.attemptId ||
+        previous.pair.revision !== pairTurn.expectedRevision
+      )
+        throw new Error('Cette conversation a changé. Recharge son dernier état.');
+      if (pairSourceKey(feature, step) !== previous.pair.sourceKey)
+        throw new Error(
+          'La mission ou ses sources ont changé. Prépare une nouvelle tentative avec son contexte.',
+        );
+      if (previous.pair.phase === 'review')
+        throw new Error('Le livrable est prêt. Valide-le ou démarre une nouvelle tentative.');
+      if (
+        ['work', 'solo'].includes(pairTurn.action) &&
+        !previous.pair.messages.some((m) => m.role === 'assistant')
+      )
+        throw new Error('Demande d’abord une proposition d’organisation à l’agent.');
+      if (pairTurn.action === 'discuss' && !pairTurn.message.trim())
+        throw new Error('Écris un message avant de l’envoyer.');
+      if (pairTurn.action === 'finish' && !previous.pair.organizationApproved)
+        throw new Error('Valide d’abord l’organisation.');
+      if (previous.pair.messages.length > 990)
+        throw new Error('La conversation est trop longue. Prépare une nouvelle tentative.');
+      input = await this.readPairInput(featureId, stepId, previous.id);
+      input.feature = structuredClone(feature);
+      input.step.attempts = structuredClone(step.attempts);
+      input.attempt = structuredClone(previous);
+      for (const server of input.mcpServers ?? []) {
+        if (
+          JSON.stringify(this.state.settings.mcpServers?.find((s) => s.id === server.id)) !==
+          JSON.stringify(server)
+        )
+          throw new Error(
+            'Une connexion MCP a changé. Prépare un nouveau contexte avant de poursuivre.',
+          );
+      }
+      // Previously authorized dirty files keep their original hashes; later writes belong to this attempt.
+      for (const path of Object.keys(previous.fileHashes ?? {}))
+        delete input.existingChangeGrants?.[path];
+      if (input.workspacePath !== (await this.featurePath(featureId)))
+        throw new Error('Le dossier de travail a changé.');
+    } else input = this.prepareInput(featureId, stepId, feedback, resume, launch);
+    if (!pairTurn && input.launch?.editableExistingFiles?.length && !previewFingerprint)
       throw new Error(
         'L’autorisation de reprendre des fichiers existants exige un aperçu confirmé au lancement manuel.',
       );
@@ -1075,16 +1189,76 @@ export class StudioService extends EventEmitter {
       if (actual.branch !== project.branch)
         throw new Error(`Le projet ${project.name} doit être sur la branche ${project.branch}.`);
     }
-    await inspectProjectChanges(input);
-    const preview = previewContext(input);
-    if (preview.errors.length) throw new Error(preview.errors.join(' '));
-    if (previewFingerprint && previewFingerprint !== preview.fingerprint)
+    if (!pairTurn) await inspectProjectChanges(input);
+    const preview = pairTurn ? undefined : previewContext(input);
+    if (preview?.errors.length) throw new Error(preview.errors.join(' '));
+    if (previewFingerprint && previewFingerprint !== preview?.fingerprint)
       throw new Error(
         'Le contexte a changé depuis son aperçu. Actualise l’aperçu avant de lancer.',
       );
     const blocked = budgetBlockReason(feature);
     if (blocked) throw new Error(blocked);
-    const attempt = this.engine.beginRun(featureId, stepId, feedback, resume);
+    const pairAction = pairTurn?.action ?? 'start';
+    const pairEnabled = Boolean(pairTurn || input.launch?.pairPace);
+    const context = input.preparedPrompt ?? preview!.prompt;
+    const draftPair = pairEnabled
+      ? structuredClone(
+          previous?.pair && pairTurn
+            ? previous.pair
+            : {
+                pace: input.launch!.pairPace!,
+                phase: 'planning' as const,
+                revision: 0,
+                turns: 1,
+                organizationApproved: false,
+                inputHash: '',
+                sourceKey: '',
+                messages: [],
+                sessionIds: [],
+              },
+        )
+      : undefined;
+    if (draftPair) {
+      if (pairTurn) {
+        draftPair.pace = pairTurn.action === 'solo' ? 'autonomous' : pairTurn.pace;
+        draftPair.messages.push({
+          id: randomUUID(),
+          at: new Date().toISOString(),
+          role: 'user',
+          content: redact(
+            pairTurn.message ||
+              {
+                discuss: '',
+                work: 'Organisation validée. Lance la prochaine unité de travail.',
+                solo: 'Continue en solo avec les décisions convenues jusqu’au livrable.',
+                finish: 'Prépare le livrable avec le travail déjà réalisé.',
+              }[pairTurn.action],
+          ),
+        });
+        draftPair.turns++;
+      }
+      const prompt = pairPrompt(context, draftPair, pairAction);
+      const limit =
+        feature.budget?.maxPromptChars ??
+        this.state.settings.budgetDefaults?.maxPromptChars ??
+        60000;
+      if (prompt.length > limit)
+        throw new Error(
+          `Le contexte et la conversation atteignent ${prompt.length} caractères (limite ${limit}). Ajuste le budget de contexte ou prépare une nouvelle tentative.`,
+        );
+      input.preparedPrompt = prompt;
+    }
+    const attempt = pairTurn
+      ? this.engine.continuePair(featureId, stepId, pairTurn.attemptId)
+      : this.engine.beginRun(featureId, stepId, feedback, resume);
+    if (draftPair) {
+      draftPair.revision++;
+      draftPair.phase = 'working';
+      draftPair.turnStartedAt = new Date().toISOString();
+      if (pairAction === 'work' || pairAction === 'solo') draftPair.organizationApproved = true;
+      draftPair.sourceKey = pairSourceKey(feature, step);
+      attempt.pair = draftPair;
+    }
     if (!input.resumeSessionId) delete attempt.sessionId;
     attempt.roastLevel = input.attempt.roastLevel;
     attempt.agentName = input.agent.nickname || input.agent.name;
@@ -1096,12 +1270,29 @@ export class StudioService extends EventEmitter {
     };
     attempt.launch = structuredClone(input.launch!);
     attempt.memorySnapshot = structuredClone(input.memory ?? []);
-    attempt.promptFingerprint = preview.fingerprint;
-    attempt.promptCharacters = preview.characters;
-    attempt.evidence = [];
-    attempt.revision = 0;
+    if (preview) {
+      attempt.promptFingerprint = preview.fingerprint;
+      attempt.promptCharacters = preview.characters;
+    }
+    attempt.evidence ??= [];
+    attempt.revision ??= 0;
     input.attempt = structuredClone(attempt);
-    input.preparedPrompt = preview.prompt;
+    input.preparedPrompt ??= preview!.prompt;
+    const conversationOnly = Boolean(
+      draftPair && ['start', 'discuss', 'finish'].includes(pairAction),
+    );
+    const priorUsage = pairTurn
+      ? structuredClone(
+          attempt.usage ?? {
+            source: 'measured' as const,
+            incompleteTokens: true,
+            incompleteCost: true,
+          },
+        )
+      : undefined;
+    let turnUsage: import('../shared/types').Usage | undefined;
+    if (draftPair) input.resumeSessionId = undefined;
+    if (conversationOnly) input.mode = 'discussion';
     if (automated && feature.autopilot) {
       feature.autopilot.runs++;
       feature.autopilot.updatedAt = new Date().toISOString();
@@ -1115,8 +1306,8 @@ export class StudioService extends EventEmitter {
     let streamText = '',
       streamId = '';
     let archive: SessionArchive | undefined;
-    let attemptBytes = 0,
-      attemptRecords = 0;
+    let attemptBytes = pairTurn ? (attempt.traceArchive?.bytes ?? 0) : 0,
+      attemptRecords = pairTurn ? (attempt.traceArchive?.records ?? 0) : 0;
     const trace = (event: import('../shared/observation').SessionTrace) => {
       if (!archive) throw new Error('Archive de session indisponible.');
       const beforeBytes = archive.info.bytes,
@@ -1139,7 +1330,8 @@ export class StudioService extends EventEmitter {
     const callbacks: RunCallbacks = {
       onTrace: trace,
       onUsage: (usage) => {
-        attempt.usage = structuredClone(usage);
+        turnUsage = structuredClone(usage);
+        attempt.usage = draftPair ? addPairUsage(priorUsage, usage) : structuredClone(usage);
         if (usage.model) attempt.model = usage.model;
         this.schedule();
       },
@@ -1199,11 +1391,19 @@ export class StudioService extends EventEmitter {
         this.schedule();
       },
       onSession: (id) => {
+        if (attempt.pair && !attempt.pair.sessionIds.includes(id)) attempt.pair.sessionIds.push(id);
         this.engine.setSession(featureId, stepId, id);
         this.schedule();
       },
     };
     try {
+      if (draftPair && !pairTurn) {
+        const frozen = { ...input, mode: undefined, preparedPrompt: context };
+        // The immutable input is private; history stays in the normal attempt store.
+        const text = JSON.stringify(frozen);
+        draftPair.inputHash = sha256(text);
+        await writePrivate(this.store.rootPath, this.pairInputPath(featureId, attempt.id), text);
+      }
       archive = await this.archiveFor(featureId);
       trace({
         id: randomUUID(),
@@ -1226,7 +1426,7 @@ export class StudioService extends EventEmitter {
       await archive.flush();
       await this.persist();
       this.assertTrusted();
-      if (feature.worktree) {
+      if (feature.worktree && !conversationOnly) {
         const before = await this.workspaces.capture(feature, {
           kind: 'before-run',
           label: `Avant ${step.name}`.slice(0, 200),
@@ -1237,11 +1437,12 @@ export class StudioService extends EventEmitter {
         attempt.checkpointBeforeId = before.id;
         await this.persist();
       }
-      attempt.existingChangesBackup = await backupProjectChanges(
-        input,
-        this.store.rootPath,
-        controller.signal,
-      );
+      if (!pairTurn)
+        attempt.existingChangesBackup = await backupProjectChanges(
+          input,
+          this.store.rootPath,
+          controller.signal,
+        );
       if (attempt.existingChangesBackup) {
         callbacks.onEvent({
           id: randomUUID(),
@@ -1251,21 +1452,66 @@ export class StudioService extends EventEmitter {
         });
         await this.persist();
       }
-      await this.hooks('beforeRun', input, controller.signal, callbacks);
+      if (!conversationOnly) await this.hooks('beforeRun', input, controller.signal, callbacks);
       this.assertTrusted();
       const result = await this.adapter.run(input, callbacks, controller.signal);
       await archive.flush();
       if (controller.signal.aborted) throw new Error('Exécution annulée.');
       const host = this.toolHosts.get(attempt.id);
-      result.changedFiles = [...(host?.changedFiles ?? [])];
-      result.fileHashes = { ...host?.fileHashes };
+      result.changedFiles = [
+        ...new Set([...(pairTurn ? attempt.changedFiles : []), ...(host?.changedFiles ?? [])]),
+      ];
+      result.fileHashes = { ...(pairTurn ? attempt.fileHashes : {}), ...host?.fileHashes };
       result.content = redact(result.content);
-      await this.hooks('afterRun', input, controller.signal, callbacks);
-      this.engine.finishRun(featureId, stepId, result);
+      if (!conversationOnly) await this.hooks('afterRun', input, controller.signal, callbacks);
+      if (draftPair) {
+        result.usage = addPairUsage(priorUsage, result.usage ?? turnUsage);
+        attempt.usage = result.usage;
+        const completed =
+          !conversationOnly &&
+          /(?:^|\n)<!-- feature-studio-pair-complete -->\s*$/.test(result.content);
+        result.content = result.content
+          .replace(/(?:^|\n)<!-- feature-studio-pair-complete -->\s*$/, '')
+          .trim();
+        draftPair.messages.push({
+          id: randomUUID(),
+          at: new Date().toISOString(),
+          role: 'assistant',
+          content:
+            result.content +
+            (result.questions.length
+              ? '\n\nQuestions à clarifier :\n' +
+                result.questions
+                  .map((q) => `- ${q.text}${q.choices ? ' (' + q.choices.join(' / ') + ')' : ''}`)
+                  .join('\n')
+              : ''),
+        });
+        draftPair.revision++;
+        const final =
+          pairAction === 'finish' ||
+          pairAction === 'solo' ||
+          (pairAction === 'work' && draftPair.pace === 'autonomous') ||
+          completed;
+        if (final && !result.questions.length) {
+          draftPair.phase = 'review';
+          this.engine.finishRun(featureId, stepId, result);
+        } else {
+          attempt.changedFiles = result.changedFiles;
+          attempt.fileHashes = result.fileHashes;
+          draftPair.phase = draftPair.organizationApproved ? 'paused' : 'planning';
+          this.engine.pausePair(featureId, stepId);
+        }
+      } else this.engine.finishRun(featureId, stepId, result);
     } catch (error) {
       const host = this.toolHosts.get(attempt.id);
-      attempt.changedFiles = [...(host?.changedFiles ?? [])];
-      attempt.fileHashes = { ...host?.fileHashes };
+      attempt.changedFiles = [...new Set([...attempt.changedFiles, ...(host?.changedFiles ?? [])])];
+      attempt.fileHashes = { ...attempt.fileHashes, ...host?.fileHashes };
+      if (draftPair) {
+        draftPair.phase = draftPair.organizationApproved ? 'paused' : 'planning';
+        delete draftPair.soloRequested;
+        draftPair.revision++;
+        attempt.usage = addPairUsage(priorUsage, turnUsage);
+      }
       if (step.status === 'running') {
         if (controller.signal.aborted) this.engine.cancelRun(featureId, stepId);
         else
@@ -1278,7 +1524,7 @@ export class StudioService extends EventEmitter {
     } finally {
       const owned = this.toolHosts.get(attempt.id)?.fileHashes;
       if (owned) feature.workspaceFileHashes = { ...feature.workspaceFileHashes, ...owned };
-      if (feature.worktree && attempt.checkpointBeforeId) {
+      if (feature.worktree && attempt.checkpointBeforeId && !conversationOnly) {
         try {
           const after = await this.workspaces.capture(feature, {
             kind: 'after-run',
@@ -1317,6 +1563,22 @@ export class StudioService extends EventEmitter {
         this.active = undefined;
         complete();
       }
+    }
+    if (attempt.pair?.soloRequested) {
+      delete attempt.pair.soloRequested;
+      await this.persist();
+      if (
+        step.status === 'waiting_input' &&
+        !controller.signal.aborted &&
+        attempt.pair.phase !== 'review'
+      )
+        await this.executeRun(featureId, stepId, '', false, undefined, undefined, false, {
+          attemptId: attempt.id,
+          expectedRevision: attempt.pair.revision,
+          action: 'solo',
+          message: 'Poursuis en solo comme demandé, avec les décisions de la conversation.',
+          pace: 'autonomous',
+        });
     }
   }
   cancel(featureId: string): void {

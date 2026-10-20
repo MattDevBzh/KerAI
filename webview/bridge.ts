@@ -1,5 +1,6 @@
 import type { ClientMessage, HostMessage } from '../src/shared/types';
 interface PersistedView {
+  pairDraft?: { attemptId: string; text: string };
   statistics?: import('../src/shared/statistics').StatsFilters;
   sessionList?: import('../src/shared/sessionList').SessionListFilters;
   navigationVersion?: number;
@@ -40,6 +41,9 @@ export function savedFeatureProposal() {
 export function savedSessionList() {
   return persistedView.sessionList;
 }
+export function savedPairDraft(attemptId: string) {
+  return persistedView.pairDraft?.attemptId === attemptId ? persistedView.pairDraft.text : '';
+}
 export function savedStatistics() {
   return persistedView.statistics;
 }
@@ -62,6 +66,8 @@ export function subscribe(callback: (message: HostMessage) => void) {
     if (
       event.data &&
       [
+        'pairTurnResult',
+        'pairContextResult',
         'dashboardState',
         'dashboardSaved',
         'state',

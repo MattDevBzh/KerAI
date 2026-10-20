@@ -1323,6 +1323,43 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         return;
       }
+      case 'pairContext':
+        try {
+          send({
+            type: 'pairContextResult',
+            requestId: message.requestId,
+            context: await current.pairContext(
+              message.featureId,
+              message.stepId,
+              message.attemptId,
+            ),
+          });
+        } catch (error) {
+          send({
+            type: 'pairContextResult',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        }
+        return;
+      case 'pairTurn':
+        void current
+          .pairTurn(message.featureId, message.stepId, {
+            attemptId: message.attemptId,
+            expectedRevision: message.expectedRevision,
+            action: message.action,
+            message: message.message,
+            pace: message.pace,
+          })
+          .then(() => send({ type: 'pairTurnResult', requestId: message.requestId }))
+          .catch((error) =>
+            send({
+              type: 'pairTurnResult',
+              requestId: message.requestId,
+              error: redact((error as Error).message),
+            }),
+          );
+        return;
       case 'runStep':
         if (!message.previewFingerprint || !message.launch)
           throw new Error('Prépare le contexte de cette tentative avant de la lancer.');

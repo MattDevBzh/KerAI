@@ -113,6 +113,7 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  pair?: import('./pair').PairState;
   /** Execution identity frozen at launch, independent from later step edits. */
   profileSnapshot?: {
     agentId: string;
@@ -301,6 +302,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./pair').PairClientMessage
   | import('./statistics').StatsClientMessage
   | { type: 'refreshSecretThemes' }
   | { type: 'unlockDragonBall'; sequence: readonly string[]; requestId: string }
@@ -500,6 +502,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | import('./pair').PairHostMessage
   | import('./statistics').StatsHostMessage
   | { type: 'secretThemeState'; dragonBallUnlocked: boolean; requestId?: string; error?: string }
   | { type: 'optionalStepResult'; requestId: string; error?: string }

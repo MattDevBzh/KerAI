@@ -4,7 +4,7 @@
 
 ## Installation
 
-1. Télécharge [feature-studio-1.18.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.18.0/feature-studio-1.18.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.18.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.19.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.19.0/feature-studio-1.19.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.19.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.

@@ -1,3 +1,4 @@
+import { pairTurnSchema } from '../core/pair';
 import { ZOOM_LEVELS } from '../shared/zoom';
 import { dashboardMessageVariants } from '../core/dashboardSchemas';
 import { devOpsMessageVariants } from '../core/devopsSchemas';
@@ -151,6 +152,8 @@ export const messageSchema = z.discriminatedUnion('type', [
         .optional(),
     })
     .strict(),
+  pairTurnSchema.extend({ type: z.literal('pairTurn'), requestId: id, ...step }).strict(),
+  z.object({ type: z.literal('pairContext'), requestId: id, ...step, attemptId: id }).strict(),
   z.object({ type: z.literal('cancelRun'), featureId: id }).strict(),
   z
     .object({

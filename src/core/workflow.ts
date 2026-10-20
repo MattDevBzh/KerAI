@@ -343,6 +343,31 @@ export class WorkflowEngine {
     this.touch(feature);
     return attempt;
   }
+  continuePair(featureId: string, stepId: string, attemptId: string): Attempt {
+    const [feature, step] = this.pair(featureId, stepId),
+      attempt = this.latest(step);
+    if (
+      feature.archived ||
+      attempt.id !== attemptId ||
+      !attempt.pair ||
+      !['waiting_input', 'failed', 'cancelled', 'interrupted'].includes(step.status) ||
+      feature.steps.some((s) => s.status === 'running') ||
+      !step.dependsOn.every((id) => stepResolved(feature.steps.find((s) => s.id === id)))
+    )
+      throw new Error('Cette conversation ne peut pas être reprise dans son état actuel.');
+    step.status = attempt.status = 'running';
+    delete attempt.finishedAt;
+    delete attempt.error;
+    feature.activeStepId = step.id;
+    this.touch(feature);
+    return attempt;
+  }
+  pausePair(featureId: string, stepId: string): void {
+    const [feature, step] = this.pair(featureId, stepId),
+      attempt = this.latest(step);
+    step.status = attempt.status = 'waiting_input';
+    this.touch(feature);
+  }
   finishRun(featureId: string, stepId: string, result: RunResult): Attempt {
     const [feature, step] = this.pair(featureId, stepId),
       attempt = this.latest(step);

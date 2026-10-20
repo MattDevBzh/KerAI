@@ -40,7 +40,10 @@ export function deletionRecord(feature: Feature): SessionDeletion {
     sessionIds: [
       ...new Set([
         ...feature.steps.flatMap((s) =>
-          s.attempts.flatMap((a) => (a.sessionId ? [a.sessionId] : [])),
+          s.attempts.flatMap((a) => [
+            ...(a.sessionId ? [a.sessionId] : []),
+            ...(a.pair?.sessionIds ?? []),
+          ]),
         ),
         ...(feature.observations ?? []).flatMap((r) =>
           r.calls.flatMap((c) => (c.sessionId ? [c.sessionId] : [])),
