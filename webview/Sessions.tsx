@@ -124,14 +124,12 @@ export function Sessions({
             `${feature.title} ${feature.description} ${feature.branch} ${feature.workflowName} ${projects.map((p) => `${p.name} ${p.path}`).join(' ')}`,
           ).includes(query)),
     )
-    .sort(
-      (a, b) =>
-        (filters.sort === 'title'
-          ? a.feature.title.localeCompare(b.feature.title, 'fr')
-          : filters.sort === 'oldest'
-            ? a.feature.updatedAt.localeCompare(b.feature.updatedAt)
-            : b.feature.updatedAt.localeCompare(a.feature.updatedAt)) ||
-        a.feature.id.localeCompare(b.feature.id),
+    .sort((a, b) =>
+      filters.sort === 'title'
+        ? a.feature.title.localeCompare(b.feature.title, 'fr')
+        : filters.sort === 'oldest'
+          ? a.feature.updatedAt.localeCompare(b.feature.updatedAt)
+          : b.feature.updatedAt.localeCompare(a.feature.updatedAt),
     );
   const visibleIds = rows.map(({ feature }) => feature.id);
   const visibleKey = JSON.stringify(visibleIds);

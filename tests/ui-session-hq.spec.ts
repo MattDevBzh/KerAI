@@ -148,7 +148,9 @@ test('la case remplace uniquement la bande, conserve le détail et persiste entr
   await expect(qg(page)).toBeVisible();
   await expect(detail(page)).toHaveText('Développement');
   await page.getByRole('button', { name: 'Vos sessions', exact: true }).click();
-  await page.getByRole('heading', { name: 'Un premier pas plus accueillant', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Ouvrir Un premier pas plus accueillant', exact: true })
+    .click();
   await expect(qg(page)).toBeVisible();
   expect(
     (await messages(page)).some((m) =>

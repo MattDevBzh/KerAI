@@ -304,7 +304,7 @@ test('final celebration waits for a successful acknowledgment and matching state
     false,
   );
   await page.getByRole('button', { name: 'Vos sessions', exact: true }).click();
-  await page.getByRole('button', { name: new RegExp(feature.title) }).click();
+  await page.getByRole('button', { name: `Ouvrir ${feature.title}`, exact: true }).click();
   await expect(page.getByLabel('Activer la célébration')).not.toBeChecked();
   await expect(page.locator('.celebration-confetti')).toHaveCount(0);
 });
