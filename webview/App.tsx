@@ -34,6 +34,7 @@ import { emptyQuestState, type QuestState } from '../src/shared/quests';
 import { KitsUI } from './KitsUI';
 import { DashboardUI } from './DashboardUI';
 import { UsageDashboard } from './UsageDashboard';
+import { Statistics } from './Statistics';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
 import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
 import {
@@ -983,6 +984,17 @@ export default function App() {
               />
             </div>
           ))}
+          {view === 'stats' && (
+            <Statistics
+              state={state}
+              dispatch={dispatch}
+              onOpen={(id) => {
+                setView('sessions');
+                setFeatureId(id);
+                setStepId('');
+              }}
+            />
+          )}
           {view === 'usage' && (
             <UsageDashboard
               features={state.features}

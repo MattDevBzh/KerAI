@@ -1887,6 +1887,14 @@ export class StudioService extends EventEmitter {
       ...(!archive.info.complete ? { error: archive.info.reason } : {}),
     };
   }
+  /** Read file sizes only: no journal hydration and no Copilot call. Shared checkpoints are excluded. */
+  async statisticsStorage(featureId: string): Promise<number> {
+    const feature = this.engine.getFeature(featureId);
+    let bytes = await privateSize(this.store.rootPath, sessionDirectory(featureId));
+    for (const id of new Set(deletionRecord(feature).attempts))
+      bytes += await privateSize(this.store.rootPath, `existing-changes/${id}`);
+    return bytes;
+  }
   async sessionStorage(featureId: string): Promise<SessionStorageInfo> {
     const feature = this.engine.getFeature(featureId);
     let traces: import('../shared/observation').TraceArchiveInfo;

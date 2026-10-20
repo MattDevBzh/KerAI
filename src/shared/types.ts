@@ -301,6 +301,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./statistics').StatsClientMessage
   | { type: 'refreshSecretThemes' }
   | { type: 'unlockDragonBall'; sequence: readonly string[]; requestId: string }
   | import('./dashboard').DashboardClientMessage
@@ -499,6 +500,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | import('./statistics').StatsHostMessage
   | { type: 'secretThemeState'; dragonBallUnlocked: boolean; requestId?: string; error?: string }
   | { type: 'optionalStepResult'; requestId: string; error?: string }
   | import('./dashboard').DashboardHostMessage

@@ -25,13 +25,12 @@ test('compact navigation has labels, traps focus, closes with Escape and restore
   ).toBeInViewport();
 });
 
-test('all sixteen screens reflow at 390px and navigation resets the page position', async ({
-  page,
-}) => {
+test('all screens reflow at 390px and navigation resets the page position', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?demo=1');
   for (const screen of [
     'Sessions',
+    'Stats',
     'Discussion',
     'Validation',
     'Consommation',

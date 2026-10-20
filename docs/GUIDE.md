@@ -4,7 +4,7 @@
 
 ## Installation
 
-1. Télécharge [feature-studio-1.14.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.14.0/feature-studio-1.14.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.14.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.18.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.18.0/feature-studio-1.18.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.18.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -70,7 +70,7 @@ Les modèles d’équipes déjà enregistrés sont adaptés automatiquement à l
 
 ## Discuter avec ses agents
 
-**Discussion**, juste après Sessions, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
+**Discussion**, dans le menu principal, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
 
 Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche **Agent de discussion**. Ces profils sont proposés en priorité ; **Voir plus** révèle les autres agents. Les profils propres à un projet portent son nom dans la liste. Les instructions, skills et ton du profil accompagnent l’échange ; ajoute dans tes messages le contexte utile. Ce chat n’exécute pas de commandes et ne consulte pas automatiquement les fichiers des projets.
 
@@ -94,7 +94,7 @@ Un formulaire présente le titre, le besoin, les critères de réussite (un par 
 
 ## Projet actif et réglages
 
-Sessions, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
+Sessions, Stats, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
 
 Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
 
@@ -137,6 +137,18 @@ Le filtre **Projet** est propre à cette liste et ne modifie pas le projet d’e
 Pour agir en masse, sélectionne une première ligne puis utilise **Maj+clic** sur une autre : toutes les lignes visibles entre les deux sont ajoutées. La case de l’en-tête sélectionne toutes les sessions affichées. Un changement de filtre ou de tri vide la sélection. Les cases fonctionnent aussi au clavier avec Espace et Maj+Espace.
 
 **Archiver** conserve les données ; l’onglet **Archives** permet de les consulter et de les **Restaurer**. **Supprimer** demande une seule confirmation pour le lot sélectionné. Les sources, branches, worktrees et exports externes sont conservés. La progression et les éventuels échecs apparaissent sur la page ; une session en cours d’exécution doit d’abord être arrêtée. Les mêmes actions existent individuellement à droite de chaque ligne.
+
+### Explorer les statistiques
+
+**Stats**, accessible directement dans le menu principal, réunit les sessions de tous les projets chargés. Les archives sont incluses par défaut. Choisis un **projet**, un **parcours** et une **période** : aujourd’hui, 7/30/90 jours, mois courant/précédent, année, tout l’historique ou dates personnalisées. Le regroupement du graphique se règle par **jour**, **semaine** (lundi) ou **mois**. Les dates utilisent le fuseau de l’écran ; les deux bornes personnalisées sont incluses. Les longues périodes basculent explicitement en vue mensuelle.
+
+- Les indicateurs distinguent sessions du périmètre, créations, finalisations datées et tentatives. Une ancienne session reprise aujourd’hui contribue à l’activité d’aujourd’hui sans devenir une nouvelle création.
+- Le graphique d’activité propose créations, finalisations, lancements ou crédits observés. Son tableau donne les valeurs exactes. Les autres vues montrent le podium des agents, les modèles utilisés, les heures habituelles de lancement, les séries de jours actifs, les relances et les états actuels des sessions.
+- La taille est présentée sous plusieurs angles : étapes par session, tentatives par session, caractères moyens des contextes et des livrables conservés. **Calculer le stockage** mesure les fichiers privés des sessions sélectionnées, par petits lots, sans appel IA. Sources, worktrees, points de restauration et pièces jointes partagées sont exclus. Ce chiffre correspond au stockage actuel, pas à une taille historique.
+- Les projets multiples ne doublent pas les totaux globaux. Une session apparaît toutefois dans chaque ligne de projet concernée : ces lignes ne s’additionnent pas. Les sessions supprimées et les projets indisponibles ne peuvent pas être comptés ; les discussions et analyses d’observateur sont hors périmètre.
+- Les crédits absents restent « — » et les mesures partielles sont indiquées. Le modèle communiqué est prioritaire ; à défaut, le modèle demandé au lancement est utilisé. Le total d’une tentative n’est jamais additionné une seconde fois à sa ventilation par modèle.
+
+Le classement mesure la fréquence d’utilisation, pas la qualité. Les durées mesurent le temps entre lancement et fin d’une tentative, sans estimation de temps humain économisé. **Comprendre les chiffres et leur couverture** expose les définitions et les données manquantes. Les filtres sont conservés après ouverture d’une session depuis le classement.
 
 ### Les menus du cockpit
 

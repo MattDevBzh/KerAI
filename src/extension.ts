@@ -826,6 +826,29 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (message.type === 'statsStorage') {
+      const items: import('./shared/statistics').StatsStorageItem[] = [];
+      try {
+        await bootstrap();
+        for (const featureId of new Set(message.featureIds)) {
+          try {
+            const bytes = await hub.featureEntry(featureId).service.statisticsStorage(featureId);
+            items.push({ featureId, bytes });
+          } catch (error) {
+            items.push({ featureId, error: redact((error as Error).message) });
+          }
+        }
+        send({ type: 'statsStorageResult', requestId: message.requestId, items });
+      } catch (error) {
+        send({
+          type: 'statsStorageResult',
+          requestId: message.requestId,
+          items,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
     if (message.type === 'manageSessions') {
       if (sessionBatchRunning) {
         send({

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.18.0 — 2026-10-20
+
+- **Stats** : nouvelle page dans la navigation principale avec filtres par projet, parcours et période, dates personnalisées inclusives et regroupement par jour, semaine ou mois. Les filtres restent mémorisés au retour d’une session.
+- Huit indicateurs de synthèse : sessions du périmètre, créations, finalisations datées, tentatives, crédits observés, durée moyenne, étapes et tentatives par session. Les archives sont incluses par défaut.
+- Graphique d’activité avec tableau accessible, podium des agents et avatars, répartition des modèles par tentatives ou crédits, carte des jours/heures, jours actifs et séries de jours consécutifs.
+- Relances, échecs, annulations, interruptions, volumes moyens des contextes et livrables, répartition par projet/parcours/état, accès aux sessions les plus actives.
+- Mesure du stockage privé à la demande par lots de 50, sans lecture des journaux ni appel Copilot. Moyenne calculée sur les seules mesures réussies ; réponses obsolètes ignorées après changement de périmètre.
+- Calendrier local respectant les changements d’heure ; sessions multi-projets non doublées dans les totaux ; crédits absents, partiels et zéros mesurés distincts. Les limites et règles d’attribution sont expliquées dans la page.
+
 ## 1.17.0 — 2026-10-20
 
 - **Sessions** devient une liste compacte sur toute la largeur, avec projet, état, progression et actions par ligne. Le bandeau et la colonne décorative laissent la place aux sessions ; les petites fenêtres conservent les informations et les actions.
