@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.20.0 — 2026-10-20
+
+- **Passage de contexte dans le QG vivant** : quatre avions en papier partent du personnage de l’étape n−1 vers celui qui démarre. Les départs sont décalés sur une animation totale de cinq secondes.
+- Déclenchement au démarrage réel d’une nouvelle tentative, classique ou en pair, à partir de la deuxième étape. Le lancement et les interactions restent immédiats ; les réponses, reprises de lots et réouvertures ne rejouent pas l’effet.
+- Trajectoires adaptées aux postes, au retour à la ligne et au zoom. Réduction des animations respectée avec une indication textuelle, couleurs forcées prises en charge et arrêt lorsque la vue est masquée.
+
 ## 1.19.0 — 2026-10-20
 
 - **Mode pair** dans les étapes : contexte confirmé, conversation dédiée et organisation proposée avant tout accès aux outils du projet.

@@ -32,6 +32,9 @@ def verify(vsix, root, extract=None, match_build=False):
         for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep'):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
+        assert b'hq-paper-plane' in ui, 'Context transfer missing from webview'
+        styles = archive.read('extension/dist/webview/assets/index.css')
+        assert b'hq-paper-delivery' in styles, 'Paper plane animation missing from stylesheet'
         properties = embedded['contributes']['configuration']['properties']
         themes = properties['featureStudio.appearance.theme']['enum']
         assert all(theme in themes for theme in ('noob', 'matrix', 'dragonball'))
@@ -60,7 +63,7 @@ def verify(vsix, root, extract=None, match_build=False):
         'sha256': hashlib.sha256(vsix.read_bytes()).hexdigest(),
         'verifiedBuildFiles': len(built_files),
         'verifiedPublicAssets': len(assets),
-        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps'],
+        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'hqContextTransfer'],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

@@ -14,6 +14,7 @@ import {
 import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
 import { TeamComposer } from './TeamComposer';
 import { SessionHq } from './SessionHq';
+import { useHqContextTransfer } from './HqContextTransfer';
 import { SessionViewToggle, useSessionView } from './SessionViewPreference';
 import { AgentFavorite } from './AgentFavorite';
 import { orderedAgents, teamLocked } from '../src/shared/team';
@@ -1719,6 +1720,7 @@ function FeatureDetail({
   const [composing, setComposing] = useState(false),
     [teamPending, setTeamPending] = useState(false);
   const { enabled: livingHq } = useSessionView();
+  const hqTransfer = useHqContextTransfer(feature, livingHq);
   const closeTeam = () => {
     if (!teamPending) {
       setComposing(false);
@@ -1977,6 +1979,7 @@ function FeatureDetail({
         <SessionHq
           feature={feature}
           state={state}
+          transfer={hqTransfer}
           selectedStepId={step?.id}
           disabled={detailDirty}
           selectStep={selectStep}

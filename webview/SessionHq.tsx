@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import {
   ArrowDown,
   Check,
@@ -17,6 +18,7 @@ import { sessionHqStation } from '../src/shared/sessionHq';
 import { Avatar } from './Avatar';
 import { useThemeAppearance } from './ThemePicker';
 import { QgKitten } from './RewardEffects';
+import { HqPaperPlanes, type ActiveHqTransfer } from './HqContextTransfer';
 import './session-hq.css';
 
 const rooms = {
@@ -49,13 +51,17 @@ export function SessionHq({
   selectedStepId,
   disabled,
   selectStep,
+  transfer,
 }: {
   feature: Feature;
   state: StudioState;
   selectedStepId?: string;
   disabled: boolean;
   selectStep: (id: string) => void;
+  transfer?: ActiveHqTransfer;
 }) {
+  const roomRef = useRef<HTMLDivElement>(null);
+  const portraits = useRef(new Map<string, HTMLSpanElement>());
   const { family, theme } = useThemeAppearance();
   const room = rooms[family];
   const stations = feature.steps.map((step) => ({
@@ -110,7 +116,7 @@ export function SessionHq({
           )}
         </div>
       </div>
-      <div className="hq-room">
+      <div className="hq-room" ref={roomRef}>
         <div className="hq-scenery" aria-hidden="true">
           <img
             className="hq-backdrop"
@@ -137,7 +143,13 @@ export function SessionHq({
                     <span className="hq-number">{String(index + 1).padStart(2, '0')}</span>
                     <strong>{step.name}</strong>
                   </span>
-                  <span className="hq-portrait">
+                  <span
+                    className="hq-portrait"
+                    ref={(element) => {
+                      if (element) portraits.current.set(step.id, element);
+                      else portraits.current.delete(step.id);
+                    }}
+                  >
                     <span className="hq-lamp" aria-hidden="true">
                       <Lightbulb size={16} />
                     </span>
@@ -164,6 +176,18 @@ export function SessionHq({
           })}
         </ol>
         <QgKitten />
+        {transfer && (
+          <HqPaperPlanes
+            key={transfer.attemptId}
+            transfer={transfer}
+            room={roomRef}
+            portraits={portraits}
+            fromName={
+              stations.find((station) => station.step.id === transfer.fromStepId)?.name ?? ''
+            }
+            toName={stations.find((station) => station.step.id === transfer.toStepId)?.name ?? ''}
+          />
+        )}
       </div>
       <p className="hq-help">
         {disabled

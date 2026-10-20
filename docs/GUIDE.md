@@ -4,7 +4,7 @@
 
 ## Installation
 
-1. Télécharge [feature-studio-1.19.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.19.0/feature-studio-1.19.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.19.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.20.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.20.0/feature-studio-1.20.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.20.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -35,6 +35,8 @@ Le thème secret **Dragon Ball** se découvre sur **Dashboard** ou sa Tour de co
 ## Afficher le QG vivant
 
 Dans une session, coche **Afficher le QG vivant**, à côté de **LE PARCOURS**. Chaque poste ouvre le détail de son intervention ; le décor suit le thème. Les questions humaines, choix facultatifs et interventions passées restent visibles avec leur état réel. La case conserve ton choix entre projets et permet de revenir à la bande classique, sans perdre la sélection ni un brouillon. Elle est désactivée par défaut. [Utilisation du QG](WORKFLOWS.md#bande-des-agents-ou-qg-vivant).
+
+Quand une nouvelle tentative démarre à partir de la deuxième étape, **quatre avions en papier** volent du personnage de l’étape immédiatement précédente vers celui qui prend le relais. Le passage dure **cinq secondes** et accompagne le lancement réel, classique ou en pair, sans le retarder. Il ne se rejoue pas à chaque réponse, lors de la reprise d’un lot en pair ou en rouvrant la session. Les trajectoires s’adaptent aux postes sur plusieurs lignes et au zoom. En mouvement réduit, seul le libellé du passage de contexte s’affiche.
 
 ## Agrandir l’interface
 
