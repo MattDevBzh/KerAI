@@ -19,9 +19,7 @@ async function hosted(page: Page, state: StudioState) {
     });
   }, state);
   await page.goto('/');
-  await expect(
-    page.getByRole('heading', { name: 'Chaque idée mérite un beau parcours.' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Sessions / })).toBeVisible();
 }
 const messages = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'qualityMessages') as ClientMessage[]);

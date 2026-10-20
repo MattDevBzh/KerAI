@@ -1949,6 +1949,19 @@ export class StudioService extends EventEmitter {
       await finishDeletion(this.store.rootPath, record.featureId);
     }
   }
+  async archiveFeature(featureId: string, archived: boolean): Promise<void> {
+    this.assertConfigurable(featureId);
+    const feature = this.engine.getFeature(featureId);
+    const previous = { ...structuredClone(feature), archived: feature.archived };
+    this.engine.archiveFeature(featureId, archived);
+    try {
+      await this.persist();
+    } catch (error) {
+      Object.assign(feature, previous);
+      this.publish();
+      throw error;
+    }
+  }
   async deleteFeature(featureId: string): Promise<number> {
     return this.workspaceAction(undefined, 'Suppression définitive de la session', async () => {
       const feature = this.engine.getFeature(featureId);

@@ -130,7 +130,13 @@ Pour ton parcours quotidien, tu peux par exemple garder **US → plan → code �
 | Relecture seule  | Examiner les changements sans écrire, compiler ou tester       | Relecture                                                 |
 | Session libre    | Confier une tâche à un seul agent, dans une vraie conversation | Une étape de développement configurable                   |
 
-Le tableau de bord affiche les sessions, leur état, leur branche et leur progression. Recherche, filtres et archives permettent de retrouver les anciens travaux. Aucune session d’exemple n’est ajoutée à ton projet.
+La page **Sessions** affiche une liste compacte sur toute la largeur : nom, branche, projets, état, progression et dernière activité. **Ouvrir** consulte une session ; un clic sur la ligne ou sa case la sélectionne. Aucune session d’exemple n’est ajoutée à ton projet.
+
+Le filtre **Projet** est propre à cette liste et ne modifie pas le projet d’exécution. Une session multi-projets apparaît pour chacun de ses projets. Recherche, état et tri se combinent ; ils sont conservés quand tu ouvres une session puis reviens à la liste. Les badges identifient les projets ; leur infobulle donne le chemin complet.
+
+Pour agir en masse, sélectionne une première ligne puis utilise **Maj+clic** sur une autre : toutes les lignes visibles entre les deux sont ajoutées. La case de l’en-tête sélectionne toutes les sessions affichées. Un changement de filtre ou de tri vide la sélection. Les cases fonctionnent aussi au clavier avec Espace et Maj+Espace.
+
+**Archiver** conserve les données ; l’onglet **Archives** permet de les consulter et de les **Restaurer**. **Supprimer** demande une seule confirmation pour le lot sélectionné. Les sources, branches, worktrees et exports externes sont conservés. La progression et les éventuels échecs apparaissent sur la page ; une session en cours d’exécution doit d’abord être arrêtée. Les mêmes actions existent individuellement à droite de chaque ligne.
 
 ### Les menus du cockpit
 

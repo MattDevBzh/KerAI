@@ -412,6 +412,12 @@ export type ClientMessage =
       askBeforeRun?: boolean;
     }
   | { type: 'archiveFeature'; featureId: string; archived: boolean }
+  | {
+      type: 'manageSessions';
+      requestId: string;
+      action: import('./sessionList').SessionBatchAction;
+      featureIds: string[];
+    }
   | { type: 'openDiff'; path: string; featureId?: string }
   | { type: 'openFile'; path: string; featureId?: string }
   | { type: 'openPersonalReviewReport'; sessionId: string }
@@ -543,6 +549,8 @@ export type HostMessage =
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
   | { type: 'agentReportExported'; requestId: string; cancelled?: boolean; error?: string }
+  | ({ type: 'sessionBatchResult' } & import('./sessionList').SessionBatchResult)
+  | { type: 'sessionBatchProgress'; requestId: string; completed: number; total: number }
   | { type: 'runPreview'; requestId: string; preview: RunPreview }
   | {
       type: 'stepApprovalResult';

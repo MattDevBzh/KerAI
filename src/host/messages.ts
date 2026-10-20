@@ -242,6 +242,14 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('archiveFeature'), featureId: id, archived: z.boolean() }).strict(),
   z
     .object({
+      type: z.literal('manageSessions'),
+      requestId: id,
+      action: z.enum(['archive', 'restore', 'delete']),
+      featureIds: z.array(id).min(1),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('previewObservation'),
       featureId: id,
       requestId: id,

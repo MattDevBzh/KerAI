@@ -8,6 +8,7 @@ import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
 import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
 import { sessionMarkdown } from './shared/sessionExport';
 import { agentReport } from './shared/agentReport';
+import { applySessionBatch } from './host/SessionBatch';
 import { DevOpsController } from './host/DevOpsController';
 import { devOpsMessageSchema } from './core/devopsSchemas';
 import { type TicketTarget } from './shared/devopsTickets';
@@ -557,6 +558,7 @@ export async function activate(context: vscode.ExtensionContext) {
   };
 
   const notice = (message: string) => send({ type: 'notice', message });
+  let sessionBatchRunning = false;
   const dispatch = async (
     raw: unknown,
     surface: 'cockpit' | 'control' = 'cockpit',
@@ -821,6 +823,70 @@ export async function activate(context: vscode.ExtensionContext) {
           requestId: message.requestId,
           error: redact((error as Error).message),
         });
+      }
+      return;
+    }
+    if (message.type === 'manageSessions') {
+      if (sessionBatchRunning) {
+        send({
+          type: 'sessionBatchResult',
+          requestId: message.requestId,
+          action: message.action,
+          succeeded: [],
+          failed: [],
+          freedBytes: 0,
+          error: 'Une opération sur les sessions est déjà en cours.',
+        });
+        return;
+      }
+      sessionBatchRunning = true;
+      try {
+        await bootstrap();
+        const result = await applySessionBatch(
+          message,
+          (id) => {
+            const entry = hub.featureEntry(id);
+            return {
+              service: entry.service,
+              removeDeletedFeature: (featureId) => entry.devops.removeDeletedFeature(featureId),
+            };
+          },
+          async (features) => {
+            const names = features
+              .map((feature) => {
+                const projects =
+                  feature.projects?.map((project) => project.name).join(' + ') ||
+                  hub.featureEntry(feature.id).project?.name;
+                return `• ${feature.title}${projects ? ` — ${projects}` : ''}`;
+              })
+              .join('\n');
+            const choice = await vscode.window.showWarningMessage(
+              `Supprimer définitivement ${features.length} session${features.length > 1 ? 's' : ''} ?`,
+              {
+                modal: true,
+                detail: `${names}\n\nLes journaux, contextes, rapports, pièces jointes et sauvegardes propres à ces sessions seront supprimés. Les fichiers du projet, branches, worktrees et exports externes sont conservés. Cette action est irréversible.`,
+              },
+              'Supprimer définitivement',
+            );
+            return choice === 'Supprimer définitivement';
+          },
+          (completed, total) =>
+            send({ type: 'sessionBatchProgress', requestId: message.requestId, completed, total }),
+        );
+        send({ type: 'sessionBatchResult', ...result });
+      } catch (error) {
+        send({
+          type: 'sessionBatchResult',
+          requestId: message.requestId,
+          action: message.action,
+          succeeded: [],
+          failed: [],
+          freedBytes: 0,
+          error: redact((error as Error).message),
+        });
+      } finally {
+        sessionBatchRunning = false;
+        hub.publish();
       }
       return;
     }
@@ -1543,9 +1609,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'archiveFeature':
-        current.assertConfigurable(message.featureId);
-        current.engine.archiveFeature(message.featureId, message.archived);
-        await current.persist();
+        await current.archiveFeature(message.featureId, message.archived);
         return;
       case 'saveAgent':
       case 'saveSkill': {

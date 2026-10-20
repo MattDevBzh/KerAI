@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.17.0 — 2026-10-20
+
+- **Sessions** devient une liste compacte sur toute la largeur, avec projet, état, progression et actions par ligne. Le bandeau et la colonne décorative laissent la place aux sessions ; les petites fenêtres conservent les informations et les actions.
+- Filtre par projet, recherche dans les noms de projets et tri mémorisés au retour sur la liste. Les sessions multi-projets apparaissent dans chacun des filtres concernés ; les anciens enregistrements retrouvent le projet de leur stockage.
+- Sélection au clic ou par case, plage inclusive avec **Maj+clic**, sélection de toutes les lignes affichées et désélection. Modifier un filtre ou le tri efface la sélection ; les lignes cachées ne participent pas à une plage.
+- Archivage, restauration et suppression depuis la liste, individuellement ou en masse. Une seule confirmation native pour supprimer le lot, progression et bilan détaillé en cas de résultat partiel. Les fichiers sources, branches et worktrees restent conservés.
+
 ## 1.16.1 — 2026-10-19
 
 - Ajoute **Télécharger .md** dans le Livrable d’une étape : enregistrement du Markdown intégral dans le fichier choisi, avec un nom proposé pour la feature, l’étape, la tentative et la version.

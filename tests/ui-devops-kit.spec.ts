@@ -75,7 +75,7 @@ async function hosted(page: Page, value: StudioState) {
     });
   }, value);
   await page.goto('/');
-  await expect(page.locator('.session-card').filter({ hasText: 'Test DevOps' })).toBeVisible();
+  await expect(page.locator('.session-row').filter({ hasText: 'Test DevOps' })).toBeVisible();
 }
 const messages = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'kitMessages') as ClientMessage[]);
@@ -114,7 +114,7 @@ test('kit DevOps : références manuelles requises, aperçu invalidé après cor
   page,
 }) => {
   await hosted(page, await state());
-  await page.locator('.session-card').filter({ hasText: 'Test DevOps' }).click();
+  await page.getByRole('button', { name: 'Ouvrir Test DevOps', exact: true }).click();
   await page.getByRole('button', { name: 'Exécuter cette étape', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Préparer l’aperçu' })).toBeDisabled();
   await page.getByLabel('ID du pipeline de test').fill(String(target.pipelineId));

@@ -163,9 +163,7 @@ async function hosted(page: Page, state = fresh()) {
     });
   }, state);
   await page.goto('/');
-  await expect(
-    page.getByRole('heading', { name: 'Chaque idée mérite un beau parcours.' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Sessions / })).toBeVisible();
 }
 async function messages(page: Page) {
   return page.evaluate(() => Reflect.get(window, 'testMessages') as ClientMessage[]);
@@ -197,7 +195,7 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
 }) => {
   await hosted(page);
   await page.getByRole('textbox', { name: 'Rechercher une session' }).fill('palette');
-  await expect(page.locator('.session-card')).toHaveCount(1);
+  await expect(page.locator('.session-row')).toHaveCount(1);
   await page.getByLabel('Filtrer les sessions').selectOption('completed');
   await expect(page.getByText('Aucune session ne correspond')).toBeVisible();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
@@ -218,7 +216,7 @@ test('le compte rendu modifié est enregistré avant validation de sa révision 
 }) => {
   const state = fresh();
   await hosted(page, state);
-  await page.locator('.session-card').filter({ hasText: 'Une palette de commandes' }).click();
+  await page.getByRole('button', { name: /^Ouvrir Une palette de commandes/ }).click();
   await page.getByRole('button', { name: 'Modifier le compte rendu' }).click();
   await page
     .getByRole('textbox', { name: 'Compte rendu modifié', exact: true })
@@ -268,7 +266,7 @@ test('le rapport personnel distant ouvre son identifiant via le bridge', async (
   const id = '9f5e28f3-6ae3-4b29-965a-1aeb42091ead';
   state.features[0].steps[1].attempts[0].artifact!.content = `# Relecture distante\n\n[Ouvrir le rapport personnel](feature-studio-review:${id})`;
   await hosted(page, state);
-  await page.locator('.session-card').filter({ hasText: 'Une palette de commandes' }).click();
+  await page.getByRole('button', { name: /^Ouvrir Une palette de commandes/ }).click();
   await page.getByRole('button', { name: 'Ouvrir le rapport personnel' }).click();
   expect((await messages(page)).at(-1)).toEqual({
     type: 'openPersonalReviewReport',
@@ -288,7 +286,7 @@ test('les questions structurées sont répondues et les diffs utilisent le bridg
   ];
   step.attempts[0].changedFiles = ['src/palette.ts'];
   await hosted(page, state);
-  await page.locator('.session-card').filter({ hasText: 'Une palette de commandes' }).click();
+  await page.getByRole('button', { name: /^Ouvrir Une palette de commandes/ }).click();
   await page.getByLabel('Quelle portée ?').selectOption('Locale');
   await page.getByLabel('Quel détail ?').fill('Navigation clavier');
   await page.getByRole('button', { name: 'Transmettre les réponses' }).click();
@@ -462,7 +460,11 @@ test('aucun run en espace non approuvé, runtime indisponible ou dépendance non
   const state = fresh();
   state.workspace.trusted = false;
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await expect(
     page.getByRole('button', { name: 'Nouvelle tentative', exact: true }),
   ).toBeDisabled();
@@ -491,7 +493,11 @@ test('relance et annulation passent par une confirmation, le statut reste celui 
 }) => {
   const state = fresh();
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByLabel('Votre retour').fill('Préciser les critères clavier.');
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Relancer cette étape ?' })).toBeVisible();
@@ -528,7 +534,11 @@ test('avatars reflètent les états et la réduction du mouvement, reprise de se
   step.attempts[0].sessionId = 'previous-session';
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Reprendre la session' }).click();
   await finishLaunch(page, true);
   expect((await messages(page)).at(-1)).toMatchObject({ type: 'runStep', resume: true });
@@ -549,7 +559,11 @@ test('avatars reflètent les états et la réduction du mouvement, reprise de se
 });
 test('thèmes VS Code et détail mobile restent lisibles et dans le viewport', async ({ page }) => {
   await hosted(page);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   for (const theme of ['vscode-light', 'vscode-high-contrast']) {
     await page.evaluate((t) => {
       document.body.className = t;
@@ -576,7 +590,11 @@ test('rejouer une étape validée annonce l’invalidation et ne simule aucun é
   page,
 }) => {
   await hosted(page);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: '01 Cadrage Validée' }).click();
   await page.getByLabel('Votre retour').fill('Intégrer les remarques de relecture.');
   await page.getByRole('button', { name: 'Rejouer cette étape' }).click();
@@ -601,9 +619,7 @@ test('les raccourcis ouvrent les catalogues et une nouvelle session reste sans �
   const state = fresh();
   state.workflows.sort((a, b) => a.id.localeCompare(b.id));
   await hosted(page, state);
-  await page
-    .getByRole('button', { name: 'Explorer les parcours Choisir une méthode de travail' })
-    .click();
+  await navigate(page, 'Parcours');
   await expect(page.getByRole('button', { name: 'Nouveau parcours' })).toBeVisible();
   await navigate(page, 'Sessions');
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
@@ -620,7 +636,11 @@ test('augmenter le budget de tentatives exige une sauvegarde explicite et permet
   step.attempts[0].sessionId = 'session-budget';
   step.attempts[0].questions = [];
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await expect(page.getByRole('button', { name: 'Reprendre la session' })).toBeDisabled();
   await expect(page.getByText('La limite de 1 tentative est atteinte.')).toBeVisible();
   await page.getByRole('button', { name: 'Modifier la limite' }).click();
@@ -671,7 +691,11 @@ test('lancement manuel : US, MCP explicite et mémoire opt-in passent par un ape
     },
   ];
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
@@ -858,7 +882,11 @@ test('mémoire locale désactivée par défaut, opt-in sans sélection n’injec
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
   await navigate(page, 'Sessions');
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Inclure la mémoire du projet' }).check();
@@ -889,7 +917,11 @@ test('autopilot : cadre explicite, contextes par étape et pause fournie par le 
     },
   ];
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.locator('.autopilot-bar').getByRole('button', { name: 'Configurer' }).click();
   await expect(page.getByLabel('Nombre maximal d’exécutions')).toHaveValue('5');
   await expect(page.getByLabel('Cycles de correction maximum')).toHaveValue('0');
@@ -1024,7 +1056,11 @@ test('budgets : conversion des crédits vers le stockage nano-AIU et valeurs abs
     incompleteCost: true,
   };
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await expect(page.locator('.budget-meter')).toContainText('120');
   await expect(page.locator('.budget-meter')).toContainText('< 0,000001');
   await expect(page.locator('.budget-meter')).toContainText('mesure absente ou partielle');
@@ -1130,7 +1166,11 @@ test('captures documentées : lancement avec US/MCP et éditeur de parcours', as
     },
   };
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page
@@ -1186,7 +1226,11 @@ test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) 
   );
   await page.getByRole('button', { name: 'Fermer', exact: true }).click();
   await navigate(page, 'Sessions');
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByLabel('US, demande ou contexte initial').fill('US mobile');
@@ -1243,7 +1287,11 @@ function checkpointState(): StudioState {
   return state;
 }
 async function openCheckpoints(page: Page) {
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Points de restauration', exact: false }).click();
   await expect(
     page.getByRole('dialog', { name: 'Le code garde des points de repère.' }),
@@ -1289,7 +1337,11 @@ test('espace courant legacy, isolation indisponible et opérations Git bloquent 
   await expect(page.getByRole('radio', { name: 'Dossier courant' })).toBeChecked();
   await expect(page.getByText(state.workspace.isolationReason)).toBeVisible();
   await page.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await expect(page.locator('.git-workspace-band')).toContainText('Dossier courant');
   await expect(page.locator('.git-workspace-band')).toContainText(state.workspace.path);
   await page.getByRole('button', { name: 'Ouvrir le dossier' }).click();
@@ -1423,7 +1475,11 @@ test('restauration et nouveaux lancements restent indisponibles pendant une tent
   const state = checkpointState();
   state.features[1].steps[0].status = 'running';
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await expect(
     page.getByRole('button', { name: 'Nouvelle tentative', exact: true }),
   ).toBeDisabled();
@@ -1474,7 +1530,11 @@ test('une tentative ouvre directement la comparaison de ses points avant et apr�
   page,
 }) => {
   await hosted(page, checkpointState());
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page
     .locator('.attempt-checkpoint-links')
     .getByRole('button', { name: 'Comparer', exact: true })
@@ -1642,7 +1702,11 @@ test('contexte : décocher la spec, modifier le plan et actualiser avant lanceme
       },
     ]),
   );
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1688,7 +1752,11 @@ test('contexte : skill absente visible et décochable avant de lancer', async ({
       },
     ]),
   );
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1719,7 +1787,11 @@ test('contexte vide par défaut : sélectionner seulement la spec, tout cocher e
       { id: 'agent', label: 'Instructions de l’agent', source: 'agent', content: 'ROLE' },
     ]),
   );
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1756,7 +1828,11 @@ test('autoriser un fichier existant exige une sélection explicite et un nouvel 
       omittedCount: 0,
     }),
   );
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1786,7 +1862,11 @@ test('dernière étape : afficher les blocages, un refus hôte et la confirmatio
   feature.activeStepId = step.id;
   feature.criteria = [{ id: 'ac', text: 'Nettoyage ciblé', status: 'pending', evidence: '' }];
   await hosted(page, state);
-  await page.locator('.session-card').first().click();
+  await page
+    .locator('.session-row')
+    .first()
+    .getByRole('button', { name: /^Ouvrir / })
+    .click();
   await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeDisabled();
   await expect(page.getByText('Validation bloquée', { exact: true })).toBeVisible();
   await expect(page.locator('.approval-blockers')).toContainText('critères d’acceptation');
