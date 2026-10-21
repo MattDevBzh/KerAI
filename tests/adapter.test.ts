@@ -17,6 +17,7 @@ import {
   parseReview,
 } from '../src/host/CopilotCliAdapter';
 import type { RunCallbacks, RunInput } from '../src/shared/types';
+import { NATIVE_TOOLS, NATIVE_READ_TOOLS } from '../src/host/NativeCopilot';
 
 function input(): RunInput {
   const attempt = {
@@ -205,6 +206,24 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
   let adapter: CopilotCliAdapter;
   let options: CopilotClientOptions | undefined;
   let callbacks: RunCallbacks;
+  function nativeTransport() {
+    const run = input();
+    run.feature.execution = { mode: 'copilot-native', permissionMode: 'manual' };
+    let mode = 'manual';
+    Object.assign(fake.session.rpc.permissions, {
+      setMode: vi.fn(async (value: { mode: string }) => {
+        mode = value.mode;
+        return { success: true, mode };
+      }),
+      getMode: vi.fn(async () => ({ mode })),
+    });
+    fake.session.rpc.tools.getCurrentMetadata.mockImplementation(async () => ({
+      tools: (Array.isArray(fake.config?.availableTools) ? fake.config.availableTools : []).map(
+        (name) => ({ name, description: name }),
+      ),
+    }));
+    return run;
+  }
   beforeEach(async () => {
     storage = await mkdtemp(join(tmpdir(), 'studio-adapter-test-'));
     fake = transport();
@@ -274,6 +293,98 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(fake.session.send).not.toHaveBeenCalled();
   });
 
+  it('resumes a native planning conversation with only read tools, then enables execution tools for approved work', async () => {
+    const run = nativeTransport();
+    run.nativeReadOnly = true;
+    run.resumeSessionId = 'persistent-session';
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config?.availableTools).toEqual(NATIVE_READ_TOOLS);
+    expect(fake.config?.tools).toEqual([]);
+    expect(fake.config?.customAgents?.[0].tools).toEqual(NATIVE_READ_TOOLS);
+    expect(fake.config?.systemMessage).toMatchObject({
+      content: expect.stringContaining('Une question ne modifie pas le livrable'),
+    });
+    const hook = fake.config!.hooks!.onPreToolUse!;
+    expect(await hook({ toolName: 'edit', toolArgs: {} } as never, {} as never)).toMatchObject({
+      permissionDecision: 'deny',
+    });
+    expect(await hook({ toolName: 'bash', toolArgs: {} } as never, {} as never)).toMatchObject({
+      permissionDecision: 'deny',
+    });
+    run.nativeReadOnly = false;
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config?.availableTools).toEqual(NATIVE_TOOLS);
+    expect(fake.client.resumeSession).toHaveBeenCalledTimes(2);
+  });
+  it('fails before a prompt if a resumed read-only conversation exposes a write tool', async () => {
+    const run = nativeTransport();
+    run.nativeReadOnly = true;
+    fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({
+      tools: [...NATIVE_READ_TOOLS, 'edit'].map((name) => ({ name, description: name })),
+    });
+    await expect(adapter.run(run, callbacks, new AbortController().signal)).rejects.toThrow(
+      'inattendu',
+    );
+    expect(fake.session.send).not.toHaveBeenCalled();
+  });
+  it('keeps stable streamed message identities and exposed reasoning while ignoring replayed events and usage', async () => {
+    const run = nativeTransport();
+    run.previousEventIds = ['old-answer', 'old-usage'];
+    callbacks.onNativeMessage = vi.fn();
+    callbacks.onNativeEventId = vi.fn();
+    fake.setOnSend(() => {
+      fake.emit('assistant.message', { messageId: 'old', content: 'OLD' }, { id: 'old-answer' });
+      fake.emit('assistant.usage', { inputTokens: 1000, outputTokens: 100 }, { id: 'old-usage' });
+      fake.emit(
+        'assistant.reasoning_delta',
+        { reasoningId: 'why', deltaContent: 'Je consulte le code.' },
+        { ephemeral: true },
+      );
+      fake.emit('assistant.reasoning', { reasoningId: 'why', content: 'Je consulte le code.' });
+      fake.emit(
+        'assistant.message_delta',
+        { messageId: 'new', deltaContent: 'Nouveau' },
+        { ephemeral: true },
+      );
+      fake.emit('assistant.message', { messageId: 'new', content: 'Nouveau résultat' });
+      fake.emit('assistant.usage', { inputTokens: 10, outputTokens: 5 });
+      fake.emit('session.idle', {});
+    });
+    const answer = await adapter.run(run, callbacks, new AbortController().signal);
+    expect(answer.content).toBe('Nouveau résultat');
+    expect(answer.usage).toMatchObject({ inputTokens: 10, outputTokens: 5 });
+    const messages = vi.mocked(callbacks.onNativeMessage).mock.calls.map(([m]) => m);
+    expect(messages).toHaveLength(4);
+    expect(messages.filter((m) => m.kind === 'text').map((m) => m.id)).toEqual([
+      'native:persistent-session:new',
+      'native:persistent-session:new',
+    ]);
+    expect(messages.at(1)).toMatchObject({ kind: 'reasoning', complete: true });
+    expect(callbacks.onNativeEventId).toHaveBeenCalledTimes(4);
+  });
+  it('sends a live human intervention through the same session and reports its native receipt', async () => {
+    const run = nativeTransport();
+    callbacks.onNativeMessageReceived = vi.fn();
+    let calls = 0;
+    fake.setOnSend(() => {
+      if (++calls === 1) return;
+      fake.emit('user.message', { messageId: 'user-message', content: 'Préserve mon code' });
+      fake.emit('assistant.message', { messageId: 'reply', content: 'Consigne prise en compte.' });
+      fake.emit('session.idle', {});
+    });
+    const active = adapter.run(run, callbacks, new AbortController().signal);
+    await vi.waitFor(() => expect(fake.session.send).toHaveBeenCalledTimes(1));
+    expect(await adapter.sendMessage('persistent-session', 'Préserve mon code')).toBe(
+      'user-message',
+    );
+    expect(fake.session.send).toHaveBeenLastCalledWith({
+      prompt: 'Préserve mon code',
+      mode: 'immediate',
+    });
+    expect(callbacks.onNativeMessageReceived).toHaveBeenCalledWith('user-message');
+    await expect(active).resolves.toMatchObject({ content: 'Consigne prise en compte.' });
+    expect(await adapter.sendMessage('persistent-session', 'Trop tard')).toBeUndefined();
+  });
   it('checks metadata and probes a disposable native catalog without sending a prompt', async () => {
     const status = await adapter.check();
     expect(status).toMatchObject({ state: 'ready', version: '1.0.96', authenticated: true });

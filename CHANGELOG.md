@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.23.0 — 2026-10-21 · La conversation de l’étape
+
+- Un même chat dans les onglets de l’agent : messages, réflexions transmises par Copilot et outils réellement exécutés, en solo comme en pair.
+- Passage solo/pair dans la tentative active, reprise de la même conversation native et interruption confirmée avant de rendre la main.
+- Cadrage et explications avec les outils de lecture du code ; travail après accord sur l’organisation. Pas à pas, par blocs ou en une fois après cadrage, avec des explications réglables.
+- Messages conservés pendant le travail, transmission immédiate quand Copilot l’accepte et traitement au point de contrôle sinon. Un envoi incertain exige un choix avant renvoi.
+- Le lien du livrable revient à sa conversation. Les questions préservent le résultat ; les corrections convenues le mettent à jour avant validation humaine. Conversation consultable après validation, discussion libre indépendante.
+- Stockage version 9 : modes, messages, états de transmission et événements conservés ; aucune reprise automatique après fermeture.
+
+
 ## 1.22.0 — 2026-10-21 · Copilot natif et permissions
 
 - Nouvelles sessions sur les outils natifs Copilot : lecture, recherche locale, création, édition, terminal et questions humaines. Les outils métier Studio restent disponibles selon le profil.

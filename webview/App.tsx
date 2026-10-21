@@ -1,4 +1,5 @@
 import { PairWorkspace } from './PairWorkspace';
+import { SessionConversation } from './SessionConversation';
 import { PermissionPicker } from './NativeExecutionUI';
 import { permissionLabels, type NativePermissionMode } from '../src/shared/native';
 import { agentPolicy } from '../src/shared/agentInheritance';
@@ -1818,7 +1819,7 @@ function FeatureDetail({
       rootStepIds,
     });
 
-  if (pairOpen && step)
+  if (pairOpen && step && !step.attempts.at(-1)?.pair?.nativeConversation)
     return (
       <div className="feature-pair-page">
         {livingHq && (
@@ -2181,9 +2182,18 @@ function StepPanel({
   const [attemptId, setAttemptId] = useState(reportTarget?.attemptId ?? '');
   const attempt = step.attempts.find((a) => a.id === attemptId) ?? latest;
   const historic = Boolean(attempt && latest && attempt.id !== latest.id);
-  const [tab, setTab] = useState<'artifact' | 'activity' | 'diffs' | 'evidence' | 'review'>(
-    'artifact',
-  );
+  const [tab, setTab] = useState<
+    'conversation' | 'artifact' | 'activity' | 'diffs' | 'evidence' | 'review'
+  >(reportTarget ? 'artifact' : latest?.pair?.nativeConversation ? 'conversation' : 'artifact');
+  const conversationAttempt = useRef(latest?.id);
+  useEffect(() => {
+    if (conversationAttempt.current !== latest?.id && latest?.pair?.nativeConversation)
+      setTab('conversation');
+    conversationAttempt.current = latest?.id;
+  }, [latest?.id, latest?.pair?.nativeConversation]);
+  useEffect(() => {
+    if (tab === 'conversation' && !attempt?.pair?.nativeConversation) setTab('artifact');
+  }, [attempt?.id, attempt?.pair?.nativeConversation, tab]);
   const [edit, setEdit] = useState(Boolean(reportTarget?.edit && !historic));
   const [discussionPending, setDiscussionPending] = useState<string>();
   useEffect(
@@ -2379,7 +2389,7 @@ function StepPanel({
       {launchResume !== null && (
         <LaunchDialog
           pairMode={launchPair}
-          onPairStarted={openPair}
+          onPairStarted={feature.execution ? () => setTab('conversation') : openPair}
           feature={feature}
           step={step}
           state={state}
@@ -2476,6 +2486,17 @@ function StepPanel({
           />
         )}
         <div className="workbench-tabs" role="tablist" aria-label="Contenu de l’étape">
+          {attempt?.pair?.nativeConversation && (
+            <button
+              role="tab"
+              id="tab-conversation"
+              aria-controls="step-content"
+              aria-selected={tab === 'conversation'}
+              onClick={() => setTab('conversation')}
+            >
+              <MessageSquare size={15} /> Conversation
+            </button>
+          )}
           <button
             role="tab"
             id="tab-artifact"
@@ -2530,6 +2551,17 @@ function StepPanel({
           aria-labelledby={`tab-${tab}`}
           className="workbench-content"
         >
+          {tab === 'conversation' && attempt?.pair?.nativeConversation && (
+            <SessionConversation
+              key={attempt.id}
+              feature={feature}
+              step={step}
+              attempt={attempt}
+              state={state}
+              dispatch={dispatch}
+              showArtifact={() => setTab('artifact')}
+            />
+          )}
           {tab === 'evidence' && (
             <EvidencePanel attempt={attempt} featureId={feature.id} dispatch={dispatch} />
           )}
@@ -2579,6 +2611,10 @@ function StepPanel({
                       !state.workspace.trusted
                     }
                     onClick={() => {
+                      if (attempt.pair?.nativeConversation) {
+                        setTab('conversation');
+                        return;
+                      }
                       const requestId = crypto.randomUUID();
                       if (isHosted) setDiscussionPending(requestId);
                       dispatch({
@@ -2592,7 +2628,11 @@ function StepPanel({
                     }}
                   >
                     <MessageSquare size={14} />{' '}
-                    {discussionPending ? 'Ouverture…' : 'Discuter avec l’agent'}
+                    {attempt.pair?.nativeConversation
+                      ? 'Revenir à la conversation'
+                      : discussionPending
+                        ? 'Ouverture…'
+                        : 'Discuter avec l’agent'}
                   </button>
                   {!historic && (
                     <button
@@ -2843,12 +2883,14 @@ function StepPanel({
         </div>
       </section>
       <aside className="step-aside">
-        <HumanRequests
-          requests={(state.humanRequests ?? []).filter(
-            (r) => r.featureId === feature.id && r.stepId === step.id,
-          )}
-          dispatch={dispatch}
-        />
+        {tab !== 'conversation' && (
+          <HumanRequests
+            requests={(state.humanRequests ?? []).filter(
+              (r) => r.featureId === feature.id && r.stepId === step.id,
+            )}
+            dispatch={dispatch}
+          />
+        )}
         <div className="decision-card">
           <span className="eyebrow">À VOUS DE DONNER LE CAP</span>
           <h3>
@@ -2877,7 +2919,7 @@ function StepPanel({
               <span>{latest.error}</span>
             </div>
           )}
-          {unanswered.length > 0 && (
+          {unanswered.length > 0 && tab !== 'conversation' && (
             <form
               className="questions-form"
               onSubmit={(e) => {
@@ -2928,28 +2970,35 @@ function StepPanel({
               </button>
             </form>
           )}
-          {!['running', 'waiting_input'].includes(step.status) && (
-            <label className="field feedback-field">
-              <span>
-                Votre retour <small>facultatif</small>
-              </span>
-              <textarea
-                rows={4}
-                placeholder="Un détail à préciser, une autre direction à explorer…"
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-              />
-            </label>
-          )}
+          {!latest?.pair?.nativeConversation &&
+            !['running', 'waiting_input'].includes(step.status) && (
+              <label className="field feedback-field">
+                <span>
+                  Votre retour <small>facultatif</small>
+                </span>
+                <textarea
+                  rows={4}
+                  placeholder="Un détail à préciser, une autre direction à explorer…"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                />
+              </label>
+            )}
           <div className="decision-actions">
             {step.attempts.some((a) => a.pair) && (
-              <button className="button secondary" disabled={dirty} onClick={openPair}>
+              <button
+                className="button secondary"
+                disabled={dirty}
+                onClick={latest?.pair?.nativeConversation ? () => setTab('conversation') : openPair}
+              >
                 <MessageSquare size={14} />{' '}
-                {!latest?.pair
-                  ? 'Consulter les échanges en pair'
-                  : latest.pair.busy
-                    ? 'Rejoindre le travail en pair'
-                    : 'Ouvrir le travail en pair'}
+                {latest?.pair?.nativeConversation
+                  ? 'Ouvrir la conversation'
+                  : !latest?.pair
+                    ? 'Consulter les échanges en pair'
+                    : latest.pair.busy
+                      ? 'Rejoindre le travail en pair'
+                      : 'Ouvrir le travail en pair'}
               </button>
             )}
             {!latest?.pair && step.status !== 'running' && (
@@ -3188,7 +3237,10 @@ function StepPanel({
                   Boolean(
                     state.humanRequests?.some((request) => request.featureId === feature.id),
                   ) ||
-                  Boolean(attempt?.pair?.busy && attempt.pair.turn?.kind !== 'work')
+                  Boolean(
+                    attempt?.pair?.busy &&
+                      !['work', 'solo'].includes(attempt.pair.turn?.kind ?? ''),
+                  )
                 }
                 onChange={(mode) =>
                   dispatch({ type: 'setPermissionMode', featureId: feature.id, mode })

@@ -79,6 +79,8 @@ Un texte de l’agent affirmant que les tests passent ne devient pas une preuve.
 
 ## Lot 2 Garder une conversation entre solo et pair
 
+Implémentation v1.23.0 : [conversation intégrée de l’étape](MODE-PAIR.md). Le chat occupe les onglets existants ; le lien du livrable y revient. Il reste interactif en pair jusqu’à validation, puis consultable. La discussion libre reste indépendante. Les comportements proposés ci-dessous sont désormais mis en œuvre ; les preuves de publication restent séparées de la validation locale.
+
 **Expérience attendue :** démarrer en solo, revenir travailler avec l’agent, puis lui confier la suite sans répéter le besoin ni recréer la tentative.
 
 La nouveauté porte sur les limites ci-dessous ; le passage solo et pair existant reste acquis.
@@ -92,7 +94,7 @@ La nouveauté porte sur les limites ci-dessous ; le passage solo et pair existan
 | Continuité interne | Historique Studio conservé, nouvelle session native pour chaque tour pair avec contexte reconstruit | Réutilisation de la conversation native lorsque le périmètre reste compatible |
 | Pause et reprise | Déjà disponibles avec conservation du travail | Adapter la confirmation d’arrêt aux outils et processus natifs |
 
-La conservation du transcript natif est une évolution interne. L’interface actuelle conserve déjà les échanges ; il ne faut pas présenter ce chantier comme la réparation d’une perte systématique de contexte. Son effet sur le coût et la qualité sera mesuré. Le changement du comportement d’un message vers un mode explicite est une proposition produit à valider dans la recette.
+La conservation du transcript natif est une évolution interne. L’interface actuelle conserve déjà les échanges ; il ne faut pas présenter ce chantier comme la réparation d’une perte systématique de contexte. Son effet sur le coût et la qualité sera mesuré. Le changement de mode explicite est conservé : un message ne bascule pas silencieusement le mode de collaboration.
 
 | Travail | Livrable concret |
 | --- | --- |

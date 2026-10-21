@@ -1,4 +1,5 @@
 import { stepResolved } from '../shared/optionalSteps';
+import { isPairWork } from '../shared/pair';
 import type { Feature } from '../shared/types';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { budgetBlockReason } from './budgets';
@@ -28,7 +29,9 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   const scopedSteps = correction
     ? feature.steps.filter((step) => correction.impactedStepIds.includes(step.id))
     : feature.steps;
-  const paired = scopedSteps.find((step) => !stepResolved(step) && step.attempts.at(-1)?.pair);
+  const paired = scopedSteps.find(
+    (step) => !stepResolved(step) && isPairWork(step.attempts.at(-1)?.pair),
+  );
   if (paired)
     return pause(
       `L’étape ${paired.name} est en mode pair. Reprends-la ou confie-la en solo depuis son espace de travail, puis valide son résultat.`,

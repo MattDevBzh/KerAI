@@ -66,6 +66,8 @@ async function fixture(count = 2) {
     ],
   });
   feature.budget!.maxRuns = 40;
+  // This suite covers the existing host-tool pair workflow. Native conversations have their own suite.
+  delete feature.execution;
   feature.budget!.maxPromptChars = 200000;
   const step = feature.steps[0];
   const inputs: RunInput[] = [];
@@ -222,7 +224,7 @@ describe('complete pair execution', () => {
       'Le travail en pair doit être terminé et validé par l’humain.',
     );
     const restored = await f.store.load();
-    expect(restored.schemaVersion).toBe(8);
+    expect(restored.schemaVersion).toBe(9);
     expect(restored.features[0].steps[0].attempts[0].pair).toEqual(
       JSON.parse(JSON.stringify(pair)),
     );

@@ -1,6 +1,6 @@
 # Copilot natif et permissions
 
-Les nouvelles sessions de Feature Studio 1.22.0 utilisent les outils natifs Copilot : lecture, recherche locale, création et édition de fichiers, terminal et questions humaines. Le cockpit conserve les agents, les instructions sélectionnées, le parcours, le QG, les validations et les outils métier. Les discussions consultatives et l’Observateur restent sans outils de projet.
+Les nouvelles sessions de Feature Studio 1.23.0 utilisent les outils natifs Copilot : lecture, recherche locale, création et édition de fichiers, terminal et questions humaines. Le cockpit conserve les agents, les instructions sélectionnées, le parcours, le QG, les validations et les outils métier. Les discussions consultatives et l’Observateur restent sans outils de projet.
 
 ## Choisir les permissions
 
@@ -17,6 +17,8 @@ Chaque demande affiche les informations disponibles : dossier, commande, chemin,
 Solo/pair, permissions et validation du résultat sont trois choix distincts. Les changements de mode ne reviennent pas sur les effets déjà produits. Avant chaque exécution ou reprise, les anciens accords locaux sont remis à zéro et le mode courant est réappliqué. La politique gérée par Copilot reste en vigueur.
 
 ## Voir les résultats
+
+L’onglet **Conversation** partage ces événements avec les échanges de l’agent. En cadrage et pendant les explications, seuls la lecture du code et les questions humaines sont disponibles. Le catalogue complet revient pour le travail autorisé. La même session native est réutilisée entre ces tours, avec des permissions vérifiées à chaque reprise. [Fonctionnement solo/pair](MODE-PAIR.md).
 
 La section **Preuves** présente l’activité native : outil, état, dossier, arguments, commande et résultat. Un code de retour n’apparaît que si Copilot fournit une valeur structurée ; une phrase telle que « les tests passent » ne constitue pas une preuve. Les sorties longues sont signalées comme tronquées. Les événements détaillés rejoignent aussi les archives de la session.
 
@@ -40,7 +42,7 @@ Le diagnostic crée puis supprime une session jetable, sans prompt ni outil de p
 
 La configuration personnelle Copilot, les plugins, hooks, skills natifs, outils web et sous-agents ne sont pas ouverts dans ce lot. Les instructions et skills Studio sélectionnés et les MCP explicitement configurés restent gérés par l’application. Les capacités complémentaires relèvent du lot 1b.
 
-Un terminal exécute avec les droits du processus : le dossier du projet ou un worktree ne constitue pas un bac à sable. Les anciennes limitations génériques Studio ne s’appliquent pas aux outils natifs. Le stockage version 8 protège les nouveaux champs contre un réenregistrement par un ancien client. Les anciennes sessions ne changent pas de régime automatiquement et peuvent être archivées si leur reprise est incompatible.
+Un terminal exécute avec les droits du processus : le dossier du projet ou un worktree ne constitue pas un bac à sable. Les anciennes limitations génériques Studio ne s’appliquent pas aux outils natifs. Le stockage version 9 protège les nouveaux champs contre un réenregistrement par un ancien client. Les anciennes sessions ne changent pas de régime automatiquement et peuvent être archivées si leur reprise est incompatible.
 
 ## Reproduire la recette
 

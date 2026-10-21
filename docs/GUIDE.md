@@ -2,6 +2,10 @@
 
 [Retour au README](../README.md) · [Kits](KITS.md) · [Kit DevOps](DEVOPS-KIT.md)
 
+## Conversation intégrée de l’étape
+
+Depuis la v1.23.0, l’onglet **Conversation** remplace l’attente opaque pendant une nouvelle tentative native. Il reste disponible avec le livrable. Passe en pair pour poser une question ou demander une correction ; reviens en solo pour confier le travail convenu. Le chat reste actif jusqu’à la validation de l’étape, puis devient consultable. Rythme, explications et permissions se règlent séparément. [Parcours complet, messages et reprise](MODE-PAIR.md).
+
 ## Outils natifs et permissions
 
 Les nouvelles sessions démarrent en **Copilot natif**, avec le mode **Manuel** par défaut. Le choix est visible lors de la création, de la préparation d’un lancement et dans la session. Réponds aux demandes de Copilot par **Autoriser une fois** ou **Refuser**. Le mode **Tout autoriser** accepte les actions natives, sous réserve des règles imposées par Copilot ; **Assisté** n’est sélectionnable que si le runtime le confirme. Ces choix ne changent ni le solo/pair ni les validations du parcours.
@@ -183,7 +187,7 @@ Le classement mesure la fréquence d’utilisation, pas la qualité. Les durées
 
 **À la fin du parcours**, choisis **Valider définitivement** ou **Faire une correction**. Seule la validation finale réussie termine la session et affiche la célébration d’équipe. Les fichiers liés aux preuves sont revérifiés avant ce choix. Tu peux rejouer la célébration ou désactiver ses effets ; la réduction des animations est respectée. [Historique, corrections et décision finale](WORKFLOWS.md).
 
-**Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Une reprise consomme elle aussi une tentative. Si la limite est atteinte, **Configurer → Limite de tentatives** permet de la relever explicitement.
+**Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Dans la conversation native intégrée, la reprise conserve la tentative et compte un nouvel appel dans le budget. Dans le parcours historique, elle consomme une nouvelle tentative. Si la limite est atteinte, **Configurer → Limite de tentatives** permet de la relever explicitement.
 
 Les sessions restent liées à leur branche et à leur dossier d’exécution. À la création d’une session isolée, Feature Studio crée une branche et un worktree local depuis le dernier commit **HEAD**. Il ne crée aucun commit, push, PR ni déploiement automatiquement.
 

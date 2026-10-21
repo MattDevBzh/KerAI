@@ -1,60 +1,42 @@
-# Travail en pair
+# Conversation de l’étape et travail en pair
 
-Le mode pair est un mode d’exécution d’une étape de feature. La tentative conserve son identité, son contexte, ses permissions, ses preuves et son livrable au fil des échanges. Une discussion consultative reste une discussion sans accès aux outils du projet.
+Depuis la v1.23.0, chaque nouvelle tentative native possède un onglet **Conversation**, à côté du livrable, des fichiers, des preuves et de la relecture. Il montre les messages de l’agent, ses réflexions lorsqu’elles sont transmises par Copilot et ses outils réels. Les sorties longues sont signalées comme tronquées ; les événements détaillés restent dans l’archive.
 
-## Permissions des nouvelles sessions
+## Solo, pair et passage de relais
 
-Depuis la v1.22.0, les blocs de travail des nouvelles sessions utilisent les outils natifs Copilot et le mode de permission choisi pour la session. Le sélecteur reste indépendant du rythme solo/pair. Les outils métier conservent leurs contrôles. Le cadrage demeure consultatif dans ce lot ; son exploration native et la conversation native continue relèvent du lot 2. [Guide Copilot natif](COPILOT-NATIF.md).
+En **solo**, tu suis la conversation en lecture seule. **Passer en pair** ouvre la saisie dans la même tentative et demande un arrêt au prochain point de contrôle. Le travail déjà en cours continue ; l’indicateur distingue le mode demandé du mode effectif.
 
-## Parcours utilisateur
+En **pair**, tu échanges avec l’agent. **Confier la suite** lui laisse enchaîner les blocs restants de l’organisation acceptée. Ce bouton ne valide ni une organisation proposée ni le résultat final. **Reprendre la main** demande l’arrêt : attends le message **À toi · exécution arrêtée** avant d’éditer les mêmes fichiers dans VS Code. Les modifications déjà réalisées sont conservées.
 
-1. Choisir **Démarrer en mode pair** dans l’étape, préparer le contexte et vérifier son aperçu.
-2. Définir le rythme et le niveau d’explication, puis ouvrir le travail en pair.
-3. Lire l’organisation de l’agent, préciser ses préférences dans la conversation et valider explicitement l’organisation retenue.
-4. Travailler bloc par bloc. Un bloc terminé rend la main à l’utilisateur ; l’agent ne peut pas s’accorder seul le bloc suivant.
-5. Envoyer des questions ou proposer un changement de direction. Pendant une exécution, le message est conservé puis traité au terme du bloc. La pause permet d’interrompre plus tôt, en conservant le travail partiel.
-6. Confier les blocs restants à l’agent avec **Continuer cette étape en solo**, ou reprendre les points de contrôle avec **Reprendre en pair**. Les demandes d’information et de permission restent humaines en solo.
-7. Relire le résultat et demander des corrections si nécessaire. Une correction fait l’objet d’une nouvelle organisation à valider ; les travaux et décisions antérieurs restent conservés.
-8. Valider l’étape pour revenir à la session d’origine. Les étapes suivantes sont débloquées selon leurs dépendances ; elles ne démarrent pas implicitement.
+Les demandes de permission et les questions natives restent visibles dans les deux modes. Le choix **Manuel / Assisté si disponible / Tout autoriser** reste indépendant du mode de collaboration et du rythme. [Permissions et limites du runtime](COPILOT-NATIF.md).
 
-## Attentes et interruptions
+## Convenir du travail
 
-- Revenir à la session ou changer d’écran ne modifie pas l’organisation, ne donne pas d’autorisation et n’annule pas le bloc en cours.
-- La phase de cadrage n’a accès à aucun outil du dépôt ou MCP. Les hooks de travail ne s’exécutent qu’après accord, pendant les blocs autorisés.
-- Un bloc correspond à un appel d’exécution ; le contrôle revient à l’application à la fin de cet appel. Les demandes humaines pendant l’appel suspendent le décompte du délai, sans inventer de réponse.
-- Une pause conserve les fichiers déjà modifiés, les messages partiels et les preuves déjà recueillies. Elle n’annonce pas le bloc comme terminé.
-- Une fermeture durant un appel devient une interruption durable. Aucune exécution ne reprend au démarrage sans action humaine. Les questions restées ouvertes sont présentées avant reprise.
-- Le passage en solo concerne exclusivement les blocs de l’organisation acceptée dans cette étape. Il ne valide ni le résultat de l’étape ni le bilan de la feature.
-- Le pilote automatique du parcours s’arrête devant une étape pair non validée. Le bouton de passage en solo reste la commande explicite pour lui confier le travail restant.
-- L’agent peut proposer une autre organisation, mais seule une commande humaine liée à sa version peut l’accepter.
+Un lancement en pair commence par un cadrage. L’agent peut lire le code avec `view`, `glob` et `grep`, et poser une question avec `ask_user`. Le terminal, l’édition, les hooks de travail et les MCP sont indisponibles pendant le cadrage et les explications.
 
-## Contexte et conservation
+Tu choisis **Pas à pas**, **Par blocs** ou **En une fois après cadrage**, ainsi que des explications concises ou détaillées et tes préférences. Tu peux ajuster ces choix dans le chat. Un changement de rythme demande une nouvelle organisation du travail restant lorsqu’il y a des blocs à revoir ; les blocs terminés sont conservés. Modifier le niveau d’explication seul ne déclenche aucun appel.
 
-Le contexte choisi au lancement et la configuration d’exécution sont conservés. Les appels suivants reçoivent ce contexte avec les échanges, l’organisation en cours, les décisions et les sorties déjà produites. Aucun historique n’est supprimé ou résumé silencieusement pour respecter une limite. Si la limite de contexte est atteinte, l’exécution s’arrête avec une explication et le budget peut être ajusté explicitement.
+Seul **Valider l’organisation et démarrer** autorise les blocs proposés. Chaque bloc en pair rend la main avant le suivant. Le solo peut enchaîner une organisation déjà acceptée. Un lancement initial en solo exécute directement la mission choisie, comme auparavant.
 
-La reprise vérifie l’identité de la tentative, la version du besoin, l’état des dépendances, la branche et les réglages d’autorisation. Une modification du périmètre ou des réglages exige une nouvelle préparation. Dans le régime Studio historique, les droits sur les fichiers modifiés avant le lancement restent liés aux contenus explicitement autorisés ; une édition externe ultérieure ne crée pas une autorisation nouvelle.
+## Expliquer et corriger le livrable
 
-Les conversations et les organisations successives sont incluses dans l’export de session. Le livrable final rassemble les organisations acceptées, les décisions retenues et les résultats des blocs. Les blocs et corrections s’ajoutent à la même tentative ; les versions du compte rendu restent consultables dans l’historique habituel.
+Le chat reste utilisable lorsque le livrable est prêt, jusqu’à la validation de l’étape. **Revenir à la conversation** depuis le livrable ouvre ce même chat. Une demande d’explication conserve le livrable. Une correction passe par une proposition de travail restant, ton accord puis une nouvelle version à relire.
 
-Les anciens échanges restent consultables sans modification après une nouvelle tentative, y compris si celle-ci utilise le mode classique.
+**Valider cette étape** approuve le résultat et débloque la suite du parcours. La conversation devient consultable en lecture seule. Pour corriger une étape déjà validée, utilise le parcours explicite de correction ou une nouvelle tentative. La **Discussion libre** du menu reste disponible pour les consultations sans lien avec une étape ; elle n’a pas d’outils de projet.
 
-La suppression définitive de la session nettoie aussi toutes les sessions natives créées pour ses échanges pair, sans supprimer les fichiers du projet.
+## Messages et reprises
 
-La v1.21.0 a introduit le stockage version 7 afin que les anciens clients ne puissent pas réenregistrer une session en supprimant son état pair. Les versions antérieures sont migrées sans démarrer de travail. Les conversations de la v1.19 et de la v1.20 conservent leurs messages, contexte figé, consommation, fichiers et sessions natives. Les travaux en cours demandent une reprise explicite du cadrage pour convenir des blocs restants ; les livrables déjà prêts restent disponibles pour validation.
+Chaque message est enregistré avant transmission. Pendant le travail, il est envoyé à la conversation native si le runtime l’accepte ; sinon il attend le point de contrôle. Son état apparaît dans le chat : en attente, transmission en cours ou reçu. Un message dont l’envoi est incertain ne repart jamais automatiquement : relis la réponse, puis choisis **Renvoyer explicitement** ou **Garder sans renvoyer**. Un échec d’enregistrement conserve le brouillon.
 
-La v1.22.0 utilise la version 8 pour conserver également le régime natif, les permissions et les événements d’outils. Une activité native en cours lors de la fermeture est marquée interrompue à la réouverture ; aucun appel n’est relancé.
+La même session Copilot est reprise tant que la mission et la configuration restent compatibles. Les nouveaux tours apportent les nouvelles interventions et l’organisation actuelle ; ils ne réinjectent pas tout l’historique Studio. Les permissions et le catalogue d’outils sont réappliqués et vérifiés à chaque reprise. Les événements déjà reçus ne sont pas comptés une seconde fois.
 
-## Consommation et validation
-
-Chaque appel de cadrage, de conversation ou de travail compte dans le plafond d’exécutions de la feature. Les mesures sont cumulées par tentative sans compter deux fois les événements intermédiaires. Une mesure manquante reste inconnue et ne devient pas une consommation nulle. Le nombre d’appels est affiché dans l’espace pair et le compteur de budget.
-
-Le délai d’exécution s’applique au temps du runtime ; le temps où une réponse humaine ou une permission est attendue est exclu. Les critères, remarques bloquantes, preuves hôtes et contrôles de fichiers sont ceux du parcours habituel. Un résultat rédigé par l’agent ne remplace pas une preuve hôte, et l’autopilot ne peut pas valider une étape issue du mode pair.
+Après fermeture, le travail actif est marqué interrompu. La reprise est explicite ; messages, questions, décisions, fichiers et consommation restent conservés. Le stockage version 9 protège ces champs contre un ancien client. Les sessions anciennes conservent leur parcours d’origine ; elles peuvent être archivées si leur reprise est incompatible.
 
 ## Vérifications
 
-- `tests/pair.test.ts` : lancement avec empreinte du contexte, absence d’outils avant accord, arrêts entre blocs, passage solo/pair, messages pendant le travail, pause, correction, budget, permissions, identité de tentative et récupération après fermeture. Les outils fichiers et le stockage sont réels ; les réponses du modèle sont simulées.
-- `tests/adapter.test.ts` : transport SDK, catalogue autorisé et exclusion des attentes humaines du délai.
-- `tests/ui-pair.spec.ts` : préparation du contexte, préférences, organisations versionnées, conservation des brouillons, erreurs, commandes pendant le travail, validation finale et affichage compact.
-- Les tests existants de workflow, migration, contexte, discussions, qualité, fichiers et autorisations vérifient la conservation des contrats du cockpit.
+- `tests/conversation.test.ts` : explications et corrections, reprise native, préférences, messages en cours, pause confirmée, envois incertains, persistance et validation humaine.
+- `tests/adapter.test.ts` et `tests/native-runtime.test.ts` : catalogue de lecture appliqué au vrai CLI lors des reprises, exclusion des écritures, événements et réception des interventions.
+- `tests/ui-conversation.spec.ts` : onglets, passage solo/pair, brouillons, liens vers le chat, commandes distinctes et fenêtre étroite.
+- Les tests historiques du mode pair, du workflow, du stockage et des outils métier continuent de couvrir leurs contrats.
 
-Les captures de l’interface sont produites dans `design/proposals/2026-10-20-mode-pair/` par les essais visuels. Elles illustrent des états de démonstration explicitement construits pour vérifier le rendu, pas une exécution réelle du fournisseur de modèle.
+Les captures `docs/screenshots/conversation-*.png` montrent des états de démonstration pour vérifier le rendu. La recette réelle est consignée séparément dans [VALIDATION.md](VALIDATION.md).

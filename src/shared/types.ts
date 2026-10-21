@@ -283,7 +283,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   workspace: {
     name: string;
     path: string;
@@ -590,6 +590,8 @@ export type HostMessage =
       stepId?: string;
     };
 export interface RunInput {
+  nativeReadOnly?: boolean;
+  previousEventIds?: string[];
   observation?: boolean;
   /** Host-owned conversation mode: no repository, MCP, human-question or native tools. */
   mode?: 'discussion';
@@ -623,6 +625,17 @@ export interface RunResult {
   review?: ReviewReport;
 }
 export interface RunCallbacks {
+  onPromptSending?(): void;
+  onPromptSent?(): void;
+  onNativeMessage?(message: {
+    id: string;
+    kind: 'text' | 'reasoning';
+    content: string;
+    at: string;
+    complete: boolean;
+  }): void;
+  onNativeEventId?(id: string): void;
+  onNativeMessageReceived?(id: string): void;
   onNativeActivity?(activity: import('./native').NativeActivity): void;
   onNativePermission?(request: import('./native').NativePermissionPrompt): Promise<boolean>;
   onTrace?(trace: import('./observation').SessionTrace): void;
@@ -644,6 +657,7 @@ export interface RunCallbacks {
   }): Promise<boolean>;
 }
 export interface AgentAdapter {
+  sendMessage?(sessionId: string, content: string): Promise<string | undefined>;
   setPermissionMode?(
     sessionId: string,
     mode: import('./native').NativePermissionMode,

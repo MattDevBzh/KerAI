@@ -7,7 +7,13 @@ import {
   pairReport,
   addPairUsage,
 } from '../core/pair';
-import { pairPlan, nextPairBlock, type PairAction, type PairTurn } from '../shared/pair';
+import {
+  pairPlan,
+  nextPairBlock,
+  isWorkTurn,
+  type PairAction,
+  type PairTurn,
+} from '../shared/pair';
 import { pairActionSchema } from '../core/pairSchemas';
 import { usesNativeTools, type NativePermissionMode } from '../shared/native';
 import { nativePermissionModeSchema } from '../core/nativeSchemas';
@@ -248,7 +254,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 8,
+      schemaVersion: 9,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -1159,26 +1165,66 @@ export class StudioService extends EventEmitter {
     }
     input.attempt = structuredClone(attempt);
     input.preparedPrompt = preview?.prompt;
-    if (input.launch?.pair && !continued) {
+    if ((input.launch?.pair || usesNativeTools(input)) && !continued) {
       attempt.pair = createPair(input);
       attempt.pair.sourceKey = pairSourceKey(feature, step);
+      if (attempt.pair.nativeConversation)
+        pairMessage(
+          attempt.pair,
+          'user',
+          `${feature.title}\n\n${feature.description}${feedback ? `\n\n${feedback}` : ''}`,
+        );
     }
     const pair = attempt.pair;
-    const turn = pairContinuation ?? (pair ? { kind: 'planning' as const } : undefined);
+    const turn =
+      pairContinuation ??
+      (pair
+        ? { kind: pair.origin === 'solo' ? ('solo' as const) : ('planning' as const) }
+        : undefined);
     const usageBefore = structuredClone(attempt.usage);
     let usageReported = false,
       pairCallStarted = false;
-    const reply = pair ? pairMessage(pair, 'assistant', '') : undefined;
+    let reply = pair ? pairMessage(pair, 'assistant', '') : undefined;
+    let nativeMessages = false;
+    const includedMessages =
+      pair?.messages
+        .filter(
+          (m) =>
+            m.role !== 'assistant' &&
+            !m.nativeId &&
+            m.delivery !== 'skipped' &&
+            m.delivery !== 'uncertain',
+        )
+        .map((m) => m.id) ?? [];
+    const promptSent = () => {
+      if (!pair) return;
+      pair.contextDelivered = true;
+      pair.deliveredMessageIds = [
+        ...new Set([...(pair.deliveredMessageIds ?? []), ...includedMessages]),
+      ];
+      pair.pendingMessages = pair.pendingMessages.filter((id) => !includedMessages.includes(id));
+      for (const message of pair.messages)
+        if (
+          includedMessages.includes(message.id) &&
+          ['pending', 'sent'].includes(message.delivery ?? '')
+        )
+          message.delivery = 'received';
+      this.schedule();
+    };
     if (pair && turn && reply) {
       pair.busy = true;
       pair.pauseRequested = false;
       pair.turn = turn;
       pair.error = undefined;
-      if (turn.kind !== 'work') pair.pendingMessages = [];
-      if (turn.kind === 'work') pair.phase = 'working';
+      if (!pair.nativeConversation && turn.kind !== 'work') pair.pendingMessages = [];
+      if (isWorkTurn(turn)) pair.phase = 'working';
       reply.status = 'streaming';
-      input.resumeSessionId = undefined;
-      input.mode = turn.kind === 'work' ? undefined : 'discussion';
+      input.resumeSessionId = pair.nativeConversation
+        ? (pair.sessionIds.at(-1) ?? input.resumeSessionId)
+        : undefined;
+      input.previousEventIds = pair.nativeConversation ? pair.nativeEventIds : undefined;
+      input.mode = isWorkTurn(turn) || pair.nativeConversation ? undefined : 'discussion';
+      input.nativeReadOnly = pair.nativeConversation && !isWorkTurn(turn);
     }
     if (automated && feature.autopilot) {
       feature.autopilot.runs++;
@@ -1215,6 +1261,51 @@ export class StudioService extends EventEmitter {
       }
     };
     const callbacks: RunCallbacks = {
+      onPromptSending: () => {
+        if (pair?.nativeConversation)
+          for (const message of pair.messages)
+            if (includedMessages.includes(message.id) && message.delivery === 'pending')
+              message.delivery = 'sent';
+        this.schedule();
+      },
+      onPromptSent: promptSent,
+      onNativeEventId: (id) => {
+        if (pair?.nativeConversation && !pair.nativeEventIds!.includes(id))
+          pair.nativeEventIds!.push(id);
+      },
+      onNativeMessageReceived: (id) => {
+        if (!pair) return;
+        pair.deliveredMessageIds ??= [];
+        pair.deliveredMessageIds.push(`native:${id}`);
+        const message = pair.messages.find((m) => m.nativeId === id);
+        if (message) {
+          message.delivery = 'received';
+          pair.pendingMessages = pair.pendingMessages.filter((pending) => pending !== message.id);
+        }
+        this.schedule();
+      },
+      onNativeMessage: (message) => {
+        if (!pair?.nativeConversation) return;
+        nativeMessages = true;
+        let current = pair.messages.find((m) => m.id === message.id);
+        if (!current) {
+          if (reply && !reply.content && !reply.id.startsWith('native:'))
+            pair.messages = pair.messages.filter((m) => m !== reply);
+          current = {
+            id: message.id,
+            role: 'assistant',
+            kind: message.kind,
+            content: '',
+            at: message.at,
+            status: 'streaming',
+          };
+          pair.messages.push(current);
+        }
+        current.content = message.content;
+        current.status = message.complete ? 'complete' : 'streaming';
+        if (message.kind === 'text') reply = current;
+        this.schedule();
+      },
       onNativeActivity: (activity) => {
         attempt.nativeActivity ??= [];
         const index = attempt.nativeActivity.findIndex((item) => item.id === activity.id);
@@ -1288,7 +1379,8 @@ export class StudioService extends EventEmitter {
         return answer === 'allow';
       },
       onEvent: (event) => {
-        if (reply && event.kind === 'message') reply.content += redact(event.message);
+        if (reply && event.kind === 'message' && !nativeMessages)
+          reply.content += redact(event.message);
         trace({ id: event.id, at: event.at, type: `activity.${event.kind}`, data: event.message });
         const last = attempt.logs.at(-1);
         if (event.kind === 'message' && last?.id === streamId) {
@@ -1348,7 +1440,7 @@ export class StudioService extends EventEmitter {
       await archive.flush();
       await this.persist();
       this.assertTrusted();
-      if (feature.worktree && (!pair || turn?.kind === 'work')) {
+      if (feature.worktree && (!pair || isWorkTurn(turn))) {
         const before = await this.workspaces.capture(feature, {
           kind: 'before-run',
           label: `Avant ${step.name}`.slice(0, 200),
@@ -1374,10 +1466,10 @@ export class StudioService extends EventEmitter {
         });
         await this.persist();
       }
-      if (!pair || turn?.kind === 'work')
+      if (!pair || isWorkTurn(turn))
         await this.hooks('beforeRun', input, controller.signal, callbacks);
       this.assertTrusted();
-      if (usesNativeTools(input)) {
+      if (usesNativeTools(input) && !input.nativeReadOnly) {
         try {
           nativeBefore = await nativeChangesSnapshot(input);
         } catch (error) {
@@ -1395,6 +1487,7 @@ export class StudioService extends EventEmitter {
         pairCallStarted = true;
       }
       const result = await this.adapter.run(input, callbacks, controller.signal);
+      promptSent();
       await archive.flush();
       if (controller.signal.aborted) throw new Error('Exécution annulée.');
       const host = this.toolHosts.get(attempt.id);
@@ -1403,7 +1496,7 @@ export class StudioService extends EventEmitter {
       ];
       result.fileHashes = { ...(pair ? attempt.fileHashes : {}), ...host?.fileHashes };
       result.content = redact(result.content);
-      if (!pair || turn?.kind === 'work')
+      if (!pair || isWorkTurn(turn))
         await this.hooks('afterRun', input, controller.signal, callbacks);
       if (pair && turn && reply) {
         if (result.usage) {
@@ -1420,10 +1513,15 @@ export class StudioService extends EventEmitter {
           attempt.questions = [...attempt.questions.filter((q) => q.id !== question.id), question];
           reply.content += `\n\nQuestion : ${question.text}`;
         }
-        if (pair.phase === 'review' && turn.kind === 'work') {
+        if (turn.kind === 'solo' || (pair.phase === 'review' && isWorkTurn(turn))) {
           this.engine.finishRun(featureId, stepId, {
             ...result,
-            content: pairReport(pair),
+            content:
+              turn.kind === 'solo'
+                ? result.content
+                : pair.nativeConversation
+                  ? reply.content
+                  : pairReport(pair),
             usage: attempt.usage,
           });
         } else {
@@ -1483,12 +1581,25 @@ export class StudioService extends EventEmitter {
             incompleteCost: true,
           };
         pair.busy = false;
+        if (pair.requestedMode) {
+          pair.mode = pair.requestedMode;
+          pair.requestedMode = undefined;
+        }
+        for (const message of pair.messages) {
+          if (message.status === 'streaming') message.status = 'interrupted';
+          if (message.delivery === 'sent' || message.delivery === 'uncertain') {
+            message.delivery = 'uncertain';
+            pair.phase = 'interrupted';
+            pair.error =
+              'Copilot a accepté un message sans confirmer sa réception dans le tour. Il est conservé ; vérifie la réponse avant de reprendre.';
+          }
+        }
         pair.version++;
         if (pair.pauseRequested) pair.phase = 'paused';
       }
       const owned = this.toolHosts.get(attempt.id)?.fileHashes;
       if (owned) feature.workspaceFileHashes = { ...feature.workspaceFileHashes, ...owned };
-      if (feature.worktree && attempt.checkpointBeforeId && (!pair || turn?.kind === 'work')) {
+      if (feature.worktree && attempt.checkpointBeforeId && (!pair || isWorkTurn(turn))) {
         try {
           const after = await this.workspaces.capture(feature, {
             kind: 'after-run',
@@ -1562,6 +1673,10 @@ export class StudioService extends EventEmitter {
     }
     if (attempt.questions.some((q) => !attempt.answers[q.id]?.trim()))
       throw new Error('Réponds aux questions conservées avant de reprendre le travail.');
+    if (pair.messages.some((m) => m.delivery === 'uncertain'))
+      throw new Error(
+        'Un message a une transmission incertaine. Choisis de le renvoyer ou de le garder sans renvoyer avant de reprendre.',
+      );
     const { prompt: _prompt, ...snapshot } = structuredClone(pair.snapshot);
     return {
       ...snapshot,
@@ -1602,15 +1717,22 @@ export class StudioService extends EventEmitter {
     const plan = pairPlan(pair);
     const humanState = () => ({
       mode: pair.mode,
+      requestedMode: pair.requestedMode,
+      engaged: pair.engaged,
       phase: pair.phase,
       preferences: pair.preferences,
       approvedRevision: pair.approvedRevision,
       pauseRequested: pair.pauseRequested,
+      error: pair.error,
     });
     const previous = humanState();
     const previousAcceptedAt = plan?.acceptedAt,
       previousUpdatedAt = feature.updatedAt,
       messageCount = pair.messages.length;
+    let changedMessage:
+      | { target: (typeof pair.messages)[number]; before: (typeof pair.messages)[number] }
+      | undefined;
+    const previousPending = [...pair.pendingMessages];
     const approved = Boolean(plan && pair.approvedRevision === plan.revision && plan.acceptedAt);
     const requirePlan = () => {
       if (!approved || !nextPairBlock(pair))
@@ -1618,12 +1740,49 @@ export class StudioService extends EventEmitter {
       return { kind: 'work' as const, blockId: nextPairBlock(pair)!.id };
     };
     switch (command.action) {
+      case 'retry-message':
+      case 'keep-message': {
+        const message = pair.messages.find(
+          (m) => m.id === command.messageId && m.delivery === 'uncertain',
+        );
+        if (!message) throw new Error('Ce message ne demande plus de décision de transmission.');
+        changedMessage = { target: message, before: { ...message } };
+        pair.pendingMessages = pair.pendingMessages.filter((id) => id !== message.id);
+        if (command.action === 'retry-message') {
+          message.delivery = 'pending';
+          delete message.nativeId;
+          pair.pendingMessages.push(message.id);
+          next = { kind: 'chat' };
+        } else message.delivery = 'skipped';
+        pair.error = undefined;
+        break;
+      }
       case 'message': {
         if (!command.content) throw new Error('Écris ton message avant de l’envoyer.');
-        pair.mode = 'pair';
+        if (pair.nativeConversation && (pair.requestedMode ?? pair.mode) !== 'pair')
+          throw new Error('Passe en pair pour intervenir dans cette conversation.');
+        if (!pair.nativeConversation) pair.mode = 'pair';
         const message = pairMessage(pair, 'user', redact(command.content), command.requestId);
+        if (pair.nativeConversation) message.delivery = 'pending';
         pair.pendingMessages.push(message.id);
-        if (!pair.busy) next = { kind: approved ? 'chat' : 'planning' };
+        if (!pair.busy) next = { kind: approved || pair.phase === 'review' ? 'chat' : 'planning' };
+        break;
+      }
+      case 'preferences': {
+        if (!command.preferences) throw new Error('Choisis tes préférences de collaboration.');
+        const paceChanged = pair.preferences.pace !== command.preferences.pace;
+        pair.preferences = command.preferences;
+        pairMessage(
+          pair,
+          'system',
+          `Préférences choisies : ${{ small: 'pas à pas', blocks: 'par blocs', oneshot: 'en une fois après cadrage' }[pair.preferences.pace]}, explications ${pair.preferences.explanation === 'detailed' ? 'détaillées' : 'concises'}.${pair.preferences.instructions ? ` Consignes : ${redact(pair.preferences.instructions)}` : ''}`,
+          command.requestId,
+        );
+        if (paceChanged && nextPairBlock(pair)) {
+          pair.approvedRevision = undefined;
+          pair.phase = 'planning';
+          next = { kind: 'planning' };
+        }
         break;
       }
       case 'reorganize':
@@ -1665,7 +1824,10 @@ export class StudioService extends EventEmitter {
         next = requirePlan();
         break;
       case 'resume':
-        if (pair.pendingMessages.length) next = { kind: approved ? 'chat' : 'planning' };
+        if (pair.pendingMessages.length)
+          next = { kind: approved || pair.origin === 'solo' ? 'chat' : 'planning' };
+        else if (pair.turn?.kind === 'solo')
+          next = { kind: pair.mode === 'solo' ? 'solo' : 'planning' };
         else if (
           ['paused', 'interrupted'].includes(pair.phase) &&
           pair.turn &&
@@ -1677,20 +1839,29 @@ export class StudioService extends EventEmitter {
         else next = { kind: 'chat' };
         break;
       case 'solo':
-        if (!approved)
+        if (
+          !approved &&
+          pair.phase !== 'review' &&
+          !(pair.origin === 'solo' && !plan && pair.turn?.kind === 'solo')
+        )
           throw new Error(
             'Valide d’abord l’organisation ; le passage en solo ne vaut pas validation.',
           );
-        pair.mode = 'solo';
+        if (pair.nativeConversation && pair.busy) pair.requestedMode = 'solo';
+        else pair.mode = 'solo';
         pairMessage(
           pair,
           'system',
           'L’utilisateur confie la fin de cette étape à l’agent. Les permissions restent identiques et la validation finale reste humaine.',
         );
         if (!pair.busy && nextPairBlock(pair)) next = requirePlan();
+        else if (!pair.busy && !plan && ['paused', 'interrupted'].includes(pair.phase))
+          next = { kind: 'solo' };
         break;
       case 'pair':
-        pair.mode = 'pair';
+        pair.engaged = true;
+        if (pair.nativeConversation && pair.busy) pair.requestedMode = 'pair';
+        else pair.mode = 'pair';
         pairMessage(
           pair,
           'system',
@@ -1699,8 +1870,8 @@ export class StudioService extends EventEmitter {
         break;
       case 'pause':
         pair.pauseRequested = true;
-        pair.mode = 'pair';
-        pair.phase = 'paused';
+        if (!pair.nativeConversation) pair.mode = 'pair';
+        if (!pair.busy) pair.phase = 'paused';
         pairMessage(
           pair,
           'system',
@@ -1726,6 +1897,10 @@ export class StudioService extends EventEmitter {
       }
       pair.messages = pair.messages.filter((message) => !addedMessages.has(message.id));
       pair.pendingMessages = pair.pendingMessages.filter((id) => !addedMessages.has(id));
+      if (changedMessage) {
+        Object.assign(changedMessage.target, changedMessage.before);
+        pair.pendingMessages = previousPending;
+      }
       pair.requests = pair.requests.filter((id) => id !== command.requestId);
       if (pair.version === command.expectedVersion + 1) pair.version = command.expectedVersion;
       if (plan?.acceptedAt === acceptedAt && plan) plan.acceptedAt = previousAcceptedAt;
@@ -1739,6 +1914,34 @@ export class StudioService extends EventEmitter {
       this.active.stepId === step.id
     )
       this.active.controller.abort(new Error('Pause demandée par l’utilisateur.'));
+    if (command.action === 'pair')
+      this.pauseAutopilot(feature.id, 'Travail en pair demandé dans la conversation de l’étape.');
+    if (
+      command.action === 'message' &&
+      pair.nativeConversation &&
+      pair.busy &&
+      attempt.sessionId &&
+      this.adapter.sendMessage &&
+      ![...this.pendingHumans.values()].some((entry) => entry.request.featureId === feature.id)
+    ) {
+      const message = pair.messages.find((item) => item.requestId === command.requestId)!;
+      message.delivery = 'sent';
+      await this.persist();
+      try {
+        const id = await this.adapter.sendMessage(attempt.sessionId, message.content);
+        if (id) {
+          message.nativeId = id;
+          const received = pair.deliveredMessageIds?.includes(`native:${id}`);
+          message.delivery = received ? 'received' : 'sent';
+          if (received)
+            pair.pendingMessages = pair.pendingMessages.filter((pending) => pending !== message.id);
+        } else message.delivery = 'pending';
+      } catch (error) {
+        message.delivery = 'uncertain';
+        pair.error = `Envoi non confirmé, message conservé : ${(error as Error).message}`;
+      }
+      await this.persist();
+    }
     if (next) {
       const requested = next;
       const start = () => {

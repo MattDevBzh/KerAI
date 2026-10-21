@@ -15,6 +15,7 @@ const cliPath =
   process.env.FEATURE_STUDIO_NATIVE_CLI ||
   resolve('.vscode-test/copilot-native/node_modules/.bin/copilot');
 const live = process.env.FEATURE_STUDIO_LIVE_TEST === '1';
+const conversation = process.env.FEATURE_STUDIO_CONVERSATION_TEST === '1';
 const stop = 'NATIVE_SMOKE_STOP_BEFORE_MODEL';
 const proof: Record<string, unknown> = {
   root,
@@ -82,6 +83,11 @@ let permissionCalls = 0,
   userQuestions = 0,
   sessionId = '';
 const activities: NativeActivity[] = [];
+const nativeEvents: string[] = [],
+  nativeMessages: unknown[] = [],
+  receipts: string[] = [];
+let steering = false,
+  steeringPromise: Promise<string | undefined> | undefined;
 const callbacks: RunCallbacks = {
   onEvent: (event) => {
     if (event.kind !== 'message')
@@ -99,7 +105,28 @@ const callbacks: RunCallbacks = {
     userQuestions++;
     return 'Blue';
   },
-  onNativeActivity: (activity) => activities.push(activity),
+  onNativeEventId: (id) => {
+    nativeEvents.push(id);
+  },
+  onNativeMessage: (message) => {
+    nativeMessages.push(message);
+  },
+  onNativeMessageReceived: (id) => {
+    receipts.push(id);
+  },
+  onNativeActivity: (activity) => {
+    activities.push(activity);
+    if (
+      steering &&
+      !steeringPromise &&
+      activity.status === 'running' &&
+      ['bash', 'powershell'].includes(activity.tool)
+    )
+      steeringPromise = adapter.sendMessage(
+        sessionId,
+        'Continue the approved work. End your final reply with the exact marker STEERING_CONFIRMED.',
+      );
+  },
 };
 let intercept: ((session: CopilotSession) => Promise<void>) | undefined;
 const adapter = new CopilotCliAdapter({
@@ -138,7 +165,41 @@ try {
   console.log(JSON.stringify({ phase: 'capabilities', status }));
   assert.equal(status.state, 'ready');
   assert.equal(status.native?.available, true);
-  if (live) {
+  if (live && conversation) {
+    const turns: unknown[] = [];
+    Object.assign(proof, { conversation: true, turns, nativeMessages, receipts, activities });
+    input.nativeReadOnly = true;
+    input.preparedPrompt =
+      'Read fixture.txt with view. Briefly explain its current contents. Do not modify anything or propose a tool call outside the read catalog.';
+    turns.push(await adapter.run(input, callbacks, new AbortController().signal));
+    assert.equal(await readFile(join(root, 'fixture.txt'), 'utf8'), 'old\n');
+    const original = sessionId;
+    input.nativeReadOnly = false;
+    input.resumeSessionId = original;
+    input.previousEventIds = [...nativeEvents];
+    input.preparedPrompt =
+      'Work is now approved: first run node -e "setTimeout(() => console.log(42), 12000)" synchronously in the shell. Then edit fixture.txt from old to new. Do not touch any other file. Report the change and command result.';
+    steering = true;
+    const worked = await adapter.run(input, callbacks, new AbortController().signal);
+    const sent = await steeringPromise;
+    turns.push(worked);
+    assert.equal(sessionId, original);
+    assert.ok(sent, 'Steering was not sent during the tool execution.');
+    assert.ok(receipts.includes(sent), 'Native user.message did not acknowledge steering.');
+    assert.match(worked.content, /STEERING_CONFIRMED/);
+    const written = await readFile(join(root, 'fixture.txt'), 'utf8');
+    assert.equal(written.trim(), 'new');
+    input.nativeReadOnly = true;
+    input.previousEventIds = [...nativeEvents];
+    input.preparedPrompt =
+      'Explain why the file now contains new. Read it if useful. Do not modify it. Keep the answer to two short sentences.';
+    steering = false;
+    turns.push(await adapter.run(input, callbacks, new AbortController().signal));
+    assert.equal(sessionId, original);
+    assert.equal(await readFile(join(root, 'fixture.txt'), 'utf8'), written);
+    Object.assign(proof, { conversation: true, turns, nativeMessages, receipts, activities });
+    scenarios.push({ phase: 'read-work-steer-explain-same-session', passed: true });
+  } else if (live) {
     const result = await adapter.run(input, callbacks, new AbortController().signal);
     assert.match(await readFile(join(root, 'fixture.txt'), 'utf8'), /new/);
     assert.ok(activities.some((activity) => activity.tool === 'view'));

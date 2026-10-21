@@ -99,6 +99,7 @@ async function legacyFixture(phase: 'planning' | 'paused' | 'working' | 'review'
     description: 'Une mission',
     workflowId: 'single',
   });
+  delete feature.execution; // Archived host-tool pair sessions retain their original execution path.
   const step = feature.steps[0];
   const preview = await f.service.previewRun(feature.id, step.id, '', false, launch);
   await f.service.runStep(feature.id, step.id, '', false, launch, preview.fingerprint);
@@ -161,7 +162,7 @@ it.each(['planning', 'paused', 'working', 'review'] as const)(
     const f = await legacyFixture(phase);
     const loaded = await new Store(f.storage).load();
     const attempt = loaded.features[0].steps[0].attempts[0];
-    expect(loaded.schemaVersion).toBe(8);
+    expect(loaded.schemaVersion).toBe(9);
     expect(attempt.pair).toMatchObject({
       calls: 3,
       busy: false,

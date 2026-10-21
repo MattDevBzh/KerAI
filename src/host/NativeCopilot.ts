@@ -34,6 +34,7 @@ export const NATIVE_TOOLS = [
   'list_powershell',
   'ask_user',
 ];
+export const NATIVE_READ_TOOLS = ['view', 'glob', 'grep', 'ask_user'];
 export const nativeGates: Partial<SessionConfig> = {
   enableManagedSettings: true,
   enableExperimentalMode: true,
@@ -72,14 +73,16 @@ export async function applyNativePermissions(
     );
 }
 
-export function verifyNativeCatalog(names: string[], extra: string[] = []): void {
-  const allowed = new Set([...NATIVE_TOOLS, ...extra]);
+export function verifyNativeCatalog(names: string[], extra: string[] = [], readOnly = false): void {
+  const allowed = new Set([...(readOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS), ...extra]);
   const unexpected = names.filter((name) => !allowed.has(name));
   if (new Set(names).size !== names.length) throw new Error('Catalogue natif dupliqué.');
   if (unexpected.length) throw new Error(`Catalogue natif inattendu : ${unexpected.join(', ')}.`);
   if (
-    ['view', 'glob', 'grep', 'edit', 'create', 'ask_user'].some((name) => !names.includes(name)) ||
-    !names.some((name) => name === 'bash' || name === 'powershell')
+    (readOnly ? NATIVE_READ_TOOLS : ['view', 'glob', 'grep', 'edit', 'create', 'ask_user']).some(
+      (name) => !names.includes(name),
+    ) ||
+    (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
   )
     throw new Error(
       'Le runtime ne propose pas tous les outils natifs nécessaires (fichiers, terminal et questions).',

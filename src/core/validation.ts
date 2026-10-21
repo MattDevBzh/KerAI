@@ -1,4 +1,5 @@
 import { stepResolved } from '../shared/optionalSteps';
+import { isPairWork } from '../shared/pair';
 import type { QualityKind } from '../shared/quality';
 import type { Attempt, Feature, FeatureStep, TestEvidence } from '../shared/types';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
@@ -89,7 +90,7 @@ export function approvalBlockers(
   if (!attempt) return ['Aucune tentative à valider.'];
   if (
     attempt.pair &&
-    (actor !== 'human' ||
+    ((isPairWork(attempt.pair) && actor !== 'human') ||
       attempt.pair.busy ||
       attempt.pair.phase !== 'review' ||
       attempt.pair.pendingMessages.length)

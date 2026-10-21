@@ -1,0 +1,77 @@
+{
+  "checkedAt": "2026-10-21T21:10:05.656Z",
+  "platform": "macOS",
+  "sdk": "1.0.20",
+  "cli": "1.0.102",
+  "status": "passed",
+  "scenario": "Read-only explanation, approved work, live steering during shell execution, then explanation in the same native session.",
+  "sameSession": true,
+  "steeringReceived": true,
+  "steeringApplied": true,
+  "fileUnchangedDuringExplanation": true,
+  "turns": [
+    {
+      "model": "gpt-6-luna",
+      "usage": {
+        "source": "measured",
+        "inputTokens": 9338,
+        "outputTokens": 70,
+        "cost": 44724000,
+        "unit": "nano-AIU",
+        "byModel": {
+          "gpt-6-luna": {
+            "inputTokens": 9338,
+            "outputTokens": 70,
+            "cost": 44724000
+          }
+        },
+        "model": "gpt-6-luna"
+      },
+      "reply": "`fixture.txt` currently contains only the text `old`."
+    },
+    {
+      "model": "gpt-6-luna",
+      "usage": {
+        "source": "measured",
+        "inputTokens": 35217,
+        "outputTokens": 957,
+        "cost": 143002000,
+        "unit": "nano-AIU",
+        "byModel": {
+          "gpt-6-luna": {
+            "inputTokens": 35217,
+            "outputTokens": 957,
+            "cost": 143002000
+          }
+        },
+        "model": "gpt-6-luna"
+      },
+      "reply": "`fixture.txt` contient maintenant `new`. La commande Node.js s’est terminée avec succès et a affiché `42`.\n\nSTEERING_CONFIRMED"
+    },
+    {
+      "model": "gpt-6-luna",
+      "usage": {
+        "source": "measured",
+        "inputTokens": 5338,
+        "outputTokens": 73,
+        "cost": 16329000,
+        "unit": "nano-AIU",
+        "byModel": {
+          "gpt-6-luna": {
+            "inputTokens": 5338,
+            "outputTokens": 73,
+            "cost": 16329000
+          }
+        },
+        "model": "gpt-6-luna"
+      },
+      "reply": "Le fichier contient `new` parce que j’ai exécuté votre demande de remplacer `old` par `new`. Je ne l’ai pas modifié depuis."
+    }
+  ],
+  "nativeMessageUpdates": 297,
+  "limitations": [
+    "Isolated fixture; does not establish quality for every agent or model.",
+    "The first preflight used an unavailable explicit model and sent no prompt.",
+    "A previous fixture run completed its work but failed an overly strict trailing-newline assertion; the successful run checks the requested content and exact bytes preserved during explanation."
+  ]
+}

@@ -282,7 +282,7 @@ export function promptSections(input: RunInput): PromptSection[] {
     'Interaction humaine et résultat attendu',
     'system',
     launch?.pair
-      ? pairPlanningContract(launch.pair)
+      ? pairPlanningContract(launch.pair, native)
       : native
         ? 'Produis le livrable de cette étape dans ta réponse finale. Utilise les outils natifs Copilot pour lire, chercher, créer, modifier et exécuter les commandes adaptées à la mission. Utilise ask_user et attends la vraie réponse lorsqu’une information humaine manque. Les autorisations sont gérées par Copilot et l’utilisateur. Une autorisation technique ne change pas la mission convenue. Ne prétends pas avoir exécuté un test sans l’avoir observé. Indique les commandes lancées, leurs résultats et les limites de vérification. Termine les processus lancés pour la tâche avant de conclure, sauf demande humaine explicite de les conserver.'
         : 'Produis le livrable de cette étape dans ta réponse finale. Utilise uniquement les outils du catalogue autorisé. ' +

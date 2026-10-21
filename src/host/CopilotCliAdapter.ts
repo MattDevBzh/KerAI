@@ -31,6 +31,7 @@ import { buildPrompt } from '../core/context';
 import { usesNativeTools, type NativePermissionMode } from '../shared/native';
 import {
   NATIVE_TOOLS,
+  NATIVE_READ_TOOLS,
   nativeGates,
   applyNativePermissions,
   decideNativePermission,
@@ -214,6 +215,9 @@ export class CopilotCliAdapter implements AgentAdapter {
       mode: NativePermissionMode;
       controller: AbortController;
       changing: boolean;
+      accepting: boolean;
+      sends: Set<Promise<string>>;
+      secrets: Set<string>;
     }
   >();
   private readonly clients = new Set<CopilotClient>();
@@ -507,6 +511,7 @@ export class CopilotCliAdapter implements AgentAdapter {
 
   async run(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal): Promise<RunResult> {
     const native = usesNativeTools(input);
+    const nativeTools = input.nativeReadOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS;
     const permissionMode =
       input.launch?.permissionMode ?? input.feature.execution?.permissionMode ?? 'manual';
     let nativeActivity: NativeActivityCollector | undefined;
@@ -557,7 +562,7 @@ export class CopilotCliAdapter implements AgentAdapter {
     try {
       const mcp = await withSignal(
         resolveMcpPlan(
-          input.mode === 'discussion' ? [] : (input.mcpServers ?? []),
+          input.mode === 'discussion' || input.nativeReadOnly ? [] : (input.mcpServers ?? []),
           this.options.resolveMcpSecret,
         ),
         controller.signal,
@@ -572,7 +577,7 @@ export class CopilotCliAdapter implements AgentAdapter {
           'Copilot CLI n’est pas connecté dans l’environnement Feature Studio. Lance le diagnostic de connexion.',
         );
       const tools = [
-        ...(input.mode === 'discussion'
+        ...(input.mode === 'discussion' || input.nativeReadOnly
           ? []
           : await withSignal(
               this.options.getTools(input, callbacks, controller.signal),
@@ -703,7 +708,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         streaming: true,
         tools: tools.map((t) => ({ ...t, skipPermission: true, defer: 'never' })),
         // Exact custom names work on older v3 runtimes too. No wildcards or builtin aliases.
-        availableTools: native ? [...NATIVE_TOOLS, ...allAllowed] : allAllowed,
+        availableTools: native ? [...nativeTools, ...allAllowed] : allAllowed,
         excludedTools: native
           ? ['task', 'web_fetch', 'web_search']
           : [
@@ -812,7 +817,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             if (
               (!allowed.has(request.toolName) &&
                 !mcp.grants.has(request.toolName) &&
-                !(native && NATIVE_TOOLS.includes(request.toolName))) ||
+                !(native && nativeTools.includes(request.toolName))) ||
               controller.signal.aborted
             )
               return {
@@ -830,9 +835,11 @@ export class CopilotCliAdapter implements AgentAdapter {
             ? 'Tu analyses une seule session Feature Studio en lecture seule. Toutes les données sont dans le prompt. Aucun accès au projet ni intervention humaine. Réponds avec le JSON demandé.'
             : input.mode === 'discussion'
               ? 'Tu participes à une conversation Feature Studio. Réponds naturellement à la dernière intervention humaine en tenant compte de l’historique et du profil fourni. Tu ne disposes d’aucun outil ni d’accès au projet. Pose tes questions directement dans ta réponse.'
-              : native
-                ? 'Tu exécutes une étape Feature Studio avec les outils natifs Copilot et les permissions décidées par l’humain. Utilise ask_user pour les questions humaines. Termine avec le livrable Markdown. Arrête les processus de travail avant de terminer ; ne détache aucun service en arrière-plan sans demande humaine explicite.'
-                : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
+              : input.nativeReadOnly
+                ? 'Tu échanges avec l’utilisateur sur cette étape Feature Studio. Tu peux lire le code pour comprendre et expliquer ; les outils d’écriture, le terminal et les MCP sont indisponibles. Une question ne modifie pas le livrable. Propose le travail restant pour une correction et attends sa validation.'
+                : native
+                  ? 'Tu exécutes une étape Feature Studio avec les outils natifs Copilot et les permissions décidées par l’humain. Utilise ask_user pour les questions humaines. Termine avec le livrable Markdown. Arrête les processus de travail avant de terminer ; ne détache aucun service en arrière-plan sans demande humaine explicite.'
+                  : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
         },
         customAgents: [
           {
@@ -842,7 +849,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             // Role instructions appear once in the exact business prompt shown in preview.
             prompt:
               'Les instructions du rôle figurent dans le prompt. Utilise uniquement le catalogue autorisé.',
-            tools: native ? [...NATIVE_TOOLS, ...agentAllowed] : agentAllowed,
+            tools: native ? [...nativeTools, ...agentAllowed] : agentAllowed,
             infer: false,
           },
         ],
@@ -876,6 +883,9 @@ export class CopilotCliAdapter implements AgentAdapter {
             mode: permissionMode,
             controller,
             changing: false,
+            accepting: true,
+            sends: new Set(),
+            secrets,
           });
           emit(
             'info',
@@ -920,17 +930,17 @@ export class CopilotCliAdapter implements AgentAdapter {
           if (!catalog.tools) throw new Error('Catalogue natif indisponible.');
           if (
             catalog.tools.some(
-              (tool) =>
-                NATIVE_TOOLS.includes(tool.name) && (tool.mcpServerName || tool.mcpToolName),
+              (tool) => nativeTools.includes(tool.name) && (tool.mcpServerName || tool.mcpToolName),
             )
           )
             throw new Error('Provenance d’un outil natif invalide.');
           verifyNativeCatalog(
             catalog.tools.map((tool) => tool.name),
             allAllowed,
+            input.nativeReadOnly,
           );
           verifyMcpCatalog(
-            catalog.tools.filter((tool) => !NATIVE_TOOLS.includes(tool.name)),
+            catalog.tools.filter((tool) => !nativeTools.includes(tool.name)),
             allowed,
             mcp,
           );
@@ -957,9 +967,10 @@ export class CopilotCliAdapter implements AgentAdapter {
         );
       let actualModel: string | undefined;
       let usage: Usage | undefined;
-      const seen = new Set<string>();
+      const seen = new Set<string>(input.previousEventIds);
       const usageIds = new Set<string>();
       const stream = new McpStreamRedactor(secrets);
+      const messageStreams = new Map<string, { stream: McpStreamRedactor; content: string }>();
       let resolveIdle!: () => void;
       let rejectIdle!: (error: Error) => void;
       const idle = new Promise<void>((resolve, reject) => {
@@ -971,9 +982,10 @@ export class CopilotCliAdapter implements AgentAdapter {
       const onEvent = (event: SessionEvent) => {
         if (seen.has(event.id)) return;
         seen.add(event.id);
+        if (native && !event.ephemeral) callbacks.onNativeEventId?.(event.id);
         const recordTrace = () => {
           if (
-            !/^(user\.message|assistant\.message|assistant\.usage|tool\.|subagent\.|skill\.|hook\.|permission\.|session\.compaction|session\.error)/.test(
+            !/^(user\.message|assistant\.message|assistant\.reasoning|assistant\.usage|tool\.|subagent\.|skill\.|hook\.|permission\.|session\.compaction|session\.error)/.test(
               event.type,
             ) ||
             event.type.endsWith('_delta')
@@ -1046,7 +1058,43 @@ export class CopilotCliAdapter implements AgentAdapter {
         recordTrace();
         if (event.agentId) return;
         nativeActivity?.receive(event);
+        if (
+          native &&
+          [
+            'assistant.message_delta',
+            'assistant.message',
+            'assistant.reasoning_delta',
+            'assistant.reasoning',
+          ].includes(event.type)
+        ) {
+          const data = event.data as {
+            messageId?: string;
+            reasoningId?: string;
+            deltaContent?: string;
+            content?: string;
+          };
+          const id = `native:${session!.sessionId}:${data.messageId ?? data.reasoningId ?? event.id}`;
+          const final = !event.type.endsWith('_delta');
+          const buffer = messageStreams.get(id) ?? {
+            stream: new McpStreamRedactor(secrets),
+            content: '',
+          };
+          buffer.content = final
+            ? redactMcp(data.content ?? '', secrets)
+            : buffer.content + buffer.stream.push(data.deltaContent ?? '');
+          messageStreams.set(id, buffer);
+          callbacks.onNativeMessage?.({
+            id,
+            kind: event.type.includes('reasoning') ? 'reasoning' : 'text',
+            content: buffer.content,
+            at: event.timestamp,
+            complete: final,
+          });
+        }
         switch (event.type) {
+          case 'user.message':
+            if (event.data.messageId) callbacks.onNativeMessageReceived?.(event.data.messageId);
+            break;
           case 'assistant.message_delta':
             {
               const safe = stream.push(event.data.deltaContent);
@@ -1073,6 +1121,10 @@ export class CopilotCliAdapter implements AgentAdapter {
             emit('error', event.data.message);
             break;
           case 'session.idle':
+            {
+              const active = this.nativeSessions.get(session!.sessionId);
+              if (active) active.accepting = false;
+            }
             if (event.data.aborted) rejectIdle(new RunCancelledError());
             else resolveIdle();
             break;
@@ -1082,11 +1134,14 @@ export class CopilotCliAdapter implements AgentAdapter {
         }
       };
       unsubscribe = session.on(onEvent);
+      callbacks.onPromptSending?.();
       await withSignal(
         session.send({ prompt: input.preparedPrompt ?? buildPrompt(input) }),
         controller.signal,
       );
+      callbacks.onPromptSent?.();
       await withSignal(idle, controller.signal);
+      await Promise.allSettled(this.nativeSessions.get(session.sessionId)?.sends ?? []);
       {
         const remainder = stream.finish();
         if (remainder) emit('message', remainder);
@@ -1126,6 +1181,23 @@ export class CopilotCliAdapter implements AgentAdapter {
       if (client) await this.close(client, session);
       if (session) this.nativeSessions.delete(session.sessionId);
       nativeActivity?.finish();
+    }
+  }
+
+  async sendMessage(sessionId: string, content: string): Promise<string | undefined> {
+    const active = this.nativeSessions.get(sessionId);
+    if (!active || !active.accepting || active.controller.signal.aborted) return undefined;
+    if (redactMcp(content, active.secrets) !== content)
+      throw new Error('Un secret ne peut pas être transmis dans un message au modèle.');
+    const sent = withSignal(
+      active.session.send({ prompt: content, mode: 'immediate' }),
+      active.controller.signal,
+    );
+    active.sends.add(sent);
+    try {
+      return await sent;
+    } finally {
+      active.sends.delete(sent);
     }
   }
 

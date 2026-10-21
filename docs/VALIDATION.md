@@ -1,5 +1,14 @@
 # Validation et limites
 
+## Conversation native intégrée — v1.23.0, 21 octobre 2026
+
+- Le vrai CLI 1.0.102 avec SDK 1.0.20 reprend une même session en passant du catalogue de lecture au catalogue de travail, puis à la lecture. Le test automatisé sans inférence vérifie les outils réellement exposés dans les deux sens.
+- La recette avec modèle réel a lu le fichier, effectué le travail autorisé, reçu une intervention pendant le shell, confirmé son application dans la réponse finale puis expliqué le résultat sans changer le fichier. Les trois tours partagent la même session native. Modèle observé : gpt-6-luna ; usage total du scénario réussi : 49 893 tokens entrants, 1 100 sortants, 204 055 000 nano-AIU. [Preuve synthétique](conversation-runtime-proof.json).
+- Le premier essai a refusé un modèle explicitement demandé absent du catalogue avant tout prompt. Un essai suivant avait réalisé le travail mais une assertion de recette imposait à tort un saut de ligne final ; la recette réussie contrôle le contenu demandé et l’absence de changement pendant l’explication.
+- Les scénarios de service et d’interface vérifient solo/pair, organisation acceptée, préférences, messages pendant le travail, envois incertains sans renvoi automatique, arrêt confirmé, questions sur le livrable, correction, verrouillage après validation et stockage version 9.
+- Les captures de conversation sont des fixtures visuelles. Les preuves locales, le chargement du VSIX, la CI Linux/Windows du commit et le paquet téléchargé sont contrôlés séparément lors de la publication.
+
+
 ## Copilot natif — v1.22.0, 21 octobre 2026
 
 - SDK 1.0.20 et CLI 1.0.102 : recette locale macOS avec outils réellement exécutés, réponses humaines, refus, changement de mode, reprise et arrêt d’un processus enfant. Une fixture complémentaire vérifie une règle gérée de refus de commande, y compris en mode tout autoriser.

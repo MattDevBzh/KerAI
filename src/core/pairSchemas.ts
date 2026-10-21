@@ -51,9 +51,13 @@ export const pairActionSchema = z
       'pause',
       'resume',
       'reorganize',
+      'preferences',
+      'retry-message',
+      'keep-message',
       'revise',
     ]),
     content: z.string().trim().min(1).max(30000).optional(),
+    messageId: id.optional(),
     preferences: pairPreferencesSchema.optional(),
   })
   .strict();
@@ -61,6 +65,14 @@ export const pairActionSchema = z
 export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
   return z
     .object({
+      nativeConversation: z.boolean().optional(),
+      origin: z.enum(['solo', 'pair']).optional(),
+      engaged: z.boolean().optional(),
+      soloResultReady: z.boolean().optional(),
+      contextDelivered: z.boolean().optional(),
+      requestedMode: z.enum(['solo', 'pair']).optional(),
+      nativeEventIds: z.array(z.string()).max(100000).optional(),
+      deliveredMessageIds: z.array(z.string()).optional(),
       sourceKey: z.string().max(1000000).optional(),
       approvedRevision: z.number().int().positive().optional(),
       version: z.number().int().nonnegative(),
@@ -117,6 +129,9 @@ export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
           at: z.string(),
           status: z.enum(['complete', 'streaming', 'interrupted']),
           requestId: z.string().optional(),
+          kind: z.enum(['text', 'reasoning']).optional(),
+          delivery: z.enum(['pending', 'sent', 'received', 'uncertain', 'skipped']).optional(),
+          nativeId: z.string().optional(),
         }),
       ),
       results: z.array(
@@ -132,7 +147,7 @@ export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
       requests: z.array(z.string()),
       pendingMessages: z.array(z.string()),
       turn: z
-        .object({ kind: z.enum(['planning', 'chat', 'work']), blockId: id.optional() })
+        .object({ kind: z.enum(['planning', 'chat', 'work', 'solo']), blockId: id.optional() })
         .strict()
         .optional(),
       busy: z.boolean(),

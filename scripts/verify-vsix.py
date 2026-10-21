@@ -35,9 +35,12 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'copilot-native' in host, 'Native execution missing from host'
         assert b'native-permissions' in ui, 'Native permission picker missing from webview'
         assert b'native-activity' in ui, 'Native evidence missing from webview'
+        assert b'nativeConversation' in host, 'Shared native conversation missing from host'
+        assert b'session-conversation' in ui, 'Step conversation missing from webview'
         assert b'hq-paper-plane' in ui, 'Context transfer missing from webview'
         styles = archive.read('extension/dist/webview/assets/index.css')
         assert b'hq-paper-delivery' in styles, 'Paper plane animation missing from stylesheet'
+        assert b'conversation-composer' in styles, 'Conversation layout missing from stylesheet'
         properties = embedded['contributes']['configuration']['properties']
         themes = properties['featureStudio.appearance.theme']['enum']
         assert all(theme in themes for theme in ('noob', 'matrix', 'dragonball'))
@@ -70,7 +73,7 @@ def verify(vsix, root, extract=None, match_build=False):
         'sha256': hashlib.sha256(vsix.read_bytes()).hexdigest(),
         'verifiedBuildFiles': len(built_files),
         'verifiedPublicAssets': len(assets),
-        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes'],
+        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes', 'stepConversation'],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
