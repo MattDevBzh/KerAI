@@ -1,3 +1,5 @@
+import { defaultPairPreferences } from '../src/shared/pair';
+import { PairPreferencesUI } from './PairPreferencesUI';
 import { useDialogAccessibility } from './Ergonomics';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
@@ -138,6 +140,8 @@ export function LaunchDialog({
   feedback: initialFeedback,
   dispatch,
   onClose,
+  pairMode = false,
+  onPairStarted,
 }: {
   feature: Feature;
   step: FeatureStep;
@@ -146,11 +150,14 @@ export function LaunchDialog({
   feedback: string;
   dispatch: Dispatch;
   onClose: () => void;
+  pairMode?: boolean;
+  onPairStarted?: () => void;
 }) {
   const agent = state.agents.find((item) => item.id === step.agentId);
   const previous = step.attempts.at(-1)?.launch;
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
+    ...(pairMode ? { pair: previous?.pair ?? { ...defaultPairPreferences } } : {}),
     ...(previous?.devopsTest
       ? { devopsTest: { ...previous.devopsTest, isolationConfirmed: false } }
       : {}),
@@ -276,7 +283,13 @@ export function LaunchDialog({
 
   return (
     <StudioDialog
-      title={resume ? 'Reprendre avec le bon contexte.' : 'Le prochain pas commence ici.'}
+      title={
+        pairMode
+          ? 'Préparer le travail en pair'
+          : resume
+            ? 'Reprendre avec le bon contexte.'
+            : 'Le prochain pas commence ici.'
+      }
       subtitle={`${step.name} · ${feature.title}. Vérifiez les instructions avant de confier le travail à l’agent.`}
       onClose={onClose}
       className="launch-dialog"
@@ -284,6 +297,9 @@ export function LaunchDialog({
       <div className="launch-grid">
         <div className="launch-inputs">
           <span className="eyebrow">VOTRE INTENTION</span>
+          {launch.pair && (
+            <PairPreferencesUI value={launch.pair} onChange={(pair) => update({ pair })} />
+          )}
           {needsDevOpsEvidence(step) && (
             <DevOpsTestForm
               value={launch.devopsTest}
@@ -608,10 +624,15 @@ export function LaunchDialog({
               previewFingerprint: preview.fingerprint,
             });
             onClose();
+            if (pairMode) onPairStarted?.();
           }}
         >
           <Play size={14} />
-          {resume ? 'Lancer la reprise' : 'Lancer cette étape'}
+          {pairMode
+            ? 'Ouvrir le travail en pair'
+            : resume
+              ? 'Lancer la reprise'
+              : 'Lancer cette étape'}
         </button>
       </div>
     </StudioDialog>

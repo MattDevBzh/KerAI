@@ -87,6 +87,14 @@ export function approvalBlockers(
   const blockers: string[] = [],
     attempt = step.attempts.at(-1);
   if (!attempt) return ['Aucune tentative à valider.'];
+  if (
+    attempt.pair &&
+    (actor !== 'human' ||
+      attempt.pair.busy ||
+      attempt.pair.phase !== 'review' ||
+      attempt.pair.pendingMessages.length)
+  )
+    blockers.push('Le travail en pair doit être terminé et validé par l’humain.');
   if (step.status !== 'awaiting_review') blockers.push('Cette étape attend un résultat à relire.');
   if (!attempt.artifact?.content.trim()) blockers.push('Un livrable non vide est nécessaire.');
   if (attempt.questions.some((q) => !attempt.answers[q.id]?.trim()))

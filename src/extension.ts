@@ -1199,6 +1199,25 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         return;
       }
+      case 'pairAction':
+        try {
+          await current.pairAction(message);
+          send({
+            type: 'pairActionResult',
+            requestId: message.requestId,
+            featureId: message.featureId,
+            stepId: message.stepId,
+          });
+        } catch (error) {
+          send({
+            type: 'pairActionResult',
+            requestId: message.requestId,
+            featureId: message.featureId,
+            stepId: message.stepId,
+            error: redact((error as Error).message),
+          });
+        }
+        return;
       case 'runStep':
         if (!message.previewFingerprint || !message.launch)
           throw new Error('Prépare le contexte de cette tentative avant de la lancer.');

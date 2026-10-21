@@ -521,6 +521,36 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect((await run).content).toBe('Livrable après réponse');
     expect(toolResponse).toMatchObject({ textResultForLlm: '{"answer":"B"}' });
   });
+  it('excludes human thinking time from the execution deadline', async () => {
+    vi.useFakeTimers();
+    let answer!: (value: string) => void;
+    callbacks.onQuestion = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    fake.setOnSend(() => {
+      const tool = fake.config!.tools!.find((t) => t.name === 'studio_ask_human')!;
+      void Promise.resolve(
+        tool.handler!(
+          { question: 'Ton choix ?' },
+          { sessionId: 's', toolCallId: 'wait', toolName: tool.name, arguments: {} },
+        ),
+      ).then(() => {
+        fake.emit('assistant.message', { content: 'Travail terminé après la vraie réponse.' });
+        fake.emit('session.idle', {});
+      });
+    });
+    const request = input();
+    request.settings.timeoutMinutes = 1;
+    const running = adapter.run(request, callbacks, new AbortController().signal);
+    await vi.waitFor(() => expect(callbacks.onQuestion).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(180000);
+    expect(fake.session.abort).not.toHaveBeenCalled();
+    answer('Mon choix');
+    expect((await running).content).toContain('vraie réponse');
+  });
   it('rejects absent human dialogs instead of inventing a default answer', async () => {
     fake.setOnSend(() => {
       const tool = fake.config!.tools!.find((t) => t.name === 'studio_ask_human')!;

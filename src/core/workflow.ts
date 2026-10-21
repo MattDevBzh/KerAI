@@ -396,6 +396,7 @@ export class WorkflowEngine {
       revision: (attempt.revision ?? 0) + 1,
     });
     attempt.artifactVersions = [
+      ...(attempt.pair ? (attempt.artifactVersions ?? []) : []),
       {
         revision: attempt.revision ?? 0,
         content: result.content,
@@ -605,7 +606,16 @@ export class WorkflowEngine {
   answerQuestions(featureId: string, stepId: string, answers: Record<string, string>) {
     const [feature, step] = this.pair(featureId, stepId),
       attempt = this.latest(step);
-    if (step.status !== 'waiting_input') throw new Error('Cette étape ne demande pas de réponse.');
+    if (
+      step.status !== 'waiting_input' &&
+      !(
+        attempt.pair &&
+        !attempt.pair.busy &&
+        ['paused', 'interrupted'].includes(attempt.pair.phase) &&
+        !['approved', 'stale'].includes(step.status)
+      )
+    )
+      throw new Error('Cette étape ne demande pas de réponse.');
     for (const [key, answer] of Object.entries(answers)) {
       if (!attempt.questions.some((q) => q.id === key) || typeof answer !== 'string')
         throw new Error('Réponse à une question inconnue.');

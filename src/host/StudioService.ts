@@ -1,8 +1,19 @@
+import {
+  createPair,
+  pairMessage,
+  pairTurnPrompt,
+  completePairTurn,
+  pairReport,
+  addPairUsage,
+} from '../core/pair';
+import { pairPlan, nextPairBlock, type PairAction, type PairTurn } from '../shared/pair';
+import { pairActionSchema } from '../core/pairSchemas';
 import { EventEmitter } from 'node:events';
 import { basename, join } from 'node:path';
 import { open, readFile, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   AgentAdapter,
   Feature,
@@ -109,6 +120,7 @@ export class StudioService extends EventEmitter {
       throw new Error('Le compte rendu a changé pendant l’ouverture de la discussion.');
     return source;
   }
+  private pairTasks = new Map<string, Promise<void>>();
   private archives = new Map<string, Promise<SessionArchive>>();
   private async archiveFor(featureId: string): Promise<SessionArchive> {
     let pending = this.archives.get(featureId);
@@ -132,6 +144,7 @@ export class StudioService extends EventEmitter {
     if (!('featureId' in message) || !message.featureId) return;
     const tracked = new Set([
       'runStep',
+      'pairAction',
       'resolveOptionalStep',
       'approveStep',
       'rejectStep',
@@ -228,7 +241,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -790,6 +803,7 @@ export class StudioService extends EventEmitter {
     });
   }
   async getTools(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal) {
+    if (input.mode === 'discussion') return [];
     if (input.observation)
       return [
         {
@@ -1006,13 +1020,19 @@ export class StudioService extends EventEmitter {
     previewFingerprint?: string,
     automated = false,
   ): Promise<void> {
-    return this.workspaceAction(
+    await this.workspaceAction(
       featureId,
       'Tentative et points de restauration',
       () =>
         this.executeRun(featureId, stepId, feedback, resume, launch, previewFingerprint, automated),
       automated,
     );
+    const attempt = this.engine.getStep(featureId, stepId).attempts.at(-1);
+    if (
+      attempt?.pair?.pendingMessages.length &&
+      !['paused', 'interrupted'].includes(attempt.pair.phase)
+    )
+      this.startPairTurns(featureId, stepId, attempt.id, { kind: 'chat' });
   }
   private async executeRun(
     featureId: string,
@@ -1022,6 +1042,7 @@ export class StudioService extends EventEmitter {
     launch?: RunLaunchOptions,
     previewFingerprint?: string,
     automated = false,
+    pairContinuation?: PairTurn,
   ): Promise<void> {
     this.assertTrusted();
     if (this.automation && !automated)
@@ -1048,8 +1069,11 @@ export class StudioService extends EventEmitter {
       );
     Object.assign(this.state, await this.registry.load());
     this.assertTrusted();
-    const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
-    if (input.launch?.editableExistingFiles?.length && !previewFingerprint)
+    const continued = pairContinuation ? step.attempts.at(-1) : undefined;
+    const input = pairContinuation
+      ? this.pairInput(featureId, stepId)
+      : this.prepareInput(featureId, stepId, feedback, resume, launch);
+    if (!pairContinuation && input.launch?.editableExistingFiles?.length && !previewFingerprint)
       throw new Error(
         'L’autorisation de reprendre des fichiers existants exige un aperçu confirmé au lancement manuel.',
       );
@@ -1058,16 +1082,21 @@ export class StudioService extends EventEmitter {
       if (actual.branch !== project.branch)
         throw new Error(`Le projet ${project.name} doit être sur la branche ${project.branch}.`);
     }
-    await inspectProjectChanges(input);
-    const preview = previewContext(input);
-    if (preview.errors.length) throw new Error(preview.errors.join(' '));
-    if (previewFingerprint && previewFingerprint !== preview.fingerprint)
+    if (!pairContinuation) await inspectProjectChanges(input);
+    const preview = pairContinuation ? undefined : previewContext(input);
+    if (preview?.errors.length) throw new Error(preview.errors.join(' '));
+    if (previewFingerprint && previewFingerprint !== preview?.fingerprint)
       throw new Error(
         'Le contexte a changé depuis son aperçu. Actualise l’aperçu avant de lancer.',
       );
     const blocked = budgetBlockReason(feature);
     if (blocked) throw new Error(blocked);
-    const attempt = this.engine.beginRun(featureId, stepId, feedback, resume);
+    const attempt = continued ?? this.engine.beginRun(featureId, stepId, feedback, resume);
+    if (continued) {
+      step.status = attempt.status = 'running';
+      delete attempt.error;
+      delete attempt.finishedAt;
+    }
     if (!input.resumeSessionId) delete attempt.sessionId;
     attempt.roastLevel = input.attempt.roastLevel;
     attempt.agentName = input.agent.nickname || input.agent.name;
@@ -1078,13 +1107,35 @@ export class StudioService extends EventEmitter {
       modelOverride: Boolean(step.model),
     };
     attempt.launch = structuredClone(input.launch!);
-    attempt.memorySnapshot = structuredClone(input.memory ?? []);
-    attempt.promptFingerprint = preview.fingerprint;
-    attempt.promptCharacters = preview.characters;
-    attempt.evidence = [];
-    attempt.revision = 0;
+    if (!continued) attempt.memorySnapshot = structuredClone(input.memory ?? []);
+    if (preview) {
+      attempt.promptFingerprint = preview.fingerprint;
+      attempt.promptCharacters = preview.characters;
+    }
+    if (!continued) {
+      attempt.evidence = [];
+      attempt.revision = 0;
+    }
     input.attempt = structuredClone(attempt);
-    input.preparedPrompt = preview.prompt;
+    input.preparedPrompt = preview?.prompt;
+    if (input.launch?.pair && !continued) attempt.pair = createPair(input);
+    const pair = attempt.pair;
+    const turn = pairContinuation ?? (pair ? { kind: 'planning' as const } : undefined);
+    const usageBefore = structuredClone(attempt.usage);
+    let usageReported = false,
+      pairCallStarted = false;
+    const reply = pair ? pairMessage(pair, 'assistant', '') : undefined;
+    if (pair && turn && reply) {
+      pair.busy = true;
+      pair.pauseRequested = false;
+      pair.turn = turn;
+      pair.error = undefined;
+      if (turn.kind !== 'work') pair.pendingMessages = [];
+      if (turn.kind === 'work') pair.phase = 'working';
+      reply.status = 'streaming';
+      input.resumeSessionId = undefined;
+      input.mode = turn.kind === 'work' ? undefined : 'discussion';
+    }
     if (automated && feature.autopilot) {
       feature.autopilot.runs++;
       feature.autopilot.updatedAt = new Date().toISOString();
@@ -1098,8 +1149,8 @@ export class StudioService extends EventEmitter {
     let streamText = '',
       streamId = '';
     let archive: SessionArchive | undefined;
-    let attemptBytes = 0,
-      attemptRecords = 0;
+    let attemptBytes = continued?.traceArchive?.bytes ?? 0,
+      attemptRecords = continued?.traceArchive?.records ?? 0;
     const trace = (event: import('../shared/observation').SessionTrace) => {
       if (!archive) throw new Error('Archive de session indisponible.');
       const beforeBytes = archive.info.bytes,
@@ -1122,7 +1173,8 @@ export class StudioService extends EventEmitter {
     const callbacks: RunCallbacks = {
       onTrace: trace,
       onUsage: (usage) => {
-        attempt.usage = structuredClone(usage);
+        usageReported = true;
+        attempt.usage = pair ? addPairUsage(usageBefore, usage) : structuredClone(usage);
         if (usage.model) attempt.model = usage.model;
         this.schedule();
       },
@@ -1139,12 +1191,14 @@ export class StudioService extends EventEmitter {
           text: question.question,
           ...(question.choices ? { choices: question.choices } : {}),
         });
+        if (pair) pairMessage(pair, 'system', `Question de l’agent : ${question.question}`);
         await this.persist();
         const answer = await this.askHuman(
           { id, featureId, stepId, kind: 'question', ...question },
           controller.signal,
         );
         attempt.answers[id] = answer;
+        if (pair) pairMessage(pair, 'user', answer);
         await this.persist();
         return answer;
       },
@@ -1165,6 +1219,7 @@ export class StudioService extends EventEmitter {
         return answer === 'allow';
       },
       onEvent: (event) => {
+        if (reply && event.kind === 'message') reply.content += redact(event.message);
         trace({ id: event.id, at: event.at, type: `activity.${event.kind}`, data: event.message });
         const last = attempt.logs.at(-1);
         if (event.kind === 'message' && last?.id === streamId) {
@@ -1183,15 +1238,29 @@ export class StudioService extends EventEmitter {
       },
       onSession: (id) => {
         this.engine.setSession(featureId, stepId, id);
+        if (pair && !pair.sessionIds.includes(id)) pair.sessionIds.push(id);
         this.schedule();
       },
     };
     try {
+      if (pair && turn) {
+        input.preparedPrompt = pairTurnPrompt(pair, turn);
+        if (continued && attempt.questions.length)
+          input.preparedPrompt += `\n\nRéponses humaines conservées : ${JSON.stringify(attempt.questions.map((question) => ({ question, answer: attempt.answers[question.id] })))}`;
+        const maximum =
+          feature.budget?.maxPromptChars ??
+          this.state.settings.budgetDefaults?.maxPromptChars ??
+          60000;
+        if (input.preparedPrompt.length > maximum)
+          throw new Error(
+            `Le contexte pair atteint ${input.preparedPrompt.length} caractères pour une limite de ${maximum}. Ajuste le budget de contexte avant de reprendre ; aucun échange n’a été supprimé.`,
+          );
+      }
       archive = await this.archiveFor(featureId);
       trace({
         id: randomUUID(),
-        at: attempt.startedAt,
-        type: 'host.launch',
+        at: continued ? new Date().toISOString() : attempt.startedAt,
+        type: continued ? 'host.pair_turn' : 'host.launch',
         data: JSON.stringify({
           prompt: input.preparedPrompt,
           agent: input.agent,
@@ -1209,7 +1278,7 @@ export class StudioService extends EventEmitter {
       await archive.flush();
       await this.persist();
       this.assertTrusted();
-      if (feature.worktree) {
+      if (feature.worktree && (!pair || turn?.kind === 'work')) {
         const before = await this.workspaces.capture(feature, {
           kind: 'before-run',
           label: `Avant ${step.name}`.slice(0, 200),
@@ -1220,11 +1289,12 @@ export class StudioService extends EventEmitter {
         attempt.checkpointBeforeId = before.id;
         await this.persist();
       }
-      attempt.existingChangesBackup = await backupProjectChanges(
-        input,
-        this.store.rootPath,
-        controller.signal,
-      );
+      if (!continued)
+        attempt.existingChangesBackup = await backupProjectChanges(
+          input,
+          this.store.rootPath,
+          controller.signal,
+        );
       if (attempt.existingChangesBackup) {
         callbacks.onEvent({
           id: randomUUID(),
@@ -1234,21 +1304,65 @@ export class StudioService extends EventEmitter {
         });
         await this.persist();
       }
-      await this.hooks('beforeRun', input, controller.signal, callbacks);
+      if (!pair || turn?.kind === 'work')
+        await this.hooks('beforeRun', input, controller.signal, callbacks);
       this.assertTrusted();
+      if (pair) {
+        pair.calls++;
+        await this.persist();
+        pairCallStarted = true;
+      }
       const result = await this.adapter.run(input, callbacks, controller.signal);
       await archive.flush();
       if (controller.signal.aborted) throw new Error('Exécution annulée.');
       const host = this.toolHosts.get(attempt.id);
-      result.changedFiles = [...(host?.changedFiles ?? [])];
-      result.fileHashes = { ...host?.fileHashes };
+      result.changedFiles = [
+        ...new Set([...(pair ? attempt.changedFiles : []), ...(host?.changedFiles ?? [])]),
+      ];
+      result.fileHashes = { ...(pair ? attempt.fileHashes : {}), ...host?.fileHashes };
       result.content = redact(result.content);
-      await this.hooks('afterRun', input, controller.signal, callbacks);
-      this.engine.finishRun(featureId, stepId, result);
+      if (!pair || turn?.kind === 'work')
+        await this.hooks('afterRun', input, controller.signal, callbacks);
+      if (pair && turn && reply) {
+        if (result.usage) {
+          usageReported = true;
+          attempt.usage = addPairUsage(usageBefore, result.usage);
+        }
+        attempt.changedFiles = result.changedFiles;
+        attempt.fileHashes = result.fileHashes;
+        completePairTurn(pair, turn, result, reply);
+        for (const question of result.questions) {
+          const previous = attempt.questions.find((q) => q.id === question.id);
+          if (previous && JSON.stringify(previous) !== JSON.stringify(question))
+            delete attempt.answers[question.id];
+          attempt.questions = [...attempt.questions.filter((q) => q.id !== question.id), question];
+          reply.content += `\n\nQuestion : ${question.text}`;
+        }
+        if (pair.phase === 'review' && turn.kind === 'work') {
+          this.engine.finishRun(featureId, stepId, {
+            ...result,
+            content: pairReport(pair),
+            usage: attempt.usage,
+          });
+        } else {
+          step.status = attempt.status =
+            pair.phase === 'review' ? 'awaiting_review' : 'waiting_input';
+          this.engine.refreshFeatureStatus(featureId);
+        }
+      } else this.engine.finishRun(featureId, stepId, result);
     } catch (error) {
       const host = this.toolHosts.get(attempt.id);
-      attempt.changedFiles = [...(host?.changedFiles ?? [])];
-      attempt.fileHashes = { ...host?.fileHashes };
+      attempt.changedFiles = [
+        ...new Set([...(pair ? attempt.changedFiles : []), ...(host?.changedFiles ?? [])]),
+      ];
+      attempt.fileHashes = { ...(pair ? attempt.fileHashes : {}), ...host?.fileHashes };
+      if (pair) {
+        pair.phase = pair.pauseRequested ? 'paused' : 'interrupted';
+        pair.error = pair.pauseRequested
+          ? undefined
+          : redact(error instanceof Error ? error.message : String(error));
+        if (reply) reply.status = 'interrupted';
+      }
       if (step.status === 'running') {
         if (controller.signal.aborted) this.engine.cancelRun(featureId, stepId);
         else
@@ -1259,9 +1373,20 @@ export class StudioService extends EventEmitter {
           );
       }
     } finally {
+      if (pair) {
+        if (pairCallStarted && !usageReported)
+          attempt.usage = {
+            ...(attempt.usage ?? { source: 'measured' as const }),
+            incompleteTokens: true,
+            incompleteCost: true,
+          };
+        pair.busy = false;
+        pair.version++;
+        if (pair.pauseRequested) pair.phase = 'paused';
+      }
       const owned = this.toolHosts.get(attempt.id)?.fileHashes;
       if (owned) feature.workspaceFileHashes = { ...feature.workspaceFileHashes, ...owned };
-      if (feature.worktree && attempt.checkpointBeforeId) {
+      if (feature.worktree && attempt.checkpointBeforeId && (!pair || turn?.kind === 'work')) {
         try {
           const after = await this.workspaces.capture(feature, {
             kind: 'after-run',
@@ -1300,6 +1425,275 @@ export class StudioService extends EventEmitter {
         this.active = undefined;
         complete();
       }
+    }
+  }
+  private pairInput(featureId: string, stepId: string): RunInput {
+    const feature = this.engine.getFeature(featureId),
+      step = this.engine.getStep(featureId, stepId);
+    const attempt = step.attempts.at(-1),
+      pair = attempt?.pair;
+    if (!attempt || !pair || feature.archived || ['approved', 'stale'].includes(step.status))
+      throw new Error(
+        'Cette tentative pair ne peut plus être poursuivie. Ouvre la version actuelle de l’étape.',
+      );
+    if (
+      (attempt.descriptionRevision ?? 0) !== (feature.descriptionRevision ?? 0) ||
+      !step.dependsOn.every((id) =>
+        ['approved', 'skipped'].includes(feature.steps.find((s) => s.id === id)?.status ?? ''),
+      )
+    )
+      throw new Error('Le contexte de la feature a changé. Prépare une nouvelle tentative.');
+    if (!isDeepStrictEqual(pair.snapshot.settings, this.state.settings))
+      throw new Error(
+        'Les réglages du projet ont changé depuis le cadrage. Prépare une nouvelle tentative avec les permissions actuelles.',
+      );
+    for (const project of pair.snapshot.projects ?? []) {
+      if (
+        this.projectSettings &&
+        !isDeepStrictEqual(project.settings, this.projectSettings(project.id))
+      )
+        throw new Error(
+          `Les réglages de ${project.name} ont changé. Prépare une nouvelle tentative.`,
+        );
+    }
+    if (attempt.questions.some((q) => !attempt.answers[q.id]?.trim()))
+      throw new Error('Réponds aux questions conservées avant de reprendre le travail.');
+    const { prompt: _prompt, ...snapshot } = structuredClone(pair.snapshot);
+    return {
+      ...snapshot,
+      feature: structuredClone(feature),
+      step: { ...snapshot.step, status: step.status, attempts: [] },
+      attempt: structuredClone({ ...attempt, pair: undefined }),
+      launch: structuredClone(attempt.launch),
+      existingChangeGrants: { ...snapshot.existingChangeGrants, ...attempt.fileHashes },
+    };
+  }
+  /** UI actions only. Model tools cannot approve an organisation or change collaboration mode. */
+  async pairAction(value: PairAction): Promise<void> {
+    const command = pairActionSchema.parse(value);
+    this.assertTrusted();
+    const feature = this.engine.getFeature(command.featureId),
+      step = this.engine.getStep(feature.id, command.stepId);
+    const attempt = step.attempts.at(-1),
+      pair = attempt?.pair;
+    if (
+      !attempt ||
+      !pair ||
+      attempt.id !== command.attemptId ||
+      feature.archived ||
+      ['approved', 'stale'].includes(step.status)
+    )
+      throw new Error(
+        'Cette action ne concerne plus la tentative actuelle. Rouvre le travail en pair.',
+      );
+    if (pair.requests.includes(command.requestId)) return;
+    if (command.expectedVersion !== pair.version)
+      throw new Error('Le travail en pair a évolué. Relis son état actuel avant de réessayer.');
+    const liveAction = ['message', 'solo', 'pair', 'pause'].includes(command.action);
+    if (!liveAction && (pair.busy || this.pairTasks.has(attempt.id) || this.workspaceTask))
+      throw new Error('Attends la fin du bloc en cours avant de changer son organisation.');
+    if (this.active && this.active.featureId !== feature.id)
+      throw new Error('Une autre session travaille actuellement. Reviens après son exécution.');
+    let next: PairTurn | undefined;
+    const plan = pairPlan(pair);
+    const humanState = () => ({
+      mode: pair.mode,
+      phase: pair.phase,
+      preferences: pair.preferences,
+      approvedRevision: pair.approvedRevision,
+      pauseRequested: pair.pauseRequested,
+    });
+    const previous = humanState();
+    const previousAcceptedAt = plan?.acceptedAt,
+      previousUpdatedAt = feature.updatedAt,
+      messageCount = pair.messages.length;
+    const approved = Boolean(plan && pair.approvedRevision === plan.revision && plan.acceptedAt);
+    const requirePlan = () => {
+      if (!approved || !nextPairBlock(pair))
+        throw new Error('Valide une organisation comportant du travail restant avant de démarrer.');
+      return { kind: 'work' as const, blockId: nextPairBlock(pair)!.id };
+    };
+    switch (command.action) {
+      case 'message': {
+        if (!command.content) throw new Error('Écris ton message avant de l’envoyer.');
+        pair.mode = 'pair';
+        const message = pairMessage(pair, 'user', redact(command.content), command.requestId);
+        pair.pendingMessages.push(message.id);
+        if (!pair.busy) next = { kind: approved ? 'chat' : 'planning' };
+        break;
+      }
+      case 'reorganize':
+      case 'revise':
+        if (!command.content && !command.preferences)
+          throw new Error('Précise la nouvelle organisation ou la correction souhaitée.');
+        if (command.preferences) pair.preferences = command.preferences;
+        pair.mode = 'pair';
+        pair.approvedRevision = undefined;
+        pair.phase = 'planning';
+        pairMessage(
+          pair,
+          'user',
+          redact(
+            command.content ??
+              `Adapte l’organisation à ces préférences : ${JSON.stringify(pair.preferences)}`,
+          ),
+          command.requestId,
+        );
+        next = { kind: 'planning' };
+        break;
+      case 'approve-plan':
+        if (!plan || pair.phase !== 'planning' || pair.error)
+          throw new Error('Attends une proposition d’organisation complète avant de la valider.');
+        if (!nextPairBlock(pair))
+          throw new Error(
+            'Cette organisation est déjà terminée. Demande une nouvelle proposition.',
+          );
+        pair.approvedRevision = plan.revision;
+        plan.acceptedAt = new Date().toISOString();
+        pairMessage(
+          pair,
+          'system',
+          `Organisation ${plan.revision} validée explicitement par l’utilisateur.`,
+        );
+        next = { kind: 'work', blockId: nextPairBlock(pair)?.id };
+        break;
+      case 'continue':
+        next = requirePlan();
+        break;
+      case 'resume':
+        if (pair.pendingMessages.length) next = { kind: approved ? 'chat' : 'planning' };
+        else if (
+          ['paused', 'interrupted'].includes(pair.phase) &&
+          pair.turn &&
+          pair.turn.kind !== 'work'
+        )
+          next = { ...pair.turn };
+        else if (!approved) next = { kind: 'planning' };
+        else if (nextPairBlock(pair)) next = requirePlan();
+        else next = { kind: 'chat' };
+        break;
+      case 'solo':
+        if (!approved)
+          throw new Error(
+            'Valide d’abord l’organisation ; le passage en solo ne vaut pas validation.',
+          );
+        pair.mode = 'solo';
+        pairMessage(
+          pair,
+          'system',
+          'L’utilisateur confie la fin de cette étape à l’agent. Les permissions restent identiques et la validation finale reste humaine.',
+        );
+        if (!pair.busy && nextPairBlock(pair)) next = requirePlan();
+        break;
+      case 'pair':
+        pair.mode = 'pair';
+        pairMessage(
+          pair,
+          'system',
+          'L’utilisateur reprend le travail en pair. Arrêt au prochain point de contrôle.',
+        );
+        break;
+      case 'pause':
+        pair.pauseRequested = true;
+        pair.mode = 'pair';
+        pair.phase = 'paused';
+        pairMessage(
+          pair,
+          'system',
+          'Pause demandée par l’utilisateur. Les changements déjà réalisés sont conservés.',
+        );
+        break;
+    }
+    if (next) pair.pauseRequested = false;
+    pair.requests.push(command.requestId);
+    pair.version++;
+    feature.updatedAt = new Date().toISOString();
+    const changed = humanState();
+    const addedMessages = new Set(pair.messages.slice(messageCount).map((message) => message.id));
+    const updatedAt = feature.updatedAt,
+      acceptedAt = plan?.acceptedAt;
+    try {
+      await this.persist();
+    } catch (error) {
+      // Undo only this command. A streaming reply or a completed block may have advanced meanwhile.
+      for (const key of Object.keys(previous) as (keyof typeof previous)[]) {
+        if (key === 'phase' && pair.version !== command.expectedVersion + 1) continue;
+        if (pair[key] === changed[key]) Object.assign(pair, { [key]: previous[key] });
+      }
+      pair.messages = pair.messages.filter((message) => !addedMessages.has(message.id));
+      pair.pendingMessages = pair.pendingMessages.filter((id) => !addedMessages.has(id));
+      pair.requests = pair.requests.filter((id) => id !== command.requestId);
+      if (pair.version === command.expectedVersion + 1) pair.version = command.expectedVersion;
+      if (plan?.acceptedAt === acceptedAt && plan) plan.acceptedAt = previousAcceptedAt;
+      if (feature.updatedAt === updatedAt) feature.updatedAt = previousUpdatedAt;
+      this.publish();
+      throw error;
+    }
+    if (
+      command.action === 'pause' &&
+      this.active?.featureId === feature.id &&
+      this.active.stepId === step.id
+    )
+      this.active.controller.abort(new Error('Pause demandée par l’utilisateur.'));
+    if (next) {
+      const requested = next;
+      const start = () => {
+        if (step.attempts.at(-1)?.id === attempt.id && !pair.pauseRequested)
+          this.startPairTurns(feature.id, step.id, attempt.id, requested);
+      };
+      if (this.workspaceTask) void this.workspaceTask.then(start);
+      else start();
+    }
+  }
+  private startPairTurns(
+    featureId: string,
+    stepId: string,
+    attemptId: string,
+    first: PairTurn,
+  ): void {
+    if (this.pairTasks.has(attemptId)) return;
+    const task = this.runPairTurns(featureId, stepId, attemptId, first);
+    this.pairTasks.set(attemptId, task);
+    void task.catch((error) => this.error(error)).finally(() => this.pairTasks.delete(attemptId));
+  }
+  private async runPairTurns(
+    featureId: string,
+    stepId: string,
+    attemptId: string,
+    first: PairTurn,
+  ): Promise<void> {
+    let turn: PairTurn | undefined = first;
+    try {
+      while (turn && !this.disposed) {
+        const attempt = this.engine.getStep(featureId, stepId).attempts.at(-1);
+        if (attempt?.id !== attemptId || !attempt.pair) return;
+        const pair = attempt.pair;
+        await this.workspaceAction(featureId, 'Travail en pair', () =>
+          this.executeRun(featureId, stepId, '', false, undefined, undefined, false, turn),
+        );
+        if (pair.phase === 'paused' || pair.phase === 'interrupted') return;
+        if (pair.pendingMessages.length) turn = { kind: 'chat' };
+        else if (
+          pair.mode === 'solo' &&
+          pair.phase === 'checkpoint' &&
+          !pair.error &&
+          pair.approvedRevision === pairPlan(pair)?.revision &&
+          nextPairBlock(pair)
+        )
+          turn = { kind: 'work', blockId: nextPairBlock(pair)!.id };
+        else turn = undefined;
+      }
+    } catch (error) {
+      const step = this.engine.getStep(featureId, stepId),
+        attempt = step.attempts.at(-1);
+      if (attempt?.id === attemptId && attempt.pair) {
+        attempt.pair.busy = false;
+        attempt.pair.phase = 'interrupted';
+        attempt.pair.error = redact((error as Error).message);
+        attempt.pair.version++;
+        await this.persist();
+      }
+      throw error;
     }
   }
   cancel(featureId: string): void {
@@ -2095,6 +2489,7 @@ export class StudioService extends EventEmitter {
     await this.adapter?.dispose();
     await active?.done;
     await this.workspaceTask;
+    await Promise.allSettled([...this.pairTasks.values()]);
     await this.automation?.done;
     if (this.state)
       await this.store.save(this.engine.features, this.state.settings, this.state.memory ?? []);

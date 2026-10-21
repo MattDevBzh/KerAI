@@ -489,10 +489,30 @@ export class CopilotCliAdapter implements AgentAdapter {
     const minutes = Number.isFinite(input.settings.timeoutMinutes)
       ? Math.max(1, Math.min(120, input.settings.timeoutMinutes))
       : 20;
-    const timer = setTimeout(
-      () => controller.abort(new Error(`Délai maximal de ${minutes} minutes dépassé.`)),
-      minutes * 60_000,
-    );
+    let remaining = minutes * 60_000,
+      started = Date.now(),
+      waiting = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const armTimer = () => {
+      started = Date.now();
+      timer = setTimeout(
+        () =>
+          controller.abort(new Error(`Délai maximal de ${minutes} minutes de travail dépassé.`)),
+        Math.max(1, remaining),
+      );
+    };
+    const humanWait = async <T>(work: () => Promise<T>): Promise<T> => {
+      if (waiting++ === 0) {
+        clearTimeout(timer);
+        remaining -= Date.now() - started;
+      }
+      try {
+        return await work();
+      } finally {
+        if (--waiting === 0 && !controller.signal.aborted) armTimer();
+      }
+    };
+    armTimer();
     let client: CopilotClient | undefined;
     let session: CopilotSession | undefined;
     let unsubscribe: (() => void) | undefined;
@@ -569,13 +589,15 @@ export class CopilotCliAdapter implements AgentAdapter {
               ? AbortSignal.any([controller.signal, invocation.signal])
               : controller.signal;
             if (requestSignal.aborted) throw cancelled(requestSignal);
-            const answer = await withSignal(
-              callbacks.onQuestion({
-                ...question,
-                question: redactMcp(question.question, secrets),
-                choices: question.choices?.map((choice) => redactMcp(choice, secrets)),
-              }),
-              requestSignal,
+            const answer = await humanWait(() =>
+              withSignal(
+                callbacks.onQuestion!({
+                  ...question,
+                  question: redactMcp(question.question, secrets),
+                  choices: question.choices?.map((choice) => redactMcp(choice, secrets)),
+                }),
+                requestSignal,
+              ),
             );
             if (typeof answer !== 'string' || !answer.trim())
               throw new Error('Une réponse humaine non vide est nécessaire.');
@@ -685,9 +707,11 @@ export class CopilotCliAdapter implements AgentAdapter {
         onPermissionRequest: (request) =>
           controller.signal.aborted
             ? { kind: 'reject', feedback: 'Tentative annulée ou terminée.' }
-            : withSignal(
-                decideMcpPermission(mcp, request, input.step.policy, callbacks),
-                controller.signal,
+            : humanWait(() =>
+                withSignal(
+                  decideMcpPermission(mcp, request, input.step.policy, callbacks),
+                  controller.signal,
+                ),
               ),
         hooks: {
           onPreToolUse: (request) => {

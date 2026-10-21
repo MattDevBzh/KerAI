@@ -3,6 +3,7 @@ import { boundAnswers } from './questions';
 import { correctionContext } from '../shared/collaboration';
 import { roastInstructions } from '../shared/roast';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
+import { pairPlanningContract } from '../shared/pair';
 import type {
   MemoryEntry,
   PromptSection,
@@ -202,6 +203,17 @@ export function promptSections(input: RunInput): PromptSection[] {
       ? `Livrable précédent à reprendre :\n${input.attempt.artifact.content}`
       : '',
   );
+  const previousAttempt = input.step.attempts.at(-1);
+  if (
+    previousAttempt?.pair &&
+    (previousAttempt.descriptionRevision ?? 0) === (input.feature.descriptionRevision ?? 0)
+  )
+    add(
+      'pair-history',
+      'Travail pair de la tentative précédente',
+      'human',
+      `Historique du travail précédent, conservé comme contexte et non comme autorisation d’exécution :\n${JSON.stringify({ plans: previousAttempt.pair.plans, decisions: previousAttempt.pair.decisions, results: previousAttempt.pair.results, messages: previousAttempt.pair.messages })}`,
+    );
   const criteria = input.feature.criteria ?? [];
   add(
     'criteria',
@@ -249,14 +261,23 @@ export function promptSections(input: RunInput): PromptSection[] {
       'system',
       `L’humain autorise la reprise des fichiers déjà modifiés suivants, dans leur version vérifiée au lancement :\n${grants.map((file) => `- ${file}`).join('\n')}\nPréserve les changements existants et lis le bloc exact avant toute édition. Privilégie studio_replace_text. Une modification externe ultérieure bloque de nouveau l’écriture.`,
     );
+  if (launch?.pair)
+    add(
+      'pair',
+      'Travail en mode pair',
+      'system',
+      `Commencer par convenir avec l’humain de l’organisation de cette étape. Préférences : ${JSON.stringify(launch.pair)}. Aucun travail avant validation explicite de l’organisation. Les blocs seront exécutés séparément avec les points d’arrêt convenus.`,
+    );
   add(
     'completion',
     'Interaction humaine et résultat attendu',
     'system',
-    'Produis le livrable de cette étape dans ta réponse finale. Utilise uniquement les outils du catalogue autorisé. ' +
-      'Si une information humaine manque, utilise studio_ask_human et attends sa vraie réponse avant toute action dépendante. Ne suppose jamais une réponse. ' +
-      'Si cet outil est indisponible, termine avec un seul bloc :\n```feature-studio-questions\n{"questions":[{"id":"question_id","text":"Question précise","choices":["Option A","Option B"]}]}\n```\n' +
-      'Les choices sont facultatifs. Les outils shell natifs, les outils hors catalogue, le push et la publication ne sont pas autorisés. Ne prétends pas avoir exécuté une commande ou obtenu une preuve sans l’avoir réellement observée.',
+    launch?.pair
+      ? pairPlanningContract(launch.pair)
+      : 'Produis le livrable de cette étape dans ta réponse finale. Utilise uniquement les outils du catalogue autorisé. ' +
+          'Si une information humaine manque, utilise studio_ask_human et attends sa vraie réponse avant toute action dépendante. Ne suppose jamais une réponse. ' +
+          'Si cet outil est indisponible, termine avec un seul bloc :\n```feature-studio-questions\n{"questions":[{"id":"question_id","text":"Question précise","choices":["Option A","Option B"]}]}\n```\n' +
+          'Les choices sont facultatifs. Les outils shell natifs, les outils hors catalogue, le push et la publication ne sont pas autorisés. Ne prétends pas avoir exécuté une commande ou obtenu une preuve sans l’avoir réellement observée.',
   );
   if (
     input.automation?.reviewStepId === input.step.id ||

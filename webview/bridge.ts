@@ -5,6 +5,8 @@ interface PersistedView {
   featureId?: string;
   stepId?: string;
   discussionId?: string;
+  pairOpen?: boolean;
+  pairDrafts?: Record<string, string>;
   celebrationEnabled?: boolean;
   featureProposal?: {
     discussionId: string;
@@ -76,6 +78,7 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'notice',
         'navigate',
         'runPreview',
+        'pairActionResult',
         'checkpointComparison',
         'stepApprovalResult',
         'artifactSaveResult',
@@ -97,4 +100,16 @@ export function subscribe(callback: (message: HostMessage) => void) {
   };
   window.addEventListener('message', handler);
   return () => window.removeEventListener('message', handler);
+}
+
+export function savedPairDraft(attemptId: string) {
+  return persistedView.pairDrafts?.[attemptId] ?? '';
+}
+export function savePairDraft(attemptId: string, content: string) {
+  if (!attemptId) return;
+  const drafts = { ...persistedView.pairDrafts };
+  if (content) drafts[attemptId] = content;
+  else delete drafts[attemptId];
+  persistedView = { ...persistedView, pairDrafts: drafts };
+  vscode?.setState(persistedView);
 }

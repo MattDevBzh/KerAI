@@ -45,6 +45,19 @@ export function sessionMarkdown(feature: Feature, workspacePath: string): string
         parts.push(
           `#### Compte rendu · révision ${version.revision}\n${version.at} · ${version.author}${version.reason ? `\nMotif : ${version.reason}` : ''}\n\n${version.content}`,
         );
+      if (attempt.pair) {
+        parts.push(
+          `#### Travail en pair\nMode : ${attempt.pair.mode} · État : ${attempt.pair.phase} · ${attempt.pair.calls} appels\nPréférences : ${JSON.stringify(attempt.pair.preferences)}`,
+        );
+        for (const plan of attempt.pair.plans)
+          parts.push(
+            `#### Organisation ${plan.revision} · ${plan.acceptedAt ? 'validée par l’humain' : 'proposée'}\n${plan.summary}\n${plan.blocks.map((block) => `- ${block.title} : ${block.description}`).join('\n')}`,
+          );
+        for (const message of attempt.pair.messages)
+          parts.push(
+            `#### Échange · ${message.role} · ${message.at} · ${message.status}\n\n${message.content}`,
+          );
+      }
       if (attempt.feedback) parts.push(`Feedback : ${attempt.feedback}`);
       if (attempt.launch?.initialContext)
         parts.push(`Contexte initial :\n${attempt.launch.initialContext}`);

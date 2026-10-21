@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.15.0 — Non publié · Mode pair
+
+- Lancement d’une étape en pair avec aperçu du contexte, rythme et niveau d’explication indépendants, organisation proposée et validation humaine explicite.
+- Espace de travail avec conversation, contexte consultable, avancement par blocs, changements d’organisation et corrections avant validation du résultat.
+- Messages enregistrés pendant le travail, passage en solo limité à l’étape, retour en pair au prochain point de contrôle et pause avec conservation du travail partiel.
+- Conservation des échanges, organisations, décisions et sorties dans la même tentative ; historique des tentatives et brouillons de messages retrouvés à la réouverture. Reprise manuelle après interruption.
+- Vérification des versions, des permissions, du budget et du contexte avant reprise ; les propositions de l’agent ne peuvent pas valider l’organisation ou l’étape.
+- Cumul de consommation entre les appels, budget comptant chaque appel du binôme, export des échanges et exclusion du temps de réponse humain du délai d’exécution.
+- Stockage version 7 avec migration des anciennes sessions et conservation des travaux interrompus.
+
 ## 1.14.0 — 2026-10-19
 
 - **Thèmes réellement appliqués** : un thème explicite du cockpit garde ses couleurs, ses agents et ses décors même avec un thème VS Code classé « contraste élevé », comme Bearded Milkshake Vanilla Banana. Le suivi automatique de VS Code et les couleurs forcées du système restent disponibles. L’enregistrement automatique des thèmes est désormais indiqué près du choix et du bouton réservé aux réglages du projet.

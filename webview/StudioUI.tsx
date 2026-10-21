@@ -1,3 +1,4 @@
+import { executionCallCount } from '../src/core/budgets';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { searchText } from './Ergonomics';
 import { orderedAgents } from '../src/shared/team';
@@ -542,6 +543,7 @@ export function BudgetMeter({
   dispatch: Dispatch;
 }) {
   const totals = usageTotals(feature);
+  const calls = executionCallCount(feature);
   const tokens = totals.inputTokens + totals.outputTokens;
   const unknown = totals.unknownTokenRuns;
   const [editing, setEditing] = useState(false);
@@ -567,10 +569,14 @@ export function BudgetMeter({
         <div className="budget-stats">
           <div>
             <strong>
-              {number(totals.runs)}
+              {number(calls)}
               {live && <small> / {live.maxRuns}</small>}
             </strong>
-            <span>tentatives réalisées</span>
+            <span>
+              {calls === totals.runs
+                ? 'tentatives réalisées'
+                : `appels agents · ${totals.runs} tentative${totals.runs > 1 ? 's' : ''}`}
+            </span>
           </div>
           <div>
             <strong>
@@ -596,11 +602,8 @@ export function BudgetMeter({
           </div>
         </div>
         {live && (
-          <div
-            className="budget-track"
-            aria-label={`${totals.runs} tentatives sur ${live.maxRuns}`}
-          >
-            <span style={{ width: `${Math.min(100, (totals.runs / live.maxRuns) * 100)}%` }} />
+          <div className="budget-track" aria-label={`${calls} appels sur ${live.maxRuns}`}>
+            <span style={{ width: `${Math.min(100, (calls / live.maxRuns) * 100)}%` }} />
           </div>
         )}
         <p className="field-help">

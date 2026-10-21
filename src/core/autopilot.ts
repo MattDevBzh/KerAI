@@ -28,6 +28,11 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   const scopedSteps = correction
     ? feature.steps.filter((step) => correction.impactedStepIds.includes(step.id))
     : feature.steps;
+  const paired = scopedSteps.find((step) => !stepResolved(step) && step.attempts.at(-1)?.pair);
+  if (paired)
+    return pause(
+      `L’étape ${paired.name} est en mode pair. Reprends-la ou confie-la en solo depuis son espace de travail, puis valide son résultat.`,
+    );
   const stopped = scopedSteps.find((step) =>
     ['failed', 'cancelled', 'interrupted'].includes(step.status),
   );

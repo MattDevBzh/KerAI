@@ -38,11 +38,23 @@ export function usageTotals(feature: Feature): UsageTotals {
     }
   return totals;
 }
+export function executionCallCount(feature: Feature): number {
+  return feature.steps.reduce(
+    (total, step) =>
+      total +
+      step.attempts.reduce(
+        (sum, attempt) => sum + (attempt.pair ? Math.max(1, attempt.pair.calls) : 1),
+        0,
+      ),
+    0,
+  );
+}
 /** Guard for a new call, never a conversion to a monetary cost guarantee. */
 export function budgetBlockReason(feature: Feature): string | undefined {
   const budget = feature.budget ?? defaultBudget,
     totals = usageTotals(feature);
-  if (totals.runs >= budget.maxRuns) return 'Budget : nombre maximal de runs atteint.';
+  if (executionCallCount(feature) >= budget.maxRuns)
+    return 'Budget : nombre maximal de runs atteint.';
   if (budget.maxTokens !== undefined) {
     if (totals.unknownTokenRuns)
       return 'Budget : consommation de tokens inconnue pour une tentative. Reprise humaine requise.';

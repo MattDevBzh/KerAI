@@ -75,6 +75,15 @@ export async function reportDiscussionSource(
       journal,
       questions: attempt.questions,
       answers: attempt.answers,
+      ...(attempt.pair
+        ? {
+            pair: {
+              plans: attempt.pair.plans,
+              decisions: attempt.pair.decisions,
+              messages: attempt.pair.messages,
+            },
+          }
+        : {}),
     });
   const originalOutput = attempt.artifactVersions?.find(
     (version) => version.author === 'agent',

@@ -715,7 +715,7 @@ async function smokeRun(): Promise<void> {
     api.getState()?.features.find((f) => f.id === feature.id)?.title,
     'Smoke extension host',
   );
-  assert.equal(api.getState()?.schemaVersion, 6);
+  assert.equal(api.getState()?.schemaVersion, 7);
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-observer'));
   await api.dispatch({
     type: 'previewObservation',
@@ -866,7 +866,7 @@ async function smokeRun(): Promise<void> {
     'Layout survives closing and reopening both surfaces',
   );
   console.log(
-    'PASS: activity-bar direct opening in the current window/sidebar dismissal/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v6 close/reopen, optional team override/manual skip without inference/persistence, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
+    'PASS: activity-bar direct opening in the current window/sidebar dismissal/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v7 close/reopen, optional team override/manual skip without inference/persistence, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );
 }
 

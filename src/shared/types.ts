@@ -111,6 +111,7 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  pair?: import('./pair').PairState;
   /** Execution identity frozen at launch, independent from later step edits. */
   profileSnapshot?: {
     agentId: string;
@@ -275,7 +276,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   workspace: {
     name: string;
     path: string;
@@ -297,6 +298,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | import('./pair').PairAction
   | { type: 'refreshSecretThemes' }
   | { type: 'unlockDragonBall'; sequence: readonly string[]; requestId: string }
   | import('./dashboard').DashboardClientMessage
@@ -478,6 +480,13 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | {
+      type: 'pairActionResult';
+      requestId: string;
+      featureId: string;
+      stepId: string;
+      error?: string;
+    }
   | { type: 'secretThemeState'; dragonBallUnlocked: boolean; requestId?: string; error?: string }
   | { type: 'optionalStepResult'; requestId: string; error?: string }
   | import('./dashboard').DashboardHostMessage

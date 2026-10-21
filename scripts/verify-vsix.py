@@ -29,7 +29,7 @@ def verify(vsix, root, extract=None, match_build=False):
         host_path = embedded['main'].removeprefix('./')
         host = archive.read('extension/' + host_path)
         ui = archive.read('extension/dist/webview/assets/app.js')
-        for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep'):
+        for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction'):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
         properties = embedded['contributes']['configuration']['properties']
@@ -50,6 +50,8 @@ def verify(vsix, root, extract=None, match_build=False):
             assert any(path.is_relative_to(root / 'webview/public' / folder) for path in assets), folder
         notes = Path('docs/releases') / f'v{version}.md'
         assert archive.read('extension/' + notes.as_posix()) == (root / notes).read_bytes()
+        pair_guide = Path('docs/MODE-PAIR.md')
+        assert archive.read('extension/' + pair_guide.as_posix()) == (root / pair_guide).read_bytes()
         if extract:
             extract.mkdir(parents=True, exist_ok=False)
             archive.extractall(extract)
@@ -60,7 +62,7 @@ def verify(vsix, root, extract=None, match_build=False):
         'sha256': hashlib.sha256(vsix.read_bytes()).hexdigest(),
         'verifiedBuildFiles': len(built_files),
         'verifiedPublicAssets': len(assets),
-        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps'],
+        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair'],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

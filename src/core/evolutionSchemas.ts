@@ -1,3 +1,4 @@
+import { pairPreferencesSchema } from './pairPreferences';
 import { z } from 'zod';
 import { qualityEvidenceSchema } from './qualitySchemas';
 import { devOpsEvidenceSchema, devOpsTestTargetSchema } from './devopsKitSchemas';
@@ -25,6 +26,7 @@ const path = z
   .refine((value) => !value.includes('\0'), 'Chemin invalide.');
 export const launchSchema = z
   .object({
+    pair: pairPreferencesSchema.optional(),
     devopsTest: devOpsTestTargetSchema.optional(),
     initialContext: z.string().max(60000),
     mcpServerIds: uniqueIds,
@@ -42,7 +44,7 @@ export const launchSchema = z
           .string()
           .max(160)
           .regex(
-            /^(?:feature|agent|initial-context|feedback|answers|previous|criteria|review-comments|(?:skill|memory|artifact):[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/,
+            /^(?:feature|agent|initial-context|feedback|answers|previous|pair-history|criteria|review-comments|(?:skill|memory|artifact):[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/,
           ),
         z
           .object({ enabled: z.boolean().optional(), content: z.string().max(60000).optional() })

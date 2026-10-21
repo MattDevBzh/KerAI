@@ -56,6 +56,16 @@ Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche *
 
 Les discussions sont enregistrées localement et retrouvées après rechargement de VS Code. Recherche une conversation dans le bandeau de gauche, ou supprime son historique avec la corbeille et la confirmation native. Les mesures remontées par Copilot sont incluses dans **Consommation**, sous **Discussions**.
 
+## Travailler en pair dans une étape
+
+**Démarrer en mode pair** ouvre la préparation du contexte, puis un espace de travail lié à la même étape. Choisis un rythme — petits pas, blocs ou travail en une fois après cadrage — et le niveau d’explication souhaité. L’agent propose une organisation ; échange avec lui pour l’ajuster, puis utilise **Valider l’organisation et démarrer**.
+
+Chaque bloc se termine par un point de contrôle. Tu peux poser une question, revoir l’organisation, demander une correction ou **Continuer cette étape en solo**. **Reprendre en pair** rétablit l’arrêt au prochain point de contrôle ; **Mettre en pause** interrompt le travail en conservant les changements déjà réalisés. Revenir à la session conserve le mode convenu. Les messages envoyés pendant un bloc sont enregistrés et traités après ce bloc, avec retour au travail en pair.
+
+Le contexte, les organisations successives, les échanges, les décisions et les résultats restent dans la tentative d’origine. Après une fermeture pendant une exécution, la reprise est explicite. À la fin, relis le compte rendu, demande les ajustements utiles, puis **Valider l’étape et revenir à la session**. Les critères, preuves de tests, permissions et validations habituelles restent appliqués. La validation finale de la feature reste distincte.
+
+Les appels de cadrage et d’exécution sont inclus dans le budget et les mesures de consommation ; les temps d’attente d’une réponse humaine n’épuisent pas le délai de travail. Les exports de session incluent les organisations et les échanges. [Fonctionnement et vérifications du mode pair](docs/MODE-PAIR.md).
+
 ## Un choix de projet au bon endroit
 
 Dashboard, Sessions, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.

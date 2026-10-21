@@ -1,3 +1,4 @@
+import { PairWorkspace } from './PairWorkspace';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { OptionalStepChoice, SkippedInterventions } from './OptionalStepsUI';
 import { CatalogSearch, searchText, useDialogAccessibility } from './Ergonomics';
@@ -342,6 +343,7 @@ export default function App() {
     discussions: [],
     agents: [],
   });
+  const [pairOpen, setPairOpen] = useState(initialView.pairOpen ?? false);
   const [discussionId, setDiscussionId] = useState(initialView.discussionId ?? '');
   const reportRequest = useRef<string | null>(null);
   const [reportTarget, setReportTarget] = useState<{
@@ -446,7 +448,16 @@ export default function App() {
     send({ type: 'ready' });
     return cleanup;
   }, []);
-  useEffect(() => persistView({ view, featureId, stepId }), [view, featureId, stepId]);
+  useEffect(
+    () => persistView({ view, featureId, stepId, pairOpen }),
+    [view, featureId, stepId, pairOpen],
+  );
+  const pairLocation = useRef(`${featureId}:${stepId}`);
+  useEffect(() => {
+    const location = `${featureId}:${stepId}`;
+    if (pairLocation.current !== location) setPairOpen(false);
+    pairLocation.current = location;
+  }, [featureId, stepId]);
   const loaded = Boolean(state);
   useEffect(() => {
     if (loaded && featureId && view === 'sessions' && !create && !isDemo)
@@ -905,6 +916,8 @@ export default function App() {
           {view === 'sessions' &&
             (selected ? (
               <FeatureDetail
+                pairOpen={pairOpen}
+                onPairOpenChange={setPairOpen}
                 key={selected.id}
                 observerRequested={observerRequested}
                 openDiscussion={(id) => {
@@ -2055,6 +2068,8 @@ function CreateModal({
   );
 }
 function FeatureDetail({
+  pairOpen,
+  onPairOpenChange,
   openDiscussion,
   observerRequested,
   reportTarget,
@@ -2069,6 +2084,8 @@ function FeatureDetail({
   confirm,
   onDirtyChange,
 }: {
+  pairOpen: boolean;
+  onPairOpenChange: (open: boolean) => void;
   openDiscussion: (id: string) => void;
   observerRequested?: boolean;
   reportTarget?: { stepId: string; attemptId: string; edit: boolean };
@@ -2157,6 +2174,17 @@ function FeatureDetail({
       rootStepIds,
     });
 
+  if (pairOpen && step)
+    return (
+      <PairWorkspace
+        key={`${feature.id}:${step.id}:${step.attempts.at(-1)?.id ?? 'pending'}`}
+        feature={feature}
+        step={step}
+        state={state}
+        dispatch={dispatch}
+        back={() => onPairOpenChange(false)}
+      />
+    );
   return (
     <div className="page feature-page">
       {composing && (
@@ -2422,6 +2450,7 @@ function FeatureDetail({
       )}
       {step ? (
         <StepPanel
+          openPair={() => onPairOpenChange(true)}
           reportTarget={reportTarget?.stepId === step.id ? reportTarget : undefined}
           key={`${feature.id}-${step.id}`}
           feature={feature}
@@ -2460,6 +2489,7 @@ function FeatureDetail({
   );
 }
 function StepPanel({
+  openPair,
   reportTarget,
   feature,
   step,
@@ -2470,6 +2500,7 @@ function StepPanel({
   onDirtyChange,
   onCorrection,
 }: {
+  openPair: () => void;
   reportTarget?: { attemptId: string; edit: boolean };
   onDirtyChange: (dirty: boolean) => void;
   onCorrection: (
@@ -2603,6 +2634,7 @@ function StepPanel({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [config, setConfig] = useState(false);
   const [launchResume, setLaunchResume] = useState<boolean | null>(null);
+  const [launchPair, setLaunchPair] = useState(false);
   const [approvalPending, setApprovalPending] = useState(false);
   const [approvalError, setApprovalError] = useState('');
   const approvalReasons =
@@ -2662,8 +2694,11 @@ function StepPanel({
           : feature.archived
             ? 'Restaurez la session pour poursuivre.'
             : '';
-  const run = (resume = false) => {
-    const action = () => setLaunchResume(resume);
+  const run = (resume = false, pairMode = false) => {
+    const action = () => {
+      setLaunchPair(pairMode);
+      setLaunchResume(resume);
+    };
     if ((latest || stepResolved(step)) && !resume)
       confirm(
         step.status === 'skipped'
@@ -2682,6 +2717,8 @@ function StepPanel({
     <div className="step-layout">
       {launchResume !== null && (
         <LaunchDialog
+          pairMode={launchPair}
+          onPairStarted={openPair}
           feature={feature}
           step={step}
           state={state}
@@ -3213,6 +3250,34 @@ function StepPanel({
             </label>
           )}
           <div className="decision-actions">
+            {step.attempts.some((a) => a.pair) && (
+              <button className="button secondary" disabled={dirty} onClick={openPair}>
+                <MessageSquare size={14} />{' '}
+                {!latest?.pair
+                  ? 'Consulter les échanges en pair'
+                  : latest.pair.busy
+                    ? 'Rejoindre le travail en pair'
+                    : 'Ouvrir le travail en pair'}
+              </button>
+            )}
+            {!latest?.pair && step.status !== 'running' && (
+              <button
+                className="button secondary"
+                disabled={!canRun || dirty}
+                onClick={() => run(false, true)}
+              >
+                <MessageSquare size={14} /> Démarrer en mode pair
+              </button>
+            )}
+            {latest?.pair && step.status !== 'running' && (
+              <button
+                className="button secondary"
+                disabled={!canRun || dirty}
+                onClick={() => run(false, true)}
+              >
+                <MessageSquare size={14} /> Nouvelle tentative en pair
+              </button>
+            )}
             {step.status === 'running' ? (
               <button
                 className="button secondary"
@@ -3311,6 +3376,7 @@ function StepPanel({
                   </>
                 )}
                 {latest?.sessionId &&
+                  !latest.pair &&
                   ['failed', 'cancelled', 'interrupted', 'waiting_input'].includes(step.status) && (
                     <button
                       className="button secondary"

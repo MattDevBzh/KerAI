@@ -1,3 +1,4 @@
+import { createPairStateSchema } from './pairSchemas';
 import { ticketSourceSnapshotSchema } from './devopsTicketSchemas';
 import { mkdir, readFile, rename, open, unlink, readdir } from 'node:fs/promises';
 import {
@@ -100,6 +101,7 @@ const correctionCycle = z.object({
   }),
 });
 const attempt = z.object({
+  pair: z.lazy(() => pairStateSchema).optional(),
   profileSnapshot: z
     .object({
       agentId: z.string(),
@@ -409,9 +411,10 @@ export const settingsSchema = z
       .optional(),
   })
   .strict();
+const pairStateSchema = createPairStateSchema(settingsSchema);
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(6),
+    schemaVersion: z.literal(7),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -424,14 +427,14 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 6;
+  schemaVersion: 7;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
 }
 const indexSchema = z
   .object({
-    schemaVersion: z.literal(6),
+    schemaVersion: z.literal(7),
     entries: z
       .array(z.object({ id: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }))
       .refine(
@@ -458,7 +461,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 6,
+          schemaVersion: 7,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -475,11 +478,12 @@ export class Store {
       version !== 3 &&
       version !== 4 &&
       version !== 5 &&
-      version !== 6
+      version !== 6 &&
+      version !== 7
     )
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    if (version === 5 || version === 6) {
-      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 6 });
+    if (version === 5 || version === 6 || version === 7) {
+      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 7 });
       const deleted = new Set((await pendingDeletions(this.rootPath)).map((d) => d.featureId));
       const features: Feature[] = [];
       for (const entry of index.entries) {
@@ -495,13 +499,13 @@ export class Store {
         features.push(item);
       }
       raw = {
-        schemaVersion: 6,
+        schemaVersion: 7,
         features,
         settings: index.settings,
         memory: index.memory.filter((m) => !m.source || !deleted.has(m.source.featureId)),
       };
     }
-    const migration = version !== 6;
+    const migration = version !== 7;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -509,7 +513,7 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 6,
+        schemaVersion: 7,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
@@ -545,6 +549,16 @@ export class Store {
       for (const step of item.steps)
         if (step.status === 'running') {
           engine.interruptRun(item.id, step.id);
+          const pair = step.attempts.at(-1)?.pair;
+          if (pair) {
+            pair.phase = 'interrupted';
+            pair.busy = false;
+            pair.mode = 'pair';
+            pair.version++;
+            pair.error = 'Échange interrompu à la fermeture. Reprends explicitement le travail.';
+            for (const message of pair.messages)
+              if (message.status === 'streaming') message.status = 'interrupted';
+          }
           recovered = true;
         }
     }
@@ -553,7 +567,7 @@ export class Store {
   }
   save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
     const snapshot = persistedSchema.parse({
-      schemaVersion: 6,
+      schemaVersion: 7,
       features: structuredClone(features),
       settings: structuredClone(settings),
       memory: structuredClone(memory),
@@ -581,7 +595,7 @@ export class Store {
           this.rootPath,
           'state.json',
           JSON.stringify({
-            schemaVersion: 6,
+            schemaVersion: 7,
             entries,
             settings: snapshot.settings,
             memory: snapshot.memory,
