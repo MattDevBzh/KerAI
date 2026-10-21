@@ -51,6 +51,10 @@ async function fixture(pairMode = false) {
   feature.budget!.maxRuns = 50;
   const step = feature.steps[0],
     inputs: RunInput[] = [];
+  let signalStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    signalStarted = resolve;
+  });
   let callbacks!: RunCallbacks;
   let behavior = async (_input: RunInput, _callbacks: RunCallbacks, _signal: AbortSignal) =>
     result(pairMode ? proposal() : undefined);
@@ -62,6 +66,7 @@ async function fixture(pairMode = false) {
       events.onSession('same-native-session');
       events.onPromptSending?.();
       events.onPromptSent?.();
+      signalStarted();
       return behavior(input, events, signal);
     },
     dispose: async () => {},
@@ -78,6 +83,18 @@ async function fixture(pairMode = false) {
     const preview = await service.previewRun(feature.id, step.id, '', false, launch);
     await service.runStep(feature.id, step.id, '', false, launch, preview.fingerprint);
     return preview;
+  };
+  const startRunning = async () => {
+    const preview = await service.previewRun(feature.id, step.id, '', false, launch);
+    const completed = service.runStep(feature.id, step.id, '', false, launch, preview.fingerprint);
+    // Git preflight can exceed a polling timeout on Windows; wait for the actual adapter entry.
+    await Promise.race([
+      started,
+      completed.then(() => {
+        throw new Error('The run finished before the conversation adapter started.');
+      }),
+    ]);
+    return { completed };
   };
   const idle = () =>
     vi.waitFor(
@@ -112,6 +129,7 @@ async function fixture(pairMode = false) {
     inputs,
     adapter,
     start,
+    startRunning,
     idle,
     action,
     get callbacks() {
@@ -237,8 +255,7 @@ it('steers a running solo conversation exactly once, keeps mode changes separate
         });
       }),
   );
-  const running = f.start();
-  await vi.waitFor(() => expect(f.inputs).toHaveLength(1));
+  const { completed: running } = await f.startRunning();
   const pair = f.step.attempts[0].pair!;
   await f.action('pair');
   expect(pair.mode).toBe('solo');
@@ -274,8 +291,7 @@ it('queues messages when live steering is unavailable and sends only new context
         finish = r;
       }),
   );
-  const running = f.start();
-  await vi.waitFor(() => expect(f.inputs).toHaveLength(1));
+  const { completed: running } = await f.startRunning();
   await f.action('pair');
   await f.action('message', { content: 'Explique le choix de structure.' });
   expect(f.step.attempts[0].pair!.pendingMessages).toHaveLength(1);
@@ -301,8 +317,7 @@ it('never automatically retries an uncertain message, keeps it across reopening,
         finish = r;
       }),
   );
-  const running = f.start();
-  await vi.waitFor(() => expect(f.inputs).toHaveLength(1));
+  const { completed: running } = await f.startRunning();
   await f.action('pair');
   f.adapter.sendMessage = vi.fn(async () => {
     throw new Error('RPC disconnected after send');
