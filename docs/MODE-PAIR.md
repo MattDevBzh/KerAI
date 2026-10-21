@@ -36,7 +36,7 @@ Les anciens échanges restent consultables sans modification après une nouvelle
 
 La suppression définitive de la session nettoie aussi toutes les sessions natives créées pour ses échanges pair, sans supprimer les fichiers du projet.
 
-Le stockage passe à la version 7 afin que les anciens clients ne puissent pas réenregistrer une session en supprimant son état pair. Les versions antérieures sont migrées sans démarrer de travail.
+Le stockage passe à la version 7 afin que les anciens clients ne puissent pas réenregistrer une session en supprimant son état pair. Les versions antérieures sont migrées sans démarrer de travail. Les conversations de la v1.19 et de la v1.20 conservent leurs messages, contexte figé, consommation, fichiers et sessions natives. Les travaux en cours demandent une reprise explicite du cadrage pour convenir des blocs restants ; les livrables déjà prêts restent disponibles pour validation.
 
 ## Consommation et validation
 

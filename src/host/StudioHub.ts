@@ -113,6 +113,14 @@ export class StudioHub extends EventEmitter {
     this.publish();
     return found[1];
   }
+  featureEntry(id: string): HubEntry {
+    const matches = [...this.entries.values()].filter((entry) =>
+      entry.service.state.features.some((feature) => feature.id === id),
+    );
+    if (matches.length !== 1)
+      throw new Error('Session inconnue ou ambiguë dans les projets enregistrés.');
+    return matches[0];
+  }
   async select(ids: string[]): Promise<HubEntry> {
     const projects = ids.length ? this.catalog.resolve(ids) : [];
     for (const project of projects) await this.entry(project.id);
@@ -134,7 +142,7 @@ export class StudioHub extends EventEmitter {
       item.service.snapshot().features.map((feature) => ({
         ...feature,
         // Older sessions retain the original project store and execution roots.
-        ...(feature.projects || !item.project
+        ...(feature.projects?.length || !item.project
           ? {}
           : {
               projects: [

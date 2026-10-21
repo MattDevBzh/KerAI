@@ -1,4 +1,6 @@
 import { executionCallCount } from '../src/core/budgets';
+import { inheritTeamProfiles, inheritAgentProfile } from '../src/shared/agentInheritance';
+import { AgentModelOverrides } from './AgentModelOverrides';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { searchText } from './Ergonomics';
 import { orderedAgents } from '../src/shared/team';
@@ -1809,7 +1811,10 @@ function WorkflowEditor({
   dispatch: Dispatch;
   onClose: () => void;
 }) {
-  const [workflow, setWorkflow] = useState(structuredClone(initial));
+  const [workflow, setWorkflow] = useState({
+    ...structuredClone(initial),
+    steps: inheritTeamProfiles(initial.steps, state.agents),
+  });
   const [selected, setSelected] = useState(initial.steps[0]?.id ?? '');
   const [deleting, setDeleting] = useState('');
   const step = workflow.steps.find((s) => s.id === selected);
@@ -1828,7 +1833,7 @@ function WorkflowEditor({
     setWorkflow({ ...workflow, steps });
   };
   const add = () => {
-    const next = newStep(state);
+    const next = inheritTeamProfiles([newStep(state)], state.agents)[0];
     if (workflow.steps.length) next.dependsOn = [workflow.steps.at(-1)!.id];
     setWorkflow({ ...workflow, steps: [...workflow.steps, next] });
     setSelected(next.id);
@@ -2026,141 +2031,29 @@ function WorkflowEditor({
                   </div>
                 </div>
                 <label className="field">
-                  <span>Nom de l’étape</span>
-                  <input
-                    required
-                    value={step.name}
-                    onChange={(e) => update({ name: e.target.value })}
-                  />
-                </label>
-                <label className="field">
-                  <span>Description de l’étape</span>
-                  <textarea
-                    rows={2}
-                    value={step.description}
-                    onChange={(e) => update({ description: e.target.value })}
-                  />
-                </label>
-                <div className="field-row">
-                  <label className="field">
-                    <span>Agent de l’étape</span>
-                    <select
-                      value={step.agentId}
-                      onChange={(e) => update({ agentId: e.target.value })}
-                    >
-                      <option value="">Choisir un agent…</option>
-                      {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.nickname || a.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Permissions de l’étape</span>
-                    <select
-                      value={step.policy}
-                      onChange={(e) => update({ policy: e.target.value as WorkflowStep['policy'] })}
-                    >
-                      <option value="read-only">Lecture seule</option>
-                      <option value="workspace-write">Écriture dans le projet</option>
-                      <option value="tests">Tests préautorisés</option>
-                    </select>
-                  </label>
-                </div>
-                <label className="inline-check">
-                  <input
-                    type="checkbox"
-                    checked={
-                      step.requiredDevOpsEvidence === true || step.agentId === 'fs-devops-validate'
-                    }
-                    disabled={step.agentId === 'fs-devops-validate'}
-                    onChange={(e) => update({ requiredDevOpsEvidence: e.target.checked })}
-                  />
-                  <span>Exiger une preuve du test DevOps manuel</span>
-                </label>
-                <label className="field">
-                  <span>Rapport qualité requis</span>
+                  <span>Agent de l’étape</span>
                   <select
-                    aria-label="Rapport qualité requis"
-                    value={step.requiredQuality ?? ''}
-                    onChange={(event) =>
-                      update({
-                        requiredQuality: (event.target.value ||
-                          undefined) as WorkflowStep['requiredQuality'],
-                      })
-                    }
+                    value={step.agentId}
+                    onChange={(e) => {
+                      const agent = state.agents.find((a) => a.id === e.target.value);
+                      if (agent)
+                        update(
+                          inheritAgentProfile(
+                            { ...step, agentId: agent.id, model: undefined, reasoning: undefined },
+                            agent,
+                          ),
+                        );
+                    }}
                   >
-                    <option value="">Selon l’agent sélectionné</option>
-                    <option value="visual">Recette visuelle</option>
-                    <option value="counterexample">Contre-exemples</option>
+                    <option value="">Choisir un agent…</option>
+                    {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.nickname || a.name}
+                      </option>
+                    ))}
                   </select>
-                  <small>
-                    Un rapport hôte réussi, courant et lié aux critères est obligatoire pour la
-                    validation humaine et automatique. Les agents de recette visuelle et
-                    contre-exemples conservent leur exigence ; un choix différent exige les deux
-                    rapports.
-                  </small>
                 </label>
-                <div className="field-row">
-                  <label className="field">
-                    <span>Modèle de l’étape</span>
-                    <select
-                      value={step.model ?? ''}
-                      onChange={(e) =>
-                        update({ model: e.target.value || undefined, reasoning: undefined })
-                      }
-                    >
-                      <option value="">Automatique</option>
-                      {step.model && !state.runtime.models.some((m) => m.id === step.model) && (
-                        <option value={step.model}>{step.model} · configuré</option>
-                      )}
-                      {state.runtime.models.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Limite de tentatives</span>
-                    <input
-                      required
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={step.maxAttempts}
-                      onChange={(e) => update({ maxAttempts: Number(e.target.value) })}
-                    />
-                  </label>
-                </div>
-                {Boolean(
-                  state.runtime.models.find((m) => m.id === step.model)?.reasoningEfforts?.length,
-                ) && (
-                  <label className="field">
-                    <span>Raisonnement de l’étape</span>
-                    <select
-                      value={step.reasoning ?? ''}
-                      onChange={(e) => update({ reasoning: e.target.value || undefined })}
-                    >
-                      <option value="">Automatique</option>
-                      {state.runtime.models
-                        .find((m) => m.id === step.model)
-                        ?.reasoningEfforts?.map((r) => (
-                          <option key={r}>{r}</option>
-                        ))}
-                    </select>
-                  </label>
-                )}
-                <label className="field">
-                  <span>Nom du fichier livrable</span>
-                  <input
-                    required
-                    value={step.artifact}
-                    onChange={(e) => update({ artifact: e.target.value })}
-                    placeholder="plan.md"
-                  />
-                </label>
+                <AgentModelOverrides step={step} state={state} onChange={update} />
                 <fieldset className="dependency-list">
                   <legend>Doit attendre la validation de</legend>
                   {workflow.steps
@@ -2185,25 +2078,6 @@ function WorkflowEditor({
                     <span className="muted">Une première étape n’a pas de dépendance.</span>
                   )}
                 </fieldset>
-                <fieldset className="skill-options">
-                  <legend>Skills de l’étape</legend>
-                  {state.skills.map((s) => (
-                    <label key={s.id}>
-                      <input
-                        type="checkbox"
-                        checked={step.skills.includes(s.id)}
-                        onChange={(e) =>
-                          update({
-                            skills: e.target.checked
-                              ? [...step.skills, s.id]
-                              : step.skills.filter((id) => id !== s.id),
-                          })
-                        }
-                      />
-                      {s.name}
-                    </label>
-                  ))}
-                </fieldset>
                 <label className="field">
                   <span>Participation de l’intervention</span>
                   <select
@@ -2217,27 +2091,6 @@ function WorkflowEditor({
                     Une intervention facultative met le pilote en pause pour choisir de l’exécuter
                     ou de la passer.
                   </small>
-                </label>
-                <label className="field">
-                  <span>Contexte initial du modèle</span>
-                  <textarea
-                    rows={3}
-                    value={step.initialContext ?? ''}
-                    onChange={(e) => update({ initialContext: e.target.value })}
-                  />
-                </label>
-                <McpPicker
-                  state={state}
-                  selected={step.mcpServerIds ?? []}
-                  onChange={(mcpServerIds) => update({ mcpServerIds })}
-                />
-                <label className="inline-check">
-                  <input
-                    type="checkbox"
-                    checked={step.askBeforeRun ?? false}
-                    onChange={(e) => update({ askBeforeRun: e.target.checked })}
-                  />
-                  <span>Demander un contexte humain avant exécution automatique</span>
                 </label>
               </>
             ) : (

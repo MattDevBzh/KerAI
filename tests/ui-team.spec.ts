@@ -68,7 +68,7 @@ async function hosted(page: Page) {
   await page.goto('/');
 }
 
-test('compose by avatar drag, duplicate an agent, change its role and validate', async ({
+test('compose by avatar drag and inherit the profile without duplicating its settings', async ({
   page,
 }) => {
   await hosted(page);
@@ -79,10 +79,14 @@ test('compose by avatar drag, duplicate an agent, change its role and validate',
   const first = (await agent.count()) ? agent : page.locator('.team-agent').first();
   await first.locator('.team-avatar-drag').dragTo(page.locator('.team-empty-target'));
   await expect(page.locator('.team-member')).toHaveCount(1);
-  await page.getByLabel('Rôle dans cette feature').fill('Cadrage personnalisé');
-  await page.getByLabel('Permissions de l’intervention').selectOption('workspace-write');
-  await page.getByLabel('Participation de Cadrage personnalisé').selectOption('optional');
-  await page.getByRole('button', { name: 'Dupliquer Cadrage personnalisé', exact: true }).click();
+  const name = await page.locator('.team-member dl dd').first().innerText();
+  await expect(page.getByLabel('Rôle dans cette feature')).toHaveCount(0);
+  await expect(page.getByLabel('Permissions de l’intervention')).toHaveCount(0);
+  await expect(page.getByLabel('Modèle de l’intervention')).toHaveValue('');
+  await expect(page.getByLabel('Niveau de réflexion')).toHaveValue('');
+  await expect(page.getByLabel('Paramètres hérités de l’agent')).toContainText('Skills');
+  await page.getByLabel(`Participation de ${name}`).selectOption('optional');
+  await page.getByRole('button', { name: `Dupliquer ${name}`, exact: true }).click();
   await expect(page.locator('.team-member')).toHaveCount(2);
   await page.getByRole('button', { name: 'Valider l’équipe' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -92,7 +96,10 @@ test('compose by avatar drag, duplicate an agent, change its role and validate',
   expect(saved.steps[0].id).not.toBe(saved.steps[1].id);
   expect(saved.steps[0].artifact).not.toBe(saved.steps[1].artifact);
   expect(saved.steps[1].dependsOn).toEqual([saved.steps[0].id]);
-  expect(saved.steps[0].policy).toBe('workspace-write');
+  expect(saved.steps[0].inheritAgent).toBe(true);
+  expect(saved.steps[0].skills).toEqual([]);
+  expect(saved.steps[0].model).toBeUndefined();
+  expect(saved.steps[0].reasoning).toBeUndefined();
   expect(saved.steps[0].optional).toBe(true);
   expect(saved.steps[1].optional).toBe(true);
   expect(demoState.workflows[0].steps[0].optional).toBeUndefined();

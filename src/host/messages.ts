@@ -244,6 +244,21 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('archiveFeature'), featureId: id, archived: z.boolean() }).strict(),
   z
     .object({
+      type: z.literal('statsStorage'),
+      requestId: id,
+      featureIds: z.array(id).min(1).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('manageSessions'),
+      requestId: id,
+      action: z.enum(['archive', 'restore', 'delete']),
+      featureIds: z.array(id).min(1),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('previewObservation'),
       featureId: id,
       requestId: id,
@@ -290,6 +305,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deleteFeature'), featureId: id }).strict(),
   z.object({ type: z.literal('openDiff'), path: short, featureId: id.optional() }).strict(),
   z.object({ type: z.literal('openFile'), path: short, featureId: id.optional() }).strict(),
+  z.object({ type: z.literal('openPersonalReviewReport'), sessionId: z.string().uuid() }).strict(),
   z
     .object({ type: z.literal('openFeatureWorkspace'), featureId: id, projectId: id.optional() })
     .strict(),
@@ -335,6 +351,15 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('exportFeature'), featureId: id }).strict(),
   z
     .object({
+      type: z.literal('exportAgentReport'),
+      ...step,
+      requestId: id,
+      attemptId: id,
+      revision: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('saveAgent'),
       requestId: z.string().min(1).max(100),
       options: z
@@ -359,6 +384,8 @@ export const messageSchema = z.discriminatedUnion('type', [
           instructions: text.min(1),
           tools: z.array(short).max(30),
           model: short.optional(),
+          reasoning: short.optional(),
+          policy: z.enum(['read-only', 'workspace-write', 'tests']).optional(),
           skills: z.array(id).max(50),
           nickname: z.string().max(80).optional(),
           avatar: avatarSchema.optional(),

@@ -35,6 +35,7 @@ export const workflowSchema = z
             name: z.string().trim().min(1),
             description: z.string(),
             agentId: id,
+            inheritAgent: z.boolean().optional(),
             policy: z.enum(['read-only', 'workspace-write', 'tests']),
             requiredQuality: qualityKindSchema.optional(),
             requiredDevOpsEvidence: z.boolean().optional(),
@@ -671,7 +672,7 @@ export class WorkflowEngine {
           JSON.stringify([...config.mcpServerIds].sort())) ||
       JSON.stringify([...step.skills].sort()) !== JSON.stringify([...config.skills].sort());
     const { maxAttempts, initialContext, mcpServerIds, askBeforeRun, ...selection } = config;
-    Object.assign(step, selection);
+    Object.assign(step, selection, step.inheritAgent ? { skills: [] } : {});
     if (maxAttempts !== undefined) step.maxAttempts = maxAttempts;
     if (initialContext !== undefined) step.initialContext = initialContext;
     if (mcpServerIds !== undefined) step.mcpServerIds = [...mcpServerIds];

@@ -1,5 +1,7 @@
 import type { ClientMessage, HostMessage } from '../src/shared/types';
 interface PersistedView {
+  statistics?: import('../src/shared/statistics').StatsFilters;
+  sessionList?: import('../src/shared/sessionList').SessionListFilters;
   navigationVersion?: number;
   view?: string;
   featureId?: string;
@@ -36,6 +38,12 @@ export const initialView = {
 };
 export function savedFeatureProposal() {
   return persistedView.featureProposal;
+}
+export function savedSessionList() {
+  return persistedView.sessionList;
+}
+export function savedStatistics() {
+  return persistedView.statistics;
 }
 export function celebrationEnabled() {
   return persistedView.celebrationEnabled !== false;
@@ -82,6 +90,10 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'checkpointComparison',
         'stepApprovalResult',
         'artifactSaveResult',
+        'agentReportExported',
+        'sessionBatchResult',
+        'sessionBatchProgress',
+        'statsStorageResult',
         'correctionResult',
         'featureFinalizationResult',
         'profileSaveResult',

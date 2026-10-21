@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { parse, parseDocument, stringify } from 'yaml';
 import { z } from 'zod';
 import type { AgentProfile, SkillInfo, Workflow } from '../shared/types';
+import { inheritTeamProfiles } from '../shared/agentInheritance';
 import { validateWorkflow } from './workflow';
 import { ROAST_LEVELS } from '../shared/roast';
 import { acceptedAvatarIds } from '../shared/avatars';
@@ -22,6 +23,8 @@ const agentMetadata = z.object({
   description: z.string(),
   tools: z.array(z.string()).default(['read', 'search', 'edit']),
   model: z.string().optional(),
+  reasoning: z.string().optional(),
+  policy: z.enum(['read-only', 'workspace-write', 'tests']).optional(),
   skills: z.array(identifier).default([]),
   nickname: z.string().max(80).optional(),
   avatar: avatarSchema.optional(),
@@ -252,12 +255,12 @@ export class AgentRegistry {
         workflows.delete(id);
         continue;
       }
-      const invalid = workflow.steps.find(
-        (s) => !agents.has(s.agentId) || s.skills.some((skill) => !skills.has(skill)),
-      );
+      const invalid = workflow.steps.find((s) => !agents.has(s.agentId));
       if (invalid) {
         notices.push(`${workflow.name} ignoré : agent ou skill inconnu pour ${invalid.id}.`);
         workflows.delete(id);
+      } else {
+        workflow.steps = inheritTeamProfiles(workflow.steps, [...agents.values()]);
       }
     }
     for (const agent of agents.values())
@@ -365,6 +368,8 @@ export class AgentRegistry {
       | 'instructions'
       | 'tools'
       | 'model'
+      | 'reasoning'
+      | 'policy'
       | 'skills'
       | 'nickname'
       | 'avatar'
@@ -391,7 +396,10 @@ export class AgentRegistry {
       const document = parseDocument(frontmatter, { uniqueKeys: true });
       for (const key of Object.keys(agentMetadata.shape)) {
         // Older editors cannot clear a tone they do not know about; the current UI sends off explicitly.
-        if ((key === 'roastLevel' || key === 'discussionAgent') && input[key] === undefined)
+        if (
+          ['roastLevel', 'discussionAgent', 'reasoning', 'policy'].includes(key) &&
+          input[key as keyof typeof input] === undefined
+        )
           continue;
         const value = meta[key as keyof typeof meta];
         if (value === undefined) document.delete(key);

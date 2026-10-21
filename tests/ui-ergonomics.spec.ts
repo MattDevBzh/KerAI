@@ -25,13 +25,12 @@ test('compact navigation has labels, traps focus, closes with Escape and restore
   ).toBeInViewport();
 });
 
-test('all sixteen screens reflow at 390px and navigation resets the page position', async ({
-  page,
-}) => {
+test('all screens reflow at 390px and navigation resets the page position', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?demo=1');
   for (const screen of [
     'Sessions',
+    'Stats',
     'Discussion',
     'Validation',
     'Consommation',
@@ -61,21 +60,19 @@ test('all sixteen screens reflow at 390px and navigation resets the page positio
 test('session totals filter, search can be reset and sorting is usable', async ({ page }) => {
   await page.goto('/?demo=1');
   await page.getByRole('button', { name: 'Afficher les sessions à votre tour' }).click();
-  await expect(page.locator('.session-card')).toHaveCount(1);
+  await expect(page.locator('.session-row')).toHaveCount(1);
   await expect(page.getByLabel('Filtrer les sessions')).toHaveValue('attention');
   await page.getByRole('button', { name: 'Réinitialiser les filtres' }).click();
   await page.getByLabel('Rechercher une session').fill('inexistant');
-  await expect(page.locator('.session-card')).toHaveCount(0);
+  await expect(page.locator('.session-row')).toHaveCount(0);
   await page.getByRole('button', { name: 'Effacer les filtres', exact: true }).click();
-  await expect(page.locator('.session-card')).toHaveCount(3);
+  await expect(page.locator('.session-row')).toHaveCount(3);
   await page.getByLabel('Trier les sessions').selectOption('title');
-  await expect(page.locator('.session-card h3').first()).toHaveText(
+  await expect(page.locator('.session-row h3').first()).toHaveText(
     'Navigation accessible au clavier',
   );
   await expect(page.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '5');
-  await page
-    .getByRole('button', { name: 'Explorer les parcours Choisir une méthode de travail' })
-    .click();
+  await navigate(page, 'Parcours');
   await expect(page.getByRole('button', { name: 'Nouveau parcours' })).toBeVisible();
 });
 

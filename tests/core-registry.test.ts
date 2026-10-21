@@ -16,6 +16,42 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 describe('agent, skill and workflow registry', () => {
+  it('persists agent defaults and reads old teams as profile references without stale skills', async () => {
+    const { registry, userPath } = await setup();
+    const original = (await registry.load()).agents.find((a) => a.id === 'fs-dev')!;
+    await registry.saveAgent({
+      ...original,
+      reasoning: 'high',
+      policy: 'read-only',
+      skills: ['ai-plan'],
+      model: 'profile-model',
+    });
+    await mkdir(join(userPath, 'feature-studio/workflows'), { recursive: true });
+    const old = (await registry.load()).workflows.find((w) => w.id === 'single')!;
+    old.steps[0].skills = ['removed-stale-skill'];
+    old.steps[0].model = 'team-model';
+    delete old.steps[0].inheritAgent;
+    await writeFile(
+      join(userPath, 'feature-studio/workflows/single.yaml'),
+      JSON.stringify({ ...old, source: undefined }),
+    );
+    const data = await registry.load();
+    expect(data.agents.find((a) => a.id === original.id)).toMatchObject({
+      reasoning: 'high',
+      policy: 'read-only',
+      skills: ['ai-plan'],
+      model: 'profile-model',
+    });
+    expect(data.workflows.find((w) => w.id === 'single')!.steps[0]).toMatchObject({
+      inheritAgent: true,
+      skills: [],
+      model: 'team-model',
+      policy: 'read-only',
+    });
+    const current = data.agents.find((a) => a.id === original.id)!;
+    await registry.saveAgent({ ...current, reasoning: '' });
+    expect((await registry.load()).agents.find((a) => a.id === original.id)?.reasoning).toBe('');
+  });
   it('retires all workflow versions across projects without destroying definitions, and permits recreation', async () => {
     const { root, registry, userPath } = await setup();
     const original = (await registry.load()).workflows.find(

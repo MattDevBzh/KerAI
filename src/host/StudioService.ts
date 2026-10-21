@@ -1,3 +1,4 @@
+import { pairSourceKey } from '../core/pairSource';
 import {
   createPair,
   pairMessage,
@@ -8,6 +9,7 @@ import {
 } from '../core/pair';
 import { pairPlan, nextPairBlock, type PairAction, type PairTurn } from '../shared/pair';
 import { pairActionSchema } from '../core/pairSchemas';
+import { inheritTeamProfiles, resolveAgentProfile } from '../shared/agentInheritance';
 import { EventEmitter } from 'node:events';
 import { basename, join } from 'node:path';
 import { open, readFile, realpath } from 'node:fs/promises';
@@ -40,6 +42,7 @@ import { WorkflowEngine, validateWorkflow } from '../core/workflow';
 import { assertTeamOrder, teamLocked } from '../shared/team';
 import { boundAnswers } from '../core/questions';
 import { gitInfo, ToolHost } from './ToolHost';
+import { PersonalReviewTools } from './PersonalReviewTools';
 import { runProcess, redact } from './process';
 import { emptyLaunch, previewContext, selectMemory } from '../core/context';
 import { defaultBudget, budgetBlockReason } from '../core/budgets';
@@ -393,7 +396,7 @@ export class StudioService extends EventEmitter {
               ...member,
               id: ids[index],
               skills: [],
-              model: agent.model,
+              inheritAgent: true,
               maxAttempts: 3,
               artifact: `${ids[index]}.md`,
               dependsOn: index ? [ids[index - 1]] : [],
@@ -416,10 +419,16 @@ export class StudioService extends EventEmitter {
           'La branche du dossier courant a changé. Rouvre la préparation du ticket avant de créer la session.',
         );
       // Do not publish a partially created feature while Git prepares its checkout.
-      const feature = new WorkflowEngine().createFeature(workflow, {
-        ...input,
-        branch: info.branch,
-      });
+      const feature = new WorkflowEngine().createFeature(
+        workflow
+          ? { ...workflow, steps: inheritTeamProfiles(workflow.steps, this.state.agents) }
+          : undefined,
+        {
+          ...input,
+          branch: info.branch,
+        },
+      );
+      feature.steps = inheritTeamProfiles(feature.steps, this.state.agents);
       feature.discussionId = input.discussionId;
       feature.creationRequestId = input.requestId;
       feature.ticketSource = input.ticketSource ? structuredClone(input.ticketSource) : undefined;
@@ -477,7 +486,8 @@ export class StudioService extends EventEmitter {
             steps,
           }).steps
         : [];
-      assertTeamOrder(validated);
+      const inherited = inheritTeamProfiles(validated, this.state.agents);
+      assertTeamOrder(inherited);
       const artifacts = new Set<string>();
       for (const step of validated) {
         if (!this.state.agents.some((agent) => agent.id === step.agentId))
@@ -488,7 +498,7 @@ export class StudioService extends EventEmitter {
         artifacts.add(artifact);
       }
       const previous = structuredClone(feature);
-      feature.steps = validated.map((step) => ({
+      feature.steps = inherited.map((step) => ({
         ...structuredClone(step),
         status: 'pending',
         attempts: [],
@@ -825,7 +835,14 @@ export class StudioService extends EventEmitter {
         ? new MultiProjectTools(input, callbacks, signal, this.projectInspector)
         : new ToolHost(input, callbacks, signal, this.devopsInspector);
     this.toolHosts.set(input.attempt.id, host);
-    return await host.createTools();
+    const personal = new PersonalReviewTools(
+      this.registry.userPath,
+      join(this.registry.defaultsPath, '..', 'dist', 'remote-review-worker.cjs'),
+      input,
+      callbacks,
+      signal,
+    );
+    return [...(await host.createTools()), ...personal.createTools()];
   }
   private prepareInput(
     featureId: string,
@@ -840,7 +857,8 @@ export class StudioService extends EventEmitter {
     const step = feature.steps.find((item) => item.id === stepId)!;
     const agent = this.state.agents.find((item) => item.id === step.agentId);
     if (!agent) throw new Error('Agent introuvable.');
-    const skillIds = [...new Set([...agent.skills, ...step.skills])];
+    Object.assign(step, resolveAgentProfile(step, agent));
+    const skillIds = step.skills;
     const selected = launchSchema.parse(
       launch ?? {
         ...emptyLaunch(),
@@ -1118,7 +1136,10 @@ export class StudioService extends EventEmitter {
     }
     input.attempt = structuredClone(attempt);
     input.preparedPrompt = preview?.prompt;
-    if (input.launch?.pair && !continued) attempt.pair = createPair(input);
+    if (input.launch?.pair && !continued) {
+      attempt.pair = createPair(input);
+      attempt.pair.sourceKey = pairSourceKey(feature, step);
+    }
     const pair = attempt.pair;
     const turn = pairContinuation ?? (pair ? { kind: 'planning' as const } : undefined);
     const usageBefore = structuredClone(attempt.usage);
@@ -1443,6 +1464,8 @@ export class StudioService extends EventEmitter {
       )
     )
       throw new Error('Le contexte de la feature a changé. Prépare une nouvelle tentative.');
+    if (pair.sourceKey && pair.sourceKey !== pairSourceKey(feature, step))
+      throw new Error('Les sources ont changé depuis le cadrage. Prépare une nouvelle tentative.');
     if (!isDeepStrictEqual(pair.snapshot.settings, this.state.settings))
       throw new Error(
         'Les réglages du projet ont changé depuis le cadrage. Prépare une nouvelle tentative avec les permissions actuelles.',
@@ -2264,6 +2287,14 @@ export class StudioService extends EventEmitter {
       ...(!archive.info.complete ? { error: archive.info.reason } : {}),
     };
   }
+  /** Read file sizes only: no journal hydration and no Copilot call. Shared checkpoints are excluded. */
+  async statisticsStorage(featureId: string): Promise<number> {
+    const feature = this.engine.getFeature(featureId);
+    let bytes = await privateSize(this.store.rootPath, sessionDirectory(featureId));
+    for (const id of new Set(deletionRecord(feature).attempts))
+      bytes += await privateSize(this.store.rootPath, `existing-changes/${id}`);
+    return bytes;
+  }
   async sessionStorage(featureId: string): Promise<SessionStorageInfo> {
     const feature = this.engine.getFeature(featureId);
     let traces: import('../shared/observation').TraceArchiveInfo;
@@ -2324,6 +2355,19 @@ export class StudioService extends EventEmitter {
       this.archives.delete(record.featureId);
       await this.adapter?.deleteSessions?.(record.sessionIds);
       await finishDeletion(this.store.rootPath, record.featureId);
+    }
+  }
+  async archiveFeature(featureId: string, archived: boolean): Promise<void> {
+    this.assertConfigurable(featureId);
+    const feature = this.engine.getFeature(featureId);
+    const previous = { ...structuredClone(feature), archived: feature.archived };
+    this.engine.archiveFeature(featureId, archived);
+    try {
+      await this.persist();
+    } catch (error) {
+      Object.assign(feature, previous);
+      this.publish();
+      throw error;
     }
   }
   async deleteFeature(featureId: string): Promise<number> {

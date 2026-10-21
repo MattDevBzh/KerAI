@@ -196,7 +196,7 @@ describe('complete pair execution', () => {
     await expect(f.action('solo')).rejects.toThrow('Valide');
     const approved = await f.action('approve-plan');
     await f.idle();
-    expect(pair.phase).toBe('checkpoint');
+    expect(pair.phase, pair.error).toBe('checkpoint');
     expectPilotPaused();
     expect(f.inputs).toHaveLength(2);
     expect(await readFile(join(f.workspace, 'src/b1.ts'), 'utf8')).toContain('b1');
@@ -472,5 +472,87 @@ describe('complete pair execution', () => {
     expect(recovered.pair).toMatchObject({ busy: false, mode: 'pair', phase: 'interrupted' });
     expect(recovered.pair!.messages.at(-1)?.status).toBe('interrupted');
     expect(f.inputs).toHaveLength(1);
+  });
+  it('refuses changed source configuration before consuming another call', async () => {
+    const f = await fixture();
+    await f.start();
+    f.feature.description = 'Mission modifiée hors du cadrage';
+    await f.action('approve-plan');
+    await f.idle();
+    expect(f.step.attempts[0].pair?.error).toContain('sources ont changé');
+    expect(f.inputs).toHaveLength(1);
+  });
+
+  it('counts streamed usage once on failure and retains the cost during explicit recovery', async () => {
+    const f = await fixture(1);
+    await f.start();
+    f.run(async (_input, callbacks) => {
+      callbacks.onUsage?.({
+        source: 'measured',
+        inputTokens: 5,
+        outputTokens: 2,
+        cost: 100,
+        unit: 'nano-AIU',
+      });
+      callbacks.onUsage?.({
+        source: 'measured',
+        inputTokens: 9,
+        outputTokens: 3,
+        cost: 200,
+        unit: 'nano-AIU',
+      });
+      throw new Error('Échec du bloc');
+    });
+    await f.action('approve-plan');
+    await f.idle();
+    const attempt = f.step.attempts[0];
+    expect(attempt.usage).toMatchObject({ inputTokens: 19, cost: 300 });
+    f.run(async () =>
+      result(
+        'Terminé.\n```feature-studio-pair-result\n{"blockId":"b1","outcome":"completed","decisions":[]}\n```',
+      ),
+    );
+    await f.action('resume');
+    await f.idle();
+    expect(attempt.usage).toMatchObject({ inputTokens: 29, cost: 400 });
+    expect(attempt.pair?.phase).toBe('review');
+  });
+
+  it('preserves a later human edit between blocks and keeps final questions unresolved', async () => {
+    const f = await fixture(2);
+    await f.start();
+    await f.action('approve-plan');
+    await f.idle();
+    await writeFile(join(f.workspace, 'src/b1.ts'), 'Human change\n');
+    f.run(async (input, callbacks, signal) => {
+      const tools = await f.service.getTools(input, callbacks, signal);
+      const invoke = async (name: string, args: unknown) => {
+        const tool = tools.find((t) => t.name === name)!;
+        return tool.handler!(args, {
+          sessionId: 'test',
+          toolCallId: randomUUID(),
+          toolName: name,
+          arguments: args,
+        });
+      };
+      await invoke('studio_read_file', { path: 'src/b1.ts' });
+      expect(
+        await invoke('studio_write_file', { path: 'src/b1.ts', content: 'Overwrite' }),
+      ).toMatchObject({ resultType: 'failure' });
+      return {
+        ...result(
+          'Clarification.\n```feature-studio-pair-result\n{"blockId":"b2","outcome":"completed","decisions":[]}\n```',
+        ),
+        questions: [{ id: 'target', text: 'Quel environnement ?' }],
+      };
+    });
+    await f.action('solo');
+    await f.idle();
+    const attempt = f.step.attempts[0];
+    expect(await readFile(join(f.workspace, 'src/b1.ts'), 'utf8')).toBe('Human change\n');
+    expect(f.step.status).toBe('waiting_input');
+    expect(attempt.pair?.results).toHaveLength(1);
+    expect(attempt.questions).toEqual([{ id: 'target', text: 'Quel environnement ?' }]);
+    expect(approvalBlockers(f.feature, f.step, 'human').length).toBeGreaterThan(0);
   });
 });

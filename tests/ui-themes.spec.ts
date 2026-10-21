@@ -430,7 +430,7 @@ for (const palette of palettes) {
       );
       await page.screenshot({ path: `${directory}/${palette.id}-${width}-settings.png` });
       await navigate(page, 'Sessions');
-      await expect(page.locator('.dashboard-page')).toBeVisible();
+      await expect(page.getByRole('table', { name: 'Sessions', exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         width,
       );

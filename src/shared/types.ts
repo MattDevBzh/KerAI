@@ -43,6 +43,8 @@ export type FeatureStatus =
   | 'awaiting_final_validation'
   | 'completed';
 export interface WorkflowStep {
+  /** Resolve the agent profile at launch; only model/reasoning are member overrides. */
+  inheritAgent?: boolean;
   optional?: boolean;
   requiredDevOpsEvidence?: boolean;
   requiredQuality?: import('./quality').QualityKind;
@@ -208,6 +210,8 @@ export interface AgentProfile {
   instructions: string;
   tools: string[];
   model?: string;
+  reasoning?: string;
+  policy?: PolicyProfile;
   source: 'bundled' | 'user' | 'workspace';
   path: string;
   skills: string[];
@@ -299,6 +303,7 @@ export interface StudioState {
 }
 export type ClientMessage =
   | import('./pair').PairAction
+  | import('./statistics').StatsClientMessage
   | { type: 'refreshSecretThemes' }
   | { type: 'unlockDragonBall'; sequence: readonly string[]; requestId: string }
   | import('./dashboard').DashboardClientMessage
@@ -410,8 +415,15 @@ export type ClientMessage =
       askBeforeRun?: boolean;
     }
   | { type: 'archiveFeature'; featureId: string; archived: boolean }
+  | {
+      type: 'manageSessions';
+      requestId: string;
+      action: import('./sessionList').SessionBatchAction;
+      featureIds: string[];
+    }
   | { type: 'openDiff'; path: string; featureId?: string }
   | { type: 'openFile'; path: string; featureId?: string }
+  | { type: 'openPersonalReviewReport'; sessionId: string }
   | { type: 'openFeatureWorkspace'; featureId: string; projectId?: string }
   | { type: 'createCheckpoint'; featureId: string; label: string; projectId?: string }
   | {
@@ -437,6 +449,14 @@ export type ClientMessage =
     }
   | { type: 'exportFeature'; featureId: string }
   | {
+      type: 'exportAgentReport';
+      requestId: string;
+      featureId: string;
+      stepId: string;
+      attemptId: string;
+      revision: number;
+    }
+  | {
       type: 'saveAgent';
       requestId: string;
       options: import('./profiles').ProfileSaveOptions;
@@ -447,6 +467,8 @@ export type ClientMessage =
         instructions: string;
         tools: string[];
         model?: string;
+        reasoning?: string;
+        policy?: PolicyProfile;
         skills: string[];
         nickname?: string;
         avatar?: string;
@@ -487,6 +509,7 @@ export type HostMessage =
       stepId: string;
       error?: string;
     }
+  | import('./statistics').StatsHostMessage
   | { type: 'secretThemeState'; dragonBallUnlocked: boolean; requestId?: string; error?: string }
   | { type: 'optionalStepResult'; requestId: string; error?: string }
   | import('./dashboard').DashboardHostMessage
@@ -536,6 +559,9 @@ export type HostMessage =
   | { type: 'state'; state: StudioState }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
+  | { type: 'agentReportExported'; requestId: string; cancelled?: boolean; error?: string }
+  | ({ type: 'sessionBatchResult' } & import('./sessionList').SessionBatchResult)
+  | { type: 'sessionBatchProgress'; requestId: string; completed: number; total: number }
   | { type: 'runPreview'; requestId: string; preview: RunPreview }
   | {
       type: 'stepApprovalResult';

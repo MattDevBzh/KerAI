@@ -1,3 +1,4 @@
+import { agentPolicy } from './agentInheritance';
 import type { AgentProfile, Feature, StudioState, WorkflowStep } from './types';
 
 export function teamLocked(feature: Feature): boolean {
@@ -60,16 +61,15 @@ export function instantiateTeam(
 }
 
 export function agentStep(agent: AgentProfile): WorkflowStep {
-  // A solo profile has no workflow permission policy. Start with read access; the user chooses
-  // writing or tests explicitly in the intervention settings before validating the team.
+  // Empty overrides keep the live profile as the source of truth.
   return instantiateTeam([
     {
       id: agent.id,
       name: agent.name,
       description: agent.description,
       agentId: agent.id,
-      policy: 'read-only',
-      model: agent.model,
+      inheritAgent: true,
+      policy: agentPolicy(agent),
       skills: [],
       maxAttempts: 3,
       artifact: 'COMPTE_RENDU.md',
@@ -163,7 +163,7 @@ export function effectiveTeamModel(step: WorkflowStep, feature: Feature, state: 
   const agent = state.agents.find((item) => item.id === step.agentId);
   const model = profile?.model || step.model || agent?.model || state.settings.defaultModel;
   const info = state.runtime.models.find((item) => item.id === model);
-  const reasoning = profile ? profile.reasoning : step.reasoning;
+  const reasoning = profile ? profile.reasoning : step.reasoning || agent?.reasoning;
   return {
     model: info?.name || model || 'Automatique',
     reasoning:

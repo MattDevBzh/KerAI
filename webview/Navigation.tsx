@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   BarChart3,
+  ChartNoAxesCombined,
   BookOpen,
   Bot,
   BrainCircuit,
@@ -24,6 +25,7 @@ import { searchText } from './Ergonomics';
 export const navigationScreens = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'sessions', label: 'Sessions', icon: PanelsTopLeft },
+  { id: 'stats', label: 'Stats', icon: ChartNoAxesCombined },
   { id: 'discussion', label: 'Discussion', icon: MessageSquare },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
   { id: 'workflows', label: 'Parcours', icon: Workflow },
@@ -121,7 +123,7 @@ export function StudioNavigation({
         )
       ) : (
         <>
-          {(['dashboard', 'sessions', 'discussion', 'validation'] as const).map((id) =>
+          {(['dashboard', 'sessions', 'stats', 'discussion', 'validation'] as const).map((id) =>
             renderScreen(id),
           )}
           <div className="nav-groups">

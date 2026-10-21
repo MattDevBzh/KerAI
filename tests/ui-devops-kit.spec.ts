@@ -75,7 +75,7 @@ async function hosted(page: Page, value: StudioState) {
     });
   }, value);
   await page.goto('/');
-  await expect(page.locator('.session-card').filter({ hasText: 'Test DevOps' })).toBeVisible();
+  await expect(page.locator('.session-row').filter({ hasText: 'Test DevOps' })).toBeVisible();
 }
 const messages = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'kitMessages') as ClientMessage[]);
@@ -83,7 +83,9 @@ const messages = (page: Page) =>
 test('kit DevOps : parcours fourni, duplication et contrat de preuve conservé', async ({
   page,
 }) => {
-  await hosted(page, await state());
+  const data = await state();
+  const validator = data.agents.find((agent) => agent.id === 'fs-devops-validate')!;
+  await hosted(page, data);
   await navigate(page, 'Parcours');
   const card = page
     .locator('.workflow-library-card')
@@ -92,13 +94,17 @@ test('kit DevOps : parcours fourni, duplication et contrat de preuve conservé',
   await card.getByRole('button', { name: 'Dupliquer', exact: true }).click();
   await page.getByLabel('Nom du parcours').fill('Mon DevOps');
   await page
-    .getByRole('button', { name: 'Configurer l’étape Validation du test', exact: true })
+    .getByRole('button', { name: `Configurer l’étape ${validator.name}`, exact: true })
     .click();
-  await expect(page.getByLabel('Exiger une preuve du test DevOps manuel')).toBeChecked();
-  await expect(page.getByLabel('Exiger une preuve du test DevOps manuel')).toBeDisabled();
+  await expect(page.getByLabel('Exiger une preuve du test DevOps manuel')).toHaveCount(0);
+  await expect(page.getByLabel('Paramètres hérités de l’agent')).toContainText(
+    validator.description,
+  );
   await page.getByRole('button', { name: 'Enregistrer le parcours' }).click();
   const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveWorkflow' }>;
   expect(saved.workflow.steps.at(-1)).toMatchObject({
+    agentId: validator.id,
+    inheritAgent: true,
     requiredDevOpsEvidence: true,
     askBeforeRun: true,
   });
@@ -108,7 +114,7 @@ test('kit DevOps : références manuelles requises, aperçu invalidé après cor
   page,
 }) => {
   await hosted(page, await state());
-  await page.locator('.session-card').filter({ hasText: 'Test DevOps' }).click();
+  await page.getByRole('button', { name: 'Ouvrir Test DevOps', exact: true }).click();
   await page.getByRole('button', { name: 'Exécuter cette étape', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Préparer l’aperçu' })).toBeDisabled();
   await page.getByLabel('ID du pipeline de test').fill(String(target.pipelineId));

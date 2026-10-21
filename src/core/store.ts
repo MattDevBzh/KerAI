@@ -1,4 +1,5 @@
 import { createPairStateSchema } from './pairSchemas';
+import { migrateLegacyPairs } from './pairMigration';
 import { ticketSourceSnapshotSchema } from './devopsTicketSchemas';
 import { mkdir, readFile, rename, open, unlink, readdir } from 'node:fs/promises';
 import {
@@ -494,7 +495,10 @@ export class Store {
         );
         if (digest(encoded) !== entry.hash)
           throw new Error('Session altérée : empreinte invalide.');
-        const item = feature.parse(JSON.parse(encoded)) as Feature;
+        const decoded = JSON.parse(encoded);
+        const item = feature.parse(
+          version < 7 ? await migrateLegacyPairs(decoded, this.rootPath) : decoded,
+        ) as Feature;
         if (item.id !== entry.id) throw new Error('Identité de session incohérente.');
         features.push(item);
       }

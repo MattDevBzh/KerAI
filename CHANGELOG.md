@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.15.0 — Non publié · Mode pair
+## 1.21.0 — 2026-10-21 · Mode pair complet
 
 - Lancement d’une étape en pair avec aperçu du contexte, rythme et niveau d’explication indépendants, organisation proposée et validation humaine explicite.
 - Espace de travail avec conversation, contexte consultable, avancement par blocs, changements d’organisation et corrections avant validation du résultat.
@@ -9,6 +9,57 @@
 - Vérification des versions, des permissions, du budget et du contexte avant reprise ; les propositions de l’agent ne peuvent pas valider l’organisation ou l’étape.
 - Cumul de consommation entre les appels, budget comptant chaque appel du binôme, export des échanges et exclusion du temps de réponse humain du délai d’exécution.
 - Stockage version 7 avec migration des anciennes sessions et conservation des travaux interrompus.
+
+## 1.20.0 — 2026-10-20
+
+- **Passage de contexte dans le QG vivant** : quatre avions en papier partent du personnage de l’étape n−1 vers celui qui démarre. Les départs sont décalés sur une animation totale de cinq secondes.
+- Déclenchement au démarrage réel d’une nouvelle tentative, classique ou en pair, à partir de la deuxième étape. Le lancement et les interactions restent immédiats ; les réponses, reprises de lots et réouvertures ne rejouent pas l’effet.
+- Trajectoires adaptées aux postes, au retour à la ligne et au zoom. Réduction des animations respectée avec une indication textuelle, couleurs forcées prises en charge et arrêt lorsque la vue est masquée.
+
+## 1.19.0 — 2026-10-20
+
+- **Mode pair** dans les étapes : contexte confirmé, conversation dédiée et organisation proposée avant tout accès aux outils du projet.
+- Rythmes **Guidé**, **Par lots** et **Autonome après cadrage**. Les messages ajustent le plan ; un bouton autorise le prochain lot. Les pauses libèrent le projet.
+- **Continuer en solo** depuis une pause ou pendant un tour : relais après la réponse en cours, avec les décisions et le travail existants. Quitter la page conserve le rythme convenu.
+- Contexte et profil figés, conversation persistante, reprise explicite après interruption, contrôles de révision et protection des modifications humaines entre les lots.
+- Une seule tentative pour toute la conversation ; crédits cumulés sans double comptage. Chaque tour compte dans le budget de runs. Validation du livrable par les contrôles existants, puis retour à la session.
+- Cette livraison inclut également la page **Stats** introduite dans les sources 1.18.0.
+
+## 1.18.0 — 2026-10-20
+
+- **Stats** : nouvelle page dans la navigation principale avec filtres par projet, parcours et période, dates personnalisées inclusives et regroupement par jour, semaine ou mois. Les filtres restent mémorisés au retour d’une session.
+- Huit indicateurs de synthèse : sessions du périmètre, créations, finalisations datées, tentatives, crédits observés, durée moyenne, étapes et tentatives par session. Les archives sont incluses par défaut.
+- Graphique d’activité avec tableau accessible, podium des agents et avatars, répartition des modèles par tentatives ou crédits, carte des jours/heures, jours actifs et séries de jours consécutifs.
+- Relances, échecs, annulations, interruptions, volumes moyens des contextes et livrables, répartition par projet/parcours/état, accès aux sessions les plus actives.
+- Mesure du stockage privé à la demande par lots de 50, sans lecture des journaux ni appel Copilot. Moyenne calculée sur les seules mesures réussies ; réponses obsolètes ignorées après changement de périmètre.
+- Calendrier local respectant les changements d’heure ; sessions multi-projets non doublées dans les totaux ; crédits absents, partiels et zéros mesurés distincts. Les limites et règles d’attribution sont expliquées dans la page.
+
+## 1.17.0 — 2026-10-20
+
+- **Sessions** devient une liste compacte sur toute la largeur, avec projet, état, progression et actions par ligne. Le bandeau et la colonne décorative laissent la place aux sessions ; les petites fenêtres conservent les informations et les actions.
+- Filtre par projet, recherche dans les noms de projets et tri mémorisés au retour sur la liste. Les sessions multi-projets apparaissent dans chacun des filtres concernés ; les anciens enregistrements retrouvent le projet de leur stockage.
+- Sélection au clic ou par case, plage inclusive avec **Maj+clic**, sélection de toutes les lignes affichées et désélection. Modifier un filtre ou le tri efface la sélection ; les lignes cachées ne participent pas à une plage.
+- Archivage, restauration et suppression depuis la liste, individuellement ou en masse. Une seule confirmation native pour supprimer le lot, progression et bilan détaillé en cas de résultat partiel. Les fichiers sources, branches et worktrees restent conservés.
+
+## 1.16.1 — 2026-10-19
+
+- Ajoute **Télécharger .md** dans le Livrable d’une étape : enregistrement du Markdown intégral dans le fichier choisi, avec un nom proposé pour la feature, l’étape, la tentative et la version.
+- L’export suit la tentative affichée, y compris une ancienne tentative. Les brouillons non enregistrés et les tentatives encore en cours doivent être terminés avant le téléchargement. Une version devenue obsolète est signalée.
+- Aucun appel d’agent ni crédit consommé pour cet export. Publication sans suites de tests à la demande de l’utilisateur ; compilation et intégrité de l’archive contrôlées.
+
+## 1.16.0 — 2026-10-19
+
+- Les agents ajoutés seuls et les membres d’équipes reprennent leur profil courant au lancement : instructions, skills, outils, permissions, contexte par défaut et ton. Les anciennes copies de skills dans les modèles d’équipe ne masquent plus le profil.
+- Dans la composition et l’édition d’une équipe, seuls le modèle et le niveau de réflexion du membre peuvent être remplacés. Les autres paramètres sont affichés en lecture seule et se modifient dans Agents. Les champs « Hériter » restent vides dans l’équipe ; chacun reprend indépendamment la valeur courante du profil.
+- Ajout de la réflexion et des permissions par défaut dans l’éditeur d’agent. Les récapitulatifs et les lancements utilisent les mêmes valeurs ; modifier un profil après un aperçu nécessite de recalculer cet aperçu.
+- Les modèles d’équipes existants sont adaptés à leur lecture. Les sessions déjà enregistrées conservent leur définition jusqu’à une modification explicite de leur équipe ; aucune tentative passée n’est réécrite.
+
+## 1.15.0 — 2026-10-19
+
+- Relecture distante Git : outils dédiés pour récupérer deux branches dans un cache utilisateur bare, figer leurs commits, parcourir les diffs et lire le contexte sans checkout.
+- Lecture des documents personnels d'agents, skills et templates, avec pagination, sans ouvrir l'accès aux secrets ou à un shell.
+- Écriture et ouverture des rapports personnels depuis un agent en lecture seule, sans modifier le projet. Les capacités distantes sont activées explicitement dans le profil de l'agent.
+- Les sessions utilisent le moteur fourni par l'extension ; aucun script personnel n'est exécuté. La méthode de relecture et le template restent ceux du profil personnel existant.
 
 ## 1.14.0 — 2026-10-19
 

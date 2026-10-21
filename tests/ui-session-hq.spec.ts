@@ -1,14 +1,76 @@
+import { createPair } from '../src/core/pair';
+import { defaultPairPreferences } from '../src/shared/pair';
+import { emptyLaunch } from '../src/core/context';
 import { test, expect, type Page } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { demoState } from '../webview/demo';
 import { avatarOptions } from '../src/shared/avatars';
 import { featureStateKey } from '../src/shared/collaboration';
-import type { ClientMessage, StudioState } from '../src/shared/types';
+import type { Attempt, ClientMessage, StudioState } from '../src/shared/types';
 
 const toggle = (page: Page) => page.getByRole('checkbox', { name: 'Afficher le QG vivant' });
 const qg = (page: Page) => page.getByRole('navigation', { name: 'QG de la session' });
 const detail = (page: Page) => page.locator('.workbench-heading h2');
 const messages = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'hqMessages') as ClientMessage[]);
+async function startStep(page: Page, index = 2, pair = false) {
+  await page.evaluate(
+    ({ index, pair, pairState }) => {
+      const state = Reflect.get(window, 'hqState') as StudioState;
+      const feature = state.features[0],
+        step = feature.steps[index];
+      for (const previous of feature.steps.slice(0, index)) {
+        if (previous.status === 'skipped') continue;
+        previous.status = 'approved';
+        const attempt = previous.attempts.at(-1);
+        if (attempt) attempt.status = 'approved';
+      }
+      const attempt: Attempt = {
+        id: `flight-${index}-${step.attempts.length}`,
+        startedAt: new Date().toISOString(),
+        status: 'running',
+        feedback: '',
+        logs: [],
+        questions: [],
+        answers: {},
+        changedFiles: [],
+      };
+      if (pair)
+        attempt.pair = {
+          ...pairState,
+          messages: [
+            {
+              id: 'intro',
+              status: 'complete',
+              at: attempt.startedAt,
+              role: 'assistant',
+              content: 'Nous travaillons ensemble. Préparons notre organisation.',
+            },
+          ],
+        };
+      step.attempts.push(attempt);
+      step.status = feature.status = 'running';
+      feature.activeStepId = step.id;
+      window.postMessage({ type: 'state', state }, '*');
+    },
+    {
+      index,
+      pair,
+      pairState: createPair({
+        feature: demoState.features[0],
+        step: demoState.features[0].steps[index],
+        attempt: demoState.features[0].steps[0].attempts[0],
+        agent: demoState.agents[0],
+        skills: [],
+        workspacePath: demoState.workspace.path,
+        settings: demoState.settings,
+        launch: { ...emptyLaunch(), pair: defaultPairPreferences },
+        preparedPrompt: 'Contexte confirmé',
+      }),
+    },
+  );
+}
 async function hosted(
   page: Page,
   { enabled = true, state = structuredClone(demoState), theme = 'jardin-sombre' } = {},
@@ -148,7 +210,9 @@ test('la case remplace uniquement la bande, conserve le détail et persiste entr
   await expect(qg(page)).toBeVisible();
   await expect(detail(page)).toHaveText('Développement');
   await page.getByRole('button', { name: 'Vos sessions', exact: true }).click();
-  await page.getByRole('heading', { name: 'Un premier pas plus accueillant', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Ouvrir Un premier pas plus accueillant', exact: true })
+    .click();
   await expect(qg(page)).toBeVisible();
   expect(
     (await messages(page)).some((m) =>
@@ -342,3 +406,179 @@ test('la réduction des animations et le contraste élevé restent prioritaires'
   await expect(station).toHaveAttribute('aria-current', 'step');
   await expect(detail(page)).toHaveText('Tests');
 });
+
+test('quatre avions accompagnent un vrai lancement pendant cinq secondes sans bloquer le QG', async ({
+  page,
+}) => {
+  await hosted(page);
+  await qg(page)
+    .getByRole('button', { name: /Étape 3/ })
+    .click();
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await startStep(page);
+  const transfer = qg(page).locator('.hq-context-transfer');
+  await expect(transfer).toHaveAttribute('data-from-step', 'design');
+  await expect(transfer).toHaveAttribute('data-to-step', 'build');
+  await expect(transfer.locator('.hq-paper-plane')).toHaveCount(4);
+  await expect(qg(page).getByRole('button', { name: /Étape 3/ })).toContainText('Au travail');
+  // Selection still works during the transfer, and streaming does not reset its deadline.
+  await qg(page)
+    .getByRole('button', { name: /Étape 4/ })
+    .click();
+  await expect(detail(page)).toHaveText('Tests');
+  await page.clock.fastForward(3000);
+  await page.evaluate(() => {
+    const state = Reflect.get(window, 'hqState') as StudioState;
+    state.features[0].steps[2].attempts.at(-1)!.logs.push({
+      id: 'stream',
+      at: new Date().toISOString(),
+      kind: 'message',
+      message: 'Je commence.',
+    });
+    window.postMessage({ type: 'state', state }, '*');
+  });
+  await expect(transfer).toBeVisible();
+  await page.clock.fastForward(1999);
+  await expect(transfer).toBeVisible();
+  await page.clock.fastForward(1);
+  await expect(transfer).toHaveCount(0);
+  expect((await messages(page)).some((m) => ['runStep', 'approveStep'].includes(m.type))).toBe(
+    false,
+  );
+});
+
+test('la première étape, une ouverture tardive et une reprise du même tour ne rejouent pas le transfert', async ({
+  page,
+}) => {
+  await hosted(page, { enabled: false });
+  await startStep(page);
+  await toggle(page).check();
+  await expect(qg(page).locator('.hq-context-transfer')).toHaveCount(0);
+  await page.evaluate(() => {
+    const state = Reflect.get(window, 'hqState') as StudioState;
+    state.features[0].steps[2].status = 'waiting_input';
+    window.postMessage({ type: 'state', state }, '*');
+  });
+  await expect(qg(page).getByRole('button', { name: /Étape 3/ })).toContainText(
+    'Attend ta réponse',
+  );
+  await page.evaluate(() => {
+    const state = Reflect.get(window, 'hqState') as StudioState;
+    state.features[0].steps[2].status = 'running';
+    window.postMessage({ type: 'state', state }, '*');
+  });
+  await expect(qg(page).getByRole('button', { name: /Étape 3/ })).toContainText('Au travail');
+  await expect(qg(page).locator('.hq-context-transfer')).toHaveCount(0);
+  await startStep(page, 0);
+  await expect(qg(page).getByRole('button', { name: /Étape 1/ })).toContainText('Au travail');
+  await expect(qg(page).locator('.hq-context-transfer')).toHaveCount(0);
+  await startStep(page);
+  await expect(qg(page).locator('.hq-paper-plane')).toHaveCount(4);
+  await page.reload();
+  await expect(qg(page)).toBeVisible();
+  await expect(qg(page).locator('.hq-context-transfer')).toHaveCount(0);
+});
+
+test('un lancement en pair conserve les avions et la conversation accessible', async ({ page }) => {
+  await hosted(page);
+  await qg(page)
+    .getByRole('button', { name: /Étape 3/ })
+    .click();
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await startStep(page, 2, true);
+  await page.getByRole('button', { name: 'Ouvrir le travail en pair', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Échanges du binôme' })).toBeVisible();
+  await expect(qg(page).locator('.hq-paper-plane')).toHaveCount(4);
+  await expect(page.getByRole('log', { name: 'Historique des échanges' })).toContainText(
+    'Nous travaillons ensemble',
+  );
+  await page.clock.fastForward(5000);
+  await expect(qg(page).locator('.hq-context-transfer')).toHaveCount(0);
+});
+
+test('en mouvement réduit le passage est annoncé sans avions animés', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'active' });
+  await hosted(page);
+  await startStep(page);
+  await expect(qg(page).getByRole('status')).toContainText('Passage de contexte');
+  await expect(qg(page).locator('.hq-paper-plane:visible')).toHaveCount(0);
+  await expect(qg(page).locator('.hq-flight-trail')).not.toBeVisible();
+  await expect(qg(page).locator('.hq-transfer-caption')).toHaveCSS('animation-name', 'none');
+});
+
+for (const width of [1440, 390])
+  test(`les trajectoires suivent les personnages à ${width}px et après un changement de zoom`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 1100 });
+    await hosted(page);
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
+    await startStep(page);
+    const planes = qg(page).locator('.hq-paper-plane');
+    await expect(planes).toHaveCount(4);
+    await page.evaluate(() => {
+      document.querySelectorAll('.hq-paper-plane, .hq-transfer-caption').forEach((element) => {
+        for (const animation of element.getAnimations()) {
+          animation.pause();
+          animation.currentTime = 2200;
+        }
+      });
+    });
+    for (const plane of await planes.all()) {
+      await expect(plane).toHaveCSS('opacity', '1');
+      await expect(plane).toHaveCSS('animation-duration', '3.35s');
+    }
+    const checkEndpoints = async () => {
+      const error = await qg(page).evaluate((nav) => {
+        const room = nav.querySelector('.hq-room')! as HTMLElement;
+        const trail = nav.querySelector('.hq-flight-trail path')! as SVGPathElement;
+        const bounds = room.getBoundingClientRect();
+        const stations = nav.querySelectorAll('.hq-portrait');
+        return [1, 2].map((index, endpoint) => {
+          const avatar = stations[index].getBoundingClientRect();
+          const point = trail.getPointAtLength(endpoint ? trail.getTotalLength() : 0);
+          return Math.hypot(
+            bounds.left +
+              (point.x * bounds.width) / room.clientWidth -
+              (avatar.left + avatar.width / 2),
+            bounds.top +
+              (point.y * bounds.height) / room.clientHeight -
+              (avatar.top + avatar.height * 0.48),
+          );
+        });
+      });
+      for (const distance of error) expect(distance).toBeLessThan(2);
+    };
+    await checkEndpoints();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await expect
+      .poll(() =>
+        qg(page)
+          .locator('img')
+          .evaluateAll((images) =>
+            images.every((img) => (img as HTMLImageElement).naturalWidth > 0),
+          ),
+      )
+      .toBe(true);
+    const screenshot =
+      width === 1440
+        ? resolve('design/proposals/2026-10-20-qg-context-transfer/qg-paper-planes.png')
+        : testInfo.outputPath('qg-paper-planes-narrow.png');
+    if (width === 1440)
+      await mkdir(resolve('design/proposals/2026-10-20-qg-context-transfer'), { recursive: true });
+    await qg(page).screenshot({ path: screenshot });
+    await page.evaluate(() => window.postMessage({ type: 'zoomState', zoom: 150 }, '*'));
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue('--studio-zoom'),
+        ),
+      )
+      .toBe('1.5');
+    await checkEndpoints();
+  });

@@ -279,10 +279,10 @@ test('a discussion becomes an editable feature proposal and failed creation keep
   await page
     .getByLabel('Critères de réussite', { exact: false })
     .fill('Entrée ouvre le résultat\nÉchap ferme la recherche');
-  await page
-    .getByRole('textbox', { name: 'Mission 1', exact: true })
-    .fill('Vérifier l’accessibilité clavier');
-  await page.getByRole('combobox', { name: 'Autorisations 2', exact: true }).selectOption('tests');
+  await expect(page.getByRole('textbox', { name: 'Mission 1', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Autorisations 2', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Modèle de l’intervention').first()).toHaveValue('');
+  await expect(page.getByLabel('Niveau de réflexion').first()).toHaveValue('');
   await page.getByRole('button', { name: 'Monter l’intervention 2' }).click();
   await page.screenshot({ path: testInfo.outputPath('discussion-feature-proposal.png') });
   await page.getByRole('button', { name: 'Créer la feature', exact: true }).click();
@@ -291,10 +291,7 @@ test('a discussion becomes an editable feature proposal and failed creation keep
     title: 'Recherche validée par Matt',
     discussionId: fixture.discussionId,
     criteria: ['Entrée ouvre le résultat', 'Échap ferme la recherche'],
-    team: [
-      { name: 'Développement', policy: 'tests' },
-      { name: 'Cadrage', description: 'Vérifier l’accessibilité clavier' },
-    ],
+    team: [{ name: 'Développement' }, { name: 'Cadrage' }],
   });
   expect(
     (await messages(page)).some(

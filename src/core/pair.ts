@@ -1,3 +1,4 @@
+import { pairSourceKey } from './pairSource';
 import { randomUUID } from 'node:crypto';
 import type { PairState, PairTurn, PairMessage } from '../shared/pair';
 import { nextPairBlock, pairPlan } from '../shared/pair';
@@ -32,6 +33,7 @@ export function createPair(input: RunInput): PairState {
   } = input.step;
   return {
     version: 0,
+    sourceKey: pairSourceKey(input.feature, input.step),
     mode: 'pair',
     phase: 'planning',
     preferences: structuredClone(input.launch!.pair!),
@@ -167,32 +169,61 @@ export function pairReport(pair: PairState): string {
     ...pair.results.map((r) => `## ${r.title}\n\n${r.content}`),
   ].join('\n\n');
 }
-/** Each SDK turn reports cumulative usage for that turn, not the complete pair session. */
-export function addPairUsage(base: Usage | undefined, next: Usage): Usage {
-  if (!base) return structuredClone(next);
-  const merged = structuredClone(base);
-  for (const key of ['inputTokens', 'outputTokens', 'cost'] as const)
-    if (typeof next[key] === 'number') merged[key] = (base[key] ?? 0) + next[key];
-  merged.incompleteTokens = Boolean(
-    base.incompleteTokens ||
-      next.incompleteTokens ||
-      next.inputTokens === undefined ||
-      next.outputTokens === undefined,
-  );
-  merged.incompleteCost = Boolean(
-    base.incompleteCost || next.incompleteCost || next.cost === undefined,
-  );
-  merged.model = next.model ?? base.model;
-  merged.unit = next.unit ?? base.unit;
-  for (const [model, entry] of Object.entries(next.byModel ?? {})) {
-    const prior = (merged.byModel ??= {})[model] ?? {};
-    merged.byModel[model] = {
-      inputTokens: (prior.inputTokens ?? 0) + (entry.inputTokens ?? 0),
-      outputTokens: (prior.outputTokens ?? 0) + (entry.outputTokens ?? 0),
-      cost: (prior.cost ?? 0) + (entry.cost ?? 0),
-      incompleteTokens: Boolean(prior.incompleteTokens || entry.incompleteTokens),
-      incompleteCost: Boolean(prior.incompleteCost || entry.incompleteCost),
-    };
+/** Each adapter call reports its own cumulative ledger; merge with the fixed prior-turn baseline. */
+export function addPairUsage(
+  before: Usage | undefined,
+  turn: Usage | undefined,
+): Usage | undefined {
+  if (!before) return turn && structuredClone(turn);
+  if (!turn) return { ...structuredClone(before), incompleteCost: true, incompleteTokens: true };
+  const sum = (a?: number, b?: number) =>
+    a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
+  const result: Usage = {
+    source: 'measured',
+    model: turn.model ?? before.model,
+    inputTokens: sum(before.inputTokens, turn.inputTokens),
+    outputTokens: sum(before.outputTokens, turn.outputTokens),
+    incompleteTokens: Boolean(
+      before.incompleteTokens ||
+        turn.incompleteTokens ||
+        before.inputTokens === undefined ||
+        before.outputTokens === undefined ||
+        turn.inputTokens === undefined ||
+        turn.outputTokens === undefined,
+    ),
+    incompleteCost: Boolean(
+      before.incompleteCost ||
+        turn.incompleteCost ||
+        before.cost === undefined ||
+        turn.cost === undefined ||
+        before.unit !== turn.unit,
+    ),
+  };
+  if (!before.unit || !turn.unit || before.unit === turn.unit) {
+    result.unit = before.unit ?? turn.unit;
+    result.cost = sum(before.cost, turn.cost);
+  } else {
+    result.unit = before.unit;
+    result.cost = before.cost;
   }
-  return merged;
+  result.byModel = {};
+  for (const name of new Set([
+    ...Object.keys(before.byModel ?? {}),
+    ...Object.keys(turn.byModel ?? {}),
+  ])) {
+    const a = before.byModel?.[name],
+      b = turn.byModel?.[name];
+    result.byModel[name] = !a
+      ? structuredClone(b!)
+      : !b
+        ? structuredClone(a)
+        : {
+            inputTokens: sum(a.inputTokens, b.inputTokens),
+            outputTokens: sum(a.outputTokens, b.outputTokens),
+            cost: sum(a.cost, b.cost),
+            incompleteCost: Boolean(a.incompleteCost || b.incompleteCost),
+            incompleteTokens: Boolean(a.incompleteTokens || b.incompleteTokens),
+          };
+  }
+  return result;
 }

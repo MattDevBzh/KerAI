@@ -61,6 +61,7 @@ export const pairActionSchema = z
 export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
   return z
     .object({
+      sourceKey: z.string().max(1000000).optional(),
       approvedRevision: z.number().int().positive().optional(),
       version: z.number().int().nonnegative(),
       mode: z.enum(['pair', 'solo']),

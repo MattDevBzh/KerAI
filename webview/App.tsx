@@ -1,4 +1,8 @@
 import { PairWorkspace } from './PairWorkspace';
+import { agentPolicy } from '../src/shared/agentInheritance';
+import { AgentProfileSummary, AgentModelOverrides } from './AgentModelOverrides';
+import { AgentReportDownload } from './AgentReportDownload';
+import { Sessions } from './Sessions';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { OptionalStepChoice, SkippedInterventions } from './OptionalStepsUI';
 import { CatalogSearch, searchText, useDialogAccessibility } from './Ergonomics';
@@ -11,6 +15,7 @@ import {
 import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
 import { TeamComposer } from './TeamComposer';
 import { SessionHq } from './SessionHq';
+import { useHqContextTransfer } from './HqContextTransfer';
 import { SessionViewToggle, useSessionView } from './SessionViewPreference';
 import { AgentFavorite } from './AgentFavorite';
 import { orderedAgents, teamLocked } from '../src/shared/team';
@@ -31,6 +36,7 @@ import { emptyQuestState, type QuestState } from '../src/shared/quests';
 import { KitsUI } from './KitsUI';
 import { DashboardUI } from './DashboardUI';
 import { UsageDashboard } from './UsageDashboard';
+import { Statistics } from './Statistics';
 import { ProfileScopeSelector, profileOptions, useProfileSave } from './ProfileScope';
 import type { ProfileSaveOptions, ProfileScope } from '../src/shared/profiles';
 import {
@@ -90,7 +96,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import Markdown from 'react-markdown';
+import Markdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {
   AgentProfile,
@@ -951,7 +957,7 @@ export default function App() {
               />
             ) : (
               <Sessions
-                onNavigate={chooseView}
+                dispatch={dispatch}
                 state={state}
                 onCreate={openCreate}
                 onOpen={(id) => {
@@ -992,6 +998,17 @@ export default function App() {
               />
             </div>
           ))}
+          {view === 'stats' && (
+            <Statistics
+              state={state}
+              dispatch={dispatch}
+              onOpen={(id) => {
+                setView('sessions');
+                setFeatureId(id);
+                setStepId('');
+              }}
+            />
+          )}
           {view === 'usage' && (
             <UsageDashboard
               features={state.features}
@@ -1316,362 +1333,6 @@ export default function App() {
     </div>
   );
 }
-function Sessions({
-  state,
-  onNavigate,
-  onCreate,
-  onOpen,
-}: {
-  state: StudioState;
-  onNavigate: (view: View) => void;
-  onCreate: (id?: string) => void;
-  onOpen: (id: string) => void;
-}) {
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [showArchive, setShowArchive] = useState(false);
-  const [sort, setSort] = useState('recent');
-  const live = state.features.filter((f) => !f.archived);
-  const features = state.features.filter(
-    (f) =>
-      Boolean(f.archived) === showArchive &&
-      (!search ||
-        searchText(`${f.title} ${f.description} ${f.branch}`).includes(searchText(search))) &&
-      (filter === 'all' ||
-        f.status === filter ||
-        (filter === 'attention' && f.status === 'awaiting_final_validation')),
-  );
-  features.sort((a, b) =>
-    sort === 'title'
-      ? a.title.localeCompare(b.title, 'fr')
-      : sort === 'oldest'
-        ? a.updatedAt.localeCompare(b.updatedAt)
-        : b.updatedAt.localeCompare(a.updatedAt),
-  );
-  const resetFilters = () => {
-    setSearch('');
-    setFilter('all');
-  };
-  const showStatus = (status: string) => {
-    setFilter(status);
-    setSearch('');
-    setShowArchive(false);
-    document.getElementById('sessions-list')?.scrollIntoView({ block: 'start' });
-  };
-  const waiting = live.filter((f) =>
-    ['attention', 'awaiting_final_validation'].includes(f.status),
-  ).length;
-  const approved = live.filter((f) => f.status === 'completed').length;
-  return (
-    <div className="page dashboard-page">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">
-            <span /> L’INTENTION DEVIENT CONCRÈTE
-          </span>
-          <h1>
-            Chaque idée mérite
-            <br />
-            un <span className="serif accent-text">beau parcours.</span>
-          </h1>
-          <p>Pilotez vos features, une étape et une décision à la fois.</p>
-        </div>
-        <button
-          className="button primary new-session"
-          disabled={Boolean(state.workspaceOperation)}
-          onClick={() => onCreate()}
-        >
-          <Plus size={17} /> Nouvelle session
-        </button>
-      </div>
-      <div className="overview-strip">
-        <button
-          type="button"
-          aria-label="Afficher toutes les sessions"
-          aria-pressed={!showArchive && filter === 'all'}
-          onClick={() => showStatus('all')}
-        >
-          <span className="stat-number">{String(live.length).padStart(2, '0')}</span>
-          <span>sessions dans l’atelier</span>
-          <span className="stat-icon">
-            <Workflow size={20} />
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-label="Afficher les sessions à votre tour"
-          aria-pressed={!showArchive && filter === 'attention'}
-          onClick={() => showStatus('attention')}
-        >
-          <span className="stat-number apricot-text">{String(waiting).padStart(2, '0')}</span>
-          <span>à votre tour de jouer</span>
-          <span className="stat-icon">
-            <MessageSquare size={20} />
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-label="Afficher les sessions terminées"
-          aria-pressed={!showArchive && filter === 'completed'}
-          onClick={() => showStatus('completed')}
-        >
-          <span className="stat-number green-text">{String(approved).padStart(2, '0')}</span>
-          <span>parcours terminés</span>
-          <span className="stat-icon">
-            <CheckCircle2 size={20} />
-          </span>
-        </button>
-      </div>
-      <div className="dashboard-columns">
-        <section className="sessions-section" id="sessions-list">
-          <div className="section-heading">
-            <h2>
-              {showArchive ? 'Archives' : 'Vos sessions'}
-              <span className="count-pill">{features.length}</span>
-            </h2>
-            <button
-              className={`text-button ${showArchive ? 'selected' : ''}`}
-              aria-pressed={showArchive}
-              onClick={() => {
-                setShowArchive(!showArchive);
-                resetFilters();
-              }}
-            >
-              <Archive size={14} />
-              {showArchive ? 'Voir les sessions' : 'Archives'}
-            </button>
-          </div>
-          <div className="filter-bar">
-            <label className="search-field">
-              <Search size={16} />
-              <input
-                aria-label="Rechercher une session"
-                placeholder="Retrouver une idée, une branche…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button
-                  className="icon-button"
-                  aria-label="Effacer la recherche"
-                  onClick={() => setSearch('')}
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </label>
-            <label className="filter-select">
-              <ListFilter size={15} />
-              <select
-                aria-label="Filtrer les sessions"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                <option value="all">Tous les états</option>
-                <option value="attention">À votre tour</option>
-                <option value="awaiting_final_validation">Dernière validation</option>
-                <option value="running">En cours</option>
-                <option value="draft">À démarrer</option>
-                <option value="completed">Terminées</option>
-              </select>
-              <ChevronDown size={13} />
-            </label>
-          </div>
-          <div className="session-list-tools">
-            <span className="muted" role="status">
-              {features.length} session{features.length > 1 ? 's' : ''} affichée
-              {features.length > 1 ? 's' : ''}
-            </span>
-            <label>
-              Trier
-              <select
-                aria-label="Trier les sessions"
-                value={sort}
-                onChange={(event) => setSort(event.target.value)}
-              >
-                <option value="recent">Activité récente</option>
-                <option value="oldest">Plus anciennes</option>
-                <option value="title">Titre A → Z</option>
-              </select>
-            </label>
-            {(search || filter !== 'all') && (
-              <button className="text-button" onClick={resetFilters}>
-                Réinitialiser les filtres
-              </button>
-            )}
-          </div>
-          <div className="session-list">
-            {features.map((f, i) => {
-              const status = featureStatus[f.status];
-              const resolved = f.steps.filter(stepResolved).length;
-              const active = f.steps.find((s) => s.id === f.activeStepId);
-              return (
-                <button
-                  className={`session-card ${['attention', 'awaiting_final_validation'].includes(f.status) ? 'needs-attention' : ''}`}
-                  onClick={() => onOpen(f.id)}
-                  key={f.id}
-                >
-                  <div className="session-top">
-                    <span className="session-kind">
-                      <span className={`mini-symbol color-${i % 3}`}>
-                        <Workflow size={15} />
-                      </span>
-                      {f.workflowName}
-                      {!!f.projects?.length && (
-                        <span className="session-projects">
-                          {f.projects.map((project) => project.name).join(' + ')}
-                        </span>
-                      )}
-                    </span>
-                    <Badge {...status} />
-                  </div>
-                  <h3>{f.title}</h3>
-                  <p>{f.description}</p>
-                  <div
-                    className="segmented-progress"
-                    role="progressbar"
-                    aria-valuemin={0}
-                    aria-valuemax={f.steps.length || 1}
-                    aria-valuenow={resolved}
-                    aria-label={progressLabel(f)}
-                    aria-valuetext={progressLabel(f)}
-                  >
-                    {f.steps.map((s) => (
-                      <span
-                        key={s.id}
-                        className={s.status}
-                        title={`${s.name} : ${statuses[s.status].label}`}
-                      />
-                    ))}
-                  </div>
-                  <div className="session-summary">
-                    <span>{progressLabel(f)}</span>
-                    <time dateTime={f.updatedAt}>Mis à jour le {date(f.updatedAt)}</time>
-                  </div>
-                  <div className="session-bottom">
-                    <span>
-                      <GitBranch size={12} />
-                      {f.branch || 'Branche courante'}
-                    </span>
-                    <span>
-                      {f.status === 'completed'
-                        ? progressLabel(f)
-                        : f.status === 'awaiting_final_validation'
-                          ? 'Valider le bilan final'
-                          : (active?.name ?? 'Préparation')}
-                      <ArrowRight size={16} />
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          {!features.length && (
-            <Empty
-              title={
-                search || filter !== 'all'
-                  ? 'Aucune session ne correspond'
-                  : showArchive
-                    ? 'Vos archives sont tranquilles'
-                    : 'La prochaine belle idée commence ici'
-              }
-              icon={search ? <Search /> : <WandSparkles />}
-              action={
-                !showArchive && !search && filter === 'all' ? (
-                  <button className="button primary" onClick={() => onCreate()}>
-                    <Plus size={16} /> Créer ma première session
-                  </button>
-                ) : search || filter !== 'all' ? (
-                  <button className="button secondary" onClick={resetFilters}>
-                    Effacer les filtres
-                  </button>
-                ) : undefined
-              }
-            >
-              {search || filter !== 'all'
-                ? 'Essayez un autre mot ou élargissez le filtre.'
-                : showArchive
-                  ? 'Une session archivée reste disponible et peut être restaurée à tout moment.'
-                  : 'Un besoin, une envie, un petit détail à améliorer. Confiez le premier pas à votre équipe d’agents.'}
-            </Empty>
-          )}
-        </section>
-        <aside className="dashboard-aside">
-          <div className="start-card">
-            <span className="eyebrow">UN BON POINT DE DÉPART</span>
-            <h2>
-              Quel est votre
-              <br />
-              <span className="serif">prochain mouvement ?</span>
-            </h2>
-            <div className="template-list">
-              {(
-                [
-                  {
-                    view: 'workflows',
-                    name: 'Explorer les parcours',
-                    hint: 'Choisir une méthode de travail',
-                    icon: Workflow,
-                  },
-                  {
-                    view: 'agents',
-                    name: 'Découvrir les agents',
-                    hint: 'Trouver les bons profils',
-                    icon: Bot,
-                  },
-                  {
-                    view: 'kits',
-                    name: 'Ouvrir les kits',
-                    hint: 'Des équipes prêtes à composer',
-                    icon: Package,
-                  },
-                ] as const
-              ).map((item, index) => (
-                <button key={item.view} onClick={() => onNavigate(item.view)}>
-                  <span className={`template-icon color-${index}`}>
-                    <item.icon size={19} />
-                  </span>
-                  <span>
-                    <strong>{item.name}</strong>
-                    <small>{item.hint}</small>
-                  </span>
-                  <ArrowUpRight size={16} />
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="principle-card">
-            <span className="orbit-art" aria-hidden="true">
-              <span />
-              <span />
-              <Sparkles size={23} />
-            </span>
-            <span className="eyebrow">LE PRINCIPE DE L’ATELIER</span>
-            <h3>
-              Les agents proposent.
-              <br />
-              <span className="serif">Vous donnez le cap.</span>
-            </h3>
-            <p>
-              Relisez chaque livrable, ajustez-le, puis validez pour ouvrir la suite du parcours.
-            </p>
-            <div>
-              <ShieldCheck size={14} /> Votre validation compte.
-            </div>
-          </div>
-          <div className="aside-note">
-            <span className="tiny-line" />
-            <p>
-              Un livrable éditable, un historique lisible,
-              <br />
-              et toujours la possibilité de reprendre.
-            </p>
-          </div>
-        </aside>
-      </div>
-    </div>
-  );
-}
 function Library({
   title,
   eyebrow,
@@ -1715,18 +1376,20 @@ function ModelSelect({
   value,
   onChange,
   label = 'Modèle',
+  emptyLabel = 'Automatique · choix du CLI',
 }: {
   state: StudioState;
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  emptyLabel?: string;
 }) {
   return (
     <label className="field">
       <span>{label}</span>
       <div className="select-wrap">
         <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-          <option value="">Automatique · choix du CLI</option>
+          <option value="">{emptyLabel}</option>
           {value && !state.runtime.models.some((m) => m.id === value) && (
             <option value={value}>{value} · configuré</option>
           )}
@@ -1899,7 +1562,14 @@ function CreateModal({
                     onChange={(event) =>
                       setTeam(
                         team.map((item, i) =>
-                          i === index ? { ...item, agentId: event.target.value } : item,
+                          i === index
+                            ? {
+                                ...item,
+                                agentId: event.target.value,
+                                model: undefined,
+                                reasoning: undefined,
+                              }
+                            : item,
                         ),
                       )
                     }
@@ -1914,54 +1584,13 @@ function CreateModal({
                     ))}
                   </select>
                 </label>
-                <label className="field">
-                  <span>Intervention {index + 1}</span>
-                  <input
-                    maxLength={200}
-                    value={member.name}
-                    onChange={(event) =>
-                      setTeam(
-                        team.map((item, i) =>
-                          i === index ? { ...item, name: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>Mission {index + 1}</span>
-                  <textarea
-                    maxLength={4000}
-                    rows={2}
-                    value={member.description}
-                    onChange={(event) =>
-                      setTeam(
-                        team.map((item, i) =>
-                          i === index ? { ...item, description: event.target.value } : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>Autorisations {index + 1}</span>
-                  <select
-                    value={member.policy}
-                    onChange={(event) =>
-                      setTeam(
-                        team.map((item, i) =>
-                          i === index
-                            ? { ...item, policy: event.target.value as typeof member.policy }
-                            : item,
-                        ),
-                      )
-                    }
-                  >
-                    <option value="read-only">Lecture seule</option>
-                    <option value="workspace-write">Écriture dans le projet</option>
-                    <option value="tests">Tests autorisés</option>
-                  </select>
-                </label>
+                <AgentModelOverrides
+                  step={member}
+                  state={state}
+                  onChange={(patch) =>
+                    setTeam(team.map((item, i) => (i === index ? { ...item, ...patch } : item)))
+                  }
+                />
                 <label className="field">
                   <span>Participation de {member.name}</span>
                   <select
@@ -2107,6 +1736,7 @@ function FeatureDetail({
   const [composing, setComposing] = useState(false),
     [teamPending, setTeamPending] = useState(false);
   const { enabled: livingHq } = useSessionView();
+  const hqTransfer = useHqContextTransfer(feature, livingHq);
   const closeTeam = () => {
     if (!teamPending) {
       setComposing(false);
@@ -2176,14 +1806,29 @@ function FeatureDetail({
 
   if (pairOpen && step)
     return (
-      <PairWorkspace
-        key={`${feature.id}:${step.id}:${step.attempts.at(-1)?.id ?? 'pending'}`}
-        feature={feature}
-        step={step}
-        state={state}
-        dispatch={dispatch}
-        back={() => onPairOpenChange(false)}
-      />
+      <div className="feature-pair-page">
+        {livingHq && (
+          <SessionHq
+            feature={feature}
+            state={state}
+            transfer={hqTransfer}
+            selectedStepId={step.id}
+            disabled={false}
+            selectStep={(id) => {
+              selectStep(id);
+              onPairOpenChange(false);
+            }}
+          />
+        )}
+        <PairWorkspace
+          key={`${feature.id}:${step.id}:${step.attempts.at(-1)?.id ?? 'pending'}`}
+          feature={feature}
+          step={step}
+          state={state}
+          dispatch={dispatch}
+          back={() => onPairOpenChange(false)}
+        />
+      </div>
     );
   return (
     <div className="page feature-page">
@@ -2376,6 +2021,7 @@ function FeatureDetail({
         <SessionHq
           feature={feature}
           state={state}
+          transfer={hqTransfer}
           selectedStepId={step?.id}
           disabled={detailDirty}
           selectStep={selectStep}
@@ -2682,6 +2328,7 @@ function StepPanel({
     step.attempts.length < step.maxAttempts;
   const next = feature.steps.find((s) => s.dependsOn.includes(step.id) && !stepResolved(s));
   const agent = state.agents.find((a) => a.id === step.agentId);
+  const displayPolicy = step.inheritAgent && agent ? agentPolicy(agent) : step.policy;
   const unanswered = latest?.questions.filter((q) => !latest.answers[q.id]) ?? [];
   const blocked = !state.workspace.trusted
     ? 'Le projet doit être approuvé dans VS Code.'
@@ -2764,7 +2411,7 @@ function StepPanel({
             <span>
               {step.model || agent?.model || state.settings.defaultModel || 'Modèle automatique'}
               <span className="inline-dot" />
-              {policyLabels[step.policy]}
+              {policyLabels[displayPolicy]}
             </span>
           </div>
           <button
@@ -2896,6 +2543,14 @@ function StepPanel({
                     {attempt.artifact.name}
                     {historic && <em>Tentative précédente</em>}
                   </span>
+                  <AgentReportDownload
+                    key={attempt.id}
+                    featureId={feature.id}
+                    stepId={step.id}
+                    attempt={attempt}
+                    unsaved={dirty || savePending}
+                    dispatch={dispatch}
+                  />
                   <button
                     className="text-button"
                     disabled={
@@ -3034,13 +2689,32 @@ function StepPanel({
                   <article className="markdown">
                     <Markdown
                       remarkPlugins={[remarkGfm]}
+                      urlTransform={(url) =>
+                        /^feature-studio-review:[a-f0-9-]{36}$/.test(url)
+                          ? url
+                          : defaultUrlTransform(url)
+                      }
                       components={{
-                        a: ({ href, children }) => (
-                          <a href={href} target="_blank" rel="noreferrer">
-                            {children}
-                            <ExternalLink size={11} />
-                          </a>
-                        ),
+                        a: ({ href, children }) =>
+                          /^feature-studio-review:[a-f0-9-]{36}$/.test(href ?? '') ? (
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() =>
+                                dispatch({
+                                  type: 'openPersonalReviewReport',
+                                  sessionId: href!.slice('feature-studio-review:'.length),
+                                })
+                              }
+                            >
+                              {children}
+                            </button>
+                          ) : (
+                            <a href={href} target="_blank" rel="noreferrer">
+                              {children}
+                              <ExternalLink size={11} />
+                            </a>
+                          ),
                       }}
                     >
                       {historic ? attempt.artifact.content : content}
@@ -3487,11 +3161,11 @@ function StepPanel({
         <div className="step-policy">
           <ShieldCheck size={16} />
           <div>
-            <strong>{policyLabels[step.policy]}</strong>
+            <strong>{policyLabels[displayPolicy]}</strong>
             <p>
-              {step.policy === 'read-only'
+              {displayPolicy === 'read-only'
                 ? 'Cette étape est destinée à analyser et proposer.'
-                : step.policy === 'tests'
+                : displayPolicy === 'tests'
                   ? 'Seules les commandes de test configurées sont autorisées.'
                   : 'L’agent peut modifier les fichiers du projet pendant cette étape.'}
             </p>
@@ -3527,7 +3201,11 @@ function StepConfig({
   const [initialContext, setInitialContext] = useState(step.initialContext ?? '');
   const [mcpServerIds, setMcpServerIds] = useState(step.mcpServerIds ?? []);
   const [askBeforeRun, setAskBeforeRun] = useState(step.askBeforeRun ?? false);
-  const efforts = state.runtime.models.find((m) => m.id === model)?.reasoningEfforts ?? [];
+  const profile = state.agents.find((a) => a.id === agent);
+  const efforts =
+    state.runtime.models.find(
+      (m) => m.id === (model || profile?.model || state.settings.defaultModel),
+    )?.reasoningEfforts ?? [];
   return (
     <form
       className="step-config"
@@ -3537,15 +3215,22 @@ function StepConfig({
           agentId: agent,
           model: model || undefined,
           reasoning: reasoning || undefined,
-          skills,
+          skills: step.inheritAgent ? [] : skills,
           maxAttempts,
+          initialContext,
+          mcpServerIds,
+          askBeforeRun,
         });
       }}
     >
       <div className="field-row">
         <label className="field">
           <span>Profil de l’agent</span>
-          <select value={agent} onChange={(e) => setAgent(e.target.value)}>
+          <select
+            disabled={step.inheritAgent}
+            value={agent}
+            onChange={(e) => setAgent(e.target.value)}
+          >
             {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -3556,6 +3241,7 @@ function StepConfig({
         <ModelSelect
           state={state}
           value={model}
+          emptyLabel={`Hériter de l’agent (${profile?.model || state.settings.defaultModel || 'Automatique'})`}
           onChange={(v) => {
             setModel(v);
             setReasoning('');
@@ -3566,7 +3252,7 @@ function StepConfig({
         <label className="field">
           <span>Effort de raisonnement</span>
           <select value={reasoning} onChange={(e) => setReasoning(e.target.value)}>
-            <option value="">Automatique</option>
+            <option value="">Hériter de l’agent ({profile?.reasoning || 'Automatique'})</option>
             {reasoning && !efforts.includes(reasoning) && (
               <option value={reasoning}>{reasoning} · configuré</option>
             )}
@@ -3610,27 +3296,31 @@ function StepConfig({
         />
         <span>Demander un contexte humain avant exécution automatique</span>
       </label>
-      <fieldset className="skill-options">
-        <legend>Skills pour cette étape</legend>
-        {state.skills.length ? (
-          state.skills.map((s) => (
-            <label key={s.id}>
-              <input
-                type="checkbox"
-                checked={skills.includes(s.id)}
-                onChange={(e) =>
-                  setSkills(
-                    e.target.checked ? [...skills, s.id] : skills.filter((id) => id !== s.id),
-                  )
-                }
-              />
-              {s.name}
-            </label>
-          ))
-        ) : (
-          <span className="muted">Aucune skill disponible dans ce projet.</span>
-        )}
-      </fieldset>
+      {step.inheritAgent && profile ? (
+        <AgentProfileSummary agent={profile} state={state} />
+      ) : (
+        <fieldset className="skill-options">
+          <legend>Skills pour cette étape</legend>
+          {state.skills.length ? (
+            state.skills.map((s) => (
+              <label key={s.id}>
+                <input
+                  type="checkbox"
+                  checked={skills.includes(s.id)}
+                  onChange={(e) =>
+                    setSkills(
+                      e.target.checked ? [...skills, s.id] : skills.filter((id) => id !== s.id),
+                    )
+                  }
+                />
+                {s.name}
+              </label>
+            ))
+          ) : (
+            <span className="muted">Aucune skill disponible dans ce projet.</span>
+          )}
+        </fieldset>
+      )}
       <button className="button secondary small" disabled={!agent}>
         Enregistrer la configuration <Check size={14} />
       </button>
@@ -3664,6 +3354,10 @@ function AgentEditor({
   const [instructions, setInstructions] = useState(source?.instructions ?? '');
   const [tools, setTools] = useState(source?.tools.join(', ') ?? '');
   const [model, setModel] = useState(source?.model ?? '');
+  const [reasoning, setReasoning] = useState(source?.reasoning ?? '');
+  const [policy, setPolicy] = useState<NonNullable<AgentProfile['policy']>>(
+    source ? agentPolicy(source) : 'read-only',
+  );
   const [skills, setSkills] = useState(source?.skills ?? []);
   const [emptyContextByDefault, setEmptyContextByDefault] = useState(
     source?.emptyContextByDefault ?? false,
@@ -3688,6 +3382,8 @@ function AgentEditor({
             instructions: string;
             tools: string;
             model: string;
+            reasoning: string;
+            policy: NonNullable<AgentProfile['policy']>;
             skills: string[];
             emptyContextByDefault: boolean;
             discussionAgent: boolean;
@@ -3718,6 +3414,8 @@ function AgentEditor({
         instructions,
         tools,
         model,
+        reasoning,
+        policy,
         skills,
         emptyContextByDefault,
         discussionAgent,
@@ -3735,6 +3433,8 @@ function AgentEditor({
         avatar: resolveAvatar(existing.avatar, existing.id),
         tools: existing.tools.join(', '),
         model: existing.model ?? '',
+        reasoning: existing.reasoning ?? '',
+        policy: agentPolicy(existing),
         emptyContextByDefault: existing.emptyContextByDefault ?? false,
         discussionAgent: existing.discussionAgent ?? false,
         roastLevel: normalizeRoastLevel(existing.roastLevel),
@@ -3748,6 +3448,8 @@ function AgentEditor({
       setInstructions(chosen.instructions);
       setTools(chosen.tools);
       setModel(chosen.model);
+      setReasoning(chosen.reasoning);
+      setPolicy(chosen.policy);
       setSkills(chosen.skills);
       setEmptyContextByDefault(chosen.emptyContextByDefault);
       setDiscussionAgent(chosen.discussionAgent);
@@ -3789,6 +3491,8 @@ function AgentEditor({
                   .map((s) => s.trim())
                   .filter(Boolean),
                 model: model || undefined,
+                reasoning,
+                policy,
                 skills,
                 nickname: nickname.trim() || undefined,
                 avatar,
@@ -3909,7 +3613,48 @@ function AgentEditor({
                 restent applicables.
               </small>
             </label>
-            <ModelSelect state={state} value={model} onChange={setModel} />
+            <ModelSelect
+              state={state}
+              value={model}
+              onChange={(value) => {
+                setModel(value);
+                setReasoning('');
+              }}
+            />
+          </div>
+          <div className="field-row">
+            <label className="field">
+              <span>Réflexion par défaut de l’agent</span>
+              <select value={reasoning} onChange={(e) => setReasoning(e.target.value)}>
+                <option value="">Automatique</option>
+                {[
+                  ...new Set([
+                    ...(reasoning ? [reasoning] : []),
+                    ...(state.runtime.models.find(
+                      (m) => m.id === (model || state.settings.defaultModel),
+                    )?.reasoningEfforts ?? []),
+                  ]),
+                ].map((effort) => (
+                  <option key={effort} value={effort}>
+                    {effort}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Permissions par défaut de l’agent</span>
+              <select
+                value={policy}
+                onChange={(e) => setPolicy(e.target.value as NonNullable<AgentProfile['policy']>)}
+              >
+                <option value="read-only">Lecture seule</option>
+                <option value="workspace-write">Écriture dans le projet</option>
+                <option value="tests">Tests préautorisés</option>
+              </select>
+              <small>
+                Les outils demandés et les commandes de test autorisées restent nécessaires.
+              </small>
+            </label>
           </div>
           <label className="discussion-agent-toggle">
             <input

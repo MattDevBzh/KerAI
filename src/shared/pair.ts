@@ -48,6 +48,7 @@ export interface PairSnapshot {
   existingChangeGrants?: Record<string, string>;
 }
 export interface PairState {
+  sourceKey?: string;
   version: number;
   approvedRevision?: number;
   mode: 'pair' | 'solo';

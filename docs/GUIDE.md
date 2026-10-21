@@ -4,7 +4,7 @@
 
 ## Installation
 
-1. Télécharge [feature-studio-1.14.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.14.0/feature-studio-1.14.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.14.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.20.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.20.0/feature-studio-1.20.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.20.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -36,6 +36,8 @@ Le thème secret **Dragon Ball** se découvre sur **Dashboard** ou sa Tour de co
 
 Dans une session, coche **Afficher le QG vivant**, à côté de **LE PARCOURS**. Chaque poste ouvre le détail de son intervention ; le décor suit le thème. Les questions humaines, choix facultatifs et interventions passées restent visibles avec leur état réel. La case conserve ton choix entre projets et permet de revenir à la bande classique, sans perdre la sélection ni un brouillon. Elle est désactivée par défaut. [Utilisation du QG](WORKFLOWS.md#bande-des-agents-ou-qg-vivant).
 
+Quand une nouvelle tentative démarre à partir de la deuxième étape, **quatre avions en papier** volent du personnage de l’étape immédiatement précédente vers celui qui prend le relais. Le passage dure **cinq secondes** et accompagne le lancement réel, classique ou en pair, sans le retarder. Il ne se rejoue pas à chaque réponse, lors de la reprise d’un lot en pair ou en rouvrant la session. Les trajectoires s’adaptent aux postes sur plusieurs lignes et au zoom. En mouvement réduit, seul le libellé du passage de contexte s’affiche.
+
 ## Agrandir l’interface
 
 Le bandeau supérieur propose **− / Auto / +**. Le zoom agrandit ensemble textes, boutons, icônes et avatars. Choisis **80 à 200 %** pour garder une taille fixe ; **Auto** adapte l’affichage lorsque tu redimensionnes la fenêtre ou changes d’écran.
@@ -58,9 +60,19 @@ La progression est personnelle, commune aux projets et enregistrée localement d
 
 Si le fichier de progression est illisible, le carnet le signale et le conserve. **Relire la progression** retente sa lecture ; le compteur affiche un tiret au lieu d’inventer un total. Les trophées ne sont jamais dépensés : ils débloquent six cadeaux aux seuils de 5, 20, 40, 70, 110 et 200. **Prochain cadeau** montre le seul palier à venir ; **Mes récompenses** permet d’activer ou de retirer les thèmes, titres, la célébration Eiffel et le chaton déjà acquis. [Consulter les récompenses](WORKFLOWS.md#quêtes-et-récompenses). La démo présente le carnet sans enregistrer de récompense personnelle.
 
+## Héritage des profils dans une équipe
+
+Un agent ajouté seul et un agent ajouté depuis une équipe reprennent le profil du menu **Agents** au lancement : instructions, skills, outils, permissions, contexte vide par défaut et ton. Dans une équipe, seuls **Modèle de l’intervention** et **Niveau de réflexion** peuvent remplacer les valeurs du profil. Les autres paramètres sont affichés en lecture seule ; modifie-les dans **Agents**. L’ajout, le retrait, l’ordre et la participation obligatoire ou facultative restent des choix de composition.
+
+Le choix **Hériter de l’agent** laisse le champ vide dans l’équipe. Modèle et réflexion héritent indépendamment : tu peux remplacer l’un et conserver l’autre. Les valeurs sont relues à chaque lancement ; si tu changes le profil après avoir préparé l’aperçu, recalcule l’aperçu. Un profil de modèle explicitement activé dans le budget de la feature garde sa priorité, signalée dans le compositeur.
+
+L’éditeur **Agents** propose maintenant une réflexion et des permissions par défaut. Pour les profils anciens sans permissions explicites, les outils demandés déterminent le profil : `execute` ou `studio_run_test` sélectionne les tests préautorisés, sinon un outil d’édition sélectionne l’écriture dans le projet, et les autres profils restent en lecture seule. Une commande de test doit toujours être autorisée dans les réglages du projet.
+
+Les modèles d’équipes déjà enregistrés sont adaptés automatiquement à leur lecture, en conservant leurs remplacements explicites de modèle et de réflexion. Les anciennes sessions conservent leur définition : avant leur premier lancement, ouvre **Modifier l’équipe**, puis valide pour activer l’héritage. Une session dont la composition est verrouillée conserve ses réglages historiques ; crée une nouvelle session pour utiliser une nouvelle composition. Les exécutions archivées ne changent pas.
+
 ## Discuter avec ses agents
 
-**Discussion**, juste après Sessions, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
+**Discussion**, dans le menu principal, ouvre un chat avec un historique à gauche, classé par date. Choisis l’agent, le modèle et le niveau de raisonnement proposé par ton compte Copilot. Ces choix s’appliquent à la conversation et préservent les valeurs par défaut du profil. Tes messages apparaissent à droite ; les réponses progressives de l’agent, avec son avatar, à gauche. **Arrêter** interrompt la réponse ; tu peux ensuite poursuivre le même échange. Entrée envoie, Maj + Entrée ajoute une ligne.
 
 Dans **Agents → Nouvel agent** ou l’éditeur d’un profil existant, coche **Agent de discussion**. Ces profils sont proposés en priorité ; **Voir plus** révèle les autres agents. Les profils propres à un projet portent son nom dans la liste. Les instructions, skills et ton du profil accompagnent l’échange ; ajoute dans tes messages le contexte utile. Ce chat n’exécute pas de commandes et ne consulte pas automatiquement les fichiers des projets.
 
@@ -78,13 +90,13 @@ Les anciens lancements sans archives ne permettent pas de recréer leur contexte
 
 Après avoir échangé avec l’agent, clique **Créer une feature**. L’agent prépare une proposition à partir de la conversation, avec le modèle choisi ; cet appel est comptabilisé dans la consommation du chat. La proposition utilise les agents disponibles du projet actif et n’exécute aucun outil.
 
-Un formulaire présente le titre, le besoin, les critères de réussite (un par ligne) et les interventions proposées. Choisis les projets, ajuste les missions, remplace ou retire des agents, change leur ordre et vérifie leurs autorisations. La proposition et les ajustements de la vue sont conservés ; une erreur de création laisse le formulaire ouvert. **Actualiser la proposition** demande une nouvelle synthèse des échanges.
+Un formulaire présente le titre, le besoin, les critères de réussite (un par ligne) et les interventions proposées. Choisis les projets, remplace ou retire des agents, change leur ordre et vérifie les paramètres hérités de leur profil. Seuls leur modèle et leur réflexion peuvent être remplacés pour cette équipe. La proposition et les ajustements de la vue sont conservés ; une erreur de création laisse le formulaire ouvert. **Actualiser la proposition** demande une nouvelle synthèse des échanges.
 
 **Créer la feature** enregistre une session en brouillon, ses critères encore à vérifier et l’équipe relue. Aucun agent ne démarre automatiquement. Tu retrouves les réglages complets dans **Composer mon équipe**, puis l’aperçu habituel avant lancement. **Discussion d’origine** revient à l’échange ayant préparé la feature.
 
 ## Projet actif et réglages
 
-Sessions, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
+Sessions, Stats, Discussion, Validation et Consommation réunissent les données de tous les projets. La création d’une feature conserve son propre choix de projets. Le sélecteur reste présent dans Mémoire, les bibliothèques qui utilisent les profils du projet, Azure DevOps et Livraison.
 
 Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
 
@@ -120,7 +132,25 @@ Pour ton parcours quotidien, tu peux par exemple garder **US → plan → code �
 | Relecture seule  | Examiner les changements sans écrire, compiler ou tester       | Relecture                                                 |
 | Session libre    | Confier une tâche à un seul agent, dans une vraie conversation | Une étape de développement configurable                   |
 
-Le tableau de bord affiche les sessions, leur état, leur branche et leur progression. Recherche, filtres et archives permettent de retrouver les anciens travaux. Aucune session d’exemple n’est ajoutée à ton projet.
+La page **Sessions** affiche une liste compacte sur toute la largeur : nom, branche, projets, état, progression et dernière activité. **Ouvrir** consulte une session ; un clic sur la ligne ou sa case la sélectionne. Aucune session d’exemple n’est ajoutée à ton projet.
+
+Le filtre **Projet** est propre à cette liste et ne modifie pas le projet d’exécution. Une session multi-projets apparaît pour chacun de ses projets. Recherche, état et tri se combinent ; ils sont conservés quand tu ouvres une session puis reviens à la liste. Les badges identifient les projets ; leur infobulle donne le chemin complet.
+
+Pour agir en masse, sélectionne une première ligne puis utilise **Maj+clic** sur une autre : toutes les lignes visibles entre les deux sont ajoutées. La case de l’en-tête sélectionne toutes les sessions affichées. Un changement de filtre ou de tri vide la sélection. Les cases fonctionnent aussi au clavier avec Espace et Maj+Espace.
+
+**Archiver** conserve les données ; l’onglet **Archives** permet de les consulter et de les **Restaurer**. **Supprimer** demande une seule confirmation pour le lot sélectionné. Les sources, branches, worktrees et exports externes sont conservés. La progression et les éventuels échecs apparaissent sur la page ; une session en cours d’exécution doit d’abord être arrêtée. Les mêmes actions existent individuellement à droite de chaque ligne.
+
+### Explorer les statistiques
+
+**Stats**, accessible directement dans le menu principal, réunit les sessions de tous les projets chargés. Les archives sont incluses par défaut. Choisis un **projet**, un **parcours** et une **période** : aujourd’hui, 7/30/90 jours, mois courant/précédent, année, tout l’historique ou dates personnalisées. Le regroupement du graphique se règle par **jour**, **semaine** (lundi) ou **mois**. Les dates utilisent le fuseau de l’écran ; les deux bornes personnalisées sont incluses. Les longues périodes basculent explicitement en vue mensuelle.
+
+- Les indicateurs distinguent sessions du périmètre, créations, finalisations datées et tentatives. Une ancienne session reprise aujourd’hui contribue à l’activité d’aujourd’hui sans devenir une nouvelle création.
+- Le graphique d’activité propose créations, finalisations, lancements ou crédits observés. Son tableau donne les valeurs exactes. Les autres vues montrent le podium des agents, les modèles utilisés, les heures habituelles de lancement, les séries de jours actifs, les relances et les états actuels des sessions.
+- La taille est présentée sous plusieurs angles : étapes par session, tentatives par session, caractères moyens des contextes et des livrables conservés. **Calculer le stockage** mesure les fichiers privés des sessions sélectionnées, par petits lots, sans appel IA. Sources, worktrees, points de restauration et pièces jointes partagées sont exclus. Ce chiffre correspond au stockage actuel, pas à une taille historique.
+- Les projets multiples ne doublent pas les totaux globaux. Une session apparaît toutefois dans chaque ligne de projet concernée : ces lignes ne s’additionnent pas. Les sessions supprimées et les projets indisponibles ne peuvent pas être comptés ; les discussions et analyses d’observateur sont hors périmètre.
+- Les crédits absents restent « — » et les mesures partielles sont indiquées. Le modèle communiqué est prioritaire ; à défaut, le modèle demandé au lancement est utilisé. Le total d’une tentative n’est jamais additionné une seconde fois à sa ventilation par modèle.
+
+Le classement mesure la fréquence d’utilisation, pas la qualité. Les durées mesurent le temps entre lancement et fin d’une tentative, sans estimation de temps humain économisé. **Comprendre les chiffres et leur couverture** expose les définitions et les données manquantes. Les filtres sont conservés après ouverture d’une session depuis le classement.
 
 ### Les menus du cockpit
 
@@ -129,7 +159,7 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 ### Développer une feature
 
 1. Clique **Nouvelle session**, choisis le parcours, donne un titre et décris le résultat attendu. **L’espace de cette session** propose un **Worktree isolé** pour une feature ou une session libre, et le **Dossier courant** pour une relecture. Tu peux changer ce choix avant la création.
-2. Ouvre une étape. **Configurer** permet de choisir l’agent, le modèle réellement proposé par le CLI, les skills, le raisonnement lorsqu’il est disponible et la limite de tentatives.
+2. Ouvre une étape. **Configurer** permet de régler le modèle réellement proposé par le CLI, la réflexion et la limite de tentatives. Pour les équipes liées aux profils, les skills et les autres paramètres proviennent du menu Agents ; les anciennes sessions conservent leurs réglages historiques.
 3. Clique **Exécuter cette étape** : colle ta **US, demande ou contexte initial**, choisis les MCP utiles, puis **Préparer l’aperçu**. Relis les sources et le prompt assemblé ; **Lancer cette étape** démarre ensuite la vraie session. Le même dialogue apparaît pour une reprise ou une nouvelle tentative. Tout changement invalide l’aperçu précédent.
 4. Si l’agent utilise `studio_ask_human`, sa question apparaît pendant l’exécution : réponds et clique **Transmettre la réponse**. L’appel attend réellement ta réponse. Si le modèle termine plutôt avec un bloc de questions, réponds au formulaire puis **Reprendre la session**. Les échanges sont conservés.
 5. Relis le **Livrable**. Tu peux éditer son Markdown et l’enregistrer, ou donner un feedback pour une nouvelle tentative.
@@ -142,6 +172,8 @@ Le tableau de bord affiche les sessions, leur état, leur branche et leur progre
 **Une correction après la relecture ?** Clique **Demander une correction** sur le compte rendu ou sur une remarque. Décris le souci, choisis où l’équipe reprend et consulte les étapes ainsi que le contexte à transmettre. La correction enchaîne jusqu’à la relecture en respectant les validations habituelles ; les anciennes tentatives et les branches indépendantes restent visibles. Le choix avancé permet de repartir de plusieurs étapes.
 
 **Une coquille dans ta demande ou dans un compte rendu ?** Ouvre **Modifier le compte rendu**. Le même écran réunit le texte, son aperçu, l’original de l’agent, l’historique des versions et le besoin initial. Tu peux **Enregistrer et valider** ta correction ou **Faire réviser par l’agent**. Modifier un rapport remet ses dépendants à actualiser ; modifier le besoin remet conservativement le parcours à revoir. Les agents suivants utilisent la version corrigée et approuvée. Une édition du texte ne change ni un résultat de tests ni un verdict structuré.
+
+**Télécharger un compte rendu :** dans **Livrable**, clique **Télécharger .md**, puis choisis le fichier dans la fenêtre d’enregistrement. L’export contient le Markdown intégral de la tentative affichée, y compris une ancienne tentative. Attends la fin d’une tentative en cours et enregistre ou abandonne un éventuel brouillon avant l’export. Aucun agent n’est lancé et aucun crédit n’est consommé.
 
 **À la fin du parcours**, choisis **Valider définitivement** ou **Faire une correction**. Seule la validation finale réussie termine la session et affiche la célébration d’équipe. Les fichiers liés aux preuves sont revérifiés avant ce choix. Tu peux rejouer la célébration ou désactiver ses effets ; la réduction des animations est respectée. [Historique, corrections et décision finale](WORKFLOWS.md).
 

@@ -1,3 +1,5 @@
+import { inheritTeamProfiles } from './shared/agentInheritance';
+import { resolvePersonalReviewReport } from './host/PersonalReviewTools';
 import { observationHtml, observationMarkdown } from './shared/observationReport';
 import { DashboardController } from './host/DashboardController';
 import { StudioHub } from './host/StudioHub';
@@ -5,11 +7,14 @@ import { DiscussionService, type DiscussionProfile } from './host/DiscussionServ
 import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
 import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
 import { sessionMarkdown } from './shared/sessionExport';
+import { agentReport } from './shared/agentReport';
+import { applySessionBatch } from './host/SessionBatch';
 import { DevOpsController } from './host/DevOpsController';
 import { devOpsMessageSchema } from './core/devopsSchemas';
 import { type TicketTarget } from './shared/devopsTickets';
 import * as vscode from 'vscode';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises';
 import { stringify } from 'yaml';
@@ -553,6 +558,7 @@ export async function activate(context: vscode.ExtensionContext) {
   };
 
   const notice = (message: string) => send({ type: 'notice', message });
+  let sessionBatchRunning = false;
   const dispatch = async (
     raw: unknown,
     surface: 'cockpit' | 'control' = 'cockpit',
@@ -814,6 +820,124 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (error) {
         send({
           type: 'projectResult',
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
+    if (message.type === 'statsStorage') {
+      const items: import('./shared/statistics').StatsStorageItem[] = [];
+      try {
+        await bootstrap();
+        for (const featureId of new Set(message.featureIds)) {
+          try {
+            const bytes = await hub.featureEntry(featureId).service.statisticsStorage(featureId);
+            items.push({ featureId, bytes });
+          } catch (error) {
+            items.push({ featureId, error: redact((error as Error).message) });
+          }
+        }
+        send({ type: 'statsStorageResult', requestId: message.requestId, items });
+      } catch (error) {
+        send({
+          type: 'statsStorageResult',
+          requestId: message.requestId,
+          items,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
+    if (message.type === 'manageSessions') {
+      if (sessionBatchRunning) {
+        send({
+          type: 'sessionBatchResult',
+          requestId: message.requestId,
+          action: message.action,
+          succeeded: [],
+          failed: [],
+          freedBytes: 0,
+          error: 'Une opération sur les sessions est déjà en cours.',
+        });
+        return;
+      }
+      sessionBatchRunning = true;
+      try {
+        await bootstrap();
+        const result = await applySessionBatch(
+          message,
+          (id) => {
+            const entry = hub.featureEntry(id);
+            return {
+              service: entry.service,
+              removeDeletedFeature: (featureId) => entry.devops.removeDeletedFeature(featureId),
+            };
+          },
+          async (features) => {
+            const names = features
+              .map((feature) => {
+                const projects =
+                  feature.projects?.map((project) => project.name).join(' + ') ||
+                  hub.featureEntry(feature.id).project?.name;
+                return `• ${feature.title}${projects ? ` — ${projects}` : ''}`;
+              })
+              .join('\n');
+            const choice = await vscode.window.showWarningMessage(
+              `Supprimer définitivement ${features.length} session${features.length > 1 ? 's' : ''} ?`,
+              {
+                modal: true,
+                detail: `${names}\n\nLes journaux, contextes, rapports, pièces jointes et sauvegardes propres à ces sessions seront supprimés. Les fichiers du projet, branches, worktrees et exports externes sont conservés. Cette action est irréversible.`,
+              },
+              'Supprimer définitivement',
+            );
+            return choice === 'Supprimer définitivement';
+          },
+          (completed, total) =>
+            send({ type: 'sessionBatchProgress', requestId: message.requestId, completed, total }),
+        );
+        send({ type: 'sessionBatchResult', ...result });
+      } catch (error) {
+        send({
+          type: 'sessionBatchResult',
+          requestId: message.requestId,
+          action: message.action,
+          succeeded: [],
+          failed: [],
+          freedBytes: 0,
+          error: redact((error as Error).message),
+        });
+      } finally {
+        sessionBatchRunning = false;
+        hub.publish();
+      }
+      return;
+    }
+    if (message.type === 'exportAgentReport') {
+      try {
+        const current = await ensure(message.featureId);
+        const report = agentReport(
+          current.engine.getFeature(message.featureId),
+          message.stepId,
+          message.attemptId,
+          message.revision,
+        );
+        const destination = await vscode.window.showSaveDialog({
+          title: 'Télécharger le compte rendu de l’agent',
+          saveLabel: 'Enregistrer le Markdown',
+          defaultUri: vscode.Uri.file(path.join(homedir(), report.filename)),
+          filters: { Markdown: ['md'] },
+        });
+        if (destination)
+          await vscode.workspace.fs.writeFile(destination, Buffer.from(report.content, 'utf8'));
+        send({
+          type: 'agentReportExported',
+          requestId: message.requestId,
+          cancelled: !destination,
+        });
+      } catch (error) {
+        send({
+          type: 'agentReportExported',
           requestId: message.requestId,
           error: redact((error as Error).message),
         });
@@ -1527,9 +1651,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'archiveFeature':
-        current.assertConfigurable(message.featureId);
-        current.engine.archiveFeature(message.featureId, message.archived);
-        await current.persist();
+        await current.archiveFeature(message.featureId, message.archived);
         return;
       case 'saveAgent':
       case 'saveSkill': {
@@ -1760,6 +1882,14 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         return;
       }
+      case 'openPersonalReviewReport': {
+        const requested = await resolvePersonalReviewReport(
+          current.registry.userPath,
+          message.sessionId,
+        );
+        await vscode.window.showTextDocument(vscode.Uri.file(requested));
+        return;
+      }
       case 'openFile': {
         const registryPaths = [...current.state.agents, ...current.state.skills].map(
           (item) => item.path,
@@ -1818,6 +1948,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       case 'saveWorkflow': {
         current.assertTrusted();
+        message.workflow.steps = inheritTeamProfiles(message.workflow.steps, current.state.agents);
         if (
           message.workflow.steps.some(
             (step) =>

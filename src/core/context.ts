@@ -114,6 +114,13 @@ export function promptSections(input: RunInput): PromptSection[] {
       unavailable: true,
     });
   }
+  if (input.agent.tools.includes('studio_remote_review'))
+    add(
+      'remote-review-tools',
+      'Relecture distante Git',
+      'system',
+      'Utilise studio_read_personal_resource pour les skills et templates personnels (chemins relatifs au catalogue utilisateur), studio_remote_review pour préparer et lire les commits distants, et studio_write_review_report pour enregistrer le rapport personnel. Ces outils remplacent les commandes node/shell du kit CLI. Le code du projet reste en lecture seule. Réutilise une skill déjà intégralement fournie dans le contexte ; une nouvelle lecture ne sert qu’aux ressources absentes ou référencées. Le rapport final doit aussi figurer dans ta réponse pour être enregistré comme livrable de Feature Studio.',
+    );
   const launch = input.launch ?? input.attempt.launch;
   if (input.agent.tools.some((tool) => tool.startsWith('studio_devops_')))
     add(
