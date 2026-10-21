@@ -2,6 +2,10 @@
 
 Le mode pair est un mode d’exécution d’une étape de feature. La tentative conserve son identité, son contexte, ses permissions, ses preuves et son livrable au fil des échanges. Une discussion consultative reste une discussion sans accès aux outils du projet.
 
+## Permissions des nouvelles sessions
+
+Depuis la v1.22.0, les blocs de travail des nouvelles sessions utilisent les outils natifs Copilot et le mode de permission choisi pour la session. Le sélecteur reste indépendant du rythme solo/pair. Les outils métier conservent leurs contrôles. Le cadrage demeure consultatif dans ce lot ; son exploration native et la conversation native continue relèvent du lot 2. [Guide Copilot natif](COPILOT-NATIF.md).
+
 ## Parcours utilisateur
 
 1. Choisir **Démarrer en mode pair** dans l’étape, préparer le contexte et vérifier son aperçu.
@@ -28,7 +32,7 @@ Le mode pair est un mode d’exécution d’une étape de feature. La tentative 
 
 Le contexte choisi au lancement et la configuration d’exécution sont conservés. Les appels suivants reçoivent ce contexte avec les échanges, l’organisation en cours, les décisions et les sorties déjà produites. Aucun historique n’est supprimé ou résumé silencieusement pour respecter une limite. Si la limite de contexte est atteinte, l’exécution s’arrête avec une explication et le budget peut être ajusté explicitement.
 
-La reprise vérifie l’identité de la tentative, la version du besoin, l’état des dépendances, la branche et les réglages d’autorisation. Une modification du périmètre ou des réglages exige une nouvelle préparation. Les droits sur les fichiers modifiés avant le lancement restent liés aux contenus explicitement autorisés ; une édition externe ultérieure ne crée pas une autorisation nouvelle.
+La reprise vérifie l’identité de la tentative, la version du besoin, l’état des dépendances, la branche et les réglages d’autorisation. Une modification du périmètre ou des réglages exige une nouvelle préparation. Dans le régime Studio historique, les droits sur les fichiers modifiés avant le lancement restent liés aux contenus explicitement autorisés ; une édition externe ultérieure ne crée pas une autorisation nouvelle.
 
 Les conversations et les organisations successives sont incluses dans l’export de session. Le livrable final rassemble les organisations acceptées, les décisions retenues et les résultats des blocs. Les blocs et corrections s’ajoutent à la même tentative ; les versions du compte rendu restent consultables dans l’historique habituel.
 
@@ -36,7 +40,9 @@ Les anciens échanges restent consultables sans modification après une nouvelle
 
 La suppression définitive de la session nettoie aussi toutes les sessions natives créées pour ses échanges pair, sans supprimer les fichiers du projet.
 
-Le stockage passe à la version 7 afin que les anciens clients ne puissent pas réenregistrer une session en supprimant son état pair. Les versions antérieures sont migrées sans démarrer de travail. Les conversations de la v1.19 et de la v1.20 conservent leurs messages, contexte figé, consommation, fichiers et sessions natives. Les travaux en cours demandent une reprise explicite du cadrage pour convenir des blocs restants ; les livrables déjà prêts restent disponibles pour validation.
+La v1.21.0 a introduit le stockage version 7 afin que les anciens clients ne puissent pas réenregistrer une session en supprimant son état pair. Les versions antérieures sont migrées sans démarrer de travail. Les conversations de la v1.19 et de la v1.20 conservent leurs messages, contexte figé, consommation, fichiers et sessions natives. Les travaux en cours demandent une reprise explicite du cadrage pour convenir des blocs restants ; les livrables déjà prêts restent disponibles pour validation.
+
+La v1.22.0 utilise la version 8 pour conserver également le régime natif, les permissions et les événements d’outils. Une activité native en cours lors de la fermeture est marquée interrompue à la réouverture ; aucun appel n’est relancé.
 
 ## Consommation et validation
 

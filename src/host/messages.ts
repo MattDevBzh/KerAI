@@ -1,4 +1,5 @@
 import { pairActionSchema } from '../core/pairSchemas';
+import { nativePermissionModeSchema } from '../core/nativeSchemas';
 import { ZOOM_LEVELS } from '../shared/zoom';
 import { dashboardMessageVariants } from '../core/dashboardSchemas';
 import { devOpsMessageVariants } from '../core/devopsSchemas';
@@ -28,6 +29,13 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('setPermissionMode'),
+      featureId: id,
+      mode: nativePermissionModeSchema,
+    })
+    .strict(),
   pairActionSchema,
   z.object({ type: z.literal('refreshSecretThemes') }).strict(),
   z
@@ -127,6 +135,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('createFeature'),
+      permissionMode: nativePermissionModeSchema.optional(),
       requestId: z.string().uuid().optional(),
       discussionId: z.string().uuid().optional(),
       criteria: discussionFeaturePlanSchema.shape.criteria.optional(),

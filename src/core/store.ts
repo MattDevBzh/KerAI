@@ -2,6 +2,7 @@ import { createPairStateSchema } from './pairSchemas';
 import { migrateLegacyPairs } from './pairMigration';
 import { ticketSourceSnapshotSchema } from './devopsTicketSchemas';
 import { mkdir, readFile, rename, open, unlink, readdir } from 'node:fs/promises';
+import { nativeActivitySchema, nativeExecutionSchema } from './nativeSchemas';
 import {
   digest,
   sessionDirectory,
@@ -102,6 +103,7 @@ const correctionCycle = z.object({
   }),
 });
 const attempt = z.object({
+  nativeActivity: z.array(nativeActivitySchema).max(1000).optional(),
   pair: z.lazy(() => pairStateSchema).optional(),
   profileSnapshot: z
     .object({
@@ -170,6 +172,7 @@ const attempt = z.object({
 });
 const feature = z
   .object({
+    execution: nativeExecutionSchema.optional(),
     id: z.string(),
     optionalRequest: z
       .object({ id: z.string().uuid(), stepId: z.string(), stateKey: z.string().max(5000000) })
@@ -415,7 +418,7 @@ export const settingsSchema = z
 const pairStateSchema = createPairStateSchema(settingsSchema);
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(7),
+    schemaVersion: z.literal(8),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -428,14 +431,14 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 7;
+  schemaVersion: 8;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
 }
 const indexSchema = z
   .object({
-    schemaVersion: z.literal(7),
+    schemaVersion: z.literal(8),
     entries: z
       .array(z.object({ id: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }))
       .refine(
@@ -462,7 +465,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 7,
+          schemaVersion: 8,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -480,11 +483,12 @@ export class Store {
       version !== 4 &&
       version !== 5 &&
       version !== 6 &&
-      version !== 7
+      version !== 7 &&
+      version !== 8
     )
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    if (version === 5 || version === 6 || version === 7) {
-      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 7 });
+    if (version === 5 || version === 6 || version === 7 || version === 8) {
+      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 8 });
       const deleted = new Set((await pendingDeletions(this.rootPath)).map((d) => d.featureId));
       const features: Feature[] = [];
       for (const entry of index.entries) {
@@ -503,13 +507,13 @@ export class Store {
         features.push(item);
       }
       raw = {
-        schemaVersion: 7,
+        schemaVersion: 8,
         features,
         settings: index.settings,
         memory: index.memory.filter((m) => !m.source || !deleted.has(m.source.featureId)),
       };
     }
-    const migration = version !== 7;
+    const migration = version !== 8;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -517,7 +521,7 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 7,
+        schemaVersion: 8,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
@@ -553,6 +557,11 @@ export class Store {
       for (const step of item.steps)
         if (step.status === 'running') {
           engine.interruptRun(item.id, step.id);
+          for (const activity of step.attempts.at(-1)?.nativeActivity ?? [])
+            if (activity.status === 'running') {
+              activity.status = 'interrupted';
+              activity.finishedAt = new Date().toISOString();
+            }
           const pair = step.attempts.at(-1)?.pair;
           if (pair) {
             pair.phase = 'interrupted';
@@ -571,7 +580,7 @@ export class Store {
   }
   save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
     const snapshot = persistedSchema.parse({
-      schemaVersion: 7,
+      schemaVersion: 8,
       features: structuredClone(features),
       settings: structuredClone(settings),
       memory: structuredClone(memory),
@@ -599,7 +608,7 @@ export class Store {
           this.rootPath,
           'state.json',
           JSON.stringify({
-            schemaVersion: 7,
+            schemaVersion: 8,
             entries,
             settings: snapshot.settings,
             memory: snapshot.memory,

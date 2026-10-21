@@ -1,0 +1,61 @@
+{
+  "checkedAt": "2026-10-21T20:30:25.871Z",
+  "platform": "macOS arm64",
+  "cli": "1.0.102",
+  "sdk": "1.0.20",
+  "nativeTools": [
+    "bash",
+    "read_bash",
+    "stop_bash",
+    "list_bash",
+    "view",
+    "create",
+    "edit",
+    "ask_user",
+    "grep",
+    "glob"
+  ],
+  "permissionModes": [
+    "manual",
+    "allow-all"
+  ],
+  "assisted": "runtime rejected mode; UI disables it",
+  "deterministic": {
+    "status": "passed",
+    "callsToModel": 0,
+    "scenarios": [
+      "native read and edit",
+      "shell exit 0",
+      "ask_user response",
+      "permission refusal",
+      "live mode change",
+      "resume with manual permissions reapplied",
+      "ordinary background child PID absent after cancellation"
+    ]
+  },
+  "live": {
+    "checkedAt": "2026-10-21T20:29:32.647Z",
+    "status": "passed",
+    "model": "gpt-6-luna",
+    "usage": {
+      "source": "measured",
+      "inputTokens": 34561,
+      "outputTokens": 573,
+      "cost": 145973500,
+      "unit": "nano-AIU",
+      "byModel": {
+        "gpt-6-luna": {
+          "inputTokens": 34561,
+          "outputTokens": 573,
+          "cost": 145973500
+        }
+      },
+      "model": "gpt-6-luna"
+    },
+    "verified": [
+      "fixture.txt changed from old to new",
+      "native read and shell events received",
+      "structured shell exitCode 0"
+    ]
+  }
+}

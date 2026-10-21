@@ -506,6 +506,7 @@ describe('manual context, human questions and MCP sessions', () => {
     });
     feature.steps[0].agentId = 'fs-dev';
     const original = '// existing feature work\r\nRemoveRange();\r\n';
+    delete feature.execution; // The legacy Studio file tool still verifies its own byte grants.
     await writeFile(join(f.workspace, 'SyfadisProvider.cs'), original);
     await writeFile(join(f.workspace, 'Other.cs'), 'human work');
     const first = await f.service.previewRun(feature.id, 'session');
@@ -585,7 +586,7 @@ describe('manual context, human questions and MCP sessions', () => {
     expect(f.inputs.at(-1)?.resumeSessionId).toBeUndefined();
     expect(f.inputs.at(-1)?.preparedPrompt).toBe(preview.prompt);
     const stored = (await f.service.store.load()).features[0].steps[0].attempts.at(-1)!;
-    expect(stored.launch).toEqual(selected);
+    expect(stored.launch).toEqual({ ...selected, permissionMode: 'manual' });
     expect(f.service.engine.getFeature(feature.id).description).toBe('SOURCE_A_EXCLURE');
   });
   it('binds a run to its preview, persists the user story and selects only explicit MCPs', async () => {
@@ -1376,4 +1377,95 @@ it('reopens an unresolved optional choice in pause without launching an agent', 
     continueAutopilot: true,
   });
   expect(f.inputs.map((input) => input.step.id)).toEqual(['required']);
+});
+
+it('persists native permissions, refusal, runtime evidence and observed edits without inventing ownership', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Native session',
+    description: 'Fix a file',
+    workflowId: 'single',
+  });
+  expect(feature.execution).toEqual({ mode: 'copilot-native', permissionMode: 'manual' });
+  await f.service.setPermissionMode(feature.id, 'allow-all');
+  const stale = await f.service.previewRun(feature.id, 'session');
+  await f.service.setPermissionMode(feature.id, 'manual');
+  await expect(
+    f.service.runStep(feature.id, 'session', '', false, undefined, stale.fingerprint),
+  ).rejects.toThrow(/contexte a changé/);
+  expect(f.inputs).toHaveLength(0);
+  await writeFile(join(f.workspace, 'already-dirty.txt'), 'human work');
+  let permitted: boolean | undefined;
+  f.run(async (_input, callbacks) => {
+    permitted = await callbacks.onNativePermission!({
+      kind: 'shell',
+      question: 'Execute npm test?',
+      details: 'npm test',
+    });
+    await writeFile(join(f.workspace, 'already-dirty.txt'), 'human work plus native edit');
+    callbacks.onNativeActivity!({
+      id: 'tool1',
+      sessionId: 'session-1',
+      source: 'copilot',
+      tool: 'bash',
+      startedAt: new Date().toISOString(),
+      status: 'completed',
+      directory: f.workspace,
+      arguments: '{}',
+      command: 'npm test',
+      output: 'real tool output',
+      exitCode: 0,
+    });
+    return finished();
+  });
+  const run = f.service.runStep(feature.id, 'session');
+  const error = run.catch((reason) => {
+    throw reason;
+  });
+  await expect.poll(() => f.service.state.humanRequests?.length, { timeout: 10000 }).toBe(1);
+  const request = f.service.state.humanRequests![0];
+  expect(request.kind).toBe('native-permission');
+  await expect(f.service.setPermissionMode(feature.id, 'allow-all')).rejects.toThrow(
+    /demande en cours/,
+  );
+  f.service.answerHumanRequest(request.id, 'deny');
+  await error;
+  expect(permitted).toBe(false);
+  const stored = (await f.service.store.load()).features.find((item) => item.id === feature.id)!;
+  expect(stored.execution?.permissionMode).toBe('manual');
+  const attempt = stored.steps[0].attempts.at(-1)!;
+  expect(attempt.nativeActivity?.[0]).toMatchObject({ source: 'copilot', exitCode: 0 });
+  expect(attempt.changedFiles).toContain('already-dirty.txt');
+  expect(attempt.fileHashes?.['already-dirty.txt']).toBeUndefined();
+  expect(stored.workspaceFileHashes?.['already-dirty.txt']).toBeUndefined();
+  expect(f.service.state.humanRequests).toHaveLength(0);
+});
+
+it('cancels native permission waits and keeps changes visible after interruption', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Native interruption',
+    description: '',
+    workflowId: 'single',
+  });
+  f.run(async (_input, callbacks) => {
+    await writeFile(join(f.workspace, 'partial.txt'), 'partial work');
+    await callbacks.onNativePermission!({
+      kind: 'shell',
+      question: 'Continue?',
+      details: 'fixture',
+    });
+    throw new Error('The cancelled permission must never continue.');
+  });
+  const run = f.service.runStep(feature.id, 'session');
+  await expect.poll(() => f.service.state.humanRequests?.length, { timeout: 10000 }).toBe(1);
+  const requestId = f.service.state.humanRequests![0].id;
+  f.service.cancel(feature.id);
+  await run;
+  expect(feature.steps[0].status).toBe('cancelled');
+  expect(feature.steps[0].attempts[0].changedFiles).toContain('partial.txt');
+  expect(f.service.state.humanRequests).toHaveLength(0);
+  expect(() => f.service.answerHumanRequest(requestId, 'allow')).toThrow(/plus active/);
 });

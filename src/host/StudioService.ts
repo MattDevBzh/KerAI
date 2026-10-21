@@ -9,6 +9,9 @@ import {
 } from '../core/pair';
 import { pairPlan, nextPairBlock, type PairAction, type PairTurn } from '../shared/pair';
 import { pairActionSchema } from '../core/pairSchemas';
+import { usesNativeTools, type NativePermissionMode } from '../shared/native';
+import { nativePermissionModeSchema } from '../core/nativeSchemas';
+import { nativeChangesSnapshot, observedNativeChanges } from './NativeChanges';
 import { inheritTeamProfiles, resolveAgentProfile } from '../shared/agentInheritance';
 import { EventEmitter } from 'node:events';
 import { basename, join } from 'node:path';
@@ -148,6 +151,7 @@ export class StudioService extends EventEmitter {
     const tracked = new Set([
       'runStep',
       'pairAction',
+      'setPermissionMode',
       'resolveOptionalStep',
       'approveStep',
       'rejectStep',
@@ -244,7 +248,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 7,
+      schemaVersion: 8,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -345,6 +349,7 @@ export class StudioService extends EventEmitter {
     this.publish();
   }
   async createFeature(input: {
+    permissionMode?: NativePermissionMode;
     requestId?: string;
     ticketSource?: import('../shared/devopsTickets').TicketSourceSnapshot;
     worktreeChoice?: { baseRef: string; baseCommit: string; branchName: string };
@@ -429,6 +434,10 @@ export class StudioService extends EventEmitter {
         },
       );
       feature.steps = inheritTeamProfiles(feature.steps, this.state.agents);
+      feature.execution = {
+        mode: 'copilot-native',
+        permissionMode: nativePermissionModeSchema.parse(input.permissionMode ?? 'manual'),
+      };
       feature.discussionId = input.discussionId;
       feature.creationRequestId = input.requestId;
       feature.ticketSource = input.ticketSource ? structuredClone(input.ticketSource) : undefined;
@@ -866,6 +875,7 @@ export class StudioService extends EventEmitter {
         mcpServerIds: step.mcpServerIds ?? [],
       },
     );
+    if (feature.execution) selected.permissionMode ??= feature.execution.permissionMode;
     if (needsDevOpsEvidence(step) && !selected.devopsTest?.isolationConfirmed)
       throw new Error(
         'Renseigne le test exécuté et confirme sa mise en place hors production dans le formulaire de lancement.',
@@ -1025,9 +1035,16 @@ export class StudioService extends EventEmitter {
     Object.assign(this.state, await this.registry.load());
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     const blocked = budgetBlockReason(input.feature);
-    const existingChanges = await inspectProjectChanges(input);
+    const existingChanges = usesNativeTools(input) ? undefined : await inspectProjectChanges(input);
     this.assertTrusted();
-    return { ...previewContext(input, blocked ? [blocked] : []), existingChanges };
+    const errors = blocked ? [blocked] : [];
+    const capability = this.state.runtime.native;
+    if (usesNativeTools(input) && capability) {
+      if (!capability.available) errors.push(capability.error ?? 'Copilot natif indisponible.');
+      else if (!capability.permissionModes.includes(input.launch?.permissionMode ?? 'manual'))
+        errors.push('Le mode de permission choisi est indisponible dans ce runtime.');
+    }
+    return { ...previewContext(input, errors), existingChanges };
   }
   async runStep(
     featureId: string,
@@ -1091,6 +1108,10 @@ export class StudioService extends EventEmitter {
     const input = pairContinuation
       ? this.pairInput(featureId, stepId)
       : this.prepareInput(featureId, stepId, feedback, resume, launch);
+    if (usesNativeTools(input) && this.state.runtime.native && !this.state.runtime.native.available)
+      throw new Error(
+        this.state.runtime.native.error ?? 'Copilot natif indisponible. Relance le diagnostic.',
+      );
     if (!pairContinuation && input.launch?.editableExistingFiles?.length && !previewFingerprint)
       throw new Error(
         'L’autorisation de reprendre des fichiers existants exige un aperçu confirmé au lancement manuel.',
@@ -1100,7 +1121,7 @@ export class StudioService extends EventEmitter {
       if (actual.branch !== project.branch)
         throw new Error(`Le projet ${project.name} doit être sur la branche ${project.branch}.`);
     }
-    if (!pairContinuation) await inspectProjectChanges(input);
+    if (!pairContinuation && !usesNativeTools(input)) await inspectProjectChanges(input);
     const preview = pairContinuation ? undefined : previewContext(input);
     if (preview?.errors.length) throw new Error(preview.errors.join(' '));
     if (previewFingerprint && previewFingerprint !== preview?.fingerprint)
@@ -1125,6 +1146,8 @@ export class StudioService extends EventEmitter {
       modelOverride: Boolean(step.model),
     };
     attempt.launch = structuredClone(input.launch!);
+    if (feature.execution && input.launch?.permissionMode)
+      feature.execution.permissionMode = input.launch.permissionMode;
     if (!continued) attempt.memorySnapshot = structuredClone(input.memory ?? []);
     if (preview) {
       attempt.promptFingerprint = preview.fingerprint;
@@ -1192,6 +1215,31 @@ export class StudioService extends EventEmitter {
       }
     };
     const callbacks: RunCallbacks = {
+      onNativeActivity: (activity) => {
+        attempt.nativeActivity ??= [];
+        const index = attempt.nativeActivity.findIndex((item) => item.id === activity.id);
+        if (index >= 0) attempt.nativeActivity[index] = structuredClone(activity);
+        else attempt.nativeActivity.push(structuredClone(activity));
+        if (attempt.nativeActivity.length > 1000)
+          attempt.nativeActivity.splice(0, attempt.nativeActivity.length - 1000);
+        this.schedule();
+      },
+      onNativePermission: async (request) => {
+        const answer = await this.askHuman(
+          {
+            id: 'native-' + randomUUID(),
+            featureId,
+            stepId,
+            kind: 'native-permission',
+            question: request.question,
+            details: request.details.slice(0, 30000),
+            choices: ['allow', 'deny'],
+            allowFreeform: false,
+          },
+          controller.signal,
+        );
+        return answer === 'allow';
+      },
       onTrace: trace,
       onUsage: (usage) => {
         usageReported = true;
@@ -1263,6 +1311,7 @@ export class StudioService extends EventEmitter {
         this.schedule();
       },
     };
+    let nativeBefore: Map<string, string> | undefined;
     try {
       if (pair && turn) {
         input.preparedPrompt = pairTurnPrompt(pair, turn);
@@ -1310,7 +1359,7 @@ export class StudioService extends EventEmitter {
         attempt.checkpointBeforeId = before.id;
         await this.persist();
       }
-      if (!continued)
+      if (!continued && !usesNativeTools(input))
         attempt.existingChangesBackup = await backupProjectChanges(
           input,
           this.store.rootPath,
@@ -1328,6 +1377,18 @@ export class StudioService extends EventEmitter {
       if (!pair || turn?.kind === 'work')
         await this.hooks('beforeRun', input, controller.signal, callbacks);
       this.assertTrusted();
+      if (usesNativeTools(input)) {
+        try {
+          nativeBefore = await nativeChangesSnapshot(input);
+        } catch (error) {
+          callbacks.onEvent({
+            id: randomUUID(),
+            at: new Date().toISOString(),
+            kind: 'warning',
+            message: `Observation des fichiers indisponible : ${(error as Error).message}`,
+          });
+        }
+      }
       if (pair) {
         pair.calls++;
         await this.persist();
@@ -1394,6 +1455,26 @@ export class StudioService extends EventEmitter {
           );
       }
     } finally {
+      if (nativeBefore) {
+        try {
+          const observed = observedNativeChanges(nativeBefore, await nativeChangesSnapshot(input));
+          attempt.changedFiles = [...new Set([...attempt.changedFiles, ...observed])];
+          if (observed.length)
+            callbacks.onEvent({
+              id: randomUUID(),
+              at: new Date().toISOString(),
+              kind: 'info',
+              message: `${observed.length} fichier(s) observé(s) modifié(s) pendant l’exécution. Les modifications humaines simultanées peuvent être incluses.`,
+            });
+        } catch (error) {
+          callbacks.onEvent({
+            id: randomUUID(),
+            at: new Date().toISOString(),
+            kind: 'warning',
+            message: `Observation des fichiers incomplète : ${(error as Error).message}`,
+          });
+        }
+      }
       if (pair) {
         if (pairCallStarted && !usageReported)
           attempt.usage = {
@@ -1725,6 +1806,39 @@ export class StudioService extends EventEmitter {
       throw new Error('Aucune exécution active pour cette session.');
     this.active.controller.abort();
   }
+  async setPermissionMode(featureId: string, raw: NativePermissionMode): Promise<void> {
+    this.assertTrusted();
+    const mode = nativePermissionModeSchema.parse(raw),
+      feature = this.engine.getFeature(featureId);
+    if (!feature.execution || feature.archived)
+      throw new Error('Cette session native n’est pas modifiable.');
+    if (this.workspaceTask && this.active?.featureId !== featureId)
+      throw new Error('Attends la fin de l’opération en cours.');
+    if (this.state.runtime.native && !this.state.runtime.native.permissionModes.includes(mode))
+      throw new Error('Ce mode est indisponible dans le runtime ou interdit par sa politique.');
+    if ([...this.pendingHumans.values()].some((item) => item.request.featureId === featureId))
+      throw new Error('Réponds à la demande en cours avant de changer les permissions.');
+    const step =
+      this.active?.featureId === featureId
+        ? this.engine.getStep(featureId, this.active.stepId)
+        : feature.steps.find((item) => item.id === feature.activeStepId);
+    const attempt = step?.attempts.at(-1);
+    if (this.active?.featureId === featureId) {
+      if (!attempt?.sessionId || !this.adapter.setPermissionMode)
+        throw new Error('Attends la connexion de la session native.');
+      await this.adapter.setPermissionMode(attempt.sessionId, mode);
+      if (this.active?.featureId !== featureId)
+        throw new Error('La tentative est terminée ; choisis le mode pour la prochaine reprise.');
+    }
+    feature.execution.permissionMode = mode;
+    if (
+      (attempt?.pair && !['approved', 'stale'].includes(step!.status)) ||
+      this.active?.featureId === featureId
+    ) {
+      if (attempt?.launch) attempt.launch.permissionMode = mode;
+    }
+    await this.persist();
+  }
   private async askHuman(request: HumanRequest, signal: AbortSignal): Promise<string> {
     this.assertTrusted();
     if (signal.aborted) throw new Error('Exécution annulée.');
@@ -1732,7 +1846,7 @@ export class StudioService extends EventEmitter {
       request.featureId,
       request.kind === 'question'
         ? 'Une réponse humaine est nécessaire. Reprends le pilote après l’échange.'
-        : 'Un appel MCP attend une autorisation humaine.',
+        : 'Une action attend une autorisation humaine.',
     );
     return await new Promise<string>((resolve, reject) => {
       const cleanup = () => {

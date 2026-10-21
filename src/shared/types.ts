@@ -113,6 +113,7 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  nativeActivity?: import('./native').NativeActivity[];
   pair?: import('./pair').PairState;
   /** Execution identity frozen at launch, independent from later step edits. */
   profileSnapshot?: {
@@ -165,6 +166,7 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  execution?: import('./native').NativeExecution;
   optionalRequest?: { id: string; stepId: string; stateKey: string };
   ticketSource?: import('./devopsTickets').TicketSourceSnapshot;
   discussionId?: string;
@@ -267,6 +269,7 @@ export interface ModelInfo {
   reasoningEfforts?: string[];
 }
 export interface RuntimeStatus {
+  native?: import('./native').NativeCapabilities;
   state: 'unchecked' | 'checking' | 'ready' | 'unavailable';
   cliPath?: string;
   cliSource?: 'configured' | 'path' | 'user-install';
@@ -280,7 +283,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   workspace: {
     name: string;
     path: string;
@@ -346,6 +349,7 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      permissionMode?: import('./native').NativePermissionMode;
       requestId?: string;
       discussionId?: string;
       criteria?: string[];
@@ -387,6 +391,7 @@ export type ClientMessage =
       launch: RunLaunchOptions;
     }
   | { type: 'answerHumanRequest'; requestId: string; answer: string }
+  | { type: 'setPermissionMode'; featureId: string; mode: import('./native').NativePermissionMode }
   | { type: 'testMcp'; serverId: string }
   | { type: 'setMcpSecret'; serverId: string; key: string; value: string }
   | { type: 'cancelRun'; featureId: string }
@@ -618,6 +623,8 @@ export interface RunResult {
   review?: ReviewReport;
 }
 export interface RunCallbacks {
+  onNativeActivity?(activity: import('./native').NativeActivity): void;
+  onNativePermission?(request: import('./native').NativePermissionPrompt): Promise<boolean>;
   onTrace?(trace: import('./observation').SessionTrace): void;
   onEvent(event: RunEvent): void;
   onSession(id: string): void;
@@ -637,6 +644,10 @@ export interface RunCallbacks {
   }): Promise<boolean>;
 }
 export interface AgentAdapter {
+  setPermissionMode?(
+    sessionId: string,
+    mode: import('./native').NativePermissionMode,
+  ): Promise<void>;
   deleteSessions?(ids: string[]): Promise<void>;
   check(): Promise<RuntimeStatus>;
   run(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal): Promise<RunResult>;

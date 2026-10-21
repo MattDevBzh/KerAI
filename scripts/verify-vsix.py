@@ -29,9 +29,12 @@ def verify(vsix, root, extract=None, match_build=False):
         host_path = embedded['main'].removeprefix('./')
         host = archive.read('extension/' + host_path)
         ui = archive.read('extension/dist/webview/assets/app.js')
-        for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction'):
+        for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction', 'setPermissionMode'):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
+        assert b'copilot-native' in host, 'Native execution missing from host'
+        assert b'native-permissions' in ui, 'Native permission picker missing from webview'
+        assert b'native-activity' in ui, 'Native evidence missing from webview'
         assert b'hq-paper-plane' in ui, 'Context transfer missing from webview'
         styles = archive.read('extension/dist/webview/assets/index.css')
         assert b'hq-paper-delivery' in styles, 'Paper plane animation missing from stylesheet'
@@ -55,6 +58,8 @@ def verify(vsix, root, extract=None, match_build=False):
         assert archive.read('extension/' + notes.as_posix()) == (root / notes).read_bytes()
         pair_guide = Path('docs/MODE-PAIR.md')
         assert archive.read('extension/' + pair_guide.as_posix()) == (root / pair_guide).read_bytes()
+        native_guide = Path('docs/COPILOT-NATIF.md')
+        assert archive.read('extension/' + native_guide.as_posix()) == (root / native_guide).read_bytes()
         if extract:
             extract.mkdir(parents=True, exist_ok=False)
             archive.extractall(extract)
@@ -65,7 +70,7 @@ def verify(vsix, root, extract=None, match_build=False):
         'sha256': hashlib.sha256(vsix.read_bytes()).hexdigest(),
         'verifiedBuildFiles': len(built_files),
         'verifiedPublicAssets': len(assets),
-        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer'],
+        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes'],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

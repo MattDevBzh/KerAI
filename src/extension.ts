@@ -1109,6 +1109,9 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
     switch (message.type) {
+      case 'setPermissionMode':
+        await current.setPermissionMode(message.featureId, message.mode);
+        return;
       case 'installQualityKit': {
         const result = await current.installQualityKit(message.featureId);
         notice(

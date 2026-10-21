@@ -1,4 +1,13 @@
-# Validation et limites — v1.14.0, 19 octobre 2026
+# Validation et limites
+
+## Copilot natif — v1.22.0, 21 octobre 2026
+
+- SDK 1.0.20 et CLI 1.0.102 : recette locale macOS avec outils réellement exécutés, réponses humaines, refus, changement de mode, reprise et arrêt d’un processus enfant. Une fixture complémentaire vérifie une règle gérée de refus de commande, y compris en mode tout autoriser.
+- Un appel modèle borné gpt-6-luna a modifié le fichier de recette et exécuté une commande avec code de retour structuré 0. Usage observé : 34 561 tokens d’entrée, 573 de sortie, 145 973 500 nano-AIU. [Preuve synthétique](native-runtime-proof.json).
+- Manuel et tout autoriser sont disponibles sur ce runtime. Assisté est refusé et désactivé dans l’interface. CLI 1.0.63 : les APIs natives requises manquent, le lancement est refusé avant prompt.
+- Les suites automatisées couvrent permissions, refus, annulation, persistance version 8, événements natifs, fichiers observés sans attribution de propriété et interface. Les jobs Linux/Windows utilisent un CLI 1.0.102 épinglé et n’envoient aucun prompt payant.
+- La procédure de publication contrôle séparément le paquet, son chargement dans VS Code, la CI du commit et l’archive téléchargée. Un succès local n’atteste pas à lui seul ces étapes.
+- Les outils web, sous-agents, plugins, hooks et skills natifs, la conversation native continue et le compagnon latéral restent hors de cette version. [Périmètre et limites](COPILOT-NATIF.md).
 
 
 ## Intégration des travaux locaux — v1.14.0

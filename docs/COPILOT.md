@@ -49,7 +49,7 @@ Les anciennes options `cliPath` et `cwd` visibles dans certains exemples GitHub 
 
 Le diagnostic démarre automatiquement à l'ouverture du cockpit si l'espace de travail est approuvé, après son approbation, ainsi que pour un projet encore non vérifié lorsqu'il devient actif. Il laisse l'interface utilisable pendant la connexion. Un échec reste affiché et se relance explicitement avec **Vérifier la connexion** ; la navigation ne provoque pas de nouvelle tentative en boucle. La démonstration et le simple chargement du lanceur ne déclenchent pas ce diagnostic.
 
-Le diagnostic appelle uniquement `start`, `getStatus`, `getAuthStatus` et `listModels`. Il ne crée pas de session et n'envoie aucun prompt. La liste des modèles provient du compte réel. Un identifiant ou niveau de raisonnement absent de cette liste est refusé avant création de session. Le raisonnement est configuré seulement parmi `supportedReasoningEfforts` annoncés pour le modèle choisi.
+Le diagnostic appelle `start`, `getStatus`, `getAuthStatus` et `listModels`, puis crée une session jetable pour introspecter les outils et les modes de permission natifs. Cette session est supprimée après contrôle. Aucun prompt ni outil du projet n’est exécuté. La liste des modèles provient du compte réel. Un identifiant ou niveau de raisonnement absent de cette liste est refusé avant création de session. Le raisonnement est configuré seulement parmi `supportedReasoningEfforts` annoncés pour le modèle choisi.
 
 Le runtime utilise un `COPILOT_HOME` propre à l'extension, sous son stockage global. Les données personnelles `~/.copilot` ne sont pas modifiées. L'authentification du CLI peut réutiliser le trousseau système ou un token déjà fourni dans l'environnement. Si elle est indisponible, le diagnostic le signale. Une connexion manuelle peut se faire avec `COPILOT_HOME=<répertoire indiqué dans le diagnostic> copilot login`; l'extension ne lit ni ne conserve le token. `mode: 'empty'` du SDK impose `COPILOT_DISABLE_KEYTAR=1`, aussi l'adaptateur applique les restrictions explicitement en conservant l'authentification du trousseau.
 
@@ -64,6 +64,12 @@ Si le CLI démarre mais que Feature Studio annonce une authentification absente,
 Les chemins complets sans extension sont également résolus sous Windows vers un fichier existant `.exe`, `.cmd` ou `.bat`. Un chemin complet introuvable produit une erreur avant le lancement du SDK et ne bascule pas vers un autre CLI du `PATH`.
 
 ### Catalogue et permissions
+
+Depuis la v1.22.0, les nouvelles sessions utilisent les outils natifs Copilot : fichiers, recherche, terminal et `ask_user`. Le diagnostic vérifie le catalogue réel et les modes disponibles. Les permissions choisies pour la session remplacent les politiques Studio sur ces outils génériques ; les outils métier gardent leurs contrôles. Le runtime réapplique les permissions avant le premier prompt et après reprise. Voir [Copilot natif](COPILOT-NATIF.md) pour les garanties et la matrice vérifiée.
+
+### Régime Studio historique
+
+Les paragraphes suivants concernent les sessions anciennes sans régime natif. Aucun changement de régime n’est appliqué automatiquement.
 
 Les flags classiques `--allow-tool=write` ne confinent pas les écritures par chemin. Les règles `shell(command:*)` autorisent un nom/préfixe de commande, sans garantir que ses arguments ou le code exécuté respectent les limites du workspace. Le `cwd` et les instructions en langage naturel ne suffisent pas pour une restriction de tests.
 
@@ -87,7 +93,7 @@ Les agents CLI se définissent dans `.github/agents/*.agent.md` ou `~/.copilot/a
 
 Feature Studio transmet le profil sélectionné au SDK comme `customAgents: [{ name, displayName, description, prompt, tools, infer: false }]`, puis `agent: 'feature-studio'`. Les règles et skills du kit sont chargés par l'hôte et ajoutés au prompt. Cela évite qu'un agent personnel prioritaire ou un MCP déclaré dans un fichier remplace les capacités de la tentative.
 
-L’outil hôte `studio_ask_human` permet de poser une question pendant l’exécution et attend une vraie réponse du cockpit. L’annulation interrompt l’attente ; aucun accord ni réponse n’est simulé. Le contexte initial est fourni dans un formulaire avant chaque lancement manuel, puis enregistré avec son empreinte. Les instructions du rôle sont incluses une seule fois dans le prompt métier ; le custom agent ne reçoit qu’une enveloppe technique générique.
+Dans une session native, `ask_user` transmet les questions au cockpit. Dans le régime historique, l’outil hôte `studio_ask_human` permet de poser une question pendant l’exécution et attend une vraie réponse du cockpit. L’annulation interrompt l’attente ; aucun accord ni réponse n’est simulé. Le contexte initial est fourni dans un formulaire avant chaque lancement manuel, puis enregistré avec son empreinte. Les instructions du rôle sont incluses une seule fois dans le prompt métier ; le custom agent ne reçoit qu’une enveloppe technique générique.
 
 Un bloc final explicite reste disponible en repli, validé strictement :
 
@@ -97,7 +103,7 @@ Un bloc final explicite reste disponible en repli, validé strictement :
 ```
 ````
 
-La liste accepte au maximum 12 questions, identifiants uniques, textes non vides et 2 à 8 choix facultatifs. Le JSON arbitraire des livrables reste du contenu. Un bloc mal formé fait échouer la tentative au lieu de fabriquer des questions ou des réponses. Le prochain prompt contient les réponses humaines enregistrées. L'outil natif `ask_user` est exclu du catalogue ; aucun accusé inventé n'est renvoyé au modèle.
+La liste accepte au maximum 12 questions, identifiants uniques, textes non vides et 2 à 8 choix facultatifs. Le JSON arbitraire des livrables reste du contenu. Un bloc mal formé fait échouer la tentative au lieu de fabriquer des questions ou des réponses. Le prochain prompt contient les réponses humaines enregistrées. Dans le régime Studio historique, l'outil natif `ask_user` est exclu du catalogue ; aucun accusé inventé n'est renvoyé au modèle.
 
 Sources : [agents personnalisés du CLI](https://docs.github.com/en/enterprise-cloud%40latest/copilot/how-tos/copilot-cli/customize-copilot/create-custom-agents-for-cli), [agents via SDK](https://docs.github.com/en/copilot/how-tos/copilot-sdk/features/custom-agents).
 

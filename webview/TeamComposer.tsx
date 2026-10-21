@@ -252,7 +252,11 @@ export function TeamComposer({
                     <dt>Réflexion</dt>
                     <dd>{effective.reasoning}</dd>
                   </dl>
-                  <small className="team-policy">{policies[step.policy]}</small>
+                  <small className="team-policy">
+                    {feature.execution
+                      ? 'Outils natifs · permissions de la session'
+                      : policies[step.policy]}
+                  </small>
                   <label className="field team-participation">
                     <span>Participation</span>
                     <select
@@ -345,7 +349,12 @@ export function TeamComposer({
       {selected && (
         <fieldset className="team-settings" disabled={disabled}>
           <legend>Intervention : {selected.name}</legend>
-          <AgentModelOverrides step={selected} state={state} onChange={update} />
+          <AgentModelOverrides
+            step={selected}
+            state={state}
+            onChange={update}
+            native={Boolean(feature.execution)}
+          />
           {feature.budget?.modelProfile && feature.budget.modelProfile !== 'current' && (
             <p className="muted">Le profil du budget de la feature a priorité sur ces choix.</p>
           )}

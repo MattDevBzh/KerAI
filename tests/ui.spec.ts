@@ -208,6 +208,7 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
     title: 'Analyser un composant',
     description: 'Comprendre les contraintes.',
     isolated: false,
+    permissionMode: 'manual',
   });
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
 });

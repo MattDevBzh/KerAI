@@ -222,7 +222,7 @@ describe('complete pair execution', () => {
       'Le travail en pair doit être terminé et validé par l’humain.',
     );
     const restored = await f.store.load();
-    expect(restored.schemaVersion).toBe(7);
+    expect(restored.schemaVersion).toBe(8);
     expect(restored.features[0].steps[0].attempts[0].pair).toEqual(
       JSON.parse(JSON.stringify(pair)),
     );

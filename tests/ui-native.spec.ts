@@ -1,0 +1,185 @@
+import { test, expect, type Page } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { demoState } from '../webview/demo';
+import type { ClientMessage, StudioState } from '../src/shared/types';
+
+function fixture(running = false): StudioState {
+  const state = structuredClone(demoState),
+    feature = state.features[0],
+    step = feature.steps[0];
+  state.features = [feature];
+  feature.steps = [step];
+  feature.activeStepId = step.id;
+  feature.execution = { mode: 'copilot-native', permissionMode: 'manual' };
+  feature.title = 'Une recherche plus agréable';
+  feature.status = running ? 'running' : 'draft';
+  delete feature.autopilot;
+  delete feature.worktree;
+  delete feature.archived;
+  step.dependsOn = [];
+  step.status = running ? 'running' : 'pending';
+  step.maxAttempts = 10;
+  step.attempts = running
+    ? [
+        {
+          id: 'native-fixture',
+          startedAt: '2026-10-21T12:00:00Z',
+          status: 'running',
+          feedback: '',
+          logs: [],
+          questions: [],
+          answers: {},
+          changedFiles: [],
+          sessionId: 'native-session',
+          launch: {
+            initialContext: '',
+            mcpServerIds: [],
+            memoryIds: [],
+            useProjectMemory: false,
+            permissionMode: 'manual',
+          },
+          nativeActivity: [
+            {
+              id: 'native-shell',
+              source: 'copilot',
+              tool: 'bash',
+              sessionId: 'native-session',
+              startedAt: '2026-10-21T12:00:00Z',
+              finishedAt: '2026-10-21T12:00:01Z',
+              status: 'completed',
+              directory: '/workspace/website',
+              arguments: '{"command":"npm test"}',
+              command: 'npm test',
+              output: '12 tests passed',
+              exitCode: 0,
+            },
+          ],
+        },
+      ]
+    : [];
+  state.runtime = {
+    state: 'ready',
+    authenticated: true,
+    models: [],
+    native: {
+      available: true,
+      tools: ['view', 'edit', 'bash', 'ask_user'],
+      permissionModes: ['manual', 'allow-all'],
+    },
+  };
+  state.humanRequests = running
+    ? [
+        {
+          id: 'native-permission',
+          kind: 'native-permission',
+          featureId: feature.id,
+          stepId: step.id,
+          question: 'Exécuter cette commande ?',
+          details: 'Dossier : /workspace/website\nCommande : npm run build',
+          choices: ['allow', 'deny'],
+          allowFreeform: false,
+        },
+      ]
+    : [];
+  delete state.workspaceOperation;
+  return state;
+}
+
+async function open(page: Page, state: StudioState, selected = true) {
+  await page.addInitScript(
+    ({ state, selected }) => {
+      const sent: ClientMessage[] = [];
+      const saved = {
+        navigationVersion: 2,
+        view: 'sessions',
+        featureId: selected ? state.features[0].id : '',
+        stepId: selected ? state.features[0].steps[0].id : '',
+      };
+      Object.assign(window, {
+        nativeMessages: sent,
+        nativeFixture: state,
+        acquireVsCodeApi: () => ({
+          getState: () => saved,
+          setState() {},
+          postMessage(message: ClientMessage) {
+            sent.push(message);
+            if (message.type === 'ready')
+              setTimeout(() => window.postMessage({ type: 'state', state }, '*'), 0);
+          },
+        }),
+      });
+    },
+    { state, selected },
+  );
+  await page.goto('/');
+  await expect(page.locator('.app-shell')).toBeVisible();
+}
+async function sent(page: Page, type: string) {
+  return page.evaluate(
+    (type) =>
+      (Reflect.get(window, 'nativeMessages') as ClientMessage[]).filter(
+        (message) => message.type === type,
+      ),
+    type,
+  );
+}
+
+test('creates a native session with an explicit permission choice and shows unavailable assisted mode', async ({
+  page,
+}) => {
+  await open(page, fixture(), false);
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Une nouvelle feature' });
+  const picker = dialog.getByRole('combobox', { name: 'Permissions Copilot' });
+  await expect(picker).toHaveValue('manual');
+  await expect(picker.locator('option[value="assisted"]')).toHaveAttribute('disabled', '');
+  await picker.selectOption('allow-all');
+  await dialog.getByPlaceholder('Ex. Une recherche plus agréable au clavier').fill('Native task');
+  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  await expect
+    .poll(() => sent(page, 'createFeature'))
+    .toMatchObject([{ permissionMode: 'allow-all', title: 'Native task' }]);
+  expect(await sent(page, 'runStep')).toHaveLength(0);
+});
+
+test('shows native permission scope, disables concurrent mode changes and sends an explicit refusal', async ({
+  page,
+}) => {
+  await open(page, fixture(true));
+  await expect(page.getByText('AUTORISATION COPILOT · CETTE DEMANDE')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Permissions Copilot' })).toBeDisabled();
+  await expect(
+    page.getByText('Dossier : /workspace/website\nCommande : npm run build'),
+  ).toBeVisible();
+  await mkdir(resolve('test-results/native'), { recursive: true });
+  await page.screenshot({ path: resolve('test-results/native/permission.png'), fullPage: true });
+  await page.locator('.native-permission').getByRole('button', { name: 'Refuser' }).click();
+  await expect
+    .poll(() => sent(page, 'answerHumanRequest'))
+    .toEqual([{ type: 'answerHumanRequest', requestId: 'native-permission', answer: 'deny' }]);
+});
+
+test('renders native command evidence without claiming host test validation', async ({ page }) => {
+  const state = fixture(true);
+  state.humanRequests = [];
+  state.features[0].steps[0].status = 'awaiting_review';
+  state.features[0].steps[0].attempts[0].status = 'awaiting_review';
+  state.features[0].steps[0].attempts[0].artifact = {
+    name: 'result.md',
+    content: 'Travail réalisé.',
+    updatedAt: '2026-10-21T12:01:00Z',
+  };
+  await open(page, state);
+  await page.getByRole('tab', { name: /Preuves/ }).click();
+  const activity = page.getByRole('region', { name: 'Activité native Copilot' });
+  await activity.locator('summary').first().click();
+  await expect(activity).toContainText('Terminé · code 0');
+  await expect(activity).toContainText('12 tests passed');
+  await expect(page.getByText('Aucune commande attestée pour cette tentative.')).toHaveCount(0);
+  await mkdir(resolve('test-results/native'), { recursive: true });
+  await page.screenshot({ path: resolve('test-results/native/evidence.png'), fullPage: true });
+  await page.getByRole('combobox', { name: 'Permissions Copilot' }).selectOption('allow-all');
+  await expect.poll(() => sent(page, 'setPermissionMode')).toMatchObject([{ mode: 'allow-all' }]);
+  expect(await sent(page, 'pairAction')).toHaveLength(0);
+});

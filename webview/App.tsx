@@ -1,4 +1,6 @@
 import { PairWorkspace } from './PairWorkspace';
+import { PermissionPicker } from './NativeExecutionUI';
+import { permissionLabels, type NativePermissionMode } from '../src/shared/native';
 import { agentPolicy } from '../src/shared/agentInheritance';
 import { AgentProfileSummary, AgentModelOverrides } from './AgentModelOverrides';
 import { AgentReportDownload } from './AgentReportDownload';
@@ -1472,6 +1474,7 @@ function CreateModal({
         )),
   );
   const [isolated, setIsolated] = useState(Boolean(state.workspace.canIsolate));
+  const [permissionMode, setPermissionMode] = useState<NativePermissionMode>('manual');
   const [projectPending, setProjectPending] = useState(false);
   const ids = state.projectCatalog?.selectedProjectIds;
   const multiple = (ids?.length ?? 0) > 1;
@@ -1512,6 +1515,7 @@ function CreateModal({
                   }
                 : {}),
               title: title.trim(),
+              permissionMode,
               description: description.trim(),
               isolated: !multiple && isolated && Boolean(state.workspace.canIsolate),
               ...(ids ? { projectIds: ids } : {}),
@@ -1520,6 +1524,15 @@ function CreateModal({
         }}
       >
         <ProjectPicker state={state} dispatch={dispatch} onPendingChange={setProjectPending} />
+        <p>
+          <strong>Copilot natif</strong> · Les outils de Copilot réalisent le travail.
+        </p>
+        <PermissionPicker
+          state={state}
+          value={permissionMode}
+          onChange={setPermissionMode}
+          disabled={busy}
+        />
         <label className="field">
           <span>
             Qu’allons-nous faire ? <em>*</em>
@@ -1585,6 +1598,7 @@ function CreateModal({
                   </select>
                 </label>
                 <AgentModelOverrides
+                  native
                   step={member}
                   state={state}
                   onChange={(patch) =>
@@ -2411,7 +2425,9 @@ function StepPanel({
             <span>
               {step.model || agent?.model || state.settings.defaultModel || 'Modèle automatique'}
               <span className="inline-dot" />
-              {policyLabels[displayPolicy]}
+              {feature.execution
+                ? `Copilot natif · ${permissionLabels[feature.execution.permissionMode]}`
+                : policyLabels[displayPolicy]}
             </span>
           </div>
           <button
@@ -2426,6 +2442,7 @@ function StepPanel({
         </div>
         {config && (
           <StepConfig
+            native={Boolean(feature.execution)}
             key={`${step.agentId}-${step.model}-${step.skills.join(',')}`}
             step={step}
             state={state}
@@ -2494,7 +2511,8 @@ function StepPanel({
             aria-selected={tab === 'evidence'}
             onClick={() => setTab('evidence')}
           >
-            <ShieldCheck size={15} /> Preuves <span>{attempt?.evidence?.length ?? 0}</span>
+            <ShieldCheck size={15} /> Preuves{' '}
+            <span>{(attempt?.evidence?.length ?? 0) + (attempt?.nativeActivity?.length ?? 0)}</span>
           </button>
           <button
             role="tab"
@@ -3161,14 +3179,33 @@ function StepPanel({
         <div className="step-policy">
           <ShieldCheck size={16} />
           <div>
-            <strong>{policyLabels[displayPolicy]}</strong>
-            <p>
-              {displayPolicy === 'read-only'
-                ? 'Cette étape est destinée à analyser et proposer.'
-                : displayPolicy === 'tests'
-                  ? 'Seules les commandes de test configurées sont autorisées.'
-                  : 'L’agent peut modifier les fichiers du projet pendant cette étape.'}
-            </p>
+            {feature.execution ? (
+              <PermissionPicker
+                state={state}
+                value={feature.execution.permissionMode}
+                disabled={
+                  Boolean(feature.archived) ||
+                  Boolean(
+                    state.humanRequests?.some((request) => request.featureId === feature.id),
+                  ) ||
+                  Boolean(attempt?.pair?.busy && attempt.pair.turn?.kind !== 'work')
+                }
+                onChange={(mode) =>
+                  dispatch({ type: 'setPermissionMode', featureId: feature.id, mode })
+                }
+              />
+            ) : (
+              <>
+                <strong>{policyLabels[displayPolicy]}</strong>
+                <p>
+                  {displayPolicy === 'read-only'
+                    ? 'Cette étape est destinée à analyser et proposer.'
+                    : displayPolicy === 'tests'
+                      ? 'Seules les commandes de test configurées sont autorisées.'
+                      : 'L’agent peut modifier les fichiers du projet pendant cette étape.'}
+                </p>
+              </>
+            )}
           </div>
         </div>
       </aside>
@@ -3176,10 +3213,12 @@ function StepPanel({
   );
 }
 function StepConfig({
+  native = false,
   step,
   state,
   save,
 }: {
+  native?: boolean;
   step: FeatureStep;
   state: StudioState;
   save: (v: {
@@ -3297,7 +3336,7 @@ function StepConfig({
         <span>Demander un contexte humain avant exécution automatique</span>
       </label>
       {step.inheritAgent && profile ? (
-        <AgentProfileSummary agent={profile} state={state} />
+        <AgentProfileSummary agent={profile} state={state} native={native} />
       ) : (
         <fieldset className="skill-options">
           <legend>Skills pour cette étape</legend>
@@ -3599,18 +3638,19 @@ function AgentEditor({
           </label>
           <div className="field-row">
             <label className="field">
-              <span>Outils demandés</span>
+              <span>Outils Studio et outils métier</span>
               <input
                 value={tools}
                 onChange={(e) => setTools(e.target.value)}
                 placeholder="read, search, edit, execute"
               />
               <small>
-                Noms pris en charge : read, search, edit, execute. execute permet uniquement les
-                commandes de test préautorisées, sans accès shell. studio_devops_inspect lit les
-                pipelines et résultats du dépôt Azure DevOps configuré ; studio_devops_verify_test
-                vérifie le test manuel dans une étape exigeant sa preuve. Les permissions de l’étape
-                restent applicables.
+                Dans les nouvelles sessions, fichiers et terminal utilisent les outils natifs et les
+                permissions Copilot choisies pour la session. Les noms read, search, edit et execute
+                configurent les outils Studio historiques. studio_devops_inspect lit les pipelines
+                et résultats du dépôt Azure DevOps configuré ; studio_devops_verify_test vérifie le
+                test manuel dans une étape exigeant sa preuve. Les permissions de l’étape restent
+                applicables à ces outils métier.
               </small>
             </label>
             <ModelSelect

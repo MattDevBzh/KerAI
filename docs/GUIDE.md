@@ -2,9 +2,15 @@
 
 [Retour au README](../README.md) · [Kits](KITS.md) · [Kit DevOps](DEVOPS-KIT.md)
 
+## Outils natifs et permissions
+
+Les nouvelles sessions démarrent en **Copilot natif**, avec le mode **Manuel** par défaut. Le choix est visible lors de la création, de la préparation d’un lancement et dans la session. Réponds aux demandes de Copilot par **Autoriser une fois** ou **Refuser**. Le mode **Tout autoriser** accepte les actions natives, sous réserve des règles imposées par Copilot ; **Assisté** n’est sélectionnable que si le runtime le confirme. Ces choix ne changent ni le solo/pair ni les validations du parcours.
+
+Le CLI 1.0.102 avec le SDK embarqué 1.0.20 constitue le couple vérifié. Un ancien CLI peut se connecter tout en étant incompatible avec l’exécution native : le lancement est alors bloqué et le diagnostic explique la mise à jour nécessaire. [Guide des permissions et des résultats natifs](COPILOT-NATIF.md).
+
 ## Installation
 
-1. Télécharge [feature-studio-1.20.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.20.0/feature-studio-1.20.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.20.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.22.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.22.0/feature-studio-1.22.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.22.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -62,7 +68,7 @@ Si le fichier de progression est illisible, le carnet le signale et le conserve.
 
 ## Héritage des profils dans une équipe
 
-Un agent ajouté seul et un agent ajouté depuis une équipe reprennent le profil du menu **Agents** au lancement : instructions, skills, outils, permissions, contexte vide par défaut et ton. Dans une équipe, seuls **Modèle de l’intervention** et **Niveau de réflexion** peuvent remplacer les valeurs du profil. Les autres paramètres sont affichés en lecture seule ; modifie-les dans **Agents**. L’ajout, le retrait, l’ordre et la participation obligatoire ou facultative restent des choix de composition.
+Un agent ajouté seul et un agent ajouté depuis une équipe reprennent le profil du menu **Agents** au lancement : instructions, skills, outils métier, contexte vide par défaut et ton. Les outils génériques natifs et leurs permissions sont ceux de la session. Dans une équipe, seuls **Modèle de l’intervention** et **Niveau de réflexion** peuvent remplacer les valeurs du profil. Les autres paramètres sont affichés en lecture seule ; modifie-les dans **Agents**. L’ajout, le retrait, l’ordre et la participation obligatoire ou facultative restent des choix de composition.
 
 Le choix **Hériter de l’agent** laisse le champ vide dans l’équipe. Modèle et réflexion héritent indépendamment : tu peux remplacer l’un et conserver l’autre. Les valeurs sont relues à chaque lancement ; si tu changes le profil après avoir préparé l’aperçu, recalcule l’aperçu. Un profil de modèle explicitement activé dans le budget de la feature garde sa priorité, signalée dans le compositeur.
 

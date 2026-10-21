@@ -9,10 +9,10 @@ import { CopilotLaunch } from '../src/host/CopilotLaunch';
 import { verifyMcpCatalog } from '../src/host/McpRuntime';
 
 // Explicit real-runtime regression. No send, tool execution, account or Azure API.
-// CI pins the external CLI to 1.0.96 on both Linux and Windows.
+// CI pins the external CLI to 1.0.102 on both Linux and Windows.
 const cliPath = process.env.FEATURE_STUDIO_CATALOG_CLI;
 it.skipIf(!cliPath)(
-  'CLI 1.0.96 retains the DevOps tool and enforces the empty Discussion tool catalogue',
+  'CLI 1.0.102 retains the DevOps tool and enforces the empty Discussion tool catalogue',
   async () => {
     const root = await mkdtemp(join(tmpdir(), 'studio-devops-catalog-'));
     const launch = await CopilotLaunch.create(cliPath!, root);
@@ -33,7 +33,7 @@ it.skipIf(!cliPath)(
     });
     try {
       await client.start();
-      expect((await client.getStatus()).version).toBe('1.0.96');
+      expect((await client.getStatus()).version).toBe('1.0.102');
       for (const [schema, included, discussion] of [
         [devOpsQuerySchema, false, false],
         [devOpsQueryToolSchema, true, false],

@@ -1,4 +1,5 @@
 import { defaultPairPreferences } from '../src/shared/pair';
+import { PermissionPicker } from './NativeExecutionUI';
 import { PairPreferencesUI } from './PairPreferencesUI';
 import { useDialogAccessibility } from './Ergonomics';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
@@ -157,6 +158,7 @@ export function LaunchDialog({
   const previous = step.attempts.at(-1)?.launch;
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
+    ...(feature.execution ? { permissionMode: feature.execution.permissionMode } : {}),
     ...(pairMode ? { pair: previous?.pair ?? { ...defaultPairPreferences } } : {}),
     ...(previous?.devopsTest
       ? { devopsTest: { ...previous.devopsTest, isolationConfirmed: false } }
@@ -261,6 +263,7 @@ export function LaunchDialog({
     changeBlock(id, { content: undefined, enabled: block?.enabled ?? contextMode === 'all' });
   };
   const eligible =
+    (!feature.execution || state.runtime.native?.available !== false) &&
     state.workspace.trusted &&
     state.runtime.state === 'ready' &&
     !feature.archived &&
@@ -297,6 +300,22 @@ export function LaunchDialog({
       <div className="launch-grid">
         <div className="launch-inputs">
           <span className="eyebrow">VOTRE INTENTION</span>
+          {feature.execution && (
+            <>
+              <p>
+                <strong>Copilot natif</strong> · Fichiers, recherche, terminal et questions.
+              </p>
+              <PermissionPicker
+                state={state}
+                value={launch.permissionMode ?? 'manual'}
+                onChange={(permissionMode) => update({ permissionMode })}
+              />
+              <p className="field-help">
+                Les commandes disposent des droits de votre compte. Le dossier de travail et le
+                worktree ne sont pas une sandbox.
+              </p>
+            </>
+          )}
           {launch.pair && (
             <PairPreferencesUI value={launch.pair} onChange={(pair) => update({ pair })} />
           )}
@@ -336,7 +355,8 @@ export function LaunchDialog({
               placeholder="Précisez la direction, les corrections ou les détails à conserver…"
             />
           </label>
-          {preview?.existingChanges &&
+          {!feature.execution &&
+            preview?.existingChanges &&
             (preview.existingChanges.files.length > 0 ||
               (launch.editableExistingFiles?.length ?? 0) > 0) && (
               <fieldset className="existing-changes-picker">
@@ -696,12 +716,16 @@ export function HumanRequests({
       {requests.map((r) => (
         <section className={`human-request ${r.kind}`} key={r.id}>
           <span className="eyebrow">
-            {r.kind === 'mcp-permission' ? <ShieldCheck size={13} /> : <MessageSquare size={13} />}{' '}
-            {r.kind === 'mcp-permission' ? 'AUTORISATION MCP' : 'VOTRE RÉPONSE EST NÉCESSAIRE'}
+            {r.kind !== 'question' ? <ShieldCheck size={13} /> : <MessageSquare size={13} />}{' '}
+            {r.kind === 'native-permission'
+              ? 'AUTORISATION COPILOT · CETTE DEMANDE'
+              : r.kind === 'mcp-permission'
+                ? 'AUTORISATION MCP'
+                : 'VOTRE RÉPONSE EST NÉCESSAIRE'}
           </span>
           <h3>{r.question}</h3>
           {r.details && <pre>{r.details}</pre>}
-          {r.kind === 'mcp-permission' ? (
+          {r.kind !== 'question' ? (
             <div className="human-actions">
               <button
                 className="button secondary small"

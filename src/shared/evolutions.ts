@@ -20,6 +20,7 @@ export interface McpCatalog {
   checkedAt?: string;
 }
 export interface RunLaunchOptions {
+  permissionMode?: import('./native').NativePermissionMode;
   pair?: import('./pair').PairPreferences;
   devopsTest?: import('./devopsKit').DevOpsTestTarget;
   initialContext: string;
@@ -58,7 +59,7 @@ export interface HumanRequest {
   id: string;
   featureId: string;
   stepId: string;
-  kind: 'question' | 'mcp-permission';
+  kind: 'question' | 'mcp-permission' | 'native-permission';
   question: string;
   choices?: string[];
   allowFreeform: boolean;

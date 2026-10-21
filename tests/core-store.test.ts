@@ -42,6 +42,37 @@ function feature() {
   return { engine, item };
 }
 describe('durable versioned store', () => {
+  it('retains native permissions and interrupts unfinished native activity after reopening', async () => {
+    const { store } = await setup();
+    const { engine, item } = feature();
+    item.execution = { mode: 'copilot-native', permissionMode: 'manual' };
+    const attempt = engine.beginRun(item.id, 'run');
+    attempt.nativeActivity = [
+      {
+        id: 'session:command',
+        source: 'copilot',
+        sessionId: 'session',
+        tool: 'bash',
+        startedAt: attempt.startedAt,
+        status: 'running',
+        directory: '/project',
+        arguments: '{"command":"node --version"}',
+        command: 'node --version',
+      },
+    ];
+    await store.save(engine.features, defaultSettings);
+    const reopened = await new Store(store.rootPath).load();
+    expect(reopened.schemaVersion).toBe(8);
+    expect(reopened.features[0].execution).toEqual(item.execution);
+    const restored = reopened.features[0].steps[0].attempts[0];
+    expect(restored.status).toBe('interrupted');
+    expect(restored.nativeActivity?.[0]).toMatchObject({
+      tool: 'bash',
+      command: 'node --version',
+      status: 'interrupted',
+    });
+    expect(restored.nativeActivity?.[0].finishedAt).toBeTruthy();
+  });
   it('round trips an empty draft without treating it as a completed workflow', async () => {
     const { store } = await setup();
     const item = new WorkflowEngine().createFeature(undefined, { title: 'Draft', description: '' });
@@ -68,7 +99,7 @@ describe('durable versioned store', () => {
     const reopened = await new Store(store.rootPath).load();
     expect(reopened.features[0]).toEqual(item);
     expect(reopened.settings.defaultModel).toBe('project-model');
-    expect(reopened.schemaVersion).toBe(7);
+    expect(reopened.schemaVersion).toBe(8);
   });
   it('persists exact question provenance across a replay and reload', async () => {
     const { store } = await setup();
@@ -109,7 +140,7 @@ describe('durable versioned store', () => {
     const migrated = await store.load();
     expect(migrated.features).toEqual(engine.features);
     expect(migrated.features[0].worktree).toBeUndefined();
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(7);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(8);
   });
   it('retains worktree identity, per-attempt checkpoints and restored ownership across reload', async () => {
     const { store } = await setup(),
@@ -142,7 +173,7 @@ describe('durable versioned store', () => {
     item.workspaceFileHashes = { 'restored.txt': 'a'.repeat(64), 'deleted.txt': '<missing>' };
     await store.save(engine.features, defaultSettings);
     const restored = await store.load();
-    expect(restored.schemaVersion).toBe(7);
+    expect(restored.schemaVersion).toBe(8);
     expect(restored.features).toEqual(engine.features);
     const invalid = { ...item, worktree: { ...item.worktree, branch: 'wrong-branch' } };
     const original = await readFile(store.path, 'utf8');
@@ -185,9 +216,9 @@ describe('durable versioned store', () => {
       JSON.stringify({ schemaVersion: 0, features: [], settings: { defaultModel: '' } }),
     );
     const state = await store.load();
-    expect(state.schemaVersion).toBe(7);
+    expect(state.schemaVersion).toBe(8);
     expect(state.settings.timeoutMinutes).toBe(20);
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(7);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(8);
   });
   it('rejects unknown versions and corruption without changing the original file', async () => {
     const { store } = await setup();
@@ -251,7 +282,7 @@ describe('durable versioned store', () => {
       }),
     );
     const migrated = await store.load();
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.features).toEqual(historical);
     expect(migrated.memory).toEqual([]);
     expect(migrated.features[0].autopilot).toBeUndefined();

@@ -1,4 +1,5 @@
 import { executionCallCount } from '../src/core/budgets';
+import { NativeActivityPanel } from './NativeExecutionUI';
 import { inheritTeamProfiles, inheritAgentProfile } from '../src/shared/agentInheritance';
 import { AgentModelOverrides } from './AgentModelOverrides';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
@@ -738,6 +739,7 @@ export function EvidencePanel({
   const evidence = attempt?.evidence ?? [];
   return (
     <div className="evidence-panel">
+      <NativeActivityPanel activities={attempt?.nativeActivity ?? []} />
       <DevOpsEvidencePanel evidence={evidence} />
       <QualityPanel
         evidence={evidence}
@@ -830,7 +832,7 @@ export function EvidencePanel({
             </div>
           </details>
         ))
-      ) : (
+      ) : !attempt?.nativeActivity?.length ? (
         <div className="evidence-empty">
           <FileCheck2 size={28} />
           <h3>Aucune commande attestée pour cette tentative.</h3>
@@ -839,7 +841,7 @@ export function EvidencePanel({
             apparaîtront ici uniquement lorsqu’elles seront transmises par le host.
           </p>
         </div>
-      )}
+      ) : null}
       {attempt?.review && (
         <section className="review-report">
           <span className="eyebrow">RELECTURE PRODUITE PAR L’AGENT</span>

@@ -24,6 +24,7 @@ import {
 import { approvalBlockers } from '../src/core/validation';
 import { Avatar } from './Avatar';
 import { HumanRequests } from './ExecutionUI';
+import { PermissionPicker } from './NativeExecutionUI';
 import { PairPreferencesUI } from './PairPreferencesUI';
 import { subscribe, savedPairDraft, savePairDraft } from './bridge';
 import './pair.css';
@@ -138,6 +139,20 @@ export function PairWorkspace({
   return (
     <div className="page pair-page">
       <header className="pair-header">
+        {feature.execution && (
+          <PermissionPicker
+            state={state}
+            value={feature.execution.permissionMode}
+            disabled={
+              locked ||
+              Boolean(requests.length) ||
+              Boolean(pair?.busy && pair.turn?.kind !== 'work')
+            }
+            onChange={(mode) =>
+              dispatch({ type: 'setPermissionMode', featureId: feature.id, mode })
+            }
+          />
+        )}
         <button className="text-button" onClick={back}>
           <ArrowLeft size={16} /> Revenir à la session
         </button>

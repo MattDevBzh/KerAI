@@ -222,7 +222,7 @@ describe('human collaboration contracts', () => {
     running.sessionId = 'paused-session';
     await store.save(f.engine.features, defaultSettings);
     const reloaded = await store.load();
-    expect(reloaded.schemaVersion).toBe(7);
+    expect(reloaded.schemaVersion).toBe(8);
     expect(reloaded.features[0].corrections?.[0].id).toBe(cycle.id);
     expect(reloaded.features[0].corrections?.[0].status).toBe('interrupted');
     expect(reloaded.features[0].steps[1].status).toBe('interrupted');
@@ -230,7 +230,7 @@ describe('human collaboration contracts', () => {
     expect(reloaded.features[0].steps[1].attempts[0].artifactVersions?.[1].content).toBe(
       'Human version',
     );
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(7);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(8);
     const legacy = fixture();
     legacy.approved();
     legacy.feature.status = 'completed';

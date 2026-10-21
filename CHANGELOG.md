@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.22.0 — 2026-10-21 · Copilot natif et permissions
+
+- Nouvelles sessions sur les outils natifs Copilot : lecture, recherche locale, création, édition, terminal et questions humaines. Les outils métier Studio restent disponibles selon le profil.
+- Choix des permissions à la création, avant un lancement et pendant une exécution : manuel, assisté si le runtime le permet, ou tout autoriser. Le choix reste indépendant du solo/pair et de la validation du résultat.
+- Demandes natives rendues dans le cockpit avec commande, dossier ou modification concernée ; accord unique ou refus, sans réponse inventée.
+- Journal des outils natifs avec origine, état, dossier, commande, sortie et code de retour structuré lorsqu’il est fourni. Les fichiers Git observés ne deviennent pas une preuve de propriété ni un résultat de tests.
+- Diagnostic réel des capacités, respect des politiques Copilot et réapplication des permissions après reprise. CLI 1.0.102 / SDK 1.0.20 vérifiés ; le mode assisté est indisponible sur le runtime testé et désactivé dans l’interface.
+- Arrêt du runtime et des processus enfants ordinaires, conservation du travail partiel et des activités interrompues. Stockage version 8 pour préserver les permissions et traces natives.
+- Aucun changement automatique du régime des anciennes sessions ; aucun chantier de reprise de celles-ci dans ce lot.
+
 ## 1.21.0 — 2026-10-21 · Mode pair complet
 
 - Lancement d’une étape en pair avec aperçu du contexte, rythme et niveau d’explication indépendants, organisation proposée et validation humaine explicite.

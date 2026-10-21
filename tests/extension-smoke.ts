@@ -715,7 +715,7 @@ async function smokeRun(): Promise<void> {
     api.getState()?.features.find((f) => f.id === feature.id)?.title,
     'Smoke extension host',
   );
-  assert.equal(api.getState()?.schemaVersion, 7);
+  assert.equal(api.getState()?.schemaVersion, 8);
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-observer'));
   await api.dispatch({
     type: 'previewObservation',

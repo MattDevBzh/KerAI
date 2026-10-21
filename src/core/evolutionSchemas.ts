@@ -24,8 +24,10 @@ const path = z
   .min(1)
   .max(1000)
   .refine((value) => !value.includes('\0'), 'Chemin invalide.');
+import { nativePermissionModeSchema } from './nativeSchemas';
 export const launchSchema = z
   .object({
+    permissionMode: nativePermissionModeSchema.optional(),
     pair: pairPreferencesSchema.optional(),
     devopsTest: devOpsTestTargetSchema.optional(),
     initialContext: z.string().max(60000),

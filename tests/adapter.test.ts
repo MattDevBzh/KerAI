@@ -163,6 +163,7 @@ function transport() {
       },
     },
     start: vi.fn(async () => {}),
+    deleteSession: vi.fn(async () => {}),
     getStatus: vi.fn(async () => ({ version: '1.0.96', protocolVersion: 3 })),
     getAuthStatus: vi.fn(async () => ({ isAuthenticated: true, login: 'matt' })),
     listModels: vi.fn(async () => [
@@ -273,13 +274,15 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(fake.session.send).not.toHaveBeenCalled();
   });
 
-  it('checks live metadata without creating or sending a session', async () => {
+  it('checks metadata and probes a disposable native catalog without sending a prompt', async () => {
     const status = await adapter.check();
     expect(status).toMatchObject({ state: 'ready', version: '1.0.96', authenticated: true });
     expect(status).toMatchObject({ cliPath: process.execPath, cliSource: 'configured' });
     expect(status.models.map((m) => m.id)).toEqual(['auto', 'gpt-test']);
-    expect(fake.client.createSession).not.toHaveBeenCalled();
+    expect(fake.client.createSession).toHaveBeenCalledOnce();
+    expect(fake.client.deleteSession).toHaveBeenCalledWith('persistent-session');
     expect(fake.session.send).not.toHaveBeenCalled();
+    expect(status.native?.available).toBe(false);
     expect(options?.baseDirectory).toBe(join(storage, 'copilot-runtime'));
     expect(options?.workingDirectory).toBe(options?.baseDirectory);
     expect(options?.connection).toMatchObject({

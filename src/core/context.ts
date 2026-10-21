@@ -4,6 +4,7 @@ import { correctionContext } from '../shared/collaboration';
 import { roastInstructions } from '../shared/roast';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { pairPlanningContract } from '../shared/pair';
+import { usesNativeTools, permissionLabels } from '../shared/native';
 import type {
   MemoryEntry,
   PromptSection,
@@ -37,6 +38,7 @@ export function selectMemory(
 
 /** A deterministic context compiler. Never calls a model or silently summarizes a source. */
 export function promptSections(input: RunInput): PromptSection[] {
+  const native = usesNativeTools(input);
   const sections: PromptSection[] = [];
   const add = (id: string, label: string, source: PromptSection['source'], content: string) => {
     if (content.trim()) sections.push({ id, label, source, content });
@@ -46,7 +48,7 @@ export function promptSections(input: RunInput): PromptSection[] {
       'projects',
       'Projets de la session',
       'system',
-      `Projets autorisés pour cette session :\n${input.projects.map((project) => `${project.id} — ${project.name} — ${project.path} — branche ${project.branch}`).join('\n')}\n${input.projects.length > 1 ? 'Chaque outil de dépôt exige projectId. Choisis uniquement un identifiant de cette liste. Les chemins des outils sont relatifs au projet choisi. Dans les comptes rendus et références de fichiers, utilise @projectId/chemin pour identifier le dépôt. Aucune racine parente ou projet voisin n’est autorisé.' : 'Les chemins des outils sont relatifs au dossier de travail de cette session.'}`,
+      `Projets de cette session :\n${input.projects.map((project) => `${project.id} — ${project.name} — ${project.path} — branche ${project.branch}`).join('\n')}\n${native ? 'Utilise les chemins absolus pour distinguer les dépôts. Les outils métier Studio demandent projectId lorsque plusieurs projets sont sélectionnés. Les permissions Copilot régissent les accès ; le dossier de travail ne constitue pas une sandbox.' : input.projects.length > 1 ? 'Chaque outil de dépôt exige projectId. Choisis uniquement un identifiant de cette liste. Les chemins des outils sont relatifs au projet choisi. Dans les comptes rendus et références de fichiers, utilise @projectId/chemin pour identifier le dépôt. Aucune racine parente ou projet voisin n’est autorisé.' : 'Les chemins des outils sont relatifs au dossier de travail de cette session.'}`,
     );
   add(
     'feature',
@@ -58,7 +60,7 @@ export function promptSections(input: RunInput): PromptSection[] {
     'step',
     'Mission de cette étape',
     'system',
-    `Étape : ${input.step.name}\n${input.step.description}\nProfil technique : ${input.step.policy}`,
+    `Étape : ${input.step.name}\n${input.step.description}\n${native ? `Outils natifs Copilot. Permissions : ${permissionLabels[input.launch?.permissionMode ?? input.feature.execution!.permissionMode]}. Les profils techniques Studio ne limitent pas ces outils. Préserve les modifications humaines existantes.` : `Profil technique : ${input.step.policy}`}`,
   );
   add(
     'agent',
@@ -281,7 +283,9 @@ export function promptSections(input: RunInput): PromptSection[] {
     'system',
     launch?.pair
       ? pairPlanningContract(launch.pair)
-      : 'Produis le livrable de cette étape dans ta réponse finale. Utilise uniquement les outils du catalogue autorisé. ' +
+      : native
+        ? 'Produis le livrable de cette étape dans ta réponse finale. Utilise les outils natifs Copilot pour lire, chercher, créer, modifier et exécuter les commandes adaptées à la mission. Utilise ask_user et attends la vraie réponse lorsqu’une information humaine manque. Les autorisations sont gérées par Copilot et l’utilisateur. Une autorisation technique ne change pas la mission convenue. Ne prétends pas avoir exécuté un test sans l’avoir observé. Indique les commandes lancées, leurs résultats et les limites de vérification. Termine les processus lancés pour la tâche avant de conclure, sauf demande humaine explicite de les conserver.'
+        : 'Produis le livrable de cette étape dans ta réponse finale. Utilise uniquement les outils du catalogue autorisé. ' +
           'Si une information humaine manque, utilise studio_ask_human et attends sa vraie réponse avant toute action dépendante. Ne suppose jamais une réponse. ' +
           'Si cet outil est indisponible, termine avec un seul bloc :\n```feature-studio-questions\n{"questions":[{"id":"question_id","text":"Question précise","choices":["Option A","Option B"]}]}\n```\n' +
           'Les choices sont facultatifs. Les outils shell natifs, les outils hors catalogue, le push et la publication ne sont pas autorisés. Ne prétends pas avoir exécuté une commande ou obtenu une preuve sans l’avoir réellement observée.',
@@ -357,6 +361,8 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
         model: input.step.model || input.agent.model || input.settings.defaultModel,
         reasoning: input.step.reasoning,
         tools: input.agent.tools,
+        execution: input.feature.execution,
+        permissionMode: input.launch?.permissionMode,
         policy: input.step.policy,
         settings: input.settings,
         mcpServers: input.mcpServers,

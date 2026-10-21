@@ -1,7 +1,15 @@
 import type { AgentProfile, StudioState, WorkflowStep } from '../src/shared/types';
 import { agentPolicy } from '../src/shared/agentInheritance';
 
-export function AgentProfileSummary({ agent, state }: { agent: AgentProfile; state: StudioState }) {
+export function AgentProfileSummary({
+  agent,
+  state,
+  native = false,
+}: {
+  agent: AgentProfile;
+  state: StudioState;
+  native?: boolean;
+}) {
   const permissions = {
     'read-only': 'Lecture seule',
     'workspace-write': 'Écriture dans le projet',
@@ -17,11 +25,16 @@ export function AgentProfileSummary({ agent, state }: { agent: AgentProfile; sta
           'Aucune'}
       </p>
       <p>
-        Permissions : {permissions[agentPolicy(agent)]} · Contexte :{' '}
-        {agent.emptyContextByDefault ? 'vide par défaut' : 'profil de l’agent'}
+        {native
+          ? 'Permissions : réglage Copilot de la session'
+          : `Profil Studio : ${permissions[agentPolicy(agent)]}`}{' '}
+        · Contexte : {agent.emptyContextByDefault ? 'vide par défaut' : 'profil de l’agent'}
       </p>
       <small>
-        Instructions, outils, skills et autres paramètres proviennent du menu Agents au lancement.
+        Instructions et skills proviennent du menu Agents au lancement.{' '}
+        {native
+          ? 'Les outils natifs suivent les permissions de la session.'
+          : 'Les restrictions des outils Studio concernent les sessions utilisant ce régime.'}
       </small>
     </div>
   );
@@ -31,9 +44,11 @@ export function AgentModelOverrides({
   step,
   state,
   onChange,
+  native = false,
 }: {
   step: Pick<WorkflowStep, 'agentId' | 'model' | 'reasoning'>;
   state: StudioState;
+  native?: boolean;
   onChange: (patch: Pick<WorkflowStep, 'model' | 'reasoning'>) => void;
 }) {
   const agent = state.agents.find((agent) => agent.id === step.agentId);
@@ -41,7 +56,7 @@ export function AgentModelOverrides({
   const efforts = state.runtime.models.find((m) => m.id === model)?.reasoningEfforts ?? [];
   return (
     <>
-      {agent && <AgentProfileSummary agent={agent} state={state} />}
+      {agent && <AgentProfileSummary agent={agent} state={state} native={native} />}
       <div className="field-row">
         <label className="field">
           <span>Modèle de l’intervention</span>
