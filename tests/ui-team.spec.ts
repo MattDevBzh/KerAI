@@ -98,8 +98,8 @@ test('compose by avatar drag and inherit the profile without duplicating its set
   expect(saved.steps[1].dependsOn).toEqual([saved.steps[0].id]);
   expect(saved.steps[0].inheritAgent).toBe(true);
   expect(saved.steps[0].skills).toEqual([]);
-  expect(saved.steps[0].model).toBeUndefined();
-  expect(saved.steps[0].reasoning).toBeUndefined();
+  expect(saved.steps[0].model).toBe('');
+  expect(saved.steps[0].reasoning).toBe('');
   expect(saved.steps[0].optional).toBe(true);
   expect(saved.steps[1].optional).toBe(true);
   expect(demoState.workflows[0].steps[0].optional).toBeUndefined();
@@ -125,9 +125,7 @@ test('drop a complete team, favorite an agent, then cancel without changing the 
   await expect(page.locator('.team-agent').first()).toHaveAttribute('data-agent-id', id!);
 });
 
-test('a live execution locks an already open composer and disables submission', async ({
-  page,
-}) => {
+test('a live execution keeps the composer available for queued edits', async ({ page }) => {
   await hosted(page);
   await page.getByRole('button', { name: 'Composer mon équipe' }).click();
   await page
@@ -141,10 +139,8 @@ test('a live execution locks an already open composer and disables submission', 
     state.features[0].teamLockedAt = new Date().toISOString();
     window.postMessage({ type: 'state', state }, '*');
   });
-  await expect(
-    page.getByText('Le parcours a commencé : l’équipe est désormais verrouillée.'),
-  ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Valider l’équipe' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Valider l’équipe' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Ajouter un sous-plan' })).toBeEnabled();
 });
 
 test('keyboard additions at small viewport and favorites in the main catalog', async ({ page }) => {

@@ -1,0 +1,284 @@
+.subplan-mark {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid var(--lavender);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--lavender) 12%, var(--panel));
+  color: var(--lavender);
+}
+.subplan-mark.incomplete {
+  border-style: dashed;
+}
+.subplan-mark > svg + svg {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  background: var(--panel);
+  border-radius: 50%;
+}
+.subplan-card {
+  border-style: double !important;
+  border-width: 3px !important;
+  background: color-mix(in srgb, var(--lavender) 5%, var(--panel)) !important;
+}
+.subplan-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--fg);
+  padding: 10px 12px;
+  border: 1px dashed var(--lavender);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--lavender) 8%, var(--panel));
+  font-size: 12px;
+}
+.subplan-warning svg {
+  flex-shrink: 0;
+}
+.subplan-settings {
+  display: grid;
+  gap: 12px;
+}
+.subplan-settings > small {
+  color: var(--muted);
+}
+.subplan-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #0009;
+}
+.subplan-config-panel {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 22px 90px #0005;
+}
+.subplan-config-panel > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.subplan-config-panel h2 {
+  margin: 6px 0;
+}
+.subplan-config-panel p {
+  color: var(--muted);
+}
+.subplan-navigation {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  margin-bottom: 20px;
+}
+.subplan-breadcrumb {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  margin-bottom: 12px;
+}
+.subplan-breadcrumb button {
+  border: 0;
+  background: transparent;
+  color: var(--lavender);
+  padding: 3px;
+  cursor: pointer;
+}
+.subplan-navigation-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.subplan-navigation-actions .field {
+  margin: 0;
+  min-width: 180px;
+  max-width: 100%;
+  flex: 1;
+}
+.subplan-navigation-actions select {
+  max-width: 100%;
+}
+.subplan-overview {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 18px;
+  margin: 16px 0;
+}
+.subplan-overview > header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.subplan-overview h3 {
+  margin: 0;
+}
+.subplan-overview header p {
+  margin: 5px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.subplan-iterations {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+.subplan-iteration {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.subplan-iteration:hover {
+  border-color: var(--lavender);
+}
+.subplan-iteration > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.subplan-iteration strong,
+.subplan-iteration small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.subplan-iteration small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+.subplan-iteration-number {
+  color: var(--lavender);
+  font-size: 20px;
+  font-weight: 700;
+}
+.subplan-iteration.needs-review {
+  border-style: dashed;
+  border-color: var(--lavender);
+}
+@media (max-width: 600px) {
+  .subplan-modal-backdrop {
+    padding: 6px;
+  }
+  .subplan-config-panel {
+    padding: 14px;
+    max-height: calc(100vh - 12px);
+  }
+  .subplan-navigation-actions .field {
+    flex-basis: 100%;
+  }
+  .subplan-iteration > span:last-child {
+    font-size: 11px;
+  }
+}
+
+.subplan-card-visual {
+  display: inline-flex;
+  position: relative;
+  width: 100px;
+  height: 70px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--lavender);
+}
+.subplan-card-visual svg {
+  width: 100%;
+  height: 100%;
+}
+.subplan-sheet {
+  stroke: var(--lavender);
+  stroke-width: 1.2;
+  fill: var(--panel);
+}
+.subplan-sheet.back {
+  opacity: 0.35;
+}
+.subplan-sheet.middle {
+  opacity: 0.65;
+}
+.subplan-sheet.front {
+  fill: color-mix(in srgb, var(--lavender) 10%, var(--panel));
+}
+.subplan-links {
+  stroke: var(--lavender);
+  stroke-width: 1.5;
+}
+.subplan-node {
+  fill: var(--lavender);
+  fill-opacity: 0.25;
+  stroke: var(--lavender);
+  stroke-width: 1.3;
+}
+.subplan-spark {
+  fill: var(--lavender);
+  opacity: 0.65;
+}
+.subplan-card-visual > svg + svg {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  right: 2px;
+  bottom: 2px;
+  background: var(--panel);
+  border-radius: 4px;
+}
+.subplan-card-visual.incomplete .front {
+  stroke-dasharray: 3 3;
+}
+.subplan-card-description {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+  line-height: 1.4;
+}
+.subplan-card-description small {
+  color: var(--muted);
+}
+.subplan-card-kicker {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--lavender);
+  font-weight: 700;
+}
+.journey-step.subplan-card .journey-node {
+  width: 72px;
+  min-width: 72px;
+  height: 54px;
+  background: none;
+}
+.journey-step.subplan-card .subplan-card-visual {
+  width: 72px;
+  height: 54px;
+}
+.hq-station.subplan-card .hq-lamp,
+.hq-station.subplan-card .hq-desk {
+  display: none;
+}
+.hq-station.subplan-card .subplan-card-visual {
+  width: 120px;
+  height: 90px;
+}
+.hq-station.subplan-card .hq-portrait {
+  background: transparent;
+}

@@ -1,3 +1,4 @@
+import { allFeatures } from '../shared/subplans';
 import { randomUUID } from 'node:crypto';
 import { stepResolved, optionalChoiceAvailable } from '../shared/optionalSteps';
 import { z } from 'zod';
@@ -20,6 +21,41 @@ import type {
 } from '../shared/collaboration';
 
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/);
+export const workflowStepSchema = z
+  .object({
+    get subplan(): z.ZodOptional<z.ZodType<import('../shared/subplans').SubplanConfig>> {
+      return z
+        .lazy(() =>
+          z
+            .object({
+              mode: z.enum(['automatic', 'pair']),
+              teamName: z.string(),
+              steps: z.array(workflowStepSchema),
+            })
+            .strict(),
+        )
+        .optional();
+    },
+    id,
+    name: z.string().trim().min(1),
+    description: z.string(),
+    agentId: id,
+    inheritAgent: z.boolean().optional(),
+    policy: z.enum(['read-only', 'workspace-write', 'tests']),
+    requiredQuality: qualityKindSchema.optional(),
+    requiredDevOpsEvidence: z.boolean().optional(),
+    model: z.string().optional(),
+    reasoning: z.string().optional(),
+    skills: z.array(id),
+    maxAttempts: z.number().int().min(1).max(100),
+    artifact: z.string().regex(/^[^/\\]+\.md$/),
+    dependsOn: z.array(id),
+    initialContext: z.string().max(60000).optional(),
+    mcpServerIds: z.array(id).max(256).optional(),
+    askBeforeRun: z.boolean().optional(),
+    optional: z.boolean().optional(),
+  })
+  .strict();
 export const workflowSchema = z
   .object({
     id,
@@ -27,60 +63,36 @@ export const workflowSchema = z
     description: z.string(),
     icon: z.string(),
     source: z.string().optional(),
-    steps: z
-      .array(
-        z
-          .object({
-            id,
-            name: z.string().trim().min(1),
-            description: z.string(),
-            agentId: id,
-            inheritAgent: z.boolean().optional(),
-            policy: z.enum(['read-only', 'workspace-write', 'tests']),
-            requiredQuality: qualityKindSchema.optional(),
-            requiredDevOpsEvidence: z.boolean().optional(),
-            model: z.string().optional(),
-            reasoning: z.string().optional(),
-            skills: z.array(id),
-            maxAttempts: z.number().int().min(1).max(100),
-            artifact: z.string().regex(/^[^/\\]+\.md$/),
-            dependsOn: z.array(id),
-            initialContext: z.string().max(60000).optional(),
-            mcpServerIds: z.array(id).max(256).optional(),
-            askBeforeRun: z.boolean().optional(),
-            optional: z.boolean().optional(),
-          })
-          .strict(),
-      )
-      .min(1),
+    steps: z.array(workflowStepSchema).min(1),
   })
   .strict()
   .superRefine((workflow, context) => {
-    const seen = new Set<string>();
-    for (const step of workflow.steps) {
-      if (seen.has(step.id))
-        context.addIssue({ code: 'custom', message: `Étape dupliquée : ${step.id}` });
-      seen.add(step.id);
-    }
-    const visiting = new Set<string>(),
-      done = new Set<string>();
-    function visit(stepId: string) {
-      if (visiting.has(stepId)) {
-        context.addIssue({ code: 'custom', message: `Cycle de dépendances : ${stepId}` });
-        return;
+    const pending = [workflow.steps];
+    while (pending.length) {
+      const steps = pending.pop()!;
+      const seen = new Set<string>();
+      for (const step of steps) {
+        if (seen.has(step.id))
+          context.addIssue({ code: 'custom', message: `Étape dupliquée : ${step.id}` });
+        seen.add(step.id);
+        if (step.subplan) pending.push(step.subplan.steps);
       }
-      if (done.has(stepId)) return;
-      const step = workflow.steps.find((s) => s.id === stepId);
-      if (!step) {
-        context.addIssue({ code: 'custom', message: `Dépendance inconnue : ${stepId}` });
-        return;
+      const remaining = new Set(steps.map((s) => s.id));
+      while (remaining.size) {
+        const next = steps.find(
+          (s) =>
+            remaining.has(s.id) && s.dependsOn.every((dep) => seen.has(dep) && !remaining.has(dep)),
+        );
+        if (!next) {
+          context.addIssue({
+            code: 'custom',
+            message: 'Cycle ou dépendance inconnue dans une équipe.',
+          });
+          break;
+        }
+        remaining.delete(next.id);
       }
-      visiting.add(stepId);
-      for (const dep of step.dependsOn) visit(dep);
-      visiting.delete(stepId);
-      done.add(stepId);
     }
-    for (const step of workflow.steps) visit(step.id);
   });
 export function validateWorkflow(input: unknown): Workflow {
   return workflowSchema.parse(input);
@@ -133,7 +145,7 @@ export class WorkflowEngine {
   }
 
   getFeature(featureId: string): Feature {
-    const feature = this.features.find((f) => f.id === featureId);
+    const feature = allFeatures(this.features).find((f) => f.id === featureId);
     if (!feature) throw new Error('Session inconnue.');
     return feature;
   }
@@ -165,7 +177,7 @@ export class WorkflowEngine {
           : feature.finalValidation
             ? 'completed'
             : 'awaiting_final_validation'
-        : feature.steps.some((s) => s.status === 'running')
+        : allFeatures([feature]).some((f) => f.steps.some((s) => s.status === 'running'))
           ? 'running'
           : feature.steps.some((s) => !['pending'].includes(s.status))
             ? 'attention'
@@ -188,6 +200,7 @@ export class WorkflowEngine {
     const next = feature.steps.find(
       (s) =>
         !stepResolved(s) &&
+        !s.awaitsCorrection &&
         s.dependsOn.every((dep) => stepResolved(feature.steps.find((d) => d.id === dep))),
     );
     if (next) feature.activeStepId = next.id;
@@ -275,6 +288,10 @@ export class WorkflowEngine {
   beginRun(featureId: string, stepId: string, feedback = '', resume = false): Attempt {
     const [feature, step] = this.pair(featureId, stepId);
     if (feature.archived) throw new Error('La session est archivée.');
+    if (step.awaitsCorrection)
+      throw new Error(
+        'Cette intervention a été insérée avant du travail déjà réalisé. Inclus-la dans une route de correction pour la lancer.',
+      );
     if (feature.steps.some((s) => s.status === 'running'))
       throw new Error('Une tentative est déjà en cours.');
     if (!step.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep))))
@@ -565,6 +582,7 @@ export class WorkflowEngine {
     for (const root of cycle.rootStepIds) this.invalidate(feature, root);
     for (const step of feature.steps)
       if (cycle.impactedStepIds.includes(step.id)) {
+        delete step.awaitsCorrection;
         step.status = step.attempts.length ? 'stale' : 'pending';
         if (!step.attempts.length) delete step.optionalDecision;
       }

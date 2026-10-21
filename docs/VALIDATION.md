@@ -1,5 +1,14 @@
 # Validation et limites
 
+## Sous-plans et sous-équipes — v1.24.0, 22 octobre 2026
+
+- Validation locale : **735 tests métier réussis, 5 tests optionnels ignorés**, vérification TypeScript et compilation. **254 scénarios Chromium réussis**. Les scénarios couvrent l’imbrication, les historiques, les révisions avec revérification des résultats suivants, les changements de composition pendant un appel, la reprise après interruption, les worktrees et la suppression complète de l’arbre.
+- Le scénario avec **Copilot CLI 1.0.102 / SDK 1.0.20 et gpt-6-luna** a réalisé une tâche avec deux agents : l’orchestrateur a fourni le découpage, le développeur a modifié le fichier avec l’outil natif `apply_patch`, le testeur a exécuté une commande native avec code de retour 0. Le scénario a contrôlé l’absence d’appel du testeur avant validation du code, puis les validations de la tâche et de la carte parente, et la relecture de leur état persisté. Les validations humaines sont envoyées explicitement par le scénario de recette. **3 appels** pour ce scénario réussi ; [preuve synthétique](subplan-runtime-proof.json).
+- Les premiers essais ont révélé l’absence de `apply_patch` dans le catalogue proposé aux modèles qui l’utilisent, puis la présence d’anciens profils utilisateur dans la recette. Le catalogue a été complété, le profil Tests fourni adapté au mode natif, et la recette utilise désormais un catalogue de profils isolé. Les profils personnels existants ne sont pas écrasés : une ancienne consigne interdisant le terminal reste à mettre à jour dans Agents si tu veux utiliser les tests natifs avec ce profil.
+- Un contrôle sans inférence utilise le vrai CLI pour exécuter le patch natif et vérifier son refus en lecture seule. Les interruptions, révisions multiples et niveaux imbriqués sont vérifiés par les tests déterministes avec agents simulés ; ils ne sont pas présentés comme une campagne multi-modèles réelle.
+- La carte et les écrans ont été vérifiés en thèmes clairs, sombres et événementiels, ainsi qu’en petite largeur. Les [captures du sous-plan](screenshots/carte-sous-plan.png) et de [navigation](screenshots/sous-equipe.png) utilisent des données de démonstration. Le paquet, son chargement dans VS Code, la CI Linux/Windows du commit et l’archive téléchargée restent des vérifications séparées avant livraison.
+
+
 ## Conversation native intégrée — v1.23.0, 21 octobre 2026
 
 - Le vrai CLI 1.0.102 avec SDK 1.0.20 reprend une même session en passant du catalogue de lecture au catalogue de travail, puis à la lecture. Le test automatisé sans inférence vérifie les outils réellement exposés dans les deux sens.

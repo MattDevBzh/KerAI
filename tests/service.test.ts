@@ -109,7 +109,7 @@ it('launches with the current base profile, rejects stale previews and keeps onl
   });
   const step = feature.steps[0];
   expect(step.inheritAgent).toBe(true);
-  expect(step.model).toBeUndefined();
+  expect(step.model).toBe('');
   expect(step.skills).toEqual([]);
   const preview = await f.service.previewRun(feature.id, step.id);
   expect(preview.prompt).toContain('LIVE_SKILL_INSTRUCTIONS');
@@ -121,8 +121,8 @@ it('launches with the current base profile, rejects stale previews and keeps onl
   step.skills = ['stale-copy-must-not-run'];
   await f.service.runStep(feature.id, step.id);
   expect(f.inputs[0].step).toMatchObject({
-    model: 'updated-model',
-    reasoning: 'low',
+    model: '',
+    reasoning: 'high',
     skills: ['live-skill'],
     policy: 'read-only',
     description: 'Live role',
@@ -134,7 +134,7 @@ it('launches with the current base profile, rejects stale previews and keeps onl
   await f.service.runStep(feature.id, step.id);
   expect(f.inputs[1].step).toMatchObject({
     model: 'team-model',
-    reasoning: 'low',
+    reasoning: '',
     skills: ['live-skill'],
   });
 });
@@ -1068,10 +1068,10 @@ describe('editable feature teams', () => {
     });
     await f.service.runStep(feature.id, step.id).catch(() => undefined);
     expect(feature.teamLockedAt).toBeTruthy();
-    await expect(f.service.saveFeatureTeam(feature.id, 1, [])).rejects.toThrow('verrouillée');
+    await expect(f.service.saveFeatureTeam(feature.id, 1, [])).rejects.toThrow('historique');
     expect((await f.service.store.load()).features[0].teamLockedAt).toBe(feature.teamLockedAt);
   });
-  it('rejects invalid graph, unavailable agent, repeated report and mutation while launching', async () => {
+  it('rejects invalid compositions and queues valid changes while an operation runs', async () => {
     const f = await fixture();
     const feature = await f.service.createFeature({
       title: 'Validate',
@@ -1106,10 +1106,16 @@ describe('editable feature teams', () => {
           enter();
         }),
     );
-    await expect(f.service.saveFeatureTeam(feature.id, 0, [])).rejects.toThrow('opération');
     await entered;
-    release();
+    try {
+      await expect(f.service.saveFeatureTeam(feature.id, 0, [])).resolves.toBe(1);
+      expect(feature.pendingTeam).toBeDefined();
+    } finally {
+      release();
+    }
     await operation;
+    expect(feature.pendingTeam).toBeUndefined();
+    expect(feature.steps).toHaveLength(0);
   });
   it('rolls back the in-memory composition if durable saving fails', async () => {
     const f = await fixture();

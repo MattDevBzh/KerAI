@@ -16,6 +16,7 @@ export const pairPlanProposalSchema = z
             id,
             title: z.string().trim().min(1).max(300),
             description: z.string().trim().min(1).max(10000),
+            corrects: id.optional(),
           })
           .strict(),
       )

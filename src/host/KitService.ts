@@ -1,3 +1,4 @@
+import { configurationSteps } from '../shared/subplans';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, mkdir, writeFile, lstat, unlink, readdir } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -136,7 +137,7 @@ function bundleNodes(bundle: KitBundle): KitNode[] {
       const workflow = validateWorkflow(parse(text, { uniqueKeys: true }));
       if (workflow.id !== basename(file.path).replace(/\.ya?ml$/, ''))
         throw Error('Identifiant de parcours différent du nom de fichier.');
-      if (workflow.source || workflow.steps.some((s) => s.mcpServerIds?.length))
+      if (workflow.source || configurationSteps(workflow.steps).some((s) => s.mcpServerIds?.length))
         throw Error('Un kit ne doit pas contenir de chemin source ou de connexion MCP active.');
       workflows.push(workflow);
     }
@@ -243,7 +244,7 @@ export class KitService {
       if (kind === 'workflow') {
         const original = data.workflows.find((w) => w.id === identifier)!;
         const { source, ...workflow } = structuredClone(original);
-        for (const step of workflow.steps) delete step.mcpServerIds;
+        for (const step of configurationSteps(workflow.steps)) delete step.mcpServerIds;
         entries.set(
           `feature-studio/workflows/${identifier}.yaml`,
           makeFile(

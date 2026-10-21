@@ -551,7 +551,7 @@ export class FeatureWorkspace {
     }
     if (!sourceTop || sourceTop !== source)
       throw new Error('Le dépôt source n’est plus disponible.');
-    const expected = this.expectedPath(source, feature.id),
+    const expected = this.expectedPath(source, feature.worktree.ownerFeatureId ?? feature.id),
       configured = path.resolve(feature.worktree.path);
     if (configured !== expected)
       throw new Error('Ce chemin de worktree n’appartient pas à cette feature.');

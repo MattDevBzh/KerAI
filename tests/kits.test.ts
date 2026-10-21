@@ -64,7 +64,7 @@ describe('portable kit dependency and file contracts', () => {
     const f = await fixture();
     const catalog = await f.kits.catalog();
     expect(catalog.map((k) => k.metadata.id)).toEqual(['copilot', 'devops']);
-    expect(catalog[0].nodes.filter((n) => n.kind === 'agent')).toHaveLength(13);
+    expect(catalog[0].nodes.filter((n) => n.kind === 'agent')).toHaveLength(14);
     expect(catalog[1].nodes.filter((n) => n.kind === 'agent')).toHaveLength(6);
     expect(catalog[1].nodes.filter((n) => n.kind === 'skill')).toHaveLength(8);
     expect(catalog.every((k) => !k.installed)).toBe(true);

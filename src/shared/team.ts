@@ -20,6 +20,8 @@ export function teamSteps(feature: Feature): WorkflowStep[] {
     ({
       status: _status,
       attempts: _attempts,
+      subplanState: _subplanState,
+      awaitsCorrection: _awaitsCorrection,
       optionalDecision: _decision,
       optionalDecisionHistory: _history,
       ...step
@@ -50,6 +52,14 @@ export function instantiateTeam(
     return {
       ...structuredClone(step),
       id,
+      ...(step.subplan
+        ? {
+            subplan: {
+              ...structuredClone(step.subplan),
+              steps: instantiateTeam(step.subplan.steps, newId),
+            },
+          }
+        : {}),
       artifact: `${step.artifact.replace(/\.md$/i, '').slice(0, 100)}-${id}.md`,
       dependsOn: step.dependsOn.map((dep) => {
         const mapped = ids.get(dep);
@@ -69,6 +79,8 @@ export function agentStep(agent: AgentProfile): WorkflowStep {
       description: agent.description,
       agentId: agent.id,
       inheritAgent: true,
+      model: agent.model ?? '',
+      reasoning: agent.reasoning ?? '',
       policy: agentPolicy(agent),
       skills: [],
       maxAttempts: 3,
@@ -161,9 +173,9 @@ export function effectiveTeamModel(step: WorkflowStep, feature: Feature, state: 
       ? state.settings.modelProfiles?.[budget.modelProfile]
       : undefined;
   const agent = state.agents.find((item) => item.id === step.agentId);
-  const model = profile?.model || step.model || agent?.model || state.settings.defaultModel;
+  const model = profile?.model || (step.model ?? agent?.model) || state.settings.defaultModel;
   const info = state.runtime.models.find((item) => item.id === model);
-  const reasoning = profile ? profile.reasoning : step.reasoning || agent?.reasoning;
+  const reasoning = profile ? profile.reasoning : (step.reasoning ?? agent?.reasoning);
   return {
     model: info?.name || model || 'Automatique',
     reasoning:

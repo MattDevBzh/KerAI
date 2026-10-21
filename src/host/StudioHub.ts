@@ -1,3 +1,4 @@
+import { allFeatures } from '../shared/subplans';
 import { EventEmitter } from 'node:events';
 import type { StudioState } from '../shared/types';
 import type { ProjectCatalog, StoredProject } from './ProjectCatalog';
@@ -53,7 +54,7 @@ export class StudioHub extends EventEmitter {
               (other) =>
                 other !== entry &&
                 (other.service.state.workspaceOperation ||
-                  other.service.state.features.some(
+                  allFeatures(other.service.state.features).some(
                     (feature) => feature.autopilot?.status === 'running',
                   )),
             )
@@ -106,7 +107,7 @@ export class StudioHub extends EventEmitter {
   }
   async activateFeature(id: string): Promise<HubEntry> {
     const found = [...this.entries].find(([, entry]) =>
-      entry.service.state.features.some((feature) => feature.id === id),
+      allFeatures(entry.service.state.features).some((feature) => feature.id === id),
     );
     if (!found) throw new Error('Session inconnue dans les projets enregistrés.');
     this.activeId = found[0];
@@ -115,7 +116,7 @@ export class StudioHub extends EventEmitter {
   }
   featureEntry(id: string): HubEntry {
     const matches = [...this.entries.values()].filter((entry) =>
-      entry.service.state.features.some((feature) => feature.id === id),
+      allFeatures(entry.service.state.features).some((feature) => feature.id === id),
     );
     if (matches.length !== 1)
       throw new Error('Session inconnue ou ambiguë dans les projets enregistrés.');

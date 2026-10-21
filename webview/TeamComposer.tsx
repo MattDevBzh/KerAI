@@ -1,3 +1,5 @@
+import { SubplanCardVisual, SubplanSettings } from './SubplanUI';
+import { newSubplanStep, subplanIssues } from '../src/shared/subplans';
 import { inheritTeamProfiles } from '../src/shared/agentInheritance';
 import { AgentModelOverrides } from './AgentModelOverrides';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
@@ -24,7 +26,6 @@ import {
   orderedAgents,
   orderTeam,
   removeTeamStep,
-  teamLocked,
   teamSteps,
 } from '../src/shared/team';
 import { Avatar } from './Avatar';
@@ -46,12 +47,14 @@ export function TeamComposer({
   dispatch,
   onClose,
   onPendingChange,
+  onApply,
 }: {
   feature: Feature;
   state: StudioState;
   dispatch: (message: ClientMessage) => void;
   onClose: () => void;
   onPendingChange: (pending: boolean) => void;
+  onApply?: (steps: WorkflowStep[]) => void;
 }) {
   const [steps, setSteps] = useState(() =>
     orderTeam(inheritTeamProfiles(teamSteps(feature), state.agents)),
@@ -65,14 +68,10 @@ export function TeamComposer({
     [dropAt, setDropAt] = useState<number>();
   const dragged = useRef<DragItem | null>(null),
     request = useRef('');
-  const locked = teamLocked(feature);
+  const locked =
+    Boolean(feature.pendingTeam) || Boolean(feature.parent && feature.status === 'completed');
   const stale = revision !== (feature.teamRevision ?? 0);
-  const busy =
-    pending ||
-    Boolean(state.workspaceOperation) ||
-    state.features.some(
-      (f) => f.steps.some((s) => s.status === 'running') || f.autopilot?.status === 'running',
-    );
+  const busy = pending;
   const disabled = busy || locked || stale || Boolean(feature.archived);
   useEffect(
     () =>
@@ -199,8 +198,24 @@ export function TeamComposer({
           <small>{isLinearTeam(steps) ? 'Ordre d’exécution' : 'Dépendances conservées'}</small>
         </div>
         <p className="muted">
-          Glissez une photo ou une équipe ici. Un agent peut intervenir plusieurs fois.
+          Glissez une photo ou une équipe ici. Un agent peut intervenir plusieurs fois. Les étapes
+          déjà exécutées conservent leur historique.
         </p>
+        <button
+          type="button"
+          className="button secondary small"
+          disabled={disabled}
+          onClick={() =>
+            apply(() => {
+              const card = newSubplanStep();
+              setEditing(card.id);
+              return insertTeam(steps, [card], steps.length);
+            }, 'Sous-plan ajouté.')
+          }
+        >
+          <Plus size={15} />
+          Ajouter un sous-plan
+        </button>
         <div className={`team-members ${!steps.length ? 'empty' : ''}`}>
           {dropZone(0)}
           {!steps.length && (
@@ -229,7 +244,7 @@ export function TeamComposer({
             return (
               <div className="team-member-slot" key={step.id}>
                 <article
-                  className={`team-member ${editing === step.id ? 'editing' : ''}`}
+                  className={`team-member ${step.subplan ? 'subplan-card' : ''} ${editing === step.id ? 'editing' : ''}`}
                   data-member-id={step.id}
                 >
                   <span className="team-position">{index + 1}</span>
@@ -240,22 +255,56 @@ export function TeamComposer({
                     onDragEnd={end}
                     title="Déplacer cette intervention"
                   >
-                    <Avatar agent={agent} />
+                    {step.subplan ? <SubplanCardVisual step={step} /> : <Avatar agent={agent} />}
                     <GripVertical size={14} />
                   </div>
-                  <strong>{agent?.nickname || agent?.name || step.agentId}</strong>
-                  <dl>
-                    <dt>Rôle</dt>
-                    <dd>{step.name}</dd>
-                    <dt>Modèle</dt>
-                    <dd>{effective.model}</dd>
-                    <dt>Réflexion</dt>
-                    <dd>{effective.reasoning}</dd>
-                  </dl>
+                  <strong>
+                    {step.subplan ? step.name : agent?.nickname || agent?.name || step.agentId}
+                  </strong>
+                  {step.subplan && (
+                    <>
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={disabled}
+                        onClick={() => setEditing(step.id)}
+                      >
+                        Configurer la sous-équipe
+                      </button>
+                      {subplanIssues([step]).length > 0 && (
+                        <p className="subplan-warning">
+                          Sous-équipe à configurer · lancement bloqué
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {step.subplan ? (
+                    <div className="subplan-card-description">
+                      <span className="subplan-card-kicker">SOUS-PLAN</span>
+                      <strong>{step.subplan.teamName || 'Aucune sous-équipe'}</strong>
+                      <small>
+                        {step.subplan.steps.length} interventions ·{' '}
+                        {step.subplan.mode === 'pair'
+                          ? 'Découpage accompagné'
+                          : 'Découpage automatique'}
+                      </small>
+                    </div>
+                  ) : (
+                    <dl>
+                      <dt>Rôle</dt>
+                      <dd>{step.name}</dd>
+                      <dt>Modèle</dt>
+                      <dd>{effective.model}</dd>
+                      <dt>Réflexion</dt>
+                      <dd>{effective.reasoning}</dd>
+                    </dl>
+                  )}
                   <small className="team-policy">
-                    {feature.execution
-                      ? 'Outils natifs · permissions de la session'
-                      : policies[step.policy]}
+                    {step.subplan
+                      ? 'Une équipe complète pour chaque tâche'
+                      : feature.execution
+                        ? 'Outils natifs · permissions de la session'
+                        : policies[step.policy]}
                   </small>
                   <label className="field team-participation">
                     <span>Participation</span>
@@ -282,6 +331,7 @@ export function TeamComposer({
                   {effective.profile && <small>Profil de budget : {effective.profile}</small>}
                   <div className="team-member-actions">
                     <button
+                      type="button"
                       className="icon-button"
                       disabled={disabled || index === 0}
                       aria-label={`Monter ${step.name}`}
@@ -292,6 +342,7 @@ export function TeamComposer({
                       <ArrowUp size={14} />
                     </button>
                     <button
+                      type="button"
                       className="icon-button"
                       disabled={disabled || index === steps.length - 1}
                       aria-label={`Descendre ${step.name}`}
@@ -302,6 +353,7 @@ export function TeamComposer({
                       <ArrowDown size={14} />
                     </button>
                     <button
+                      type="button"
                       className="icon-button"
                       disabled={disabled}
                       aria-label={`Régler ${step.name}`}
@@ -311,6 +363,7 @@ export function TeamComposer({
                       <Settings2 size={14} />
                     </button>
                     <button
+                      type="button"
                       className="icon-button"
                       disabled={disabled}
                       aria-label={`Dupliquer ${step.name}`}
@@ -329,8 +382,12 @@ export function TeamComposer({
                       <Copy size={14} />
                     </button>
                     <button
+                      type="button"
                       className="icon-button"
-                      disabled={disabled}
+                      disabled={
+                        disabled ||
+                        Boolean(feature.steps.find((s) => s.id === step.id)?.attempts.length)
+                      }
                       aria-label={`Retirer ${step.name}`}
                       onClick={() =>
                         apply(() => removeTeamStep(steps, step.id), 'Intervention retirée.')
@@ -349,6 +406,9 @@ export function TeamComposer({
       {selected && (
         <fieldset className="team-settings" disabled={disabled}>
           <legend>Intervention : {selected.name}</legend>
+          {selected.subplan && (
+            <SubplanSettings step={selected} state={state} dispatch={dispatch} onChange={update} />
+          )}
           <AgentModelOverrides
             step={selected}
             state={state}
@@ -407,6 +467,7 @@ export function TeamComposer({
               </div>
               <p>{team.description}</p>
               <button
+                type="button"
                 className="button secondary small"
                 disabled={disabled}
                 onClick={() => add({ kind: 'team', id: team.id }, steps.length)}
@@ -440,6 +501,7 @@ export function TeamComposer({
               <strong>{agent.nickname || agent.name}</strong>
               <p>{agent.description}</p>
               <button
+                type="button"
                 className="button secondary small"
                 disabled={disabled}
                 aria-label={`Ajouter ${agent.nickname || agent.name}`}
@@ -460,7 +522,7 @@ export function TeamComposer({
         {(locked || stale) && (
           <p className="team-error" role="alert">
             {locked
-              ? 'Le parcours a commencé : l’équipe est désormais verrouillée.'
+              ? 'Cette itération est historique ou une modification attend la fin de l’appel en cours.'
               : 'L’équipe a changé. Fermez puis rouvrez ce panneau.'}
           </p>
         )}
@@ -482,22 +544,28 @@ export function TeamComposer({
         )}
         {feature.autopilot && (
           <p className="muted">
-            Valider cette composition réinitialise la configuration du pilote.
+            Les étapes et validations déjà exécutées sont conservées. Une insertion avant du travail
+            réalisé demande une route de correction.
           </p>
         )}
         <div className="modal-actions">
           <span className="muted">
             {!steps.length
               ? 'La feature restera sans équipe.'
-              : 'Modifiable jusqu’à la première décision ou exécution.'}
+              : 'En cours d’exécution : application au prochain arrêt.'}
           </span>
-          <button className="button secondary" disabled={pending} onClick={onClose}>
+          <button type="button" className="button secondary" disabled={pending} onClick={onClose}>
             Annuler
           </button>
           <button
+            type="button"
             className="button primary"
             disabled={disabled || !!issues.length}
             onClick={() => {
+              if (onApply) {
+                onApply(steps);
+                return;
+              }
               request.current = crypto.randomUUID();
               setPending(true);
               onPendingChange(true);

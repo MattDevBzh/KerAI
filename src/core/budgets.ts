@@ -1,4 +1,5 @@
 import type { Feature, FeatureBudget, UsageTotals } from '../shared/types';
+import { allFeatures } from '../shared/subplans';
 
 export const defaultBudget: FeatureBudget = {
   maxRuns: 10,
@@ -16,7 +17,7 @@ export function usageTotals(feature: Feature): UsageTotals {
     unknownTokenRuns: 0,
     unknownCostRuns: 0,
   };
-  for (const step of feature.steps)
+  for (const step of allFeatures([feature]).flatMap((f) => f.steps))
     for (const attempt of step.attempts) {
       totals.runs++;
       if (measured(attempt.usage?.inputTokens)) totals.inputTokens += attempt.usage.inputTokens;
@@ -39,15 +40,17 @@ export function usageTotals(feature: Feature): UsageTotals {
   return totals;
 }
 export function executionCallCount(feature: Feature): number {
-  return feature.steps.reduce(
-    (total, step) =>
-      total +
-      step.attempts.reduce(
-        (sum, attempt) => sum + (attempt.pair ? Math.max(1, attempt.pair.calls) : 1),
-        0,
-      ),
-    0,
-  );
+  return allFeatures([feature])
+    .flatMap((f) => f.steps)
+    .reduce(
+      (total, step) =>
+        total +
+        step.attempts.reduce(
+          (sum, attempt) => sum + (attempt.pair ? Math.max(1, attempt.pair.calls) : 1),
+          0,
+        ),
+      0,
+    );
 }
 /** Guard for a new call, never a conversion to a monetary cost guarantee. */
 export function budgetBlockReason(feature: Feature): string | undefined {

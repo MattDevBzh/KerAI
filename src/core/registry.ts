@@ -1,3 +1,4 @@
+import { configurationSteps } from '../shared/subplans';
 import { readFile, readdir, mkdir, lstat, writeFile, open, rename, unlink } from 'node:fs/promises';
 import { join, resolve, relative, dirname, basename, isAbsolute } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -255,7 +256,7 @@ export class AgentRegistry {
         workflows.delete(id);
         continue;
       }
-      const invalid = workflow.steps.find((s) => !agents.has(s.agentId));
+      const invalid = configurationSteps(workflow.steps).find((s) => !agents.has(s.agentId));
       if (invalid) {
         notices.push(`${workflow.name} ignoré : agent ou skill inconnu pour ${invalid.id}.`);
         workflows.delete(id);
@@ -493,7 +494,7 @@ export class AgentRegistry {
     const workflow = validateWorkflow(definition);
     const data = await this.load();
     if (
-      workflow.steps.some(
+      configurationSteps(workflow.steps).some(
         (step) =>
           !data.agents.some((agent) => agent.id === step.agentId) ||
           step.skills.some((skill) => !data.skills.some((s) => s.id === skill)),

@@ -523,7 +523,11 @@ export function FinalSummary({
             onClick={onFinalize}
           >
             {busy ? <LoaderCircle size={15} className="spin" /> : <Check size={15} />}
-            {busy ? 'Validation finale en cours…' : 'Valider définitivement'}
+            {busy
+              ? 'Validation finale en cours…'
+              : feature.parent
+                ? 'Valider cette tâche'
+                : 'Valider définitivement'}
           </button>
         )}
       </div>

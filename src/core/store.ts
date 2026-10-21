@@ -1,3 +1,4 @@
+import { reconcileTeam } from './teamComposition';
 import { createPairStateSchema } from './pairSchemas';
 import { migrateLegacyPairs } from './pairMigration';
 import { ticketSourceSnapshotSchema } from './devopsTicketSchemas';
@@ -17,6 +18,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Feature, StudioSettings, MemoryEntry } from '../shared/types';
+import { allFeatures } from '../shared/subplans';
 import { WorkflowEngine, workflowSchema } from './workflow';
 import {
   autopilotStateSchema,
@@ -170,8 +172,30 @@ const attempt = z.object({
   checkpointAfterId: z.string().uuid().optional(),
   usage: usageSchema.optional(),
 });
-const feature = z
+const feature: z.ZodType<Feature> = z
   .object({
+    parent: z
+      .object({ featureId: z.string(), stepId: z.string(), iterationId: z.string() })
+      .strict()
+      .optional(),
+    pendingTeam: z
+      .object({
+        expectedRevision: z.number().int().nonnegative(),
+        steps: z.array(workflowSchema.shape.steps.element),
+      })
+      .strict()
+      .optional(),
+    teamHistory: z
+      .array(
+        z
+          .object({
+            revision: z.number().int().nonnegative(),
+            at: z.string(),
+            steps: z.array(workflowSchema.shape.steps.element),
+          })
+          .strict(),
+      )
+      .optional(),
     execution: nativeExecutionSchema.optional(),
     id: z.string(),
     optionalRequest: z
@@ -225,6 +249,39 @@ const feature = z
     workspaceFileHashes: z.record(z.string(), z.string()).optional(),
     steps: z.array(
       workflowSchema.shape.steps.element.extend({
+        awaitsCorrection: z.boolean().optional(),
+        get subplanState(): z.ZodOptional<z.ZodType<import('../shared/subplans').SubplanState>> {
+          return z
+            .lazy(() =>
+              z
+                .object({
+                  acceptedRevisions: z.array(z.number().int().nonnegative()),
+                  paused: z.boolean().optional(),
+                  queue: z.array(z.string()).optional(),
+                  iterations: z.array(
+                    z
+                      .object({
+                        id: z.string(),
+                        number: z.number().int().positive(),
+                        taskId: z.string(),
+                        title: z.string(),
+                        description: z.string(),
+                        planRevision: z.number().int().nonnegative(),
+                        corrects: z.string().optional(),
+                        orchestrationAttemptId: z.string(),
+                        cancelled: z.boolean().optional(),
+                        requiresRecheck: z.boolean().optional(),
+                        recheckAfter: z.number().int().nonnegative().optional(),
+                        templateKey: z.string().optional(),
+                        feature,
+                      })
+                      .strict(),
+                  ),
+                })
+                .strict(),
+            )
+            .optional();
+        },
         status,
         attempts: z.array(attempt),
         optionalDecisionHistory: z
@@ -297,6 +354,8 @@ const feature = z
         ({
           status: _status,
           attempts: _attempts,
+          subplanState: _subplanState,
+          awaitsCorrection: _awaitsCorrection,
           optionalDecision: _decision,
           optionalDecisionHistory: _history,
           ...step
@@ -418,7 +477,7 @@ export const settingsSchema = z
 const pairStateSchema = createPairStateSchema(settingsSchema);
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(9),
+    schemaVersion: z.literal(10),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -431,14 +490,14 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 9;
+  schemaVersion: 10;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
 }
 const indexSchema = z
   .object({
-    schemaVersion: z.literal(9),
+    schemaVersion: z.literal(10),
     entries: z
       .array(z.object({ id: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }))
       .refine(
@@ -465,7 +524,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 9,
+          schemaVersion: 10,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -485,11 +544,19 @@ export class Store {
       version !== 6 &&
       version !== 7 &&
       version !== 8 &&
-      version !== 9
+      version !== 9 &&
+      version !== 10
     )
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
-    if (version === 5 || version === 6 || version === 7 || version === 8 || version === 9) {
-      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 9 });
+    if (
+      version === 5 ||
+      version === 6 ||
+      version === 7 ||
+      version === 8 ||
+      version === 9 ||
+      version === 10
+    ) {
+      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 10 });
       const deleted = new Set((await pendingDeletions(this.rootPath)).map((d) => d.featureId));
       const features: Feature[] = [];
       for (const entry of index.entries) {
@@ -508,13 +575,13 @@ export class Store {
         features.push(item);
       }
       raw = {
-        schemaVersion: 9,
+        schemaVersion: 10,
         features,
         settings: index.settings,
         memory: index.memory.filter((m) => !m.source || !deleted.has(m.source.featureId)),
       };
     }
-    const migration = version !== 9;
+    const migration = version !== 10;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -522,15 +589,16 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 9,
+        schemaVersion: 10,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
       };
     }
     const state = persistedSchema.parse(raw) as PersistedStudio;
+    validateFeatureTree(state.features);
     let recovered = false;
-    for (const item of state.features)
+    for (const item of allFeatures(state.features))
       for (const review of item.observations ?? []) {
         if (review.status === 'running') {
           recovered = true;
@@ -543,7 +611,7 @@ export class Store {
         }
       }
     const engine = new WorkflowEngine(state.features);
-    for (const item of state.features) {
+    for (const item of allFeatures(state.features)) {
       if (item.status === 'completed' && !item.finalValidation) {
         engine.refreshFeatureStatus(item.id);
         recovered = true;
@@ -580,12 +648,19 @@ export class Store {
           recovered = true;
         }
     }
+    for (const item of allFeatures(state.features))
+      if (item.pendingTeam) {
+        reconcileTeam(item, item.pendingTeam.steps);
+        engine.refreshFeatureStatus(item.id);
+        recovered = true;
+      }
     if (migration || recovered) await this.save(state.features, state.settings, state.memory);
     return state;
   }
   save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
+    validateFeatureTree(features);
     const snapshot = persistedSchema.parse({
-      schemaVersion: 9,
+      schemaVersion: 10,
       features: structuredClone(features),
       settings: structuredClone(settings),
       memory: structuredClone(memory),
@@ -613,7 +688,7 @@ export class Store {
           this.rootPath,
           'state.json',
           JSON.stringify({
-            schemaVersion: 9,
+            schemaVersion: 10,
             entries,
             settings: snapshot.settings,
             memory: snapshot.memory,
@@ -640,4 +715,36 @@ export class Store {
       .catch(() => undefined);
     return work;
   }
+}
+
+function validateFeatureTree(roots: Feature[]): void {
+  const flat = allFeatures(roots);
+  for (const root of roots)
+    if (root.parent) throw new Error('Une sous-équipe ne peut pas devenir une session racine.');
+  for (const parent of flat)
+    for (const step of parent.steps) {
+      const state = step.subplanState;
+      if (!state) continue;
+      if (!step.subplan) throw new Error('Historique de sous-équipe sans carte sous-plan.');
+      if (new Set(state.iterations.map((i) => i.id)).size !== state.iterations.length)
+        throw new Error('Identifiants d’itérations dupliqués.');
+      if (state.queue?.some((id) => !state.iterations.some((i) => i.id === id)))
+        throw new Error('File de sous-tâches incohérente.');
+      for (const i of state.iterations) {
+        const link = i.feature.parent;
+        if (
+          link?.featureId !== parent.id ||
+          link.stepId !== step.id ||
+          link.iterationId !== i.id ||
+          !step.attempts.some((a) => a.id === i.orchestrationAttemptId)
+        )
+          throw new Error('Lien de sous-équipe incohérent.');
+        if (
+          i.feature.worktree &&
+          (i.feature.worktree.path !== parent.worktree?.path ||
+            i.feature.worktree.ownerFeatureId !== (parent.worktree.ownerFeatureId ?? parent.id))
+        )
+          throw new Error('Espace de travail de sous-équipe incohérent.');
+      }
+    }
 }

@@ -43,6 +43,7 @@ export type FeatureStatus =
   | 'awaiting_final_validation'
   | 'completed';
 export interface WorkflowStep {
+  subplan?: import('./subplans').SubplanConfig;
   /** Resolve the agent profile at launch; only model/reasoning are member overrides. */
   inheritAgent?: boolean;
   optional?: boolean;
@@ -160,12 +161,17 @@ export interface Attempt {
   checkpointAfterId?: string;
 }
 export interface FeatureStep extends WorkflowStep {
+  subplanState?: import('./subplans').SubplanState;
+  awaitsCorrection?: boolean;
   optionalDecision?: { id: string; action: 'run' | 'skip'; at: string; author: 'human' };
   optionalDecisionHistory?: NonNullable<FeatureStep['optionalDecision']>[];
   status: StepStatus;
   attempts: Attempt[];
 }
 export interface Feature {
+  parent?: { featureId: string; stepId: string; iterationId: string };
+  pendingTeam?: { expectedRevision: number; steps: WorkflowStep[] };
+  teamHistory?: { revision: number; at: string; steps: WorkflowStep[] }[];
   execution?: import('./native').NativeExecution;
   optionalRequest?: { id: string; stepId: string; stateKey: string };
   ticketSource?: import('./devopsTickets').TicketSourceSnapshot;
@@ -283,7 +289,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   workspace: {
     name: string;
     path: string;

@@ -2,6 +2,10 @@
 
 [Retour au README](../README.md) · [Kits](KITS.md) · [Kit DevOps](DEVOPS-KIT.md)
 
+## Sous-plans et sous-équipes
+
+Ajoute une carte **Sous-plan** dans une équipe enregistrée ou dans **Modifier l’équipe** d’une feature. Sa carte possède un visuel dédié. Choisis son orchestrateur, son mode de découpage et sa sous-équipe ; celle-ci peut contenir d’autres sous-plans. Le chat sert à discuter le découpage et à ajouter des tâches. Clique sur la carte pour entrer dans les itérations, avec retour au niveau précédent ou à l’équipe de base. [Guide détaillé](SOUS-PLANS.md).
+
 ## Conversation intégrée de l’étape
 
 Depuis la v1.23.0, l’onglet **Conversation** remplace l’attente opaque pendant une nouvelle tentative native. Il reste disponible avec le livrable. Passe en pair pour poser une question ou demander une correction ; reviens en solo pour confier le travail convenu. Le chat reste actif jusqu’à la validation de l’étape, puis devient consultable. Rythme, explications et permissions se règlent séparément. [Parcours complet, messages et reprise](MODE-PAIR.md).
@@ -14,7 +18,7 @@ Le CLI 1.0.102 avec le SDK embarqué 1.0.20 constitue le couple vérifié. Un an
 
 ## Installation
 
-1. Télécharge [feature-studio-1.22.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.22.0/feature-studio-1.22.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.22.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.24.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.24.0/feature-studio-1.24.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.24.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -74,11 +78,11 @@ Si le fichier de progression est illisible, le carnet le signale et le conserve.
 
 Un agent ajouté seul et un agent ajouté depuis une équipe reprennent le profil du menu **Agents** au lancement : instructions, skills, outils métier, contexte vide par défaut et ton. Les outils génériques natifs et leurs permissions sont ceux de la session. Dans une équipe, seuls **Modèle de l’intervention** et **Niveau de réflexion** peuvent remplacer les valeurs du profil. Les autres paramètres sont affichés en lecture seule ; modifie-les dans **Agents**. L’ajout, le retrait, l’ordre et la participation obligatoire ou facultative restent des choix de composition.
 
-Le choix **Hériter de l’agent** laisse le champ vide dans l’équipe. Modèle et réflexion héritent indépendamment : tu peux remplacer l’un et conserver l’autre. Les valeurs sont relues à chaque lancement ; si tu changes le profil après avoir préparé l’aperçu, recalcule l’aperçu. Un profil de modèle explicitement activé dans le budget de la feature garde sa priorité, signalée dans le compositeur.
+Depuis la v1.24, le modèle et la réflexion sont copiés à l’ajout puis conservés sur chaque carte, y compris le choix automatique. Une modification du profil source actualise ses autres champs sans remplacer ces deux choix. Si tu changes le profil après avoir préparé l’aperçu, recalcule l’aperçu. Un profil de modèle explicitement activé dans le budget de la feature garde sa priorité, signalée dans le compositeur.
 
 L’éditeur **Agents** propose maintenant une réflexion et des permissions par défaut. Pour les profils anciens sans permissions explicites, les outils demandés déterminent le profil : `execute` ou `studio_run_test` sélectionne les tests préautorisés, sinon un outil d’édition sélectionne l’écriture dans le projet, et les autres profils restent en lecture seule. Une commande de test doit toujours être autorisée dans les réglages du projet.
 
-Les modèles d’équipes déjà enregistrés sont adaptés automatiquement à leur lecture, en conservant leurs remplacements explicites de modèle et de réflexion. Les anciennes sessions conservent leur définition : avant leur premier lancement, ouvre **Modifier l’équipe**, puis valide pour activer l’héritage. Une session dont la composition est verrouillée conserve ses réglages historiques ; crée une nouvelle session pour utiliser une nouvelle composition. Les exécutions archivées ne changent pas.
+Les modèles d’équipes déjà enregistrés sont adaptés automatiquement à leur lecture, en conservant leurs remplacements explicites de modèle et de réflexion. Les anciennes sessions conservent leur définition : avant leur premier lancement, ouvre **Modifier l’équipe**, puis valide pour activer l’héritage. Une session en cours reste modifiable : les changements attendent la fin de l’appel actif, et les membres déjà utilisés conservent leur historique. Les exécutions archivées ne changent pas.
 
 ## Discuter avec ses agents
 
@@ -116,7 +120,7 @@ Dans **Parcours**, **Supprimer** retire le parcours du catalogue personnel pour 
 
 Le caractère facultatif appartient à une **intervention dans un parcours**. Le même agent peut relire obligatoirement l’US et proposer facultativement une documentation. Les équipes existantes restent obligatoires par défaut.
 
-Dans **Parcours**, ouvre ou duplique une équipe et règle la **Participation** de chaque intervention. Dans une feature, ouvre **Composer mon équipe** ou **Modifier l’équipe** : le choix est directement visible sur chaque membre, avant de lancer le travail. L’adaptation concerne uniquement cette feature, même si elle reprend un modèle d’équipe. La composition se verrouille dès la première décision ou exécution ; les réglages d’intervention déjà disponibles restent accessibles.
+Dans **Parcours**, ouvre ou duplique une équipe et règle la **Participation** de chaque intervention. Dans une feature, ouvre **Composer mon équipe** ou **Modifier l’équipe** : le choix est directement visible sur chaque membre, avant de lancer le travail. L’adaptation concerne uniquement cette feature, même si elle reprend un modèle d’équipe. La composition reste modifiable pendant son utilisation ; une carte déjà utilisée ne peut pas être supprimée ou remplacée.
 
 **En manuel**, une intervention facultative disponible propose **Passer cette intervention**. Ses préalables doivent être validés ou explicitement passés. Le bouton habituel permet de l’exécuter avec l’aperçu de lancement. Passer ne lance ni l’agent ni le pilote automatique.
 
@@ -458,7 +462,7 @@ Chaque intervention affiche le rôle, le modèle et le niveau de réflexion effe
 
 Un même agent peut intervenir plusieurs fois. Les nouveaux identifiants et noms de livrables évitent les collisions. Un parcours simple suit l’ordre des cartes ; les dépendances particulières d’une équipe existante restent obligatoires. Aucun nombre fixe de places n’est imposé.
 
-**Valider l’équipe** enregistre la composition ; **Annuler** conserve la précédente. Une équipe vide laisse la feature en brouillon. La composition reste modifiable jusqu’à la première tentative, même après préparation du contexte ; un lancement refusé avant création de tentative ne la verrouille pas. Une tentative commencée puis annulée conserve le verrouillage. Modifier la composition réinitialise le pilote qui dépend de ses étapes.
+**Valider l’équipe** enregistre la composition ; **Annuler** conserve la précédente. Une équipe vide laisse la feature en brouillon. La composition reste modifiable pendant le travail. Un changement enregistré pendant un appel est appliqué à sa fin. Les cartes déjà utilisées et leurs résultats sont conservés. Une nouvelle carte placée avant une intervention utilisée attend un retour par le parcours de correction ; une carte placée après sera jouée normalement. Le pilote conserve les réglages des membres restants, avec validation de chaque étape des sous-équipes.
 
 L’étoile ajoute ou retire un agent des favoris. Cette préférence est enregistrée dans les réglages utilisateur de VS Code, commune aux projets, sans modifier les profils ni les fichiers du dépôt. Les favoris remontent dans les catalogues et sélecteurs, jamais dans l’ordre d’une équipe déjà composée.
 

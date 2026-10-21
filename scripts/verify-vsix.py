@@ -32,6 +32,10 @@ def verify(vsix, root, extract=None, match_build=False):
         for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction', 'setPermissionMode'):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
+        assert b'subplanState' in host, 'Recursive execution missing from host'
+        assert b'subplan-card-visual' in ui, 'Dedicated subplan card missing from webview'
+        assert b'subplan-navigation' in ui, 'Iteration navigation missing from webview'
+        assert archive.read('extension/defaults/agents/fs-orchestrator.agent.md') == (root / 'defaults/agents/fs-orchestrator.agent.md').read_bytes()
         assert b'copilot-native' in host, 'Native execution missing from host'
         assert b'native-permissions' in ui, 'Native permission picker missing from webview'
         assert b'native-activity' in ui, 'Native evidence missing from webview'
@@ -63,6 +67,8 @@ def verify(vsix, root, extract=None, match_build=False):
         assert archive.read('extension/' + pair_guide.as_posix()) == (root / pair_guide).read_bytes()
         native_guide = Path('docs/COPILOT-NATIF.md')
         assert archive.read('extension/' + native_guide.as_posix()) == (root / native_guide).read_bytes()
+        subplan_guide = Path('docs/SOUS-PLANS.md')
+        assert archive.read('extension/' + subplan_guide.as_posix()) == (root / subplan_guide).read_bytes()
         if extract:
             extract.mkdir(parents=True, exist_ok=False)
             archive.extractall(extract)
@@ -73,7 +79,7 @@ def verify(vsix, root, extract=None, match_build=False):
         'sha256': hashlib.sha256(vsix.read_bytes()).hexdigest(),
         'verifiedBuildFiles': len(built_files),
         'verifiedPublicAssets': len(assets),
-        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes', 'stepConversation'],
+        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes', 'stepConversation', 'recursiveSubplans'],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

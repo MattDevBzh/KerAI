@@ -1,3 +1,4 @@
+import { allFeatures } from '../shared/subplans';
 import { readdir, lstat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -11,7 +12,7 @@ import {
   removePrivate,
 } from './SessionFiles';
 
-const deletionSchema = z
+const deletionItemSchema = z
   .object({
     featureId: z.string(),
     attempts: z.array(z.string().regex(/^[a-zA-Z0-9_-]+$/)),
@@ -20,6 +21,9 @@ const deletionSchema = z
     quality: z.array(z.string().regex(/^[a-f0-9]{64}\.(png|jpg|zip)$/)),
   })
   .strict();
+const deletionSchema = deletionItemSchema.extend({
+  children: z.array(deletionItemSchema).optional(),
+});
 export type SessionDeletion = z.infer<typeof deletionSchema>;
 const qualityPaths = (feature: Feature) =>
   feature.steps.flatMap((s) =>
@@ -67,16 +71,19 @@ export async function pendingDeletions(root: string): Promise<SessionDeletion[]>
       );
       if (`${digest(record.featureId)}.json` !== name)
         throw new Error('Suppression enregistrée incohérente.');
-      records.push(record);
+      records.push(...(record.children ?? []), record);
     }
   return records;
 }
-export const markDeletion = (root: string, feature: Feature) =>
-  writePrivate(
+export async function markDeletion(root: string, feature: Feature): Promise<void> {
+  // One durable tombstone owns the entire tree; the root is removed after its children.
+  const [record, ...children] = allFeatures([feature]).map(deletionRecord);
+  await writePrivate(
     root,
     `deletions/${digest(feature.id)}.json`,
-    JSON.stringify(deletionRecord(feature)),
+    JSON.stringify({ ...record, ...(children.length ? { children } : {}) }),
   );
+}
 export async function cleanSessionFiles(
   root: string,
   record: SessionDeletion,
@@ -84,7 +91,7 @@ export async function cleanSessionFiles(
 ): Promise<void> {
   await removePrivate(root, sessionDirectory(record.featureId));
   for (const id of record.attempts) await removePrivate(root, `existing-changes/${id}`);
-  const retained = new Set(survivors.flatMap(qualityPaths));
+  const retained = new Set(allFeatures(survivors).flatMap(qualityPaths));
   const qualityDirectory = dirname(await privateFile(root, 'quality/placeholder'));
   const files = await readdir(qualityDirectory).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return [];

@@ -1,5 +1,6 @@
 import { stepResolved } from '../shared/optionalSteps';
 import { isPairWork } from '../shared/pair';
+import { subplanComplete } from '../shared/subplans';
 import type { QualityKind } from '../shared/quality';
 import type { Attempt, Feature, FeatureStep, TestEvidence } from '../shared/types';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
@@ -69,6 +70,11 @@ function qualityIsCurrent(
 }
 export function featureCompletionBlockers(feature: Feature): string[] {
   const blockers: string[] = [];
+  if (feature.pendingTeam) blockers.push('Une modification de l’équipe attend son application.');
+  if (feature.steps.some((s) => s.awaitsCorrection))
+    blockers.push('Une intervention insérée dans l’historique attend une route de correction.');
+  if (feature.steps.some((s) => s.subplan && s.status !== 'skipped' && !subplanComplete(s)))
+    blockers.push('Des sous-tâches ou leurs revalidations restent à terminer.');
   if (
     feature.criteria?.some(
       (criterion) => criterion.status !== 'passed' || !criterion.evidence.trim(),
@@ -88,6 +94,12 @@ export function approvalBlockers(
   const blockers: string[] = [],
     attempt = step.attempts.at(-1);
   if (!attempt) return ['Aucune tentative à valider.'];
+  if (feature.parent && actor !== 'human')
+    blockers.push('Chaque étape de la sous-équipe nécessite une validation humaine.');
+  if (step.subplan && (!subplanComplete(step) || actor !== 'human'))
+    blockers.push(
+      'Valide toutes les sous-tâches et leurs revalidations avant de clôturer ce sous-plan.',
+    );
   if (
     attempt.pair &&
     ((isPairWork(attempt.pair) && actor !== 'human') ||

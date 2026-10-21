@@ -83,6 +83,14 @@ export function featureStateKey(feature: Feature): string {
       askBeforeRun: step.askBeforeRun,
       optional: step.optional,
       optionalDecision: step.optionalDecision,
+      awaitsCorrection: step.awaitsCorrection,
+      subplan: step.subplan,
+      iterations: step.subplanState?.iterations.map((i) => ({
+        id: i.id,
+        cancelled: i.cancelled,
+        requiresRecheck: i.requiresRecheck,
+        state: featureStateKey(i.feature),
+      })),
       attempts: step.attempts.map((attempt) => ({
         id: attempt.id,
         revision: attempt.revision ?? 0,
@@ -92,6 +100,7 @@ export function featureStateKey(feature: Feature): string {
     criteria: feature.criteria ?? [],
     comments: feature.reviewComments ?? [],
     correction: feature.activeCorrectionId,
+    pendingTeam: feature.pendingTeam,
     budget: feature.budget,
     pilot: feature.autopilot && {
       checkpoints: feature.autopilot.checkpoints,
@@ -261,6 +270,8 @@ export function previewCorrection(feature: Feature, request: CorrectionRequest):
 export function finalValidationReady(feature: Feature): boolean {
   return (
     !feature.archived &&
+    !feature.pendingTeam &&
+    !feature.steps.some((s) => s.awaitsCorrection) &&
     feature.steps.length > 0 &&
     feature.steps.every(stepResolved) &&
     !(feature.criteria ?? []).some(

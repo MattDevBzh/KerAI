@@ -4,6 +4,7 @@ const commit = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 const short = z.string().min(1).max(500);
 export const worktreeSchema = z
   .object({
+    ownerFeatureId: z.string().uuid().optional(),
     path: z.string().min(1).max(4000),
     branch: short,
     baseBranch: short,

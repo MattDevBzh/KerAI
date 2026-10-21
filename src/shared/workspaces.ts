@@ -1,4 +1,5 @@
 export interface FeatureWorktree {
+  ownerFeatureId?: string;
   path: string;
   branch: string;
   baseBranch: string;

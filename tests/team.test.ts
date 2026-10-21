@@ -18,7 +18,7 @@ import { parseMessage } from '../src/host/messages';
 import { inheritTeamProfiles, resolveAgentProfile } from '../src/shared/agentInheritance';
 
 describe('feature team composition', () => {
-  it('inherits the live solo profile and only keeps explicit team model/reasoning overrides', () => {
+  it('inherits profile changes while preserving the cloned model and reasoning', () => {
     const agent = {
       ...structuredClone(demoState.agents[0]),
       model: 'original',
@@ -27,15 +27,15 @@ describe('feature team composition', () => {
       policy: 'read-only' as const,
     };
     const solo = agentStep(agent);
-    expect(solo.model).toBeUndefined();
-    expect(solo.reasoning).toBeUndefined();
+    expect(solo.model).toBe('original');
+    expect(solo.reasoning).toBe('high');
     expect(solo.skills).toEqual([]);
     agent.model = 'updated';
     agent.reasoning = 'medium';
     agent.skills = ['changed-skill'];
     expect(resolveAgentProfile(solo, agent)).toMatchObject({
-      model: 'updated',
-      reasoning: 'medium',
+      model: 'original',
+      reasoning: 'high',
       skills: ['changed-skill'],
     });
     const [member] = inheritTeamProfiles(
@@ -44,18 +44,18 @@ describe('feature team composition', () => {
     );
     expect(resolveAgentProfile(member, agent)).toMatchObject({
       model: 'team-model',
-      reasoning: 'medium',
+      reasoning: '',
       skills: ['changed-skill'],
     });
     expect(resolveAgentProfile({ ...member, model: ' ', reasoning: 'low' }, agent)).toMatchObject({
-      model: 'updated',
+      model: '',
       reasoning: 'low',
     });
     const state = structuredClone(demoState);
     state.agents = [agent];
     expect(effectiveTeamModel(solo, state.features[0], state)).toMatchObject({
-      modelId: 'updated',
-      reasoning: 'medium',
+      modelId: 'original',
+      reasoning: 'high',
     });
   });
   it('copies a complete team twice without identity, artifact or dependency collisions', () => {

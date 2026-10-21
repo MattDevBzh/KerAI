@@ -22,6 +22,7 @@ export const NATIVE_TOOLS = [
   'grep',
   'edit',
   'create',
+  'apply_patch',
   'bash',
   'powershell',
   'read_bash',

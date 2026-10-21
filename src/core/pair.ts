@@ -29,6 +29,8 @@ export function createPair(input: RunInput): PairState {
     solo = !input.launch?.pair;
   const {
     attempts: _attempts,
+    subplanState: _subplanState,
+    awaitsCorrection: _awaitsCorrection,
     status: _status,
     optionalDecision: _decision,
     optionalDecisionHistory: _history,

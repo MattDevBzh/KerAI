@@ -1,4 +1,5 @@
 import type { AgentProfile, Feature, FeatureStep, StepStatus } from './types';
+import { subplanDisplayStatus, subplanProgressLabel } from './subplans';
 
 export const hqTransferDuration = 5_000;
 export interface HqContextTransfer {
@@ -55,13 +56,16 @@ export function sessionHqStation(
   const attempt = ['pending', 'stale'].includes(step.status) ? undefined : step.attempts.at(-1);
   const agentId = attempt?.profileSnapshot?.agentId ?? step.agentId;
   const profile = agents.find((agent) => agent.id === agentId);
-  const status = waitingForHuman || waitingForOptionalChoice ? 'waiting_input' : step.status;
+  const status =
+    waitingForHuman || waitingForOptionalChoice ? 'waiting_input' : subplanDisplayStatus(step);
   return {
     agent: { id: agentId, avatar: profile?.avatar },
-    name: attempt?.agentName || profile?.nickname || profile?.name || agentId,
+    name: step.subplan
+      ? step.subplan.teamName || 'Sous-équipe à configurer'
+      : attempt?.agentName || profile?.nickname || profile?.name || agentId,
     status,
     label: waitingForOptionalChoice
       ? 'Choix facultatif attendu'
-      : `${hqStatusLabels[status]}${step.optional && status !== 'skipped' ? ' · Facultative' : ''}`,
+      : `${(!waitingForHuman && subplanProgressLabel(step)) || hqStatusLabels[status]}${step.optional && status !== 'skipped' ? ' · Facultative' : ''}`,
   };
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.24.0 — 2026-10-22 · Sous-plans et sous-équipes
+
+- Carte Sous-plan dédiée, sans portrait ni nom d’orchestrateur, compatible avec les thèmes et le QG vivant. Composition dans une équipe enregistrée ou une feature, configuration récursive dans le même panneau.
+- Orchestrateur configurable, en lecture seule. Découpage automatique ou accompagné avec discussion et validation du plan. Une carte incomplète porte un avertissement et bloque le lancement.
+- Une exécution complète de la sous-équipe par tâche, avec historique, conversation et validations séparés. Chaque étape attend une validation humaine, notamment le développement avant les tests.
+- Navigation entre niveaux, retour à l’équipe de base, sélection des itérations et consultation des résultats précédents. Les corrections d’une tâche validée créent une nouvelle itération ; les suivantes restent signalées à revérifier jusqu’à leur propre vérification liée.
+- Modification des compositions pendant l’utilisation, mise en attente pendant un appel, conservation des membres déjà exécutés et de leurs historiques. Une insertion antérieure passe par le parcours de correction ; les futures itérations reprennent la composition mise à jour.
+- Profils d’agents actualisés dans toutes les équipes ; modèle et réflexion conservés par carte, y compris le choix automatique. Budgets et statistiques agrègent les sous-équipes.
+- Stockage version 10, validation des liens entre niveaux, préservation des interruptions et reprise manuelle. Les sous-équipes utilisent le worktree de leur équipe de base.
+
 ## 1.23.0 — 2026-10-21 · La conversation de l’étape
 
 - Un même chat dans les onglets de l’agent : messages, réflexions transmises par Copilot et outils réellement exécutés, en solo comme en pair.

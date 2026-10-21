@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -208,14 +208,15 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.23.0.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.24.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "smoke:mcp": "node scripts/run-mcp-smoke.mjs",
     "avatars:pack": "node scripts/pack-avatars.mjs",
     "logo:pack": "node scripts/pack-logo.mjs",
-    "smoke:native": "node scripts/run-native-smoke.mjs"
+    "smoke:native": "node scripts/run-native-smoke.mjs",
+    "smoke:subplans": "node scripts/run-subplan-smoke.mjs"
   },
   "dependencies": {
     "@github/copilot-sdk": "1.0.20",

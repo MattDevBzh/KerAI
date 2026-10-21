@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-10-21T22:49:33.979Z",
+  "runtime": "Copilot CLI 1.0.102 / SDK 1.0.20",
+  "passed": true,
+  "model": "gpt-6-luna",
+  "calls": 3,
+  "scenarios": [
+    "native-read-only-orchestrator",
+    "human-plan-approval",
+    "native-file-edit",
+    "human-code-approval-before-tests",
+    "native-command-exit-zero",
+    "child-final-approval",
+    "parent-final-approval",
+    "persisted-independent-history"
+  ],
+  "limitations": [
+    "Single task with two agents; recursive queues, revisions and interruption are verified by deterministic integration tests."
+  ]
+}

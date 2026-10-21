@@ -17,12 +17,12 @@ export function inheritAgentProfile<T extends WorkflowStep>(step: T, agent: Agen
   return {
     ...step,
     inheritAgent: true,
-    name: agent.name,
-    description: agent.description,
-    policy: agentPolicy(agent),
+    name: step.subplan ? step.name : agent.name,
+    description: step.subplan ? step.description : agent.description,
+    policy: step.subplan ? 'read-only' : agentPolicy(agent),
     skills: [],
-    model: step.model?.trim() || undefined,
-    reasoning: step.reasoning?.trim() || undefined,
+    model: (step.model ?? agent.model ?? '').trim(),
+    reasoning: (step.reasoning ?? agent.reasoning ?? '').trim(),
   };
 }
 
@@ -32,8 +32,14 @@ export function inheritTeamProfiles<T extends WorkflowStep>(
 ): T[] {
   return steps.map((step) => {
     const agent = agents.find((entry) => entry.id === step.agentId);
-    if (!agent) return { ...step };
-    return inheritAgentProfile(step, agent);
+    const nested = step.subplan
+      ? {
+          ...step,
+          subplan: { ...step.subplan, steps: inheritTeamProfiles(step.subplan.steps, agents) },
+        }
+      : step;
+    if (!agent) return { ...nested };
+    return inheritAgentProfile(nested, agent);
   });
 }
 
@@ -42,8 +48,8 @@ export function resolveAgentProfile<T extends WorkflowStep>(step: T, agent: Agen
   const resolved = step.inheritAgent ? inheritAgentProfile(step, agent) : { ...step };
   return {
     ...resolved,
-    model: step.model?.trim() || agent.model?.trim() || undefined,
-    reasoning: step.reasoning?.trim() || agent.reasoning?.trim() || undefined,
+    model: (resolved.model ?? agent.model)?.trim(),
+    reasoning: (resolved.reasoning ?? agent.reasoning)?.trim(),
     skills: step.inheritAgent ? [...agent.skills] : [...new Set([...agent.skills, ...step.skills])],
   };
 }

@@ -85,6 +85,11 @@ it.skipIf(!cliPath)(
         arguments: { path: join(root, 'fixture.txt'), old_str: 'before', new_str: 'after' },
       });
       expect(await readFile(join(root, 'fixture.txt'), 'utf8')).toBe('after');
+      await session.rpc.tools.execute({
+        name: 'apply_patch',
+        arguments: '*** Begin Patch\n*** Add File: patch-fixture.txt\n+native patch\n*** End Patch',
+      });
+      expect((await readFile(join(root, 'patch-fixture.txt'), 'utf8')).trim()).toBe('native patch');
       expect(JSON.stringify(await execute('node -e "console.log(42)"'))).toContain('42');
       const answer = await session.rpc.tools.execute({
         name: 'ask_user',
@@ -117,6 +122,16 @@ it.skipIf(!cliPath)(
         verifyNativeCatalog(names, [], readOnly);
         expect(resumed.sessionId).toBe(session.sessionId);
         expect(names.includes('edit')).toBe(!readOnly);
+        if (readOnly) {
+          await resumed.rpc.tools
+            .execute({
+              name: 'apply_patch',
+              arguments:
+                '*** Begin Patch\n*** Add File: forbidden-patch.txt\n+forbidden\n*** End Patch',
+            })
+            .catch(() => undefined);
+          await expect(readFile(join(root, 'forbidden-patch.txt'))).rejects.toThrow();
+        }
         approve = true;
         const content = await resumed.rpc.tools.execute({
           name: 'view',

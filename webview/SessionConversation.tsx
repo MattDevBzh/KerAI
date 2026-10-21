@@ -130,7 +130,9 @@ export function SessionConversation({
         <div className="conversation-identity">
           <strong>{attempt.agentName ?? pair.snapshot.agent.name}</strong>
           <span>
-            {mode === 'pair' ? 'Pair' : 'Solo'} · {paceLabels[pair.preferences.pace]}
+            {step.subplan
+              ? `Orchestrateur · ${step.subplan.mode === 'pair' ? 'Découpage accompagné' : 'Découpage automatique'}`
+              : `${mode === 'pair' ? 'Pair' : 'Solo'} · ${paceLabels[pair.preferences.pace]}`}
           </span>
           <small>
             {feature.execution &&
@@ -161,7 +163,8 @@ export function SessionConversation({
                 </button>
               )
             )}
-            {pair.busy && (
+            {(pair.busy ||
+              (step.subplanState && !step.subplanState.paused && pair.phase !== 'review')) && (
               <button
                 className="button secondary small"
                 disabled={Boolean(pending || pair.pauseRequested)}
@@ -336,7 +339,10 @@ export function SessionConversation({
               disabled={idleDisabled || Boolean(pair.error)}
               onClick={() => act('approve-plan')}
             >
-              <Check size={14} /> Valider l’organisation et démarrer
+              <Check size={14} />{' '}
+              {step.subplan
+                ? 'Valider le découpage et lancer la sous-équipe'
+                : 'Valider l’organisation et démarrer'}
             </button>
           )}
         </section>
@@ -354,7 +360,7 @@ export function SessionConversation({
                 <Play size={14} /> Poursuivre après mes réponses
               </button>
             )}
-          {pair.phase === 'checkpoint' && accepted && next && (
+          {!step.subplan && pair.phase === 'checkpoint' && accepted && next && (
             <button
               className="button primary"
               disabled={idleDisabled || unanswered.length > 0}

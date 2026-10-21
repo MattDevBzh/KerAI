@@ -1,3 +1,4 @@
+import { configurationSteps } from './subplans';
 import type { AgentProfile, SkillInfo, Workflow } from './types';
 
 export type KitKind = 'workflow' | 'agent' | 'skill';
@@ -95,7 +96,7 @@ export function kitNodes(data: {
         content: JSON.stringify({ ...w, source: undefined }, null, 2),
         dependencies: [
           ...new Set(
-            w.steps.flatMap((s) => [
+            configurationSteps(w.steps).flatMap((s) => [
               `agent:${s.agentId}` as KitRef,
               ...s.skills.map((id) => `skill:${id}` as KitRef),
             ]),

@@ -6,7 +6,7 @@ Le kit est une donnée livrée avec Feature Studio : ses instructions définisse
 
 `agents/fs-*.agent.md` fournit cinq profils dérivés : specs et plan divisent ai-cadrage ; dev, tests et review reprennent les limites de leurs homologues. Les procédures sont référencées par identifiant et restent dans `kit/.github/skills`, une seule source par procédure. Les workflows choisissent seulement les procédures nécessaires. Aucun identifiant de modèle n'est présupposé : les valeurs vides utilisent la découverte du CLI.
 
-La seule extension du rôle tests est le droit `execute` associé à l'outil local `studio_run_test` du host : il doit recevoir une commande configurée et autorisée par l'utilisateur, dans le profil tests, sans shell générique. Ce droit explicite n'est jamais le défaut d'un agent importé. Le kit original est conservé sans modification. Ses exemples .NET restent des exemples optionnels et ne deviennent jamais la configuration de tests par défaut.
+Dans les anciennes sessions Studio, le droit `execute` utilise l'outil local `studio_run_test` avec une commande configurée et autorisée par l'utilisateur, sans shell générique. Depuis la v1.24.0, le profil adaptateur Tests utilise le terminal natif dans les sessions Copilot natives, après validation du développement et selon les permissions choisies. Ce droit explicite n'est jamais le défaut d'un agent importé. Le kit original est conservé sans modification. Ses exemples .NET restent des exemples optionnels et ne deviennent jamais la configuration de tests par défaut.
 
 Les avatars sont des identifiants de présentation : detective (specs), wizard (plan), hacker (dev), scientist (tests), ninja (review). Un pseudo peut être ajouté dans le frontmatter sans changer l'identité stable de l'agent.
 

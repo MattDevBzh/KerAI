@@ -1,3 +1,4 @@
+import { allFeatures } from '../shared/subplans';
 import type { AgentProfile, Attempt, Feature } from '../shared/types';
 import type { StudioProject } from '../shared/projects';
 import type { StatsFilters, StatsGrain } from '../shared/statistics';
@@ -131,9 +132,11 @@ export function analyzeStatistics(
   );
   const records = scoped
     .flatMap((feature) =>
-      feature.steps.flatMap((step) =>
-        step.attempts.map((attempt, index) => ({ feature, step, attempt, index })),
-      ),
+      allFeatures([feature])
+        .flatMap((f) => f.steps)
+        .flatMap((step) =>
+          step.attempts.map((attempt, index) => ({ feature, step, attempt, index })),
+        ),
     )
     .filter(({ attempt }) => inRange(attempt.startedAt));
   const created = scoped.filter((feature) => inRange(feature.createdAt));
@@ -344,7 +347,11 @@ export function analyzeStatistics(
     heatmap,
     states,
     averageSteps: selected.length
-      ? selected.reduce((sum, feature) => sum + feature.steps.length, 0) / selected.length
+      ? selected.reduce(
+          (sum, feature) =>
+            sum + allFeatures([feature]).reduce((total, f) => total + f.steps.length, 0),
+          0,
+        ) / selected.length
       : null,
     averageRuns: selected.length ? records.length / selected.length : null,
     projects: [...projects.values()].sort(
@@ -371,13 +378,15 @@ export function analyzeStatistics(
     invalidDates: scoped.reduce(
       (sum, feature) =>
         sum +
-        feature.steps.reduce(
-          (n, step) =>
-            n +
-            step.attempts.filter((attempt) => !Number.isFinite(Date.parse(attempt.startedAt)))
-              .length,
-          0,
-        ),
+        allFeatures([feature])
+          .flatMap((f) => f.steps)
+          .reduce(
+            (n, step) =>
+              n +
+              step.attempts.filter((attempt) => !Number.isFinite(Date.parse(attempt.startedAt)))
+                .length,
+            0,
+          ),
       0,
     ),
   };

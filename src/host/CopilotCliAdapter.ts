@@ -685,7 +685,7 @@ export class CopilotCliAdapter implements AgentAdapter {
       ];
       const models = await withSignal(client.listModels(), controller.signal);
       const requestedModel =
-        input.step.model || input.agent.model || input.settings.defaultModel || undefined;
+        (input.step.model ?? input.agent.model) || input.settings.defaultModel || undefined;
       if (
         requestedModel &&
         !models.some((m) => m.id === requestedModel && m.policy?.state !== 'disabled')

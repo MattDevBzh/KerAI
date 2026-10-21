@@ -69,6 +69,7 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   const available = scopedSteps.filter(
     (step) =>
       !stepResolved(step) &&
+      !step.awaitsCorrection &&
       step.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep))),
   );
   const step =
@@ -88,7 +89,7 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
     budgetBlockReason(feature) ??
     (pilot.runs >= pilot.maxRuns ? 'Nombre maximal de runs du pilote atteint.' : undefined);
   if (step.status === 'awaiting_review') {
-    if (pilot.checkpoints.includes(step.id))
+    if (feature.parent || pilot.checkpoints.includes(step.id))
       return pause(`Validation humaine requise : ${step.name}.`);
     const failedTests = attempt
       ? currentTestEvidence(attempt).filter(

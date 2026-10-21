@@ -1,3 +1,5 @@
+import { SubplanMark, SubplanSettings } from './SubplanUI';
+import { newSubplanStep } from '../src/shared/subplans';
 import { executionCallCount } from '../src/core/budgets';
 import { NativeActivityPanel } from './NativeExecutionUI';
 import { inheritTeamProfiles, inheritAgentProfile } from '../src/shared/agentInheritance';
@@ -286,7 +288,8 @@ function AutopilotEditor({
                 <label key={s.id}>
                   <input
                     type="checkbox"
-                    checked={config.checkpoints.includes(s.id)}
+                    checked={Boolean(feature.parent) || config.checkpoints.includes(s.id)}
+                    disabled={Boolean(feature.parent)}
                     onChange={(e) =>
                       setConfig({
                         ...config,
@@ -303,6 +306,12 @@ function AutopilotEditor({
                 </label>
               ))}
             </fieldset>
+            {feature.parent && (
+              <p className="field-help">
+                Dans une sous-équipe, chaque étape attend ta validation, y compris le code avant les
+                tests.
+              </p>
+            )}
             <div className="field-row">
               <label className="field">
                 <span>Nombre maximal d’exécutions</span>
@@ -1912,6 +1921,19 @@ function WorkflowEditor({
               <button type="button" className="text-button" onClick={add}>
                 <Plus size={13} /> Étape
               </button>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  const card = newSubplanStep();
+                  if (workflow.steps.length) card.dependsOn = [workflow.steps.at(-1)!.id];
+                  setWorkflow({ ...workflow, steps: [...workflow.steps, card] });
+                  setSelected(card.id);
+                }}
+              >
+                <Plus size={13} />
+                Sous-plan
+              </button>
             </div>
             <div
               className="workflow-nodes"
@@ -1943,7 +1965,7 @@ function WorkflowEditor({
               </svg>
               {workflow.steps.map((s, i) => (
                 <div
-                  className={`workflow-node ${s.id === selected ? 'selected' : ''}`}
+                  className={`workflow-node ${s.subplan ? 'subplan-card' : ''} ${s.id === selected ? 'selected' : ''}`}
                   key={s.id}
                   draggable
                   onDragStart={(e) => {
@@ -1963,14 +1985,16 @@ function WorkflowEditor({
                     onClick={() => setSelected(s.id)}
                     aria-label={`Configurer l’étape ${s.name}`}
                   >
-                    <GripVertical size={13} />
+                    {s.subplan ? <SubplanMark step={s} /> : <GripVertical size={13} />}
                     <span className="node-number">{String(i + 1).padStart(2, '0')}</span>
                     <span>
                       <strong>{s.name}</strong>
                       <small>
-                        {state.agents.find((a) => a.id === s.agentId)?.nickname ||
-                          state.agents.find((a) => a.id === s.agentId)?.name ||
-                          'Agent à choisir'}{' '}
+                        {s.subplan
+                          ? s.subplan.teamName || 'Sous-équipe à choisir'
+                          : state.agents.find((a) => a.id === s.agentId)?.nickname ||
+                            state.agents.find((a) => a.id === s.agentId)?.name ||
+                            'Agent à choisir'}{' '}
                         ·{' '}
                         {s.dependsOn.length
                           ? s.dependsOn
@@ -2055,6 +2079,14 @@ function WorkflowEditor({
                     ))}
                   </select>
                 </label>
+                {step.subplan && (
+                  <SubplanSettings
+                    step={step}
+                    state={state}
+                    dispatch={dispatch}
+                    onChange={update}
+                  />
+                )}
                 <AgentModelOverrides step={step} state={state} onChange={update} />
                 <fieldset className="dependency-list">
                   <legend>Doit attendre la validation de</legend>

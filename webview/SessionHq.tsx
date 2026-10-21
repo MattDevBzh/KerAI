@@ -1,3 +1,4 @@
+import { SubplanCardVisual } from './SubplanUI';
 import { useRef } from 'react';
 import {
   ArrowDown,
@@ -133,7 +134,7 @@ export function SessionHq({
               <li key={step.id}>
                 <button
                   type="button"
-                  className={`hq-station status-${status} ${selected ? 'selected' : ''}`}
+                  className={`hq-station ${step.subplan ? 'subplan-card' : ''} status-${status} ${selected ? 'selected' : ''}`}
                   disabled={disabled}
                   aria-current={selected ? 'step' : undefined}
                   aria-label={`Étape ${index + 1} · ${step.name} · ${name} · ${label}`}
@@ -153,14 +154,20 @@ export function SessionHq({
                     <span className="hq-lamp" aria-hidden="true">
                       <Lightbulb size={16} />
                     </span>
-                    <Avatar
-                      agent={agent}
-                      status={feature.archived && status === 'running' ? 'pending' : status}
-                    />
+                    {step.subplan ? (
+                      <SubplanCardVisual step={step} />
+                    ) : (
+                      <Avatar
+                        agent={agent}
+                        status={feature.archived && status === 'running' ? 'pending' : status}
+                      />
+                    )}
                     <span className="hq-desk" aria-hidden="true" />
                   </span>
                   <span className="hq-nameplate">
-                    <strong>{name}</strong>
+                    <strong>
+                      {step.subplan ? step.subplan.teamName || 'Sous-équipe à configurer' : name}
+                    </strong>
                     <span className="hq-status">
                       <Icon size={14} aria-hidden="true" /> {label}
                     </span>

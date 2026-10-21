@@ -10,6 +10,7 @@ import { DRAGON_BALL_CODE } from '../src/shared/dragonBall';
 import { resolveAvatar } from '../src/shared/avatars';
 import { featureStateKey } from '../src/shared/collaboration';
 import { teamSteps } from '../src/shared/team';
+import { newSubplanStep, subplanIssues } from '../src/shared/subplans';
 import type { QuestState } from '../src/shared/quests';
 import type { DashboardState } from '../src/shared/dashboard';
 
@@ -337,11 +338,46 @@ async function smokeRun(): Promise<void> {
     steps: teamSteps(feature),
     requestId: 'quest-team',
   });
+  assert.ok(
+    api.getState()!.agents.some((a) => a.id === 'fs-orchestrator'),
+    'The bundled orchestration profile is installed',
+  );
+  const outer = newSubplanStep(),
+    inner = newSubplanStep();
+  outer.subplan!.teamName = 'Recursive smoke';
+  outer.subplan!.steps = [inner];
+  const teamBefore = teamSteps(api.getState()!.features.find((f) => f.id === feature.id)!);
+  await api.dispatch({
+    type: 'saveFeatureTeam',
+    featureId: feature.id,
+    expectedRevision: api.getState()!.features.find((f) => f.id === feature.id)!.teamRevision ?? 0,
+    steps: [...teamBefore, outer],
+    requestId: 'smoke-subplan',
+  });
+  const withSubplan = api.getState()!.features.find((f) => f.id === feature.id)!;
+  assert.equal(withSubplan.steps.at(-1)!.subplan!.steps[0].agentId, 'fs-orchestrator');
+  assert.equal(
+    subplanIssues(withSubplan.steps).length,
+    1,
+    'An empty nested card is saved but cannot execute',
+  );
+  assert.equal(
+    withSubplan.steps.at(-1)!.attempts.length,
+    0,
+    'Configuring a card never launches its orchestrator',
+  );
+  await api.dispatch({
+    type: 'saveFeatureTeam',
+    featureId: feature.id,
+    expectedRevision: withSubplan.teamRevision ?? 0,
+    steps: teamBefore,
+    requestId: 'smoke-restore-team',
+  });
   await api.dispatch({ type: 'refreshQuests' });
   assert.equal(
     api.getQuestState().counts.teamsCreated,
-    1,
-    'A saved composition advances the team series',
+    2,
+    'Distinct saved compositions advance the team series; restoring one is not counted again',
   );
   await api.dispatch({
     type: 'configureStep',
@@ -715,7 +751,7 @@ async function smokeRun(): Promise<void> {
     api.getState()?.features.find((f) => f.id === feature.id)?.title,
     'Smoke extension host',
   );
-  assert.equal(api.getState()?.schemaVersion, 9);
+  assert.equal(api.getState()?.schemaVersion, 10);
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-observer'));
   await api.dispatch({
     type: 'previewObservation',

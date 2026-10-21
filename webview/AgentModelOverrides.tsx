@@ -52,7 +52,7 @@ export function AgentModelOverrides({
   onChange: (patch: Pick<WorkflowStep, 'model' | 'reasoning'>) => void;
 }) {
   const agent = state.agents.find((agent) => agent.id === step.agentId);
-  const model = step.model || agent?.model || state.settings.defaultModel;
+  const model = (step.model ?? agent?.model) || state.settings.defaultModel;
   const efforts = state.runtime.models.find((m) => m.id === model)?.reasoningEfforts ?? [];
   return (
     <>
@@ -62,11 +62,9 @@ export function AgentModelOverrides({
           <span>Modèle de l’intervention</span>
           <select
             value={step.model ?? ''}
-            onChange={(e) => onChange({ model: e.target.value || undefined, reasoning: undefined })}
+            onChange={(e) => onChange({ model: e.target.value, reasoning: '' })}
           >
-            <option value="">
-              Hériter de l’agent ({agent?.model || state.settings.defaultModel || 'Automatique'})
-            </option>
+            <option value="">Automatique (réglage du projet)</option>
             {step.model && !state.runtime.models.some((m) => m.id === step.model) && (
               <option value={step.model}>{step.model} · configuré</option>
             )}
@@ -81,9 +79,9 @@ export function AgentModelOverrides({
           <span>Niveau de réflexion</span>
           <select
             value={step.reasoning ?? ''}
-            onChange={(e) => onChange({ reasoning: e.target.value || undefined })}
+            onChange={(e) => onChange({ reasoning: e.target.value })}
           >
-            <option value="">Hériter de l’agent ({agent?.reasoning || 'Automatique'})</option>
+            <option value="">Automatique</option>
             {[...new Set([...(step.reasoning ? [step.reasoning] : []), ...efforts])].map(
               (effort) => (
                 <option key={effort} value={effort}>
@@ -95,8 +93,8 @@ export function AgentModelOverrides({
         </label>
       </div>
       <p className="field-help">
-        Un choix « Hériter » reste vide dans l’équipe. La valeur courante de l’agent est utilisée à
-        chaque lancement.
+        Le modèle et la réflexion restent propres à cette intervention. Les autres champs suivent
+        les mises à jour du profil de l’agent.
       </p>
     </>
   );

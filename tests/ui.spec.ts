@@ -1093,8 +1093,8 @@ test('éditeur visuel : profils hérités, seules les surcharges modèle et réf
   await navigate(page, 'Parcours');
   await page.getByRole('button', { name: 'Nouveau parcours' }).click();
   await page.getByLabel('Nom du parcours').fill('Mon parcours');
-  await expect(page.getByLabel('Modèle de l’intervention')).toHaveValue('');
-  await expect(page.getByLabel('Niveau de réflexion')).toHaveValue('');
+  await expect(page.getByLabel('Modèle de l’intervention')).toHaveValue('base-model');
+  await expect(page.getByLabel('Niveau de réflexion')).toHaveValue('high');
   await expect(page.getByLabel('Paramètres hérités de l’agent')).toContainText(
     state.skills.find((skill) => skill.id === 'ai-plan')?.name || 'ai-plan',
   );
@@ -1122,8 +1122,8 @@ test('éditeur visuel : profils hérités, seules les surcharges modèle et réf
     skills: [],
     dependsOn: [saved.workflow.steps[1].id],
   });
-  expect(saved.workflow.steps[1].model).toBeUndefined();
-  expect(saved.workflow.steps[1].reasoning).toBeUndefined();
+  expect(saved.workflow.steps[1].model).toBe('base-model');
+  expect(saved.workflow.steps[1].reasoning).toBe('high');
   expect(saved.workflow.steps[1].skills).toEqual([]);
 });
 async function labelCapture(page: Page) {

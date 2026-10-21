@@ -1,3 +1,4 @@
+import { allFeatures } from '../src/shared/subplans';
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeftRight,
@@ -42,7 +43,7 @@ const size = (value: number) =>
       ? `${(value / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Ko`
       : `${(value / 1024 / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
 export const hasActiveRun = (state: StudioState) =>
-  state.features.some((f) => f.steps.some((s) => s.status === 'running'));
+  allFeatures(state.features).some((f) => f.steps.some((s) => s.status === 'running'));
 export function WorkspaceChoice({
   state,
   isolated,

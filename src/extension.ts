@@ -1,3 +1,4 @@
+import { allFeatures, configurationSteps } from './shared/subplans';
 import { inheritTeamProfiles } from './shared/agentInheritance';
 import { resolvePersonalReviewReport } from './host/PersonalReviewTools';
 import { observationHtml, observationMarkdown } from './shared/observationReport';
@@ -382,7 +383,7 @@ export async function activate(context: vscode.ExtensionContext) {
         },
         ensureFeatureSaved: async (id) => {
           const owner = [...hub.entries.values()].find((entry) =>
-            entry.service.state.features.some((feature) => feature.id === id),
+            allFeatures(entry.service.state.features).some((feature) => feature.id === id),
           );
           if (!owner) throw new Error('La session liée est indisponible.');
           await owner.service.withWorkspaceMutation(
@@ -1953,7 +1954,7 @@ export async function activate(context: vscode.ExtensionContext) {
         current.assertTrusted();
         message.workflow.steps = inheritTeamProfiles(message.workflow.steps, current.state.agents);
         if (
-          message.workflow.steps.some(
+          configurationSteps(message.workflow.steps).some(
             (step) =>
               !current.state.agents.some((agent) => agent.id === step.agentId) ||
               step.skills.some((id) => !current.state.skills.some((skill) => skill.id === id)),

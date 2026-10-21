@@ -1,3 +1,20 @@
+import {
+  allFeatures,
+  featurePath as treePath,
+  configurationSteps,
+  currentIteration,
+  subplanIssues,
+  subplanContract,
+} from '../shared/subplans';
+import {
+  acceptSubplan,
+  assertSubplanExecution,
+  syncSubplans,
+  validateSubplanProposal,
+  refreshFutureIteration,
+  iterationReport,
+} from '../core/subplans';
+import { reconcileTeam } from '../core/teamComposition';
 import { pairSourceKey } from '../core/pairSource';
 import {
   createPair,
@@ -48,7 +65,7 @@ import { AgentRegistry } from '../core/registry';
 import { installQualityKit, resolveQualityAttachment } from './QualityRunner';
 import { Store, settingsSchema } from '../core/store';
 import { WorkflowEngine, validateWorkflow } from '../core/workflow';
-import { assertTeamOrder, teamLocked } from '../shared/team';
+import { assertTeamOrder } from '../shared/team';
 import { boundAnswers } from '../core/questions';
 import { gitInfo, ToolHost } from './ToolHost';
 import { PersonalReviewTools } from './PersonalReviewTools';
@@ -254,7 +271,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 9,
+      schemaVersion: 10,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -310,6 +327,7 @@ export class StudioService extends EventEmitter {
   async persist(): Promise<void> {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
+    syncSubplans(this.engine);
     const persisted = this.listenerCount('persisted') ? this.snapshot() : undefined;
     await this.store.save(this.engine.features, this.state.settings, this.state.memory ?? []);
     if (persisted) this.emit('persisted', persisted);
@@ -483,51 +501,60 @@ export class StudioService extends EventEmitter {
     expectedRevision: number,
     steps: WorkflowStep[],
   ): Promise<number> {
-    return this.workspaceAction(featureId, 'Enregistrement de l’équipe', async () => {
-      Object.assign(this.state, await this.registry.load());
-      this.assertTrusted();
-      const feature = this.engine.getFeature(featureId);
-      if (feature.archived) throw new Error('Réactive la feature avant de modifier son équipe.');
-      if (teamLocked(feature))
-        throw new Error('L’équipe est verrouillée : le parcours a déjà commencé.');
-      if ((feature.teamRevision ?? 0) !== expectedRevision)
-        throw new Error('L’équipe a changé. Ferme le panneau puis rouvre la composition actuelle.');
-      const validated = steps.length
-        ? validateWorkflow({
-            id: 'custom',
-            name: 'Équipe personnalisée',
-            description: '',
-            icon: 'users',
-            steps,
-          }).steps
-        : [];
-      const inherited = inheritTeamProfiles(validated, this.state.agents);
-      assertTeamOrder(inherited);
-      const artifacts = new Set<string>();
-      for (const step of validated) {
+    this.assertTrusted();
+    Object.assign(this.state, await this.registry.load());
+    const feature = this.engine.getFeature(featureId);
+    if (treePath(this.engine.features, featureId).some((f) => f.archived))
+      throw new Error('Réactive cette session avant de modifier son équipe.');
+    if (feature.parent && feature.status === 'completed')
+      throw new Error(
+        'Cette itération est terminée. Ajoute une nouvelle tâche corrective depuis son orchestrateur.',
+      );
+    if (feature.pendingTeam || (feature.teamRevision ?? 0) !== expectedRevision)
+      throw new Error(
+        'L’équipe a changé ou une composition attend son application. Rouvre le panneau actuel.',
+      );
+    const validated = steps.length
+      ? validateWorkflow({
+          id: 'custom',
+          name: 'Équipe personnalisée',
+          description: '',
+          icon: 'users',
+          steps,
+        }).steps
+      : [];
+    const inherited = inheritTeamProfiles(validated, this.state.agents);
+    assertTeamOrder(inherited);
+    const levels = [inherited];
+    while (levels.length) {
+      const level = levels.pop()!,
+        artifacts = new Set<string>();
+      assertTeamOrder(level);
+      for (const step of level) {
         if (!this.state.agents.some((agent) => agent.id === step.agentId))
           throw new Error(`Agent introuvable pour « ${step.name} » : ${step.agentId}.`);
-        const artifact = step.artifact.toLowerCase();
-        if (artifacts.has(artifact))
+        if (artifacts.has(step.artifact.toLowerCase()))
           throw new Error(`Deux interventions utilisent le même livrable : ${step.artifact}.`);
-        artifacts.add(artifact);
+        artifacts.add(step.artifact.toLowerCase());
+        if (step.subplan) levels.push(step.subplan.steps);
       }
-      const previous = structuredClone(feature);
-      feature.steps = inherited.map((step) => ({
-        ...structuredClone(step),
-        status: 'pending',
-        attempts: [],
-      }));
-      feature.activeStepId = feature.steps[0]?.id ?? '';
-      feature.workflowId = 'custom';
-      feature.workflowName = 'Équipe personnalisée';
-      feature.teamRevision = expectedRevision + 1;
-      feature.status = 'draft';
-      feature.updatedAt = new Date().toISOString();
-      delete feature.autopilot;
-      delete feature.optionalRequest;
-      delete feature.finalValidation;
+    }
+    reconcileTeam(structuredClone(feature), inherited);
+    if (this.active || this.workspaceTask || this.automation) {
+      const pending = (feature.pendingTeam = { expectedRevision, steps: inherited });
       try {
+        await this.persist();
+      } catch (error) {
+        if (feature.pendingTeam === pending) delete feature.pendingTeam;
+        throw error;
+      }
+      return expectedRevision + 1;
+    }
+    return this.workspaceAction(featureId, 'Enregistrement de l’équipe', async () => {
+      const previous = structuredClone(feature);
+      try {
+        reconcileTeam(feature, inherited);
+        this.engine.refreshFeatureStatus(feature.id);
         await this.persist();
       } catch (error) {
         for (const key of Object.keys(feature))
@@ -538,6 +565,74 @@ export class StudioService extends EventEmitter {
       return feature.teamRevision!;
     });
   }
+  private async applyPendingTeams(): Promise<void> {
+    const changed: { feature: Feature; previous: Feature }[] = [];
+    try {
+      for (const feature of allFeatures(this.engine.features)) {
+        if (!feature.pendingTeam || feature.steps.some((s) => s.status === 'running')) continue;
+        changed.push({ feature, previous: structuredClone(feature) });
+        reconcileTeam(feature, feature.pendingTeam.steps);
+        this.engine.refreshFeatureStatus(feature.id);
+      }
+      if (changed.length) await this.persist();
+    } catch (error) {
+      for (const { feature, previous } of changed.reverse()) {
+        for (const key of Object.keys(feature))
+          delete (feature as unknown as Record<string, unknown>)[key];
+        Object.assign(feature, previous);
+      }
+      throw error;
+    }
+  }
+  /** Continue only the selected iteration, never historical children or siblings in parallel. */
+  private async advanceSubplan(featureId: string): Promise<void> {
+    if (this.disposed) return;
+    if (this.workspaceTask) await this.workspaceTask;
+    if (this.automation) await this.automation.done;
+    if (this.disposed || this.active || this.automation) return;
+    const initial = this.engine.getFeature(featureId);
+    const path = treePath(this.engine.features, featureId);
+    let feature = path[0] ?? initial;
+    for (;;) {
+      const step = feature.steps.find(
+        (s) =>
+          s.subplan &&
+          s.status !== 'approved' &&
+          s.status !== 'stale' &&
+          s.subplanState?.iterations.length,
+      );
+      if (!step) break;
+      const pair = step.attempts.at(-1)?.pair;
+      if (
+        !pair ||
+        pair.busy ||
+        pair.error ||
+        pair.pauseRequested ||
+        step.subplanState?.paused ||
+        pair.approvedRevision !== pairPlan(pair)?.revision
+      )
+        return;
+      refreshFutureIteration(step, this.state.agents);
+      const iteration = currentIteration(step);
+      if (!iteration) return;
+      feature = iteration.feature;
+    }
+    if (!feature.parent || feature.archived || !feature.autopilot) return;
+    try {
+      assertSubplanExecution(this.engine.features, feature);
+      const next = nextAutopilotAction({
+        ...feature,
+        autopilot: { ...feature.autopilot, status: 'running' },
+      });
+      if (next.kind === 'run') await this.startAutopilot(feature.id);
+    } catch (error) {
+      this.error(error);
+    }
+  }
+  private scheduleSubplan(featureId: string): void {
+    void this.advanceSubplan(featureId).catch((error) => this.error(error));
+  }
+
   /** Dedicated delivery uses the same reservation, trust checks and source workspace lease. */
   withWorkspaceMutation<T>(label: string, action: () => Promise<T>): Promise<T> {
     return this.workspaceAction(undefined, label, action);
@@ -578,10 +673,14 @@ export class StudioService extends EventEmitter {
       try {
         for (const lease of leases.reverse()) await lease.release();
       } finally {
-        this.workspaceTask = undefined;
-        this.state.workspaceOperation = undefined;
-        complete();
-        this.publish();
+        try {
+          await this.applyPendingTeams();
+        } finally {
+          this.workspaceTask = undefined;
+          this.state.workspaceOperation = undefined;
+          complete();
+          this.publish();
+        }
       }
     }
   }
@@ -868,6 +967,9 @@ export class StudioService extends EventEmitter {
   ): RunInput {
     const originalFeature = this.engine.getFeature(featureId);
     const originalStep = this.engine.getStep(featureId, stepId);
+    assertSubplanExecution(this.engine.features, originalFeature);
+    const issues = subplanIssues(originalFeature.steps);
+    if (issues.length) throw new Error(issues.join(' '));
     const feature = structuredClone(originalFeature);
     const step = feature.steps.find((item) => item.id === stepId)!;
     const agent = this.state.agents.find((item) => item.id === step.agentId);
@@ -881,6 +983,32 @@ export class StudioService extends EventEmitter {
         mcpServerIds: step.mcpServerIds ?? [],
       },
     );
+    if (originalFeature.parent) {
+      const parent = this.engine.getStep(
+        originalFeature.parent.featureId,
+        originalFeature.parent.stepId,
+      );
+      const reports = parent.subplanState?.iterations
+        .filter(
+          (i) =>
+            !i.cancelled &&
+            i.feature.id !== feature.id &&
+            i.feature.status === 'completed' &&
+            !i.requiresRecheck,
+        )
+        .map((i) => `Itération ${i.number} · ${i.title} :\n${iterationReport(i.feature)}`)
+        .join('\n\n');
+      if (reports)
+        selected.initialContext = [
+          selected.initialContext,
+          'Résultats validés des tâches précédentes :',
+          reports,
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+    }
+    if (step.subplan)
+      selected.pair ??= { pace: 'blocks', explanation: 'detailed', instructions: '' };
     if (feature.execution) selected.permissionMode ??= feature.execution.permissionMode;
     if (needsDevOpsEvidence(step) && !selected.devopsTest?.isolationConfirmed)
       throw new Error(
@@ -907,7 +1035,7 @@ export class StudioService extends EventEmitter {
       );
     for (const entry of memory) {
       if (!entry.source) continue;
-      const sourceStep = this.engine.features
+      const sourceStep = allFeatures(this.engine.features)
         .find((item) => item.id === entry.source!.featureId)
         ?.steps.find((item) => item.id === entry.source!.stepId);
       if (
@@ -1040,7 +1168,9 @@ export class StudioService extends EventEmitter {
     await this.featurePath(featureId);
     Object.assign(this.state, await this.registry.load());
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
-    const blocked = budgetBlockReason(input.feature);
+    const blocked = treePath(this.engine.features, featureId)
+      .map((f) => budgetBlockReason(f))
+      .find(Boolean);
     const existingChanges = usesNativeTools(input) ? undefined : await inspectProjectChanges(input);
     this.assertTrusted();
     const errors = blocked ? [blocked] : [];
@@ -1074,6 +1204,7 @@ export class StudioService extends EventEmitter {
       !['paused', 'interrupted'].includes(attempt.pair.phase)
     )
       this.startPairTurns(featureId, stepId, attempt.id, { kind: 'chat' });
+    else this.scheduleSubplan(featureId);
   }
   private async executeRun(
     featureId: string,
@@ -1134,9 +1265,23 @@ export class StudioService extends EventEmitter {
       throw new Error(
         'Le contexte a changé depuis son aperçu. Actualise l’aperçu avant de lancer.',
       );
-    const blocked = budgetBlockReason(feature);
+    const blocked = treePath(this.engine.features, featureId)
+      .map((f) => budgetBlockReason(f))
+      .find(Boolean);
     if (blocked) throw new Error(blocked);
+    if (
+      !continued &&
+      step.subplanState?.iterations.some((i) => !i.cancelled && i.feature.status !== 'completed')
+    )
+      throw new Error(
+        'Reprends le chat de l’orchestrateur : des sous-tâches sont encore en cours.',
+      );
     const attempt = continued ?? this.engine.beginRun(featureId, stepId, feedback, resume);
+    if (!continued && step.subplanState) {
+      step.subplanState.acceptedRevisions = [];
+      step.subplanState.queue = [];
+      step.subplanState.paused = false;
+    }
     if (continued) {
       step.status = attempt.status = 'running';
       delete attempt.error;
@@ -1406,7 +1551,10 @@ export class StudioService extends EventEmitter {
     let nativeBefore: Map<string, string> | undefined;
     try {
       if (pair && turn) {
+        if (step.subplan && isWorkTurn(turn))
+          throw new Error('L’orchestrateur ne peut pas exécuter le travail des sous-équipes.');
         input.preparedPrompt = pairTurnPrompt(pair, turn);
+        if (step.subplan) input.preparedPrompt += `\n\n${subplanContract(step)}`;
         if (continued && attempt.questions.length)
           input.preparedPrompt += `\n\nRéponses humaines conservées : ${JSON.stringify(attempt.questions.map((question) => ({ question, answer: attempt.answers[question.id] })))}`;
         const maximum =
@@ -1432,7 +1580,7 @@ export class StudioService extends EventEmitter {
           resumeSessionId: input.resumeSessionId,
           execution: {
             model:
-              input.step.model || input.agent.model || input.settings.defaultModel || undefined,
+              (input.step.model ?? input.agent.model) || input.settings.defaultModel || undefined,
             reasoning: input.step.reasoning,
           },
         }),
@@ -1506,6 +1654,11 @@ export class StudioService extends EventEmitter {
         attempt.changedFiles = result.changedFiles;
         attempt.fileHashes = result.fileHashes;
         completePairTurn(pair, turn, result, reply);
+        if (step.subplan && pairPlan(pair) && pair.approvedRevision !== pairPlan(pair)!.revision) {
+          validateSubplanProposal(step);
+          if (step.subplan.mode === 'automatic' && !pair.pauseRequested)
+            acceptSubplan(feature, step, this.state.agents);
+        }
         for (const question of result.questions) {
           const previous = attempt.questions.find((q) => q.id === question.id);
           if (previous && JSON.stringify(previous) !== JSON.stringify(question))
@@ -1633,6 +1786,7 @@ export class StudioService extends EventEmitter {
         };
       }
       try {
+        await this.applyPendingTeams();
         await this.persist();
       } finally {
         this.active = undefined;
@@ -1711,8 +1865,17 @@ export class StudioService extends EventEmitter {
     const liveAction = ['message', 'solo', 'pair', 'pause'].includes(command.action);
     if (!liveAction && (pair.busy || this.pairTasks.has(attempt.id) || this.workspaceTask))
       throw new Error('Attends la fin du bloc en cours avant de changer son organisation.');
-    if (this.active && this.active.featureId !== feature.id)
+    if (
+      this.active &&
+      this.active.featureId !== feature.id &&
+      !(
+        step.subplan &&
+        command.action === 'pause' &&
+        allFeatures([feature]).some((f) => f.id === this.active!.featureId)
+      )
+    )
       throw new Error('Une autre session travaille actuellement. Reviens après son exécution.');
+    if (step.subplan && command.action === 'approve-plan') validateSubplanProposal(step);
     let next: PairTurn | undefined;
     const plan = pairPlan(pair);
     const humanState = () => ({
@@ -1826,6 +1989,7 @@ export class StudioService extends EventEmitter {
       case 'resume':
         if (pair.pendingMessages.length)
           next = { kind: approved || pair.origin === 'solo' ? 'chat' : 'planning' };
+        else if (step.subplan && approved && nextPairBlock(pair)) next = requirePlan();
         else if (pair.turn?.kind === 'solo')
           next = { kind: pair.mode === 'solo' ? 'solo' : 'planning' };
         else if (
@@ -1879,7 +2043,15 @@ export class StudioService extends EventEmitter {
         );
         break;
     }
-    if (next) pair.pauseRequested = false;
+    let advanceChildren = false;
+    const subplanBefore = step.subplan ? structuredClone(step.subplanState) : undefined;
+    if (step.subplan && next && isWorkTurn(next)) {
+      acceptSubplan(feature, step, this.state.agents);
+      if (step.subplanState) step.subplanState.paused = false;
+      advanceChildren = true;
+      next = undefined;
+    }
+    if (next || advanceChildren) pair.pauseRequested = false;
     pair.requests.push(command.requestId);
     pair.version++;
     feature.updatedAt = new Date().toISOString();
@@ -1890,6 +2062,7 @@ export class StudioService extends EventEmitter {
     try {
       await this.persist();
     } catch (error) {
+      if (advanceChildren) step.subplanState = subplanBefore;
       // Undo only this command. A streaming reply or a completed block may have advanced meanwhile.
       for (const key of Object.keys(previous) as (keyof typeof previous)[]) {
         if (key === 'phase' && pair.version !== command.expectedVersion + 1) continue;
@@ -1914,6 +2087,19 @@ export class StudioService extends EventEmitter {
       this.active.stepId === step.id
     )
       this.active.controller.abort(new Error('Pause demandée par l’utilisateur.'));
+    if (step.subplan && command.action === 'pause') {
+      step.subplanState && (step.subplanState.paused = true);
+      const current = currentIteration(step);
+      if (current) {
+        this.pauseAutopilot(current.feature.id);
+        if (
+          this.active &&
+          allFeatures([current.feature]).some((f) => f.id === this.active!.featureId)
+        )
+          this.active.controller.abort(new Error('Sous-plan mis en pause.'));
+      }
+      await this.persist();
+    }
     if (command.action === 'pair')
       this.pauseAutopilot(feature.id, 'Travail en pair demandé dans la conversation de l’étape.');
     if (
@@ -1942,6 +2128,7 @@ export class StudioService extends EventEmitter {
       }
       await this.persist();
     }
+    if (advanceChildren) this.scheduleSubplan(feature.id);
     if (next) {
       const requested = next;
       const start = () => {
@@ -1979,6 +2166,10 @@ export class StudioService extends EventEmitter {
           this.executeRun(featureId, stepId, '', false, undefined, undefined, false, turn),
         );
         if (pair.phase === 'paused' || pair.phase === 'interrupted') return;
+        if (this.engine.getStep(featureId, stepId).subplan && !pair.pendingMessages.length) {
+          this.scheduleSubplan(featureId);
+          return;
+        }
         if (pair.pendingMessages.length) turn = { kind: 'chat' };
         else if (
           pair.mode === 'solo' &&
@@ -2005,7 +2196,14 @@ export class StudioService extends EventEmitter {
   }
   cancel(featureId: string): void {
     this.pauseAutopilot(featureId, 'Exécution arrêtée par l’utilisateur.');
-    if (this.active?.featureId !== featureId)
+    for (const f of allFeatures([this.engine.getFeature(featureId)])) {
+      this.pauseAutopilot(f.id);
+      for (const s of f.steps) if (s.subplanState) s.subplanState.paused = true;
+    }
+    if (
+      !this.active ||
+      !allFeatures([this.engine.getFeature(featureId)]).some((f) => f.id === this.active!.featureId)
+    )
       throw new Error('Aucune exécution active pour cette session.');
     this.active.controller.abort();
   }
@@ -2105,6 +2303,20 @@ export class StudioService extends EventEmitter {
   }
   assertConfigurable(featureId?: string): void {
     this.assertTrusted();
+    if (featureId) {
+      const f = this.engine.getFeature(featureId);
+      if (f.pendingTeam) throw new Error('Une composition attend la fin de l’appel en cours.');
+      if (
+        treePath(this.engine.features, featureId)
+          .slice(0, -1)
+          .some((p) => p.archived)
+      )
+        throw new Error('La feature parente est archivée.');
+      if (f.parent && f.status === 'completed')
+        throw new Error(
+          'Cette itération est historique. Demande une nouvelle tâche corrective à son orchestrateur.',
+        );
+    }
     if (this.workspaceTask) throw new Error('Attends la fin de l’opération sur les fichiers.');
     if (this.active && (!featureId || this.active.featureId === featureId))
       throw new Error('Arrête la tentative avant de modifier cette configuration.');
@@ -2119,6 +2331,7 @@ export class StudioService extends EventEmitter {
       parsed = autopilotConfigSchema.parse(config);
     if (!feature.steps.length) throw new Error('Compose une équipe avant de configurer le pilote.');
     const ids = new Set(feature.steps.map((step) => step.id));
+    if (feature.parent) parsed.checkpoints = [...ids];
     if (
       [
         ...parsed.checkpoints,
@@ -2287,6 +2500,7 @@ export class StudioService extends EventEmitter {
       feature.autopilot.updatedAt = new Date().toISOString();
       this.automation = undefined;
       try {
+        await this.applyPendingTeams();
         await this.persist();
         const request = feature.optionalRequest;
         if (request && !this.disposed && !this.notifiedOptional.has(request.id)) {
@@ -2306,12 +2520,13 @@ export class StudioService extends EventEmitter {
     actor: 'human' | 'autopilot' = 'human',
   ): Promise<void> {
     if (actor === 'human') this.assertConfigurable(featureId);
-    return this.workspaceAction(
+    await this.workspaceAction(
       featureId,
       'Validation des preuves de la feature',
       () => this.approveInWorkspace(featureId, stepId, expectedAttemptId, expectedRevision, actor),
       actor === 'autopilot',
     );
+    if (actor === 'human') this.scheduleSubplan(featureId);
   }
   private async approveInWorkspace(
     featureId: string,
@@ -2456,7 +2671,7 @@ export class StudioService extends EventEmitter {
   }
   async finalizeFeature(featureId: string, expectedStateKey: string): Promise<string> {
     this.assertConfigurable(featureId);
-    return this.workspaceAction(
+    const result = await this.workspaceAction(
       featureId,
       'Validation définitive des preuves de la feature',
       async () => {
@@ -2485,6 +2700,8 @@ export class StudioService extends EventEmitter {
         return id;
       },
     );
+    this.scheduleSubplan(featureId);
+    return result;
   }
   async previewObservation(featureId: string, options: ObservationOptions) {
     return this.workspaceAction(
@@ -2657,16 +2874,20 @@ export class StudioService extends EventEmitter {
     };
   }
   async recoverSessionDeletions(): Promise<void> {
-    for (const record of await pendingDeletions(this.store.rootPath)) {
+    const records = await pendingDeletions(this.store.rootPath);
+    const deleted = new Set(records.map((record) => record.featureId));
+    if (records.length) {
       this.engine.features.splice(
         0,
         this.engine.features.length,
-        ...this.engine.features.filter((f) => f.id !== record.featureId),
+        ...this.engine.features.filter((f) => !deleted.has(f.id)),
       );
       this.state.memory = (this.state.memory ?? []).filter(
-        (m) => m.source?.featureId !== record.featureId,
+        (m) => !m.source || !deleted.has(m.source.featureId),
       );
       await this.persist();
+    }
+    for (const record of records) {
       await this.workspaces.purgeSession(record.featureId, record.checkpoints);
       await cleanSessionFiles(this.store.rootPath, record, this.engine.features);
       this.archives.delete(record.featureId);
@@ -2677,6 +2898,8 @@ export class StudioService extends EventEmitter {
   async archiveFeature(featureId: string, archived: boolean): Promise<void> {
     this.assertConfigurable(featureId);
     const feature = this.engine.getFeature(featureId);
+    if (feature.parent)
+      throw new Error('Archive l’équipe de base pour conserver tout l’historique.');
     const previous = { ...structuredClone(feature), archived: feature.archived };
     this.engine.archiveFeature(featureId, archived);
     try {
@@ -2690,6 +2913,8 @@ export class StudioService extends EventEmitter {
   async deleteFeature(featureId: string): Promise<number> {
     return this.workspaceAction(undefined, 'Suppression définitive de la session', async () => {
       const feature = this.engine.getFeature(featureId);
+      if (feature.parent)
+        throw new Error('Une itération fait partie de l’historique de son équipe de base.');
       const before = await privateSize(this.store.rootPath, 'sessions');
       const backups = await privateSize(this.store.rootPath, 'existing-changes');
       const checkpoints = await privateSize(this.store.rootPath, 'workspaces');

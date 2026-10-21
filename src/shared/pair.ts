@@ -18,6 +18,7 @@ export interface PairBlock {
   id: string;
   title: string;
   description: string;
+  corrects?: string;
 }
 export interface PairPlan {
   revision: number;

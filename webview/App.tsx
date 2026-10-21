@@ -1,3 +1,10 @@
+import {
+  allFeatures,
+  currentIteration,
+  subplanIssues,
+  subplanProgressLabel,
+} from '../src/shared/subplans';
+import { SubplanCardVisual, SubplanNavigation, SubplanOverview } from './SubplanUI';
 import { PairWorkspace } from './PairWorkspace';
 import { SessionConversation } from './SessionConversation';
 import { PermissionPicker } from './NativeExecutionUI';
@@ -21,7 +28,7 @@ import { SessionHq } from './SessionHq';
 import { useHqContextTransfer } from './HqContextTransfer';
 import { SessionViewToggle, useSessionView } from './SessionViewPreference';
 import { AgentFavorite } from './AgentFavorite';
-import { orderedAgents, teamLocked } from '../src/shared/team';
+import { orderedAgents } from '../src/shared/team';
 import { Avatar, AgentImage, avatarOptions } from './Avatar';
 import { resolveAvatar } from '../src/shared/avatars';
 import { usageCredits } from '../src/shared/credits';
@@ -591,7 +598,7 @@ export default function App() {
     }
     send(message);
   };
-  const selected = state?.features.find((f) => f.id === featureId);
+  const selected = state && allFeatures(state.features).find((f) => f.id === featureId);
   const activeFeatures = state?.features.filter((f) => !f.archived) ?? [];
   const openCreate = (_id?: string) => {
     setCreateFrom(undefined);
@@ -943,6 +950,12 @@ export default function App() {
                   }
                 }}
                 reportTarget={reportTarget?.featureId === selected.id ? reportTarget : undefined}
+                navigate={(id, step) => {
+                  if (!draftDirty) {
+                    setFeatureId(id);
+                    setStepId(step ?? '');
+                  }
+                }}
                 feature={selected}
                 state={state}
                 devops={devops}
@@ -1712,6 +1725,7 @@ function CreateModal({
   );
 }
 function FeatureDetail({
+  navigate,
   pairOpen,
   onPairOpenChange,
   openDiscussion,
@@ -1728,6 +1742,7 @@ function FeatureDetail({
   confirm,
   onDirtyChange,
 }: {
+  navigate: (id: string, stepId?: string) => void;
   pairOpen: boolean;
   onPairOpenChange: (open: boolean) => void;
   openDiscussion: (id: string) => void;
@@ -1748,6 +1763,14 @@ function FeatureDetail({
     feature.steps.find((s) => s.id === stepId) ??
     feature.steps.find((s) => s.id === feature.activeStepId) ??
     feature.steps[0];
+  const selectCard = (id: string) => {
+    const selected = feature.steps.find((s) => s.id === id);
+    const child = selected?.subplan
+      ? (currentIteration(selected) ?? selected.subplanState?.iterations.at(-1))
+      : undefined;
+    if (child) navigate(child.feature.id);
+    else selectStep(id);
+  };
   const [composing, setComposing] = useState(false),
     [teamPending, setTeamPending] = useState(false);
   const { enabled: livingHq } = useSessionView();
@@ -1779,7 +1802,7 @@ function FeatureDetail({
   const busy =
     hasActiveRun(state) ||
     Boolean(state.workspaceOperation) ||
-    state.features.some((item) => item.autopilot?.status === 'running');
+    allFeatures(state.features).some((item) => item.autopilot?.status === 'running');
   useEffect(
     () =>
       subscribe((message) => {
@@ -1847,6 +1870,17 @@ function FeatureDetail({
     );
   return (
     <div className="page feature-page">
+      <SubplanNavigation
+        feature={feature}
+        state={state}
+        navigate={navigate}
+        disabled={detailDirty}
+      />
+      {feature.pendingTeam && (
+        <p className="subplan-warning" role="status">
+          Nouvelle composition enregistrée. Elle sera appliquée à la fin de l’appel en cours.
+        </p>
+      )}
       {composing && (
         <Modal
           title="Composer mon équipe"
@@ -1922,7 +1956,7 @@ function FeatureDetail({
           </button>
           <button
             className="icon-button"
-            disabled={busy || detailDirty}
+            disabled={busy || detailDirty || Boolean(feature.parent)}
             aria-label="Supprimer la session"
             onClick={() => dispatch({ type: 'deleteFeature', featureId: feature.id })}
           >
@@ -2010,21 +2044,22 @@ function FeatureDetail({
       {!!feature.steps.length && (
         <div className="feature-team-heading">
           <h2>Votre équipe</h2>
-          {teamLocked(feature) ? (
-            <span className="muted">Composition verrouillée depuis le début du parcours</span>
-          ) : (
-            <button
-              className="button secondary small"
-              disabled={busy || detailDirty || Boolean(feature.archived)}
-              onClick={() => {
-                setComposing(true);
-                onDirtyChange(true);
-              }}
-            >
-              <Settings2 size={14} />
-              Modifier l’équipe
-            </button>
-          )}
+          <button
+            className="button secondary small"
+            disabled={
+              detailDirty ||
+              Boolean(feature.archived) ||
+              Boolean(feature.pendingTeam) ||
+              Boolean(feature.parent && feature.status === 'completed')
+            }
+            onClick={() => {
+              setComposing(true);
+              onDirtyChange(true);
+            }}
+          >
+            <Settings2 size={14} />
+            Modifier l’équipe
+          </button>
         </div>
       )}
       <div className="journey-heading">
@@ -2039,7 +2074,7 @@ function FeatureDetail({
           transfer={hqTransfer}
           selectedStepId={step?.id}
           disabled={detailDirty}
-          selectStep={selectStep}
+          selectStep={selectCard}
         />
       ) : (
         <div className="journey" role="navigation" aria-label="Étapes du parcours">
@@ -2047,16 +2082,20 @@ function FeatureDetail({
             <button
               key={s.id}
               disabled={detailDirty}
-              onClick={() => selectStep(s.id)}
-              className={`journey-step ${s.status} ${s.id === step?.id ? 'current' : ''}`}
+              onClick={() => selectCard(s.id)}
+              className={`journey-step ${s.subplan ? 'subplan-card' : ''} ${s.status} ${s.id === step?.id ? 'current' : ''}`}
               aria-current={s.id === step?.id ? 'step' : undefined}
             >
               <span className="journey-node">
-                <Avatar
-                  agent={state.agents.find((a) => a.id === s.agentId)}
-                  status={s.status}
-                  small
-                />
+                {s.subplan ? (
+                  <SubplanCardVisual step={s} />
+                ) : (
+                  <Avatar
+                    agent={state.agents.find((a) => a.id === s.agentId)}
+                    status={s.status}
+                    small
+                  />
+                )}
                 {s.status === 'approved' && (
                   <span className="journey-check">
                     <Check size={9} />
@@ -2069,7 +2108,16 @@ function FeatureDetail({
                   {s.name}
                 </strong>
                 <small>
-                  {statuses[s.status].label}
+                  {s.awaitsCorrection
+                    ? 'Reprise par correctif'
+                    : s.subplan && subplanIssues([s]).length
+                      ? 'À configurer'
+                      : subplanProgressLabel(s) || statuses[s.status].label}
+                  {s.subplanState
+                    ? ` · ${s.subplanState.iterations.filter((i) => i.feature.status === 'completed' && !i.cancelled).length}/${s.subplanState.iterations.filter((i) => !i.cancelled).length} tâches validées`
+                    : s.subplan
+                      ? ' · Sous-équipe'
+                      : ''}
                   {s.optional && s.status !== 'skipped' ? ' · Facultative' : ''}
                 </small>
               </span>
@@ -2109,8 +2157,13 @@ function FeatureDetail({
           }}
         />
       )}
+      {step?.subplan && <SubplanOverview step={step} navigate={navigate} />}
       {step ? (
         <StepPanel
+          configureTeam={() => {
+            setComposing(true);
+            onDirtyChange(true);
+          }}
           openPair={() => onPairOpenChange(true)}
           reportTarget={reportTarget?.stepId === step.id ? reportTarget : undefined}
           key={`${feature.id}-${step.id}`}
@@ -2118,7 +2171,7 @@ function FeatureDetail({
           step={step}
           state={state}
           dispatch={dispatch}
-          selectStep={selectStep}
+          selectStep={selectCard}
           onDirtyChange={(value) => {
             setDetailDirty(value);
             onDirtyChange(value);
@@ -2150,6 +2203,7 @@ function FeatureDetail({
   );
 }
 function StepPanel({
+  configureTeam,
   openPair,
   reportTarget,
   feature,
@@ -2162,6 +2216,7 @@ function StepPanel({
   onCorrection,
 }: {
   openPair: () => void;
+  configureTeam: () => void;
   reportTarget?: { attemptId: string; edit: boolean };
   onDirtyChange: (dirty: boolean) => void;
   onCorrection: (
@@ -2339,7 +2394,7 @@ function StepPanel({
   const running =
     hasActiveRun(state) ||
     Boolean(state.workspaceOperation) ||
-    state.features.some((item) => item.autopilot?.status === 'running');
+    allFeatures(state.features).some((item) => item.autopilot?.status === 'running');
   const unlocked = step.dependsOn.every((id) =>
     stepResolved(feature.steps.find((s) => s.id === id)),
   );
@@ -2348,23 +2403,30 @@ function StepPanel({
     state.runtime.state === 'ready' &&
     !running &&
     unlocked &&
+    !step.awaitsCorrection &&
+    !subplanIssues(feature.steps).length &&
+    !(feature.parent && feature.status === 'completed') &&
     !feature.archived &&
     step.attempts.length < step.maxAttempts;
   const next = feature.steps.find((s) => s.dependsOn.includes(step.id) && !stepResolved(s));
   const agent = state.agents.find((a) => a.id === step.agentId);
   const displayPolicy = step.inheritAgent && agent ? agentPolicy(agent) : step.policy;
   const unanswered = latest?.questions.filter((q) => !latest.answers[q.id]) ?? [];
-  const blocked = !state.workspace.trusted
-    ? 'Le projet doit être approuvé dans VS Code.'
-    : state.runtime.state !== 'ready'
-      ? 'Vérifiez la connexion Copilot avant de lancer une étape.'
-      : !unlocked
-        ? 'Validez les étapes précédentes pour débloquer celle-ci.'
-        : step.attempts.length >= step.maxAttempts
-          ? `La limite de ${step.maxAttempts} tentative${step.maxAttempts > 1 ? 's' : ''} est atteinte.`
-          : feature.archived
-            ? 'Restaurez la session pour poursuivre.'
-            : '';
+  const blocked = step.awaitsCorrection
+    ? 'Intervention ajoutée avant du travail réalisé : utilisez une route de correction.'
+    : subplanIssues(feature.steps).length
+      ? subplanIssues(feature.steps).join(' ')
+      : !state.workspace.trusted
+        ? 'Le projet doit être approuvé dans VS Code.'
+        : state.runtime.state !== 'ready'
+          ? 'Vérifiez la connexion Copilot avant de lancer une étape.'
+          : !unlocked
+            ? 'Validez les étapes précédentes pour débloquer celle-ci.'
+            : step.attempts.length >= step.maxAttempts
+              ? `La limite de ${step.maxAttempts} tentative${step.maxAttempts > 1 ? 's' : ''} est atteinte.`
+              : feature.archived
+                ? 'Restaurez la session pour poursuivre.'
+                : '';
   const run = (resume = false, pairMode = false) => {
     const action = () => {
       setLaunchPair(pairMode);
@@ -2433,7 +2495,7 @@ function StepPanel({
           <div>
             <strong>{agent?.nickname || agent?.name || step.agentId}</strong>
             <span>
-              {step.model || agent?.model || state.settings.defaultModel || 'Modèle automatique'}
+              {(step.model ?? agent?.model) || state.settings.defaultModel || 'Modèle automatique'}
               <span className="inline-dot" />
               {feature.execution
                 ? `Copilot natif · ${permissionLabels[feature.execution.permissionMode]}`
@@ -2443,7 +2505,7 @@ function StepPanel({
           <button
             className="text-button"
             disabled={running || dirty || Boolean(feature.archived)}
-            onClick={() => setConfig(!config)}
+            onClick={() => (step.subplan ? configureTeam() : setConfig(!config))}
             aria-expanded={config}
           >
             <Settings2 size={14} />
@@ -2728,7 +2790,9 @@ function StepPanel({
                       ...(running
                         ? [
                             state.workspaceOperation?.label ??
-                              (state.features.some((item) => item.autopilot?.status === 'running')
+                              (allFeatures(state.features).some(
+                                (item) => item.autopilot?.status === 'running',
+                              )
                                 ? 'Arrêtez le pilote avant de modifier le compte rendu.'
                                 : 'Attendez la fin de l’exécution en cours.'),
                           ]
@@ -3112,7 +3176,11 @@ function StepPanel({
                       ) : (
                         <Check size={16} />
                       )}{' '}
-                      {approvalPending ? 'Validation en cours…' : 'Valider cette étape'}
+                      {approvalPending
+                        ? 'Validation en cours…'
+                        : step.subplan
+                          ? 'Valider l’ensemble des sous-tâches'
+                          : 'Valider cette étape'}
                     </button>
                   </>
                 )}

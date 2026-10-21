@@ -4,6 +4,8 @@ import type { Feature, FeatureStep } from '../shared/types';
 export function pairSourceKey(feature: Feature, step: FeatureStep): string {
   const {
     attempts: _attempts,
+    subplanState: _subplanState,
+    awaitsCorrection: _awaitsCorrection,
     status: _status,
     optionalDecision: _decision,
     optionalDecisionHistory: _history,
@@ -16,7 +18,9 @@ export function pairSourceKey(feature: Feature, step: FeatureStep): string {
     branch: feature.branch,
     projects: feature.projects,
     worktree: feature.worktree?.path,
-    configuration,
+    configuration: step.subplan
+      ? { ...configuration, subplan: { mode: step.subplan.mode } }
+      : configuration,
     sources: feature.steps
       .filter((s) => s.id !== step.id && (s.status === 'approved' || step.dependsOn.includes(s.id)))
       .map((s) => [s.id, s.status, s.attempts.at(-1)?.id, s.attempts.at(-1)?.revision]),
