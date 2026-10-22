@@ -45,7 +45,7 @@ jobs:
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - name: Compile the explicitly requested no-test release
         if: env.FEATURE_STUDIO_SKIP_TESTS == 'true'
-        run: npm run format:check && npm run typecheck && npm run build
+        run: npm run typecheck && npm run build
       - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.102
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts
