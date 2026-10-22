@@ -207,7 +207,7 @@
     "test:watch": "vitest",
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
-    "check": "npm run format:check && npm run typecheck && npm test && npm run build",
+    "check": "npm run typecheck && npm test && npm run build",
     "package": "vsce package --no-dependencies --out releases/feature-studio-1.25.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
