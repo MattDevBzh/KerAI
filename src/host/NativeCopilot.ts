@@ -23,6 +23,7 @@ export const NATIVE_TOOLS = [
   'view',
   'glob',
   'grep',
+  'rg',
   'edit',
   'create',
   'apply_patch',
@@ -38,7 +39,7 @@ export const NATIVE_TOOLS = [
   'list_powershell',
   'ask_user',
 ];
-export const NATIVE_READ_TOOLS = ['view', 'glob', 'grep', 'ask_user'];
+export const NATIVE_READ_TOOLS = ['view', 'glob', 'grep', 'rg', 'ask_user'];
 export const nativeGates: Partial<SessionConfig> = {
   enableManagedSettings: true,
   enableExperimentalMode: true,
@@ -80,17 +81,32 @@ export async function applyNativePermissions(
 export function verifyNativeCatalog(names: string[], extra: string[] = [], readOnly = false): void {
   const allowed = new Set([...(readOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS), ...extra]);
   const unexpected = names.filter((name) => !allowed.has(name));
-  if (new Set(names).size !== names.length) throw new Error('Catalogue natif dupliqué.');
-  if (unexpected.length) throw new Error(`Catalogue natif inattendu : ${unexpected.join(', ')}.`);
-  if (
-    (readOnly ? NATIVE_READ_TOOLS : ['view', 'glob', 'grep', 'edit', 'create', 'ask_user']).some(
-      (name) => !names.includes(name),
-    ) ||
-    (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
-  )
+  const received = names.join(', ') || '(aucun)';
+  if (new Set(names).size !== names.length)
+    throw new Error(`Catalogue natif dupliqué. Outils reçus : ${received}.`);
+  if (unexpected.length)
     throw new Error(
-      'Le runtime ne propose pas tous les outils natifs nécessaires (fichiers, terminal et questions).',
+      `Catalogue natif inattendu : ${unexpected.join(', ')}. Outils reçus : ${received}.`,
     );
+  // Some models expose apply_patch instead of edit/create. It covers both write capabilities.
+  // Keep read-only validation strict: apply_patch remains outside NATIVE_READ_TOOLS.
+  const required =
+    readOnly || names.includes('apply_patch')
+      ? ['view', 'glob', 'ask_user']
+      : ['view', 'glob', 'edit', 'create', 'ask_user'];
+  const missing = required.filter((name) => !names.includes(name));
+  if (!names.some((name) => name === 'grep' || name === 'rg')) missing.push('grep ou rg');
+  if (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
+    missing.push('bash ou powershell');
+  if (missing.length) {
+    throw new Error(
+      [
+        `Outils natifs obligatoires absents : ${missing.join(', ')}.`,
+        `Outils reçus (${names.length}) : ${received}.`,
+        `Mode : ${readOnly ? 'lecture seule' : 'complet'}.`,
+      ].join(' '),
+    );
+  }
 }
 
 /** Probes a disposable session. No prompt, model call or project tool is executed. */
@@ -99,6 +115,7 @@ export async function probeNativeCapabilities(
   directory: string,
 ): Promise<NativeCapabilities> {
   let session: CopilotSession | undefined;
+  let tools: string[] = [];
   try {
     session = await client.createSession({
       ...nativeGates,
@@ -115,9 +132,7 @@ export async function probeNativeCapabilities(
       onPermissionRequest: () => ({ kind: 'reject', feedback: 'Diagnostic sans exécution.' }),
     });
     await session.rpc.tools.initializeAndValidate();
-    const tools = ((await session.rpc.tools.getCurrentMetadata()).tools ?? []).map(
-      (tool) => tool.name,
-    );
+    tools = ((await session.rpc.tools.getCurrentMetadata()).tools ?? []).map((tool) => tool.name);
     verifyNativeCatalog(tools);
     const permissionModes: NativePermissionMode[] = [];
     for (const mode of NATIVE_PERMISSION_MODES) {
@@ -135,9 +150,9 @@ export async function probeNativeCapabilities(
   } catch (error) {
     return {
       available: false,
-      tools: [],
+      tools,
       permissionModes: [],
-      error: `Copilot natif indisponible : ${(error as Error).message} Version testée : CLI 1.0.102, SDK 1.0.20. Mets le CLI à jour puis relance le diagnostic.`,
+      error: `Copilot natif indisponible : ${(error as Error).message} Couple de référence : CLI 1.0.102, SDK 1.0.20.`,
     };
   } finally {
     if (session) {

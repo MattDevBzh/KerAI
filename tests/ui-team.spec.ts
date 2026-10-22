@@ -168,3 +168,98 @@ test('keyboard additions at small viewport and favorites in the main catalog', a
       .getByRole('button', { name: label!.replace('Ajouter aux favoris', 'Retirer des favoris') }),
   ).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('Mes équipes reuses the visual catalog and saves a reusable team without starting a feature', async ({
+  page,
+}) => {
+  await hosted(page);
+  await navigate(page, 'Mes équipes');
+  await page.getByRole('button', { name: 'Nouvelle équipe', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Enregistrer l’équipe', exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel('Nom de l’équipe').fill('Mon atelier');
+  await page.getByLabel('Description de l’équipe').fill('Une équipe réutilisable');
+  const template = page.locator('.team-template').filter({ hasText: 'Feature complète' });
+  await template.locator('.team-template-drag').dragTo(page.locator('.team-empty-target'));
+  await expect(page.locator('.team-member')).toHaveCount(5);
+  await page.getByRole('dialog').evaluate((dialog) => {
+    const note = document.createElement('p');
+    note.textContent = 'DÉMONSTRATION · équipe d’exemple · aucune exécution Copilot';
+    note.className = 'muted';
+    dialog.querySelector('.modal-heading > div')?.append(note);
+    dialog.scrollTop = 0;
+  });
+  await page.screenshot({ path: 'test-results/my-teams-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/my-teams-mobile.png' });
+  const mobileAdd = page
+    .locator('.team-agent')
+    .first()
+    .getByRole('button', { name: /^Ajouter (?!aux favoris)/ });
+  await mobileAdd.scrollIntoViewIfNeeded();
+  await mobileAdd.click();
+  await expect(page.locator('.team-member')).toHaveCount(6);
+  await page
+    .locator('.team-member')
+    .last()
+    .getByRole('button', { name: /^Retirer / })
+    .click();
+  await expect(page.locator('.team-member')).toHaveCount(5);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: 'Enregistrer l’équipe', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const messages: ClientMessage[] = await page.evaluate(() => Reflect.get(window, 'teamMessages'));
+  const saved = messages.find((message) => message.type === 'saveWorkflow');
+  expect(saved?.type).toBe('saveWorkflow');
+  if (saved?.type !== 'saveWorkflow') throw new Error('Team was not saved');
+  expect(saved.workflow).toMatchObject({
+    id: 'mon-atelier',
+    name: 'Mon atelier',
+    description: 'Une équipe réutilisable',
+  });
+  expect(saved.workflow.steps).toHaveLength(5);
+  expect(new Set(saved.workflow.steps.map((step) => step.id)).size).toBe(5);
+  expect(
+    messages.some((message) =>
+      ['createFeature', 'saveFeatureTeam', 'runStep'].includes(message.type),
+    ),
+  ).toBe(false);
+});
+
+test('saved team dependency settings reject cycles and retain valid links', async ({ page }) => {
+  await hosted(page);
+  await navigate(page, 'Mes équipes');
+  await page.getByRole('button', { name: 'Nouvelle équipe', exact: true }).click();
+  await page.getByLabel('Nom de l’équipe').fill('Dépendances');
+  const [first, second] = demoState.agents;
+  for (const agent of [first, second])
+    await page
+      .getByRole('button', { name: `Ajouter ${agent.nickname || agent.name}`, exact: true })
+      .click();
+  await page.getByRole('button', { name: `Régler ${first.name}`, exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Doit attendre la validation de', exact: true })
+    .getByLabel(second.name, { exact: true })
+    .click();
+  await expect(page.getByRole('alert').filter({ hasText: 'dépendances' })).toBeVisible();
+  await page.getByRole('button', { name: `Régler ${second.name}`, exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Doit attendre la validation de', exact: true })
+    .getByLabel(first.name, { exact: true })
+    .uncheck();
+  await page.getByRole('button', { name: `Régler ${first.name}`, exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Doit attendre la validation de', exact: true })
+    .getByLabel(second.name, { exact: true })
+    .check();
+  await page.getByRole('button', { name: 'Enregistrer l’équipe', exact: true }).click();
+  const messages: ClientMessage[] = await page.evaluate(() => Reflect.get(window, 'teamMessages'));
+  const saved = messages.find((message) => message.type === 'saveWorkflow');
+  if (saved?.type !== 'saveWorkflow') throw new Error('Team was not saved');
+  expect(saved.workflow.steps[0].agentId).toBe(second.id);
+  expect(saved.workflow.steps[0].dependsOn).toEqual([]);
+  expect(saved.workflow.steps[1].agentId).toBe(first.id);
+  expect(saved.workflow.steps[1].dependsOn).toEqual([saved.workflow.steps[0].id]);
+});

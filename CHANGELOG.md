@@ -10,6 +10,31 @@
 - Permissions natives : accord ponctuel, par type pour la session ou pour les lectures dans le dossier de travail, quand le runtime le permet. Les règles gérées et demandes de contournement restent prioritaires ; un changement de mode efface les accords mémorisés.
 - Appels et relances manuels sans plafond par défaut ; limites explicites existantes conservées et configurables. L’autopilot conserve son propre plafond.
 
+## 1.25.2 — 2026-10-22 · Compatibilité native apply_patch
+
+- Accepte les catalogues qui exposent `apply_patch` à la place de `edit` et `create`, tout en conservant les contrôles de lecture, recherche, terminal, questions, doublons et outils autorisés.
+- Garde les outils d’écriture et de terminal interdits en lecture seule.
+- Ajoute des tests du catalogue Windows signalé, des alternatives d’écriture et du diagnostic sans appel modèle, exécutés sous Linux et Windows.
+- Synchronise les versions du manifeste, du lockfile et du VSIX. Restaure la seule métadonnée de dépendance altérée par le précédent changement de version, sans mise à jour des dépendances.
+
+## 1.25.1 — 2026-10-22 · Diagnostic natif et validation
+
+- Le diagnostic Copilot natif conserve les outils réellement annoncés par le runtime en cas d’échec et indique les capacités obligatoires manquantes.
+- Les tests vérifient le détail du catalogue et des capacités absentes.
+- Le contrôle de formatage Prettier n’est plus bloquant dans `npm run check` ; le typage TypeScript, les tests et la compilation restent obligatoires.
+
+## 1.25.0 — 2026-10-22 · Mes équipes
+
+- Le menu **Parcours** devient **Mes équipes**.
+- La création d’une équipe utilise le compositeur visuel partagé avec les features : avatars, cartes, catalogue d’agents et d’équipes, réorganisation et réglages des interventions.
+- Le correctif `grep` / `rg` de la version 1.24.1 est conservé.
+
+## 1.24.1 — 2026-10-22 · Compatibilité de la recherche native
+
+- Les catalogues natifs acceptent `grep`, `rg`, ou les deux. Un seul outil de recherche suffit, en lecture seule comme pendant le travail.
+- Les catalogues incomplets, les doublons, les outils non autorisés et les outils d’écriture ou de terminal en lecture seule restent refusés.
+- Le diagnostic invite à vérifier la compatibilité de Feature Studio et du CLI ; il ne prescrit plus systématiquement une mise à jour du CLI. Le couple de référence est distingué des versions réellement installées.
+
 ## 1.24.0 — 2026-10-22 · Sous-plans et sous-équipes
 
 - Carte Sous-plan dédiée, sans portrait ni nom d’orchestrateur, compatible avec les thèmes et le QG vivant. Composition dans une équipe enregistrée ou une feature, configuration récursive dans le même panneau.

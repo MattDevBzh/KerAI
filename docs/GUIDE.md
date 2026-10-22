@@ -18,7 +18,7 @@ Le CLI 1.0.102 avec le SDK embarqué 1.0.20 constitue le couple vérifié. Un an
 
 ## Installation
 
-1. Télécharge [feature-studio-1.24.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.24.0/feature-studio-1.24.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.24.0/SHA256SUMS).
+1. Télécharge [feature-studio-1.25.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.25.0/feature-studio-1.25.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.25.0/SHA256SUMS).
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -114,13 +114,13 @@ Sessions, Stats, Discussion, Validation et Consommation réunissent les données
 
 Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
 
-Dans **Parcours**, **Supprimer** retire le parcours du catalogue personnel pour tous les projets, après confirmation. Les sessions déjà créées et les fichiers de définition sont conservés. Réenregistrer explicitement une définition avec le même identifiant la rend de nouveau disponible.
+Dans **Mes équipes**, **Supprimer** retire le parcours du catalogue personnel pour tous les projets, après confirmation. Les sessions déjà créées et les fichiers de définition sont conservés. Réenregistrer explicitement une définition avec le même identifiant la rend de nouveau disponible.
 
 ## Interventions obligatoires et facultatives
 
 Le caractère facultatif appartient à une **intervention dans un parcours**. Le même agent peut relire obligatoirement l’US et proposer facultativement une documentation. Les équipes existantes restent obligatoires par défaut.
 
-Dans **Parcours**, ouvre ou duplique une équipe et règle la **Participation** de chaque intervention. Dans une feature, ouvre **Composer mon équipe** ou **Modifier l’équipe** : le choix est directement visible sur chaque membre, avant de lancer le travail. L’adaptation concerne uniquement cette feature, même si elle reprend un modèle d’équipe. La composition reste modifiable pendant son utilisation ; une carte déjà utilisée ne peut pas être supprimée ou remplacée.
+Dans **Mes équipes**, ouvre ou duplique une équipe et règle la **Participation** de chaque intervention. Dans une feature, ouvre **Composer mon équipe** ou **Modifier l’équipe** : le choix est directement visible sur chaque membre, avant de lancer le travail. L’adaptation concerne uniquement cette feature, même si elle reprend un modèle d’équipe. La composition reste modifiable pendant son utilisation ; une carte déjà utilisée ne peut pas être supprimée ou remplacée.
 
 **En manuel**, une intervention facultative disponible propose **Passer cette intervention**. Ses préalables doivent être validés ou explicitement passés. Le bouton habituel permet de l’exécuter avec l’aperçu de lancement. Passer ne lance ni l’agent ni le pilote automatique.
 
@@ -168,7 +168,7 @@ Le classement mesure la fréquence d’utilisation, pas la qualité. Les durées
 
 ### Les menus du cockpit
 
-**Sessions** regroupe les sessions. **Azure DevOps** conserve l’aperçu et la configuration ; ses sous-menus **PR** et **Tickets**, toujours visibles, ouvrent deux tableaux dédiés ; **Livraison** prépare les opérations Git du dépôt ouvert. Ces deux menus fonctionnent sans session active. **Consommation** regroupe les mesures SDK par session, parcours et modèle, avec filtres et couverture inconnue/partielle, sans estimation. [Consommation et validations](../docs/consumption.md). **Validation** rassemble questions, livrables et preuves ; **Parcours**, **Agents**, **Skills**, **Mémoire**, **Automatisations** et **Réglages** permettent de configurer le travail.
+**Sessions** regroupe les sessions. **Azure DevOps** conserve l’aperçu et la configuration ; ses sous-menus **PR** et **Tickets**, toujours visibles, ouvrent deux tableaux dédiés ; **Livraison** prépare les opérations Git du dépôt ouvert. Ces deux menus fonctionnent sans session active. **Consommation** regroupe les mesures SDK par session, parcours et modèle, avec filtres et couverture inconnue/partielle, sans estimation. [Consommation et validations](../docs/consumption.md). **Validation** rassemble questions, livrables et preuves ; **Mes équipes**, **Agents**, **Skills**, **Mémoire**, **Automatisations** et **Réglages** permettent de configurer le travail.
 
 ### Développer une feature
 
@@ -271,11 +271,11 @@ Ajoute les conventions, décisions, informations d’architecture et contexte du
 
 La mémoire est **décochée à chaque lancement manuel**. Si tu l’actives, seules les entrées actives que tu coches sont envoyées ; une sélection vide n’ajoute rien. Le total injecté est plafonné à **4 000 caractères**, sans troncature ni résumé automatique. L’aperçu montre chaque entrée ajoutée. Elle peut donc ajouter des tokens au prompt si tu l’actives, mais ne déclenche jamais une requête supplémentaire. Le même choix explicite s’applique au contexte enregistré des étapes du pilote.
 
-## Construire ses propres parcours
+## Construire ses propres équipes
 
 Le parcours **DevOps — du besoin au test vérifié** fournit six agents : challenge, plan technique, modifications locales, relecture indépendante, guide de test hors production et validation du test exécuté manuellement. Les outils Azure DevOps lisent uniquement le dépôt configuré. Le pilote s’arrête avant la vérification finale ; renseigne le pipeline, le build, le SHA complet, la branche, les stages et les preuves attendues dans son formulaire de lancement. [Kit, script et limites](../docs/DEVOPS-KIT.md).
 
-L’éditeur visuel de **Parcours** permet d’ajouter, dupliquer, retirer et réordonner les étapes, de relier leurs dépendances, puis de choisir agents, modèles, skills, permissions et contexte initial. Le graphe montre les liens ; les cycles et références invalides sont refusés. Les boutons de déplacement offrent une alternative au glisser-déposer.
+Dans **Mes équipes**, crée ou modifie une équipe avec le même compositeur visuel que dans une feature. La composition apparaît sous forme de cartes avec avatars ; le catalogue permet de chercher et d’ajouter des agents ou une équipe existante. Le glisser-déposer et les boutons de déplacement permettent de réordonner les interventions. Donne un nom et une description à ton équipe, puis ajuste les réglages de chaque membre et les sous-plans avant de l’enregistrer. Les dépendances et références invalides restent refusées.
 
 L’enregistrement produit un YAML au niveau utilisateur, dans `~/.copilot/feature-studio/workflows/` (ou `COPILOT_HOME/feature-studio/workflows/` si configuré). Les anciens YAML du projet peuvent être déplacés manuellement vers ce dossier ; aucune migration automatique n’est effectuée. Les sessions existantes conservent leur définition ; le nouveau parcours s’applique aux sessions créées ensuite. **Demander avant de lancer** impose une pause avant l’étape, même avec le pilote. [Détails et format de workflow](../docs/WORKFLOWS.md).
 

@@ -280,6 +280,7 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(fake.config?.systemMessage).toMatchObject({
       content: expect.stringContaining('conversation Feature Studio'),
     });
+    expect(fake.config?.excludedTools).toContain('rg');
     expect(fake.session.send).toHaveBeenCalledWith({ prompt: 'Historical conversation' });
     expect(result.content).toBe('# Livrable\nBonjour Matt');
     expect(result.questions).toEqual([]);
@@ -293,6 +294,26 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(fake.session.send).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'accepts an rg-only native catalog before sending a prompt (readOnly=%s)',
+    async (readOnly) => {
+      const run = nativeTransport();
+      run.nativeReadOnly = readOnly;
+      const names = [
+        'view',
+        'glob',
+        'rg',
+        'ask_user',
+        ...(readOnly ? [] : ['edit', 'create', 'powershell']),
+      ];
+      fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({
+        tools: names.map((name) => ({ name, description: name })),
+      });
+      await adapter.run(run, callbacks, new AbortController().signal);
+      expect(fake.config?.availableTools).toContain('rg');
+      expect(fake.session.send).toHaveBeenCalledOnce();
+    },
+  );
   it('resumes a native planning conversation with only read tools, then enables execution tools for approved work', async () => {
     const run = nativeTransport();
     run.nativeReadOnly = true;

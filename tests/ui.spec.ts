@@ -620,8 +620,8 @@ test('les raccourcis ouvrent les catalogues et une nouvelle session reste sans �
   const state = fresh();
   state.workflows.sort((a, b) => a.id.localeCompare(b.id));
   await hosted(page, state);
-  await navigate(page, 'Parcours');
-  await expect(page.getByRole('button', { name: 'Nouveau parcours' })).toBeVisible();
+  await navigate(page, 'Mes équipes');
+  await expect(page.getByRole('button', { name: 'Nouvelle équipe' })).toBeVisible();
   await navigate(page, 'Sessions');
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await expect(page.getByRole('radio', { name: 'Feature complète' })).toHaveCount(0);
@@ -1091,9 +1091,15 @@ test('éditeur visuel : profils hérités, seules les surcharges modèle et réf
   state.agents[0].reasoning = 'high';
   state.agents[0].skills = ['ai-plan'];
   await hosted(page, state);
-  await navigate(page, 'Parcours');
-  await page.getByRole('button', { name: 'Nouveau parcours' }).click();
-  await page.getByLabel('Nom du parcours').fill('Mon parcours');
+  await navigate(page, 'Mes équipes');
+  await page.getByRole('button', { name: 'Nouvelle équipe' }).click();
+  await page.getByLabel('Nom de l’équipe').fill('Mon équipe');
+  await page
+    .getByRole('button', {
+      name: `Ajouter ${state.agents[0].nickname || state.agents[0].name}`,
+      exact: true,
+    })
+    .click();
   await expect(page.getByLabel('Modèle de l’intervention')).toHaveValue('base-model');
   await expect(page.getByLabel('Niveau de réflexion')).toHaveValue('high');
   await expect(page.getByLabel('Paramètres hérités de l’agent')).toContainText(
@@ -1107,12 +1113,16 @@ test('éditeur visuel : profils hérités, seules les surcharges modèle et réf
     'Skills de l’étape',
   ])
     await expect(page.getByLabel(name, { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Étape', exact: true }).click();
-  await page.getByLabel('Agent de l’étape').selectOption(state.agents[1].id);
+  await page
+    .getByRole('button', {
+      name: `Ajouter ${state.agents[1].nickname || state.agents[1].name}`,
+      exact: true,
+    })
+    .click();
   await page.getByLabel('Modèle de l’intervention').selectOption('real-model');
   await page.getByLabel('Niveau de réflexion').selectOption('low');
   await page.getByRole('button', { name: `Monter ${state.agents[1].name}`, exact: true }).click();
-  await page.getByRole('button', { name: 'Enregistrer le parcours' }).click();
+  await page.getByRole('button', { name: 'Enregistrer l’équipe' }).click();
   const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveWorkflow' }>;
   expect(saved.type).toBe('saveWorkflow');
   expect(saved.workflow.steps[0]).toMatchObject({
@@ -1121,8 +1131,9 @@ test('éditeur visuel : profils hérités, seules les surcharges modèle et réf
     reasoning: 'low',
     inheritAgent: true,
     skills: [],
-    dependsOn: [saved.workflow.steps[1].id],
+    dependsOn: [],
   });
+  expect(saved.workflow.steps[1].dependsOn).toEqual([saved.workflow.steps[0].id]);
   expect(saved.workflow.steps[1].model).toBe('base-model');
   expect(saved.workflow.steps[1].reasoning).toBe('high');
   expect(saved.workflow.steps[1].skills).toEqual([]);
@@ -1196,7 +1207,7 @@ test('captures documentées : lancement avec US/MCP et éditeur de parcours', as
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: 'docs/images/launch-context.png', fullPage: false });
   await page.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await navigate(page, 'Parcours');
+  await navigate(page, 'Mes équipes');
   await page
     .locator('.workflow-library-card')
     .filter({ hasText: 'Feature complète' })
@@ -1204,9 +1215,7 @@ test('captures documentées : lancement avec US/MCP et éditeur de parcours', as
     .click();
   const design = state.workflows.find((workflow) => workflow.name === 'Feature complète')!.steps[1];
   const designer = state.agents.find((agent) => agent.id === design.agentId)!;
-  await page
-    .getByRole('button', { name: `Configurer l’étape ${designer.name}`, exact: true })
-    .click();
+  await page.getByRole('button', { name: `Régler ${designer.name}`, exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1320 });
   await labelCapture(page);
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -1215,14 +1224,14 @@ test('captures documentées : lancement avec US/MCP et éditeur de parcours', as
 test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await hosted(page);
-  for (const view of ['Validation', 'Mémoire', 'Parcours']) {
+  for (const view of ['Validation', 'Mémoire', 'Mes équipes']) {
     await navigate(page, view);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
   }
-  await page.getByRole('button', { name: 'Nouveau parcours' }).click();
-  await page.getByLabel('Nom du parcours').fill('Un petit parcours');
+  await page.getByRole('button', { name: 'Nouvelle équipe' }).click();
+  await page.getByLabel('Nom de l’équipe').fill('Un petit parcours');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

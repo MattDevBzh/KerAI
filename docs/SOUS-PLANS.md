@@ -4,7 +4,7 @@ Une carte **Sous-plan** confie le découpage d’une mission à un orchestrateur
 
 ## Composer la carte
 
-Dans **Parcours**, ajoute un sous-plan à une équipe enregistrée. Dans une feature, utilise **Composer mon équipe** ou **Modifier l’équipe**. La carte a une illustration de sous-équipe distincte des portraits d’agents et reprend le thème courant, y compris dans le QG vivant.
+Dans **Mes équipes**, ajoute un sous-plan à une équipe enregistrée. Dans une feature, utilise **Composer mon équipe** ou **Modifier l’équipe**. La carte a une illustration de sous-équipe distincte des portraits d’agents et reprend le thème courant, y compris dans le QG vivant.
 
 Les réglages réunissent son nom, sa mission, un seul sélecteur d’orchestrateur et l’organisation par défaut. Le chat de l’orchestrateur utilise ce mode de découpage ; il n’affiche pas le réglage de rythme des agents exécutants :
 

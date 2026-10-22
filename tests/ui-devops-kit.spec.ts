@@ -86,21 +86,19 @@ test('kit DevOps : parcours fourni, duplication et contrat de preuve conservé',
   const data = await state();
   const validator = data.agents.find((agent) => agent.id === 'fs-devops-validate')!;
   await hosted(page, data);
-  await navigate(page, 'Parcours');
+  await navigate(page, 'Mes équipes');
   const card = page
     .locator('.workflow-library-card')
     .filter({ hasText: 'DevOps — du besoin au test vérifié' });
   await expect(card).toContainText('6 étapes');
   await card.getByRole('button', { name: 'Dupliquer', exact: true }).click();
-  await page.getByLabel('Nom du parcours').fill('Mon DevOps');
-  await page
-    .getByRole('button', { name: `Configurer l’étape ${validator.name}`, exact: true })
-    .click();
+  await page.getByLabel('Nom de l’équipe').fill('Mon DevOps');
+  await page.getByRole('button', { name: `Régler ${validator.name}`, exact: true }).click();
   await expect(page.getByLabel('Exiger une preuve du test DevOps manuel')).toHaveCount(0);
   await expect(page.getByLabel('Paramètres hérités de l’agent')).toContainText(
     validator.description,
   );
-  await page.getByRole('button', { name: 'Enregistrer le parcours' }).click();
+  await page.getByRole('button', { name: 'Enregistrer l’équipe' }).click();
   const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveWorkflow' }>;
   expect(saved.workflow.steps.at(-1)).toMatchObject({
     agentId: validator.id,

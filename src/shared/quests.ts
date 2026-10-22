@@ -339,7 +339,7 @@ export const quests: readonly QuestDefinition[] = [
       'Dix parcours maison',
     ],
     (n) => `Enregistrer ${n} nouveau${n > 1 ? 'x' : ''} parcours.`,
-    'Parcours → Nouveau parcours, ou dupliquez un parcours avec un nouvel identifiant. Un même identifiant compte une fois.',
+    'Mes équipes → Nouvelle équipe, ou dupliquez une équipe avec un nouvel identifiant. Un même identifiant compte une fois.',
     'workflows',
   ),
   ...series(

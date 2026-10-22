@@ -12,7 +12,7 @@ export async function navigate(page: Page, name: string) {
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
   if (!(await nav.isVisible()))
     await page.getByRole('button', { name: 'Ouvrir le menu', exact: true }).click();
-  const group = ['Parcours', 'Agents', 'Skills', 'Kits', 'Consommation'].includes(name)
+  const group = ['Mes équipes', 'Agents', 'Skills', 'Kits', 'Consommation'].includes(name)
     ? 'Atelier'
     : ['Azure DevOps', 'Tickets', 'PR', 'Livraison'].includes(name)
       ? 'DevOps'

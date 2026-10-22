@@ -720,6 +720,7 @@ export class CopilotCliAdapter implements AgentAdapter {
               'view',
               'glob',
               'grep',
+              'rg',
               'task',
               'web_fetch',
               'web_search',
@@ -949,7 +950,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         if (controller.signal.aborted) throw cancelled(controller.signal);
         throw new Error(
           native
-            ? `Copilot natif indisponible avant tout prompt : ${errorMessage(error)} Couple testé : SDK 1.0.20 et CLI 1.0.102. Relance le diagnostic après mise à jour du CLI.`
+            ? `Copilot natif indisponible avant tout prompt : ${errorMessage(error)} Couple de référence : SDK 1.0.20 et CLI 1.0.102. Vérifie la compatibilité de Feature Studio avec le CLI utilisé, puis relance le diagnostic.`
             : `Exécution refusée avant tout prompt : confinement des outils non vérifiable. ${errorMessage(error)} SDK 1.0.20 ; MCP sélectionnés : ${input.mcpServers?.length ?? 0}. CLI : ${this.launches.get(client)?.executable ?? 'transport de test'}. Ce refus ne prouve pas que le CLI est trop ancien : conserve ce diagnostic pour identifier l’incompatibilité.`,
         );
       }

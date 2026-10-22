@@ -1,7 +1,7 @@
 import { SubplanCardVisual, SubplanMark, SubplanSettings, SubplanTeamButton } from './SubplanUI';
 import { searchText } from './Ergonomics';
 import { allFeatures, newSubplanStep, subplanIssues } from '../src/shared/subplans';
-import { inheritTeamProfiles } from '../src/shared/agentInheritance';
+import { inheritAgentProfile, inheritTeamProfiles } from '../src/shared/agentInheritance';
 import { AgentModelOverrides } from './AgentModelOverrides';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
@@ -50,6 +50,9 @@ export function TeamComposer({
   onClose,
   onPendingChange,
   onApply,
+  templateMode = false,
+  validationErrors = [],
+  onStepsChange,
 }: {
   feature: Feature;
   state: StudioState;
@@ -57,6 +60,9 @@ export function TeamComposer({
   onClose: () => void;
   onPendingChange: (pending: boolean) => void;
   onApply?: (steps: WorkflowStep[]) => void;
+  templateMode?: boolean;
+  validationErrors?: string[];
+  onStepsChange?: (steps: WorkflowStep[]) => void;
 }) {
   const [steps, setSteps] = useState(() =>
     orderTeam(inheritTeamProfiles(teamSteps(feature), state.agents)),
@@ -97,7 +103,9 @@ export function TeamComposer({
   const apply = (change: () => WorkflowStep[], text: string) => {
     if (disabled) return;
     try {
-      setSteps(change());
+      const next = change();
+      setSteps(next);
+      onStepsChange?.(next);
       setError('');
       setAnnouncement(text);
     } catch (reason) {
@@ -176,7 +184,7 @@ export function TeamComposer({
       () => steps.map((step) => (step.id === editing ? { ...step, ...patch } : step)),
       'Réglages modifiés.',
     );
-  const issues: string[] = [];
+  const issues: string[] = [...validationErrors];
   try {
     assertTeamOrder(steps);
   } catch (reason) {
@@ -208,8 +216,10 @@ export function TeamComposer({
           <small>{isLinearTeam(steps) ? 'Ordre d’exécution' : 'Dépendances conservées'}</small>
         </div>
         <p className="muted">
-          Glissez une photo ou une équipe ici. Un agent peut intervenir plusieurs fois. Les étapes
-          déjà exécutées conservent leur historique.
+          Glissez une photo ou une équipe ici. Un agent peut intervenir plusieurs fois.{' '}
+          {templateMode
+            ? 'Retrouvez ensuite cette composition dans toutes vos features.'
+            : 'Les étapes déjà exécutées conservent leur historique.'}
         </p>
         <button
           type="button"
@@ -422,6 +432,33 @@ export function TeamComposer({
       {selected && (
         <fieldset className="team-settings" disabled={disabled}>
           <legend>Intervention : {selected.name}</legend>
+          {templateMode && !selected.subplan && (
+            <label className="field">
+              <span>Agent de l’intervention</span>
+              <select
+                value={selected.agentId}
+                onChange={(event) => {
+                  const agent = state.agents.find((item) => item.id === event.target.value);
+                  if (agent)
+                    update(
+                      inheritAgentProfile(
+                        { ...selected, agentId: agent.id, model: undefined, reasoning: undefined },
+                        agent,
+                      ),
+                    );
+                }}
+              >
+                {!state.agents.some((agent) => agent.id === selected.agentId) && (
+                  <option value={selected.agentId}>Agent indisponible</option>
+                )}
+                {orderedAgents(state.agents, state.favoriteAgentIds).map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.nickname || agent.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {selected.subplan && (
             <SubplanSettings step={selected} state={state} dispatch={dispatch} onChange={update} />
           )}
@@ -434,7 +471,46 @@ export function TeamComposer({
           {feature.budget?.modelProfile && feature.budget.modelProfile !== 'current' && (
             <p className="muted">Le profil du budget de la feature a priorité sur ces choix.</p>
           )}
-          {!!selected.dependsOn.length && (
+          {templateMode && (
+            <fieldset className="dependency-list">
+              <legend>Doit attendre la validation de</legend>
+              {steps
+                .filter((step) => step.id !== selected.id)
+                .map((step) => (
+                  <label key={step.id}>
+                    <input
+                      type="checkbox"
+                      checked={selected.dependsOn.includes(step.id)}
+                      onChange={(event) =>
+                        apply(
+                          () =>
+                            orderTeam(
+                              steps.map((item) =>
+                                item.id === selected.id
+                                  ? {
+                                      ...item,
+                                      dependsOn: event.target.checked
+                                        ? [...item.dependsOn, step.id]
+                                        : item.dependsOn.filter((id) => id !== step.id),
+                                    }
+                                  : item,
+                              ),
+                            ),
+                          'Dépendances modifiées.',
+                        )
+                      }
+                    />
+                    {step.name}
+                  </label>
+                ))}
+              {steps.length === 1 && (
+                <span className="muted">
+                  Ajoutez une autre intervention pour définir une dépendance.
+                </span>
+              )}
+            </fieldset>
+          )}
+          {!templateMode && !!selected.dependsOn.length && (
             <p className="muted">
               Après :{' '}
               {selected.dependsOn
@@ -583,13 +659,15 @@ export function TeamComposer({
         )}
         <div className="modal-actions">
           <span className="muted">
-            {!steps.length
-              ? 'La feature restera sans équipe.'
-              : onApply
-                ? 'La carte sera mise à jour. Enregistrez ensuite l’équipe qui la contient.'
-                : appliesAfterRun
-                  ? 'Le travail continue. La composition sera appliquée au prochain arrêt.'
-                  : 'La composition sera enregistrée sans lancer d’agent.'}
+            {templateMode
+              ? 'Équipe réutilisable · aucune exécution au moment de l’enregistrement'
+              : !steps.length
+                ? 'La feature restera sans équipe.'
+                : onApply
+                  ? 'La carte sera mise à jour. Enregistrez ensuite l’équipe qui la contient.'
+                  : appliesAfterRun
+                    ? 'Le travail continue. La composition sera appliquée au prochain arrêt.'
+                    : 'La composition sera enregistrée sans lancer d’agent.'}
           </span>
           <button type="button" className="button secondary" disabled={pending} onClick={onClose}>
             Annuler
@@ -616,7 +694,11 @@ export function TeamComposer({
               });
             }}
           >
-            {pending ? 'Enregistrement…' : 'Valider l’équipe'}
+            {pending
+              ? 'Enregistrement…'
+              : templateMode
+                ? 'Enregistrer l’équipe'
+                : 'Valider l’équipe'}
           </button>
         </div>
       </div>

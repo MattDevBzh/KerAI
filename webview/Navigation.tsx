@@ -28,7 +28,7 @@ export const navigationScreens = [
   { id: 'stats', label: 'Stats', icon: ChartNoAxesCombined },
   { id: 'discussion', label: 'Discussion', icon: MessageSquare },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
-  { id: 'workflows', label: 'Parcours', icon: Workflow },
+  { id: 'workflows', label: 'Mes équipes', icon: Workflow },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'skills', label: 'Skills', icon: BookOpen },
   { id: 'kits', label: 'Kits', icon: Package },
@@ -49,7 +49,7 @@ const navigationGroups = [
   {
     id: 'atelier',
     label: 'Atelier',
-    description: 'Parcours, agents, skills, kits et consommation des sessions',
+    description: 'Équipes, agents, skills, kits et consommation des sessions',
     icon: PanelsTopLeft,
     views: ['workflows', 'agents', 'skills', 'kits', 'usage'] as readonly View[],
   },

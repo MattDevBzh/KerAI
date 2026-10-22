@@ -32,7 +32,7 @@ Le CLI est détecté automatiquement. Si un ancien chemin est invalide, clique s
 
 Le contrôle **Zoom** de l’en-tête et **Réglages → Apparence → Taille de l’interface** agrandissent ensemble les textes, boutons et avatars. **Auto** suit l’espace disponible ; un pourcentage fixe est conservé entre les projets et les réouvertures. Le compteur **Copilot** affiche les crédits du compte ; clique dessus pour consulter le renouvellement et les détails disponibles.
 
-Le menu regroupe **Parcours, Agents, Skills, Kits et Consommation** dans **Atelier**, et **Azure DevOps, Tickets, PR et Livraison** dans **DevOps**. Un seul groupe se déplie à la fois ; celui de la page restaurée s’ouvre automatiquement. La roue dentée de l’en-tête, à côté du compteur Copilot, ouvre les **Réglages**. La recherche **Aller à…** retrouve toutes les pages, y compris celles des groupes repliés et les réglages.
+Le menu regroupe **Mes équipes, Agents, Skills, Kits et Consommation** dans **Atelier**, et **Azure DevOps, Tickets, PR et Livraison** dans **DevOps**. Un seul groupe se déplie à la fois ; celui de la page restaurée s’ouvre automatiquement. La roue dentée de l’en-tête, à côté du compteur Copilot, ouvre les **Réglages**. La recherche **Aller à…** retrouve toutes les pages, y compris celles des groupes repliés et les réglages.
 
 ## Sessions et Dashboard
 
@@ -76,7 +76,7 @@ Dashboard, Sessions, Stats, Discussion, Validation et Consommation réunissent l
 
 Dans **Réglages**, l’apparence, la connexion Copilot, les dossiers enregistrés et le raccourci sont réunis dans **Commun à tous les projets**. En dessous, **Paramètres par projet** propose une liste déroulante pour choisir le dépôt dont tu règles les modèles, budgets, MCP et tests. Le menu **Automatisations** propose le même choix pour les hooks. Enregistre ou annule un brouillon avant de changer de projet.
 
-Dans **Parcours**, **Supprimer** retire le parcours du catalogue personnel pour tous les projets, après confirmation. Les sessions déjà créées et les fichiers de définition sont conservés. Réenregistrer explicitement une définition avec le même identifiant la rend de nouveau disponible.
+Dans **Mes équipes**, **Supprimer** retire le parcours du catalogue personnel pour tous les projets, après confirmation. Les sessions déjà créées et les fichiers de définition sont conservés. Réenregistrer explicitement une définition avec le même identifiant la rend de nouveau disponible.
 
 ## Une bibliothèque pour tes équipes
 
@@ -125,7 +125,7 @@ Le collecteur vise **Azure DevOps Services / Azure Repos Git**. Il lit les donn�
 
 ## Des interventions adaptées à ta feature
 
-Dans **Parcours**, règle chaque intervention comme **Obligatoire** ou **Facultative**. Après avoir choisi une équipe pour une feature, **Modifier l’équipe → Participation** permet d’ajuster chaque membre avant de commencer, sans modifier le modèle enregistré. Un même agent peut être obligatoire pour une mission et facultatif pour une autre.
+Dans **Mes équipes**, règle chaque intervention comme **Obligatoire** ou **Facultative**. Après avoir choisi une équipe pour une feature, **Modifier l’équipe → Participation** permet d’ajuster chaque membre avant de commencer, sans modifier le modèle enregistré. Un même agent peut être obligatoire pour une mission et facultatif pour une autre.
 
 Lorsqu’il atteint une intervention facultative jamais exécutée, le pilote se met en pause et affiche une notification ainsi qu’un bandeau dans la session : **Exécuter et continuer**, **Passer et continuer** ou **Décider plus tard**. Fermer la notification laisse le choix en attente. En manuel, **Passer cette intervention** avance sans démarrer le pilote.
 
@@ -152,7 +152,7 @@ Les données de session restent dans le stockage local de l’extension. Le PAT 
 | Utiliser le cockpit, les profils et les validations | [Guide complet](docs/GUIDE.md)                                          |
 | Installer, créer, importer ou exporter un kit       | [Kits](docs/KITS.md)                                                    |
 | Travailler sur les pipelines et l’infrastructure    | [Kit DevOps](docs/DEVOPS-KIT.md)                                        |
-| Créer un parcours                                   | [Workflows](docs/WORKFLOWS.md)                                          |
+| Créer une équipe                                    | [Workflows](docs/WORKFLOWS.md)                                          |
 | Comprendre les worktrees et restaurations           | [Espaces Git](docs/WORKSPACES.md)                                       |
 | Configurer Azure DevOps et préparer une livraison   | [Livraison](docs/devops-delivery.md)                                    |
 | Connecter Copilot et des MCP                        | [Copilot](docs/COPILOT.md) · [MCP](docs/MCP.md)                         |
