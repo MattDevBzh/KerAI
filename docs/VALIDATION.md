@@ -1,5 +1,14 @@
 # Validation et limites
 
+## Lisibilité des sessions et sous-équipes — v1.26.0, 22 octobre 2026
+
+- Après intégration de la version 1.25.2 : **800 tests métier réussis, 5 tests optionnels ignorés**, vérification TypeScript et compilation. Les tests métier ont été exécutés séparément de Chromium pour éviter la concurrence sur les tests d’archives qui écrivent plusieurs milliers d’événements.
+- **266 scénarios Chromium réussis**, dont les parcours de Mes équipes, les sous-plans imbriqués, la navigation au clavier, le retour vers l’étape active, la mission et son contexte dépliable, l’historique filtrable et les résultats à revérifier. Le glisser-déposer, les panneaux imbriqués à 390 px et au zoom 200 %, les thèmes, le contraste élevé et les mouvements réduits sont couverts.
+- Les demandes humaines partagent leur brouillon entre la popin et le chat ; les tests vérifient la réduction, les demandes successives et l’absence de double réponse. Les permissions mémorisées sont limitées à la session et à leur portée, puis effacées lors d’un changement de mode. Les validations humaines, dont le code avant les tests, restent requises.
+- **Deux contrôles réussis avec le vrai Copilot CLI 1.0.102 / SDK 1.0.20**, sans inférence : catalogue natif, outils exécutés, permissions, refus et reprise. Les variantes `rg` et `apply_patch` restent couvertes par les tests du catalogue. Cette passe n’ajoute pas de campagne avec un modèle réel ; la recette agentique de la v1.24.0 reste documentée ci-dessous.
+- Les [captures de navigation](screenshots/subplan-ergonomics/navigation.png), d’[historique](screenshots/subplan-ergonomics/historique.png) et de [composition compacte](screenshots/subplan-ergonomics/composition-390.png) proviennent de l’interface avec des données de démonstration. Les cartes Sous-plan gardent leur illustration dédiée, sans portrait d’orchestrateur.
+- La livraison exige séparément le contrôle du VSIX, son chargement dans VS Code, la CI Linux/Windows du commit livré et la vérification du paquet téléchargé. La [release v1.26.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.26.0) associe le commit exact, sa CI et les empreintes du paquet publié.
+
 ## Sous-plans et sous-équipes — v1.24.0, 22 octobre 2026
 
 - Validation locale : **735 tests métier réussis, 5 tests optionnels ignorés**, vérification TypeScript et compilation. **254 scénarios Chromium réussis**. Les scénarios couvrent l’imbrication, les historiques, les révisions avec revérification des résultats suivants, les changements de composition pendant un appel, la reprise après interruption, les worktrees et la suppression complète de l’arbre.
