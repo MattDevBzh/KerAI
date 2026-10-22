@@ -82,13 +82,12 @@ export function verifyNativeCatalog(
 ): void {
   const allowed = new Set([...(readOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS), ...extra]);
   const unexpected = names.filter((name) => !allowed.has(name));
+  const received = names.join(', ') || '(aucun)';
   if (new Set(names).size !== names.length)
-    throw new Error(
-      `Catalogue natif dupliqué. Outils reçus : ${names.join(', ') || '(aucun)'}.`,
-    );
+    throw new Error(`Catalogue natif dupliqué. Outils reçus : ${received}.`);
   if (unexpected.length)
     throw new Error(
-      `Catalogue natif inattendu : ${unexpected.join(', ')}. Outils reçus : ${names.join(', ') || '(aucun)'}.`,
+      `Catalogue natif inattendu : ${unexpected.join(', ')}. Outils reçus : ${received}.`,
     );
   // Copilot can expose grep, rg, or both for the same search capability.
   const required = readOnly
@@ -98,10 +97,15 @@ export function verifyNativeCatalog(
   if (!names.some((name) => name === 'grep' || name === 'rg')) missing.push('grep ou rg');
   if (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
     missing.push('bash ou powershell');
-  if (missing.length)
+  if (missing.length) {
     throw new Error(
-      `Outils natifs obligatoires absents : ${missing.join(', ')}. Outils reçus (${names.length}) : ${names.join(', ') || '(aucun)'}. Mode : ${readOnly ? 'lecture seule' : 'complet'}.`,
+      [
+        `Outils natifs obligatoires absents : ${missing.join(', ')}.`,
+        `Outils reçus (${names.length}) : ${received}.`,
+        `Mode : ${readOnly ? 'lecture seule' : 'complet'}.`,
+      ].join(' '),
     );
+  }
 }
 
 /** Probes a disposable session. No prompt, model call or project tool is executed. */
