@@ -75,11 +75,7 @@ export async function applyNativePermissions(
     );
 }
 
-export function verifyNativeCatalog(
-  names: string[],
-  extra: string[] = [],
-  readOnly = false,
-): void {
+export function verifyNativeCatalog(names: string[], extra: string[] = [], readOnly = false): void {
   const allowed = new Set([...(readOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS), ...extra]);
   const unexpected = names.filter((name) => !allowed.has(name));
   const received = names.join(', ') || '(aucun)';
@@ -89,10 +85,12 @@ export function verifyNativeCatalog(
     throw new Error(
       `Catalogue natif inattendu : ${unexpected.join(', ')}. Outils reçus : ${received}.`,
     );
-  // Copilot can expose grep, rg, or both for the same search capability.
-  const required = readOnly
-    ? ['view', 'glob', 'ask_user']
-    : ['view', 'glob', 'edit', 'create', 'ask_user'];
+  // Some models expose apply_patch instead of edit/create. It covers both write capabilities.
+  // Keep read-only validation strict: apply_patch remains outside NATIVE_READ_TOOLS.
+  const required =
+    readOnly || names.includes('apply_patch')
+      ? ['view', 'glob', 'ask_user']
+      : ['view', 'glob', 'edit', 'create', 'ask_user'];
   const missing = required.filter((name) => !names.includes(name));
   if (!names.some((name) => name === 'grep' || name === 'rg')) missing.push('grep ou rg');
   if (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
@@ -131,9 +129,7 @@ export async function probeNativeCapabilities(
       onPermissionRequest: () => ({ kind: 'reject', feedback: 'Diagnostic sans exécution.' }),
     });
     await session.rpc.tools.initializeAndValidate();
-    tools = ((await session.rpc.tools.getCurrentMetadata()).tools ?? []).map(
-      (tool) => tool.name,
-    );
+    tools = ((await session.rpc.tools.getCurrentMetadata()).tools ?? []).map((tool) => tool.name);
     verifyNativeCatalog(tools);
     const permissionModes: NativePermissionMode[] = [];
     for (const mode of NATIVE_PERMISSION_MODES) {
