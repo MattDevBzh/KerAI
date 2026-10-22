@@ -42,7 +42,7 @@ describe.each([false, true])('native catalog (readOnly=%s)', (readOnly) => {
   });
   it('reports the exact missing capabilities and received catalog', () => {
     expect(() => verifyNativeCatalog(['view', 'glob', 'grep'])).toThrow(
-      /ask_user, edit, create, bash ou powershell.*Outils reçus \(3\) : view, glob, grep/,
+      /edit, create, ask_user, bash ou powershell.*Outils reçus \(3\) : view, glob, grep/,
     );
   });
   it('keeps rejecting unknown tools and duplicates when rg is present', () => {
