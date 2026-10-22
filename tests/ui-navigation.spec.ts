@@ -57,8 +57,8 @@ test('les groupes se déplient au clavier et gardent la page active identifiable
   await page.keyboard.press('Enter');
   await expect(atelier).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Tab');
-  await expect(nav.getByRole('button', { name: 'Parcours', exact: true })).toBeFocused();
-  for (const name of ['Parcours', 'Agents', 'Skills', 'Kits', 'Consommation'])
+  await expect(nav.getByRole('button', { name: 'Mes équipes', exact: true })).toBeFocused();
+  for (const name of ['Mes équipes', 'Agents', 'Skills', 'Kits', 'Consommation'])
     await expect(nav.getByRole('button', { name, exact: true })).toBeVisible();
   await navigate(page, 'Agents');
   await expect(nav.getByRole('button', { name: 'Agents', exact: true })).toHaveAttribute(

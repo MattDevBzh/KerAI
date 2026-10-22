@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.25.0 — 2026-10-22 · Mes équipes
+
+- Le menu **Parcours** devient **Mes équipes**.
+- La création d’une équipe utilise le compositeur visuel partagé avec les features : avatars, cartes, catalogue d’agents et d’équipes, réorganisation et réglages des interventions.
+- Le correctif `grep` / `rg` de la version 1.24.1 est conservé.
+
 ## 1.24.1 — 2026-10-22 · Compatibilité de la recherche native
 
 - Les catalogues natifs acceptent `grep`, `rg`, ou les deux. Un seul outil de recherche suffit, en lecture seule comme pendant le travail.

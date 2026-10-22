@@ -328,13 +328,13 @@ test('marking an existing profile as a discussion agent immediately makes it sel
 
 test('workflow deletion removes only the chosen template from the catalogue', async ({ page }) => {
   await hosted(page);
-  await navigate(page, 'Parcours');
+  await navigate(page, 'Mes équipes');
   const cards = page.locator('.workflow-library-card');
   const count = await cards.count();
   const title = await cards.first().getByRole('heading').textContent();
   await cards
     .first()
-    .getByRole('button', { name: /^Supprimer le parcours/ })
+    .getByRole('button', { name: /^Supprimer l’équipe/ })
     .click();
   await expect(cards).toHaveCount(count - 1);
   await expect(cards.filter({ hasText: title! })).toHaveCount(0);

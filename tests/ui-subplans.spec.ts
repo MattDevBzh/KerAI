@@ -231,15 +231,17 @@ test('navigates arbitrary levels and historical iterations without changing exec
 });
 test('adds and configures a subplan in a saved team template', async ({ page }) => {
   await open(page, scenario());
-  await navigate(page, 'Parcours');
-  await page.getByRole('button', { name: 'Nouveau parcours' }).click();
-  await page.getByRole('button', { name: 'Sous-plan', exact: true }).click();
+  await navigate(page, 'Mes équipes');
+  await page.getByRole('button', { name: 'Nouvelle équipe' }).click();
+  await page.getByRole('button', { name: 'Ajouter un sous-plan', exact: true }).click();
   await expect(page.getByLabel('Orchestrateur dédié')).toHaveValue('fs-orchestrator');
   await page.getByLabel('Équipe à utiliser').selectOption('feature');
   await expect(
-    page.getByRole('button', { name: 'Configurer la sous-équipe', exact: true }),
+    page
+      .locator('.team-settings')
+      .getByRole('button', { name: 'Configurer la sous-équipe', exact: true }),
   ).toBeVisible();
-  await expect(page.locator('.workflow-node.subplan-card')).toHaveCount(1);
+  await expect(page.locator('.team-member.subplan-card')).toHaveCount(1);
 });
 for (const theme of [
   'papier-clair',

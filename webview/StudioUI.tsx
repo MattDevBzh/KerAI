@@ -1,9 +1,7 @@
-import { SubplanMark, SubplanSettings } from './SubplanUI';
-import { newSubplanStep } from '../src/shared/subplans';
+import { TeamComposer } from './TeamComposer';
 import { executionCallCount } from '../src/core/budgets';
 import { NativeActivityPanel } from './NativeExecutionUI';
-import { inheritTeamProfiles, inheritAgentProfile } from '../src/shared/agentInheritance';
-import { AgentModelOverrides } from './AgentModelOverrides';
+import { inheritTeamProfiles } from '../src/shared/agentInheritance';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { searchText } from './Ergonomics';
 import { orderedAgents } from '../src/shared/team';
@@ -11,9 +9,7 @@ import { toCredits, toNanoAiu, formatCredits } from '../src/shared/credits';
 import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { subscribe } from './bridge';
 import {
-  ArrowDown,
   ArrowRight,
-  ArrowUp,
   ArrowUpRight,
   BrainCircuit,
   Check,
@@ -25,7 +21,6 @@ import {
   Flag,
   Gauge,
   GitBranch,
-  GripVertical,
   Layers,
   MessageSquare,
   Pause,
@@ -56,7 +51,6 @@ import type {
   StudioSettings,
   StudioState,
   Workflow as WorkflowType,
-  WorkflowStep,
 } from '../src/shared/types';
 import { HumanRequests, McpPicker, MemoryPicker, StudioDialog, type Dispatch } from './ExecutionUI';
 import { usageTotals, defaultBudget } from '../src/core/budgets';
@@ -1626,7 +1620,7 @@ function MemoryEditor({
 }
 function workflowErrors(workflow: WorkflowType, state: StudioState) {
   const errors: string[] = [];
-  if (!workflow.name.trim()) errors.push('Donnez un nom au parcours.');
+  if (!workflow.name.trim()) errors.push('Donnez un nom à l’équipe.');
   if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(workflow.id))
     errors.push('L’identifiant doit commencer par une lettre.');
   if (!workflow.steps.length) errors.push('Ajoutez au moins une étape.');
@@ -1663,23 +1657,6 @@ function workflowErrors(workflow: WorkflowType, state: StudioState) {
   }
   return [...new Set(errors)];
 }
-function newStep(state: StudioState): WorkflowStep {
-  const id = `etape-${crypto.randomUUID().slice(0, 8)}`;
-  return {
-    id,
-    name: 'Nouvelle étape',
-    description: '',
-    agentId: state.agents[0]?.id ?? '',
-    policy: 'read-only',
-    skills: [],
-    maxAttempts: 3,
-    artifact: `${id}.md`,
-    dependsOn: [],
-    initialContext: '',
-    mcpServerIds: [],
-    askBeforeRun: false,
-  };
-}
 export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispatch: Dispatch }) {
   const [deleting, setDeleting] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -1713,11 +1690,11 @@ export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispa
     <div className="page workflows-page">
       <div className="page-heading library-heading">
         <div>
-          <span className="eyebrow">VOTRE MANIÈRE D’AVANCER</span>
-          <h1>Des parcours qui vous ressemblent.</h1>
+          <span className="eyebrow">VOS ÉQUIPES RÉUTILISABLES</span>
+          <h1>Mes équipes</h1>
           <p>
-            Construisez visuellement les étapes, leur équipe et leurs dépendances. Les agents
-            suivent vos règles, sans vous demander d’écrire du YAML.
+            Composez vos équipes avec les agents de votre choix, puis retrouvez-les lors de la
+            création de vos features.
           </p>
         </div>
         <button
@@ -1729,11 +1706,11 @@ export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispa
               name: '',
               description: '',
               icon: 'layers',
-              steps: [newStep(state)],
+              steps: [],
             });
           }}
         >
-          <Plus size={15} /> Nouveau parcours
+          <Plus size={15} /> Nouvelle équipe
         </button>
       </div>
       <div className="workflow-library">
@@ -1770,7 +1747,7 @@ export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispa
               </button>
               <button
                 className="text-button"
-                aria-label={`Supprimer le parcours ${w.name}`}
+                aria-label={`Supprimer l’équipe ${w.name}`}
                 disabled={
                   Boolean(deleting) || !state.workspace.trusted || Boolean(state.workspaceOperation)
                 }
@@ -1791,9 +1768,10 @@ export function WorkflowLibrary({ state, dispatch }: { state: StudioState; dispa
       {!state.workflows.length && (
         <div className="evidence-empty">
           <Layers size={29} />
-          <h3>Un premier parcours à dessiner.</h3>
+          <h3>Votre première équipe à composer.</h3>
           <p>
-            Ajoutez une étape, un agent et les dépendances qui donnent du sens à la progression.
+            Choisissez des agents, organisez leurs interventions et enregistrez votre équipe pour la
+            retrouver dans vos features.
           </p>
         </div>
       )}
@@ -1822,370 +1800,83 @@ function WorkflowEditor({
   dispatch: Dispatch;
   onClose: () => void;
 }) {
-  const [workflow, setWorkflow] = useState({
+  const [workflow, setWorkflow] = useState(() => ({
     ...structuredClone(initial),
     steps: inheritTeamProfiles(initial.steps, state.agents),
-  });
-  const [selected, setSelected] = useState(initial.steps[0]?.id ?? '');
-  const [deleting, setDeleting] = useState('');
-  const step = workflow.steps.find((s) => s.id === selected);
-  const errors = workflowErrors(workflow, state);
-  const update = (patch: Partial<WorkflowStep>) =>
-    setWorkflow({
-      ...workflow,
-      steps: workflow.steps.map((s) => (s.id === selected ? { ...s, ...patch } : s)),
-    });
-  const move = (id: string, to: number) => {
-    const from = workflow.steps.findIndex((s) => s.id === id);
-    if (from === -1 || to < 0 || to >= workflow.steps.length) return;
-    const steps = [...workflow.steps];
-    const [item] = steps.splice(from, 1);
-    steps.splice(to, 0, item);
-    setWorkflow({ ...workflow, steps });
-  };
-  const add = () => {
-    const next = inheritTeamProfiles([newStep(state)], state.agents)[0];
-    if (workflow.steps.length) next.dependsOn = [workflow.steps.at(-1)!.id];
-    setWorkflow({ ...workflow, steps: [...workflow.steps, next] });
-    setSelected(next.id);
-  };
-  const duplicate = () => {
-    if (!step) return;
-    const copied = {
-      ...structuredClone(step),
-      id: `etape-${crypto.randomUUID().slice(0, 8)}`,
-      name: `${step.name} · copie`,
-    };
-    copied.artifact = `${copied.id}.md`;
-    const steps = [...workflow.steps];
-    steps.splice(steps.findIndex((s) => s.id === step.id) + 1, 0, copied);
-    setWorkflow({ ...workflow, steps });
-    setSelected(copied.id);
-  };
+  }));
+  // The composer also edits nested team drafts; this preview has no execution history.
+  const [draft] = useState<Feature>(() => ({
+    id: initial.id || 'team-draft',
+    title: initial.name,
+    description: initial.description,
+    workflowId: initial.id,
+    workflowName: initial.name,
+    branch: '',
+    createdAt: '',
+    updatedAt: '',
+    status: 'draft',
+    activeStepId: '',
+    budget: { ...defaultBudget, modelProfile: 'current' },
+    steps: workflow.steps.map((step) => ({ ...step, status: 'pending', attempts: [] })),
+  }));
   return (
     <StudioDialog
-      title={existingId ? workflow.name || 'Votre parcours' : 'Dessiner un nouveau parcours.'}
-      subtitle="Enregistré au niveau utilisateur, disponible dans tous vos projets. Les sessions existantes conservent leurs étapes."
+      title={existingId ? workflow.name || 'Votre équipe' : 'Composer une nouvelle équipe'}
+      subtitle="Choisissez vos agents comme dans une feature. L’équipe enregistrée sera disponible dans tous vos projets."
       onClose={onClose}
       className="workflow-editor-dialog"
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!errors.length) {
-            dispatch({ type: 'saveWorkflow', workflow: { ...workflow, source: undefined } });
-            onClose();
-          }
+      <div className="workflow-info">
+        <label className="field">
+          <span>Nom de l’équipe</span>
+          <input
+            required
+            value={workflow.name}
+            onChange={(event) =>
+              setWorkflow({
+                ...workflow,
+                name: event.target.value,
+                ...(!existingId ? { id: slug(event.target.value) } : {}),
+              })
+            }
+            placeholder="Ex. Mon équipe développement"
+          />
+        </label>
+        <label className="field">
+          <span>Identifiant de l’équipe</span>
+          <input
+            required
+            disabled={Boolean(existingId)}
+            value={workflow.id}
+            onChange={(event) => setWorkflow({ ...workflow, id: event.target.value })}
+            pattern="[a-zA-Z][a-zA-Z0-9_-]*"
+          />
+        </label>
+        <label className="field">
+          <span>Description de l’équipe</span>
+          <input
+            value={workflow.description}
+            onChange={(event) => setWorkflow({ ...workflow, description: event.target.value })}
+            placeholder="Pour quels besoins utiliserez-vous cette équipe ?"
+          />
+        </label>
+      </div>
+      <TeamComposer
+        feature={draft}
+        state={state}
+        dispatch={dispatch}
+        onClose={onClose}
+        onPendingChange={() => {}}
+        templateMode
+        validationErrors={workflowErrors(workflow, state)}
+        onStepsChange={(steps) => setWorkflow((current) => ({ ...current, steps }))}
+        onApply={(steps) => {
+          const saved = { ...workflow, steps, source: undefined };
+          if (workflowErrors(saved, state).length) return;
+          dispatch({ type: 'saveWorkflow', workflow: saved });
+          onClose();
         }}
-      >
-        <div className="workflow-info">
-          <label className="field">
-            <span>Nom du parcours</span>
-            <input
-              required
-              value={workflow.name}
-              onChange={(e) =>
-                setWorkflow({
-                  ...workflow,
-                  name: e.target.value,
-                  ...(!existingId ? { id: slug(e.target.value) } : {}),
-                })
-              }
-              placeholder="Du besoin à la livraison"
-            />
-          </label>
-          <label className="field">
-            <span>Identifiant du parcours</span>
-            <input
-              required
-              disabled={Boolean(existingId)}
-              value={workflow.id}
-              onChange={(e) => setWorkflow({ ...workflow, id: e.target.value })}
-              pattern="[a-zA-Z][a-zA-Z0-9_-]*"
-            />
-          </label>
-          <label className="field">
-            <span>Description du parcours</span>
-            <input
-              value={workflow.description}
-              onChange={(e) => setWorkflow({ ...workflow, description: e.target.value })}
-            />
-          </label>
-        </div>
-        <div className="workflow-editor-grid">
-          <section className="workflow-flow">
-            <div className="section-heading">
-              <h3>
-                <GitBranch size={15} /> Les étapes & leurs liens
-              </h3>
-              <button type="button" className="text-button" onClick={add}>
-                <Plus size={13} /> Étape
-              </button>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => {
-                  const card = newSubplanStep();
-                  if (workflow.steps.length) card.dependsOn = [workflow.steps.at(-1)!.id];
-                  setWorkflow({ ...workflow, steps: [...workflow.steps, card] });
-                  setSelected(card.id);
-                }}
-              >
-                <Plus size={13} />
-                Sous-plan
-              </button>
-            </div>
-            <div
-              className="workflow-nodes"
-              style={{ minHeight: Math.max(workflow.steps.length * 94, 220) }}
-            >
-              <svg
-                className="workflow-connectors"
-                width="54"
-                height={workflow.steps.length * 94}
-                aria-hidden="true"
-              >
-                {workflow.steps.flatMap((s, to) =>
-                  s.dependsOn.map((dep) => {
-                    const from = workflow.steps.findIndex((x) => x.id === dep);
-                    if (from < 0) return null;
-                    const y1 = from * 94 + 39,
-                      y2 = to * 94 + 39;
-                    return (
-                      <path
-                        key={`${s.id}-${dep}`}
-                        d={`M 51 ${y1} C 8 ${y1}, 8 ${y2}, 51 ${y2}`}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.3"
-                      />
-                    );
-                  }),
-                )}
-              </svg>
-              {workflow.steps.map((s, i) => (
-                <div
-                  className={`workflow-node ${s.subplan ? 'subplan-card' : ''} ${s.id === selected ? 'selected' : ''}`}
-                  key={s.id}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/feature-studio-step', s.id);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const id = e.dataTransfer.getData('application/feature-studio-step');
-                    move(id, i);
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="node-main"
-                    onClick={() => setSelected(s.id)}
-                    aria-label={`Configurer l’étape ${s.name}`}
-                  >
-                    {s.subplan ? <SubplanMark step={s} /> : <GripVertical size={13} />}
-                    <span className="node-number">{String(i + 1).padStart(2, '0')}</span>
-                    <span>
-                      <strong>{s.name}</strong>
-                      <small>
-                        {s.subplan
-                          ? s.subplan.teamName || 'Sous-équipe à choisir'
-                          : state.agents.find((a) => a.id === s.agentId)?.nickname ||
-                            state.agents.find((a) => a.id === s.agentId)?.name ||
-                            'Agent à choisir'}{' '}
-                        ·{' '}
-                        {s.dependsOn.length
-                          ? s.dependsOn
-                              .map((id) => workflow.steps.find((s) => s.id === id)?.name ?? id)
-                              .join(', ')
-                          : 'Point de départ'}
-                      </small>
-                    </span>
-                  </button>
-                  <div className="node-order">
-                    <button
-                      type="button"
-                      className="icon-button"
-                      disabled={i === 0}
-                      aria-label={`Monter ${s.name}`}
-                      onClick={() => move(s.id, i - 1)}
-                    >
-                      <ArrowUp size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      disabled={i === workflow.steps.length - 1}
-                      aria-label={`Descendre ${s.name}`}
-                      onClick={() => move(s.id, i + 1)}
-                    >
-                      <ArrowDown size={12} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="field-help">
-              Glissez les cartes ou utilisez les flèches. Une liaison signifie que la dépendance
-              doit être validée avant l’étape.
-            </p>
-          </section>
-          <section className="workflow-step-editor">
-            {step ? (
-              <>
-                <div className="section-heading">
-                  <span className="eyebrow">LE DÉTAIL DE L’ÉTAPE</span>
-                  <div>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label="Dupliquer cette étape"
-                      onClick={duplicate}
-                    >
-                      <Copy size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label="Supprimer cette étape"
-                      onClick={() => setDeleting(step.id)}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-                <label className="field">
-                  <span>Agent de l’étape</span>
-                  <select
-                    value={step.agentId}
-                    onChange={(e) => {
-                      const agent = state.agents.find((a) => a.id === e.target.value);
-                      if (agent)
-                        update(
-                          inheritAgentProfile(
-                            { ...step, agentId: agent.id, model: undefined, reasoning: undefined },
-                            agent,
-                          ),
-                        );
-                    }}
-                  >
-                    <option value="">Choisir un agent…</option>
-                    {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.nickname || a.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {step.subplan && (
-                  <SubplanSettings
-                    step={step}
-                    state={state}
-                    dispatch={dispatch}
-                    onChange={update}
-                  />
-                )}
-                <AgentModelOverrides step={step} state={state} onChange={update} />
-                <fieldset className="dependency-list">
-                  <legend>Doit attendre la validation de</legend>
-                  {workflow.steps
-                    .filter((s) => s.id !== step.id)
-                    .map((s) => (
-                      <label key={s.id}>
-                        <input
-                          type="checkbox"
-                          checked={step.dependsOn.includes(s.id)}
-                          onChange={(e) =>
-                            update({
-                              dependsOn: e.target.checked
-                                ? [...step.dependsOn, s.id]
-                                : step.dependsOn.filter((id) => id !== s.id),
-                            })
-                          }
-                        />
-                        {s.name}
-                      </label>
-                    ))}
-                  {workflow.steps.length === 1 && (
-                    <span className="muted">Une première étape n’a pas de dépendance.</span>
-                  )}
-                </fieldset>
-                <label className="field">
-                  <span>Participation de l’intervention</span>
-                  <select
-                    value={step.optional ? 'optional' : 'required'}
-                    onChange={(e) => update({ optional: e.target.value === 'optional' })}
-                  >
-                    <option value="required">Obligatoire</option>
-                    <option value="optional">Facultative</option>
-                  </select>
-                  <small>
-                    Une intervention facultative met le pilote en pause pour choisir de l’exécuter
-                    ou de la passer.
-                  </small>
-                </label>
-              </>
-            ) : (
-              <p className="muted">Ajoutez une étape pour définir son rôle.</p>
-            )}
-          </section>
-        </div>
-        {errors.length > 0 && (
-          <div className="workflow-errors" role="status">
-            {errors.map((e) => (
-              <p key={e}>
-                <TriangleAlert size={13} />
-                {e}
-              </p>
-            ))}
-          </div>
-        )}
-        <div className="modal-actions">
-          <span className="muted">
-            {workflow.steps.length} étape{workflow.steps.length > 1 ? 's' : ''} · aucune écriture
-            YAML manuelle
-          </span>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Annuler
-          </button>
-          <button className="button primary" disabled={errors.length > 0}>
-            Enregistrer le parcours <Check size={14} />
-          </button>
-        </div>
-      </form>
-      {deleting && (
-        <div className="workflow-delete-confirm" role="alert">
-          <p>
-            Supprimer « {workflow.steps.find((s) => s.id === deleting)?.name} » ? Ses liaisons
-            seront aussi retirées des autres étapes.
-          </p>
-          <div>
-            <button
-              type="button"
-              className="button secondary small"
-              onClick={() => setDeleting('')}
-            >
-              Conserver
-            </button>
-            <button
-              type="button"
-              className="button primary small"
-              onClick={() => {
-                const steps = workflow.steps
-                  .filter((s) => s.id !== deleting)
-                  .map((s) => ({ ...s, dependsOn: s.dependsOn.filter((id) => id !== deleting) }));
-                setWorkflow({ ...workflow, steps });
-                setSelected(steps[0]?.id ?? '');
-                setDeleting('');
-              }}
-            >
-              Supprimer l’étape
-            </button>
-          </div>
-        </div>
-      )}
+      />
     </StudioDialog>
   );
 }

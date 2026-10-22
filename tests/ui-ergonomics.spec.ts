@@ -35,7 +35,7 @@ test('all screens reflow at 390px and navigation resets the page position', asyn
     'Validation',
     'Consommation',
     'Quêtes',
-    'Parcours',
+    'Mes équipes',
     'Agents',
     'Skills',
     'Automatisations',
@@ -72,8 +72,8 @@ test('session totals filter, search can be reset and sorting is usable', async (
     'Navigation accessible au clavier',
   );
   await expect(page.getByRole('progressbar').first()).toHaveAttribute('aria-valuenow', '5');
-  await navigate(page, 'Parcours');
-  await expect(page.getByRole('button', { name: 'Nouveau parcours' })).toBeVisible();
+  await navigate(page, 'Mes équipes');
+  await expect(page.getByRole('button', { name: 'Nouvelle équipe' })).toBeVisible();
 });
 
 test('agent and skill catalogues support accent-insensitive search, origins and empty resets', async ({

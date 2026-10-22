@@ -162,14 +162,14 @@ test('qualité : les exigences enregistrées restent conservées avec les profil
   const state = structuredClone(demoState);
   state.workflows[0].steps[0].requiredQuality = 'visual';
   await hosted(page, state);
-  await navigate(page, 'Parcours');
+  await navigate(page, 'Mes équipes');
   await page
     .locator('.workflow-library-card')
     .first()
     .getByRole('button', { name: 'Ouvrir l’éditeur' })
     .click();
   await expect(page.getByLabel('Rapport qualité requis')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Enregistrer le parcours' }).click();
+  await page.getByRole('button', { name: 'Enregistrer l’équipe' }).click();
   const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveWorkflow' }>;
   expect(saved.type).toBe('saveWorkflow');
   expect(saved.workflow.steps[0].requiredQuality).toBe('visual');
