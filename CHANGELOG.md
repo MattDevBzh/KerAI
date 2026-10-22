@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.24.1 — 2026-10-22 · Compatibilité de la recherche native
+
+- Les catalogues natifs acceptent `grep`, `rg`, ou les deux. Un seul outil de recherche suffit, en lecture seule comme pendant le travail.
+- Les catalogues incomplets, les doublons, les outils non autorisés et les outils d’écriture ou de terminal en lecture seule restent refusés.
+- Le diagnostic invite à vérifier la compatibilité de Feature Studio et du CLI ; il ne prescrit plus systématiquement une mise à jour du CLI. Le couple de référence est distingué des versions réellement installées.
+
 ## 1.24.0 — 2026-10-22 · Sous-plans et sous-équipes
 
 - Carte Sous-plan dédiée, sans portrait ni nom d’orchestrateur, compatible avec les thèmes et le QG vivant. Composition dans une équipe enregistrée ou une feature, configuration récursive dans le même panneau.

@@ -22,6 +22,46 @@ const shell: PermissionRequest = {
   canOfferSessionApproval: true,
 };
 
+describe.each([false, true])('native catalog (readOnly=%s)', (readOnly) => {
+  const required = readOnly
+    ? ['view', 'glob', 'ask_user']
+    : ['view', 'glob', 'ask_user', 'edit', 'create', 'powershell'];
+
+  it.each([{ search: ['grep'] }, { search: ['rg'] }, { search: ['grep', 'rg'] }])(
+    'accepts the search catalog $search',
+    ({ search }) => {
+      expect(() => verifyNativeCatalog([...required, ...search], [], readOnly)).not.toThrow();
+    },
+  );
+  it('requires a search tool and all other mandatory capabilities', () => {
+    expect(() => verifyNativeCatalog(required, [], readOnly)).toThrow(/nécessaires/);
+    for (const missing of required)
+      expect(() =>
+        verifyNativeCatalog([...required.filter((name) => name !== missing), 'rg'], [], readOnly),
+      ).toThrow(/nécessaires/);
+  });
+  it('keeps rejecting unknown tools and duplicates when rg is present', () => {
+    expect(() => verifyNativeCatalog([...required, 'rg', 'task'], [], readOnly)).toThrow(
+      /inattendu/,
+    );
+    expect(() => verifyNativeCatalog([...required, 'rg', 'rg'], [], readOnly)).toThrow(/dupliqué/);
+  });
+  it('allows explicitly selected host tools alongside rg', () => {
+    expect(() =>
+      verifyNativeCatalog([...required, 'rg', 'studio_test'], ['studio_test'], readOnly),
+    ).not.toThrow();
+  });
+});
+
+it.each(['edit', 'create', 'apply_patch', 'bash', 'powershell'])(
+  'rejects %s in a read-only catalog containing rg',
+  (tool) => {
+    expect(() => verifyNativeCatalog(['view', 'glob', 'rg', 'ask_user', tool], [], true)).toThrow(
+      /inattendu/,
+    );
+  },
+);
+
 describe('native permissions and evidence', () => {
   it('keeps manual approvals single-use and honors refusals, including managed asks in allow-all', async () => {
     const ask = vi.fn(async () => false);

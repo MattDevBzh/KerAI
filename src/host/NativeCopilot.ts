@@ -20,6 +20,7 @@ export const NATIVE_TOOLS = [
   'view',
   'glob',
   'grep',
+  'rg',
   'edit',
   'create',
   'apply_patch',
@@ -35,7 +36,7 @@ export const NATIVE_TOOLS = [
   'list_powershell',
   'ask_user',
 ];
-export const NATIVE_READ_TOOLS = ['view', 'glob', 'grep', 'ask_user'];
+export const NATIVE_READ_TOOLS = ['view', 'glob', 'grep', 'rg', 'ask_user'];
 export const nativeGates: Partial<SessionConfig> = {
   enableManagedSettings: true,
   enableExperimentalMode: true,
@@ -79,10 +80,13 @@ export function verifyNativeCatalog(names: string[], extra: string[] = [], readO
   const unexpected = names.filter((name) => !allowed.has(name));
   if (new Set(names).size !== names.length) throw new Error('Catalogue natif dupliqué.');
   if (unexpected.length) throw new Error(`Catalogue natif inattendu : ${unexpected.join(', ')}.`);
+  // Copilot can expose grep, rg, or both for the same search capability.
+  const required = readOnly
+    ? ['view', 'glob', 'ask_user']
+    : ['view', 'glob', 'edit', 'create', 'ask_user'];
   if (
-    (readOnly ? NATIVE_READ_TOOLS : ['view', 'glob', 'grep', 'edit', 'create', 'ask_user']).some(
-      (name) => !names.includes(name),
-    ) ||
+    required.some((name) => !names.includes(name)) ||
+    !names.some((name) => name === 'grep' || name === 'rg') ||
     (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
   )
     throw new Error(
@@ -134,7 +138,7 @@ export async function probeNativeCapabilities(
       available: false,
       tools: [],
       permissionModes: [],
-      error: `Copilot natif indisponible : ${(error as Error).message} Version testée : CLI 1.0.102, SDK 1.0.20. Mets le CLI à jour puis relance le diagnostic.`,
+      error: `Copilot natif indisponible : ${(error as Error).message} Couple de référence : CLI 1.0.102, SDK 1.0.20. Vérifie la compatibilité de Feature Studio avec le CLI utilisé, puis relance le diagnostic.`,
     };
   } finally {
     if (session) {
