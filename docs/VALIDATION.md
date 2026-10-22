@@ -1,5 +1,12 @@
 # Validation et limites
 
+## Compétences natives et instructions ciblées — v1.27.0
+
+- Vérification TypeScript, compilation et **803 tests métier réussis, 6 tests optionnels ignorés**. **267 scénarios Chromium réussis**, dont les chargements réellement confirmés, leur contenu et leur affichage compact. Les captures du panneau utilisent des données de démonstration.
+- Un scénario traverse le véritable adaptateur et Copilot CLI **1.0.102 et 1.0.103**, avec un fournisseur de réponses local déterministe : compétence ordinaire chargée à la demande, compétence explicite préchargée, lecture d’une instruction ciblée, refus du shell et conservation des preuves après relecture du stockage. Ce scénario ne constitue pas une évaluation de la qualité d’un modèle réel.
+- La recette avec inférence réelle n’a pas pu démarrer : le compte est authentifié mais le catalogue de modèles retourné par ces runtimes est vide. Aucun succès d’inférence n’est revendiqué pour cette version.
+- Les validations humaines et les catalogues personnels sont conservés. Le paquet, le smoke VS Code, la CI Linux/Windows et le téléchargement publié sont des contrôles séparés ; la [release](https://github.com/MattDevBzh/KerAI/releases/tag/v1.27.0) référence le commit et la CI de livraison.
+
 ## Lisibilité des sessions et sous-équipes — v1.26.0, 22 octobre 2026
 
 - Après intégration de la version 1.25.2 : **800 tests métier réussis, 5 tests optionnels ignorés**, vérification TypeScript et compilation. Les tests métier ont été exécutés séparément de Chromium pour éviter la concurrence sur les tests d’archives qui écrivent plusieurs milliers d’événements.

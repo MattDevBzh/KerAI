@@ -112,7 +112,10 @@ it('launches with the current base profile, rejects stale previews and keeps onl
   expect(step.model).toBe('');
   expect(step.skills).toEqual([]);
   const preview = await f.service.previewRun(feature.id, step.id);
-  expect(preview.prompt).toContain('LIVE_SKILL_INSTRUCTIONS');
+  expect(preview.prompt).not.toContain('LIVE_SKILL_INSTRUCTIONS');
+  expect(preview.sections.find((section) => section.id === 'skill:live-skill')?.content).toContain(
+    'LIVE_SKILL_INSTRUCTIONS',
+  );
   await writeAgent('updated-model', 'low', 'UPDATED_PROFILE');
   await expect(
     f.service.runStep(feature.id, step.id, '', false, undefined, preview.fingerprint),
@@ -128,7 +131,8 @@ it('launches with the current base profile, rejects stale previews and keeps onl
     description: 'Live role',
   });
   expect(f.inputs[0].agent).toMatchObject({ instructions: 'UPDATED_PROFILE', tools: ['read'] });
-  expect(f.inputs[0].preparedPrompt).toContain('LIVE_SKILL_INSTRUCTIONS');
+  expect(f.inputs[0].preparedPrompt).not.toContain('LIVE_SKILL_INSTRUCTIONS');
+  expect(f.inputs[0].skills[0].content).toContain('LIVE_SKILL_INSTRUCTIONS');
   step.model = 'team-model';
   step.reasoning = '';
   await f.service.runStep(feature.id, step.id);
@@ -427,7 +431,10 @@ describe('StudioService execution gates', () => {
     );
     const preview = await f.service.previewRun(feature.id, 'session');
     expect(preview.errors).toEqual([]);
-    expect(preview.prompt).toContain('Fresh instructions');
+    expect(preview.prompt).not.toContain('Fresh instructions');
+    expect(
+      preview.sections.find((section) => section.id === 'skill:restored-skill')?.content,
+    ).toContain('Fresh instructions');
     await rm(directory, { recursive: true });
     await expect(
       f.service.runStep(feature.id, 'session', '', false, undefined, preview.fingerprint),
@@ -1410,6 +1417,20 @@ it('persists native permissions, refusal, runtime evidence and observed edits wi
       details: 'npm test',
     });
     await writeFile(join(f.workspace, 'already-dirty.txt'), 'human work plus native edit');
+    const load = {
+      id: 'loaded-skill',
+      sessionId: 'session-1',
+      at: new Date().toISOString(),
+      kind: 'skill' as const,
+      name: 'Revue',
+      path: '/catalogue/SKILL.md',
+      origin: 'user',
+      trigger: 'agent-invoked',
+      content: 'Snapshot réellement chargé',
+      digest: 'a'.repeat(64),
+    };
+    callbacks.onNativeContextLoad!(load);
+    callbacks.onNativeContextLoad!(load);
     callbacks.onNativeActivity!({
       id: 'tool1',
       sessionId: 'session-1',
@@ -1442,6 +1463,8 @@ it('persists native permissions, refusal, runtime evidence and observed edits wi
   expect(stored.execution?.permissionMode).toBe('manual');
   const attempt = stored.steps[0].attempts.at(-1)!;
   expect(attempt.nativeActivity?.[0]).toMatchObject({ source: 'copilot', exitCode: 0 });
+  expect(attempt.nativeContextLoads).toHaveLength(1);
+  expect(attempt.nativeContextLoads?.[0].content).toBe('Snapshot réellement chargé');
   expect(attempt.changedFiles).toContain('already-dirty.txt');
   expect(attempt.fileHashes?.['already-dirty.txt']).toBeUndefined();
   expect(stored.workspaceFileHashes?.['already-dirty.txt']).toBeUndefined();

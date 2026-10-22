@@ -97,6 +97,7 @@ function transport() {
   const session = {
     sessionId: 'persistent-session',
     rpc: {
+      instructions: { getSources: vi.fn(async () => ({ sources: [] })) },
       managedSettings: {
         get: vi.fn(async () => ({
           failClosed: false,
@@ -224,6 +225,67 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     }));
     return run;
   }
+  it('loads only selected native skills, keeps file hooks disabled and persists confirmed instruction receipts', async () => {
+    const run = nativeTransport();
+    run.nativeReadOnly = true;
+    run.skills = [
+      {
+        id: 'review',
+        name: 'Revue',
+        description: 'Review',
+        path: '/skills/review/SKILL.md',
+        source: 'user',
+        content:
+          '---\nname: review\ndescription: Review\nallowed-tools: [bash]\n---\nReview carefully',
+      },
+    ];
+    callbacks.onNativeContextLoad = vi.fn();
+    fake.setOnSend(() => {
+      fake.emit('session.skills_loaded', { skills: [{ name: 'review' }] });
+      fake.emit('system.notification', {
+        content: 'Actual targeted instructions',
+        kind: {
+          type: 'instruction_discovered',
+          sourcePath: '.github/instructions/code.instructions.md',
+          triggerFile: 'src/code.ts',
+          triggerTool: 'view',
+        },
+      });
+      const event = { id: 'same-receipt', name: 'review', path: '', content: 'Actual skill body' };
+      fake.emit('skill.invoked', event, { id: event.id });
+      fake.emit('skill.invoked', event, { id: event.id });
+      fake.emit('assistant.message', { messageId: 'answer', content: 'Done' });
+      fake.emit('session.idle', {});
+    });
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config).toMatchObject({
+      enableSkills: true,
+      skipCustomInstructions: false,
+      enableOnDemandInstructionDiscovery: true,
+      enableFileHooks: false,
+      enableConfigDiscovery: false,
+      includedBuiltinSkills: [],
+    });
+    expect(fake.config!.availableTools).toContain('skill');
+    expect(fake.config!.availableTools).not.toContain('bash');
+    expect(callbacks.onNativeContextLoad).toHaveBeenCalledTimes(2);
+    expect(callbacks.onNativeContextLoad).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'instruction', content: 'Actual targeted instructions' }),
+    );
+    const hook = fake.config!.hooks!.onPreToolUse!;
+    expect(
+      await hook(
+        {
+          toolName: 'skill',
+          toolArgs: { skill: 'ambient-skill' },
+          timestamp: new Date(),
+          workingDirectory: '/workspace',
+          sessionId: 'persistent-session',
+        },
+        { sessionId: 'persistent-session' },
+      ),
+    ).toMatchObject({ permissionDecision: 'deny' });
+  });
   beforeEach(async () => {
     storage = await mkdtemp(join(tmpdir(), 'studio-adapter-test-'));
     fake = transport();
@@ -424,7 +486,6 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     expect(options?.env?.ELECTRON_RUN_AS_NODE).toBe('1');
     expect(options?.connection && 'args' in options.connection && options.connection.args).toEqual([
       expect.stringContaining('config.json'),
-      '--no-remote',
       '--no-custom-instructions',
       '--disable-builtin-mcps',
       '--disallow-temp-dir',

@@ -33,6 +33,21 @@ export interface NativeActivity {
   files?: string[];
   truncated?: boolean;
 }
+/** A runtime receipt of instructions injected into the conversation, not a catalogue entry. */
+export interface NativeContextLoad {
+  id: string;
+  sessionId: string;
+  at: string;
+  kind: 'skill' | 'instruction';
+  name: string;
+  path: string;
+  origin: string;
+  trigger: string;
+  triggerFile?: string;
+  content: string;
+  digest: string;
+  truncated?: boolean;
+}
 export interface NativePermissionPrompt {
   kind: string;
   question: string;

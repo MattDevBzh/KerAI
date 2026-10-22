@@ -116,6 +116,7 @@ export interface Artifact {
 }
 export interface Attempt {
   nativeActivity?: import('./native').NativeActivity[];
+  nativeContextLoads?: import('./native').NativeContextLoad[];
   pair?: import('./pair').PairState;
   /** Execution identity frozen at launch, independent from later step edits. */
   profileSnapshot?: {
@@ -644,6 +645,7 @@ export interface RunCallbacks {
   onNativeEventId?(id: string): void;
   onNativeMessageReceived?(id: string): void;
   onNativeActivity?(activity: import('./native').NativeActivity): void;
+  onNativeContextLoad?(load: import('./native').NativeContextLoad): void;
   onNativePermission?(
     request: import('./native').NativePermissionPrompt,
   ): Promise<import('./native').NativePermissionAnswer>;

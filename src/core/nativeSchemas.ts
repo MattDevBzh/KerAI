@@ -2,6 +2,22 @@ import { z } from 'zod';
 import { NATIVE_PERMISSION_MODES } from '../shared/native';
 
 export const nativePermissionModeSchema = z.enum(NATIVE_PERMISSION_MODES);
+export const nativeContextLoadSchema = z
+  .object({
+    id: z.string().max(300),
+    sessionId: z.string().max(300),
+    at: z.string().max(64),
+    kind: z.enum(['skill', 'instruction']),
+    name: z.string().max(1000),
+    path: z.string().max(4000),
+    origin: z.string().max(300),
+    trigger: z.string().max(300),
+    triggerFile: z.string().max(4000).optional(),
+    content: z.string().max(64000),
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+    truncated: z.boolean().optional(),
+  })
+  .strict();
 export const nativeExecutionSchema = z
   .object({
     mode: z.literal('copilot-native'),

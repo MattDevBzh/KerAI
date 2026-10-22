@@ -6,6 +6,7 @@ import { roastInstructions } from '../shared/roast';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
 import { pairPlanningContract } from '../shared/pair';
 import { usesNativeTools, permissionLabels } from '../shared/native';
+import { nativePromptSection } from './nativeSkills';
 import type {
   MemoryEntry,
   PromptSection,
@@ -328,7 +329,11 @@ export function buildPrompt(input: RunInput): string {
   const sections = promptSections(input).filter((section) => section.enabled !== false);
   const missing = sections.filter((section) => section.unavailable);
   if (missing.length) throw new Error(missing.map((section) => section.originalContent).join(' '));
-  return sections.map((section) => section.content).join('\n\n');
+  return sections
+    .map((section) =>
+      usesNativeTools(input) ? nativePromptSection(input, section) : section.content,
+    )
+    .join('\n\n');
 }
 
 export function previewContext(input: RunInput, errors: string[] = []): RunPreview {
@@ -336,7 +341,11 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
   const included = sections.filter((section) => section.enabled !== false);
   for (const section of included.filter((section) => section.unavailable))
     errors.push(section.originalContent!);
-  const prompt = included.map((section) => section.content).join('\n\n');
+  const prompt = included
+    .map((section) =>
+      usesNativeTools(input) ? nativePromptSection(input, section) : section.content,
+    )
+    .join('\n\n');
   const maxCharacters =
     input.feature.budget?.maxPromptChars ?? input.settings.budgetDefaults?.maxPromptChars ?? 60000;
   const memoryCharacters = included
@@ -355,6 +364,9 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
       JSON.stringify({
         prompt,
         sections,
+        nativeSkillSources: usesNativeTools(input)
+          ? input.skills.map(({ id, path, source }) => ({ id, path, source }))
+          : undefined,
         existingChangeGrants: input.existingChangeGrants,
         editableExistingFiles: input.launch?.editableExistingFiles,
         contextMode: input.launch?.contextMode,

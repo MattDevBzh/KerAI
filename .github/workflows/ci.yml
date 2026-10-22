@@ -22,7 +22,7 @@ jobs:
       - run: npm run typecheck
       - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.102
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
-      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts
+      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts tests/native-context-runtime.test.ts
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot.cmd
@@ -48,7 +48,7 @@ jobs:
         run: npm run typecheck && npm run build
       - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.102
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
-      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts
+      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts tests/native-context-runtime.test.ts
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot

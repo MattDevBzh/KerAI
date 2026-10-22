@@ -1,6 +1,7 @@
 import { TeamComposer } from './TeamComposer';
 import { executionCallCount } from '../src/core/budgets';
 import { NativeActivityPanel } from './NativeExecutionUI';
+import { NativeContextPanel } from './NativeContextPanel';
 import { inheritTeamProfiles } from '../src/shared/agentInheritance';
 import { stepResolved, progressLabel } from '../src/shared/optionalSteps';
 import { searchText } from './Ergonomics';
@@ -737,6 +738,7 @@ export function EvidencePanel({
   return (
     <div className="evidence-panel">
       <NativeActivityPanel activities={attempt?.nativeActivity ?? []} />
+      {attempt && <NativeContextPanel loads={attempt.nativeContextLoads ?? []} />}
       <DevOpsEvidencePanel evidence={evidence} />
       <QualityPanel
         evidence={evidence}

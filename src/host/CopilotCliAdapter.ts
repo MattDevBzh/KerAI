@@ -28,6 +28,7 @@ import type {
   ReviewReport,
 } from '../shared/types';
 import { buildPrompt } from '../core/context';
+import { nativeSkillCatalog, nativeContextReceipt, NativeInstructionReads } from './NativeContext';
 import { usesNativeTools, type NativePermissionMode } from '../shared/native';
 import {
   NATIVE_TOOLS,
@@ -272,7 +273,10 @@ export class CopilotCliAdapter implements AgentAdapter {
     }
   }
 
-  private async newClient(secrets: Set<string> = new Set()): Promise<CopilotClient> {
+  private async newClient(
+    secrets: Set<string> = new Set(),
+    instructions = false,
+  ): Promise<CopilotClient> {
     if (this.disposed) throw new Error('Adaptateur fermé.');
     const directory = join(this.options.storagePath, 'copilot-runtime');
     await mkdir(directory, { recursive: true });
@@ -295,8 +299,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         path: this.options.launcherPath ?? join(__dirname, 'copilot-launcher.js'),
         args: [
           launch.configPath,
-          '--no-remote',
-          '--no-custom-instructions',
+          ...(instructions ? [] : ['--no-custom-instructions']),
           '--disable-builtin-mcps',
           '--disallow-temp-dir',
         ],
@@ -511,7 +514,14 @@ export class CopilotCliAdapter implements AgentAdapter {
 
   async run(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal): Promise<RunResult> {
     const native = usesNativeTools(input);
-    const nativeTools = input.nativeReadOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS;
+    const skills = nativeSkillCatalog(native ? input : { ...input, skills: [] });
+    const skillTools = native && skills.byName.size ? ['skill'] : [];
+    const nativeTools = [
+      ...(input.nativeReadOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS),
+      ...skillTools,
+    ];
+    const earlyContextEvents: SessionEvent[] = [];
+    let contextEventsReady = false;
     const permissionMode =
       input.launch?.permissionMode ?? input.feature.execution?.permissionMode ?? 'manual';
     let nativeActivity: NativeActivityCollector | undefined;
@@ -568,7 +578,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         controller.signal,
       );
       secrets = mcp.secrets;
-      client = await this.newClient(secrets);
+      client = await this.newClient(secrets, native);
       if (controller.signal.aborted) throw cancelled(controller.signal);
       await withSignal(client.start(), controller.signal);
       const auth = await withSignal(client.getAuthStatus(), controller.signal);
@@ -728,8 +738,10 @@ export class CopilotCliAdapter implements AgentAdapter {
             ],
         enableConfigDiscovery: false,
         enableFileHooks: false,
-        skipCustomInstructions: true,
-        enableSkills: false,
+        skipCustomInstructions: !native,
+        enableSkills: native && skills.byName.size > 0,
+        includedBuiltinSkills: [],
+        skillProvider: native && skills.byName.size ? skills.provider : undefined,
         skillDirectories: [],
         pluginDirectories: [],
         mcpServers: mcp.servers,
@@ -750,7 +762,16 @@ export class CopilotCliAdapter implements AgentAdapter {
         ...(native ? nativeGates : {}),
         skipEmbeddingRetrieval: true,
         embeddingCacheStorage: 'in-memory',
-        enableOnDemandInstructionDiscovery: false,
+        enableOnDemandInstructionDiscovery: native,
+        onEvent: native
+          ? (event) => {
+              if (
+                !contextEventsReady &&
+                (event.type === 'skill.invoked' || event.type === 'system.notification')
+              )
+                earlyContextEvents.push(event);
+            }
+          : undefined,
         memory: { enabled: false },
         remoteSession: 'off',
         includeSubAgentStreamingEvents: true,
@@ -815,6 +836,15 @@ export class CopilotCliAdapter implements AgentAdapter {
               ),
         hooks: {
           onPreToolUse: (request) => {
+            if (request.toolName === 'skill') {
+              const name = (request.toolArgs as { skill?: unknown } | null)?.skill;
+              if (typeof name !== 'string' || !skills.byName.has(name))
+                return {
+                  permissionDecision: 'deny',
+                  permissionDecisionReason:
+                    'Compétence absente du catalogue sélectionné pour cette étape.',
+                };
+            }
             if (
               (!allowed.has(request.toolName) &&
                 !mcp.grants.has(request.toolName) &&
@@ -851,6 +881,13 @@ export class CopilotCliAdapter implements AgentAdapter {
             prompt:
               'Les instructions du rôle figurent dans le prompt. Utilise uniquement le catalogue autorisé.',
             tools: native ? [...nativeTools, ...agentAllowed] : agentAllowed,
+            // Explicitly selected manual-only skills keep their original invocation policy.
+            // Copilot preloads them for this agent; ordinary skills remain lazy.
+            skills: native
+              ? [...skills.byName.values()]
+                  .filter((item) => item.descriptor.disableModelInvocation)
+                  .map((item) => item.descriptor.name)
+              : undefined,
             infer: false,
           },
         ],
@@ -866,6 +903,12 @@ export class CopilotCliAdapter implements AgentAdapter {
           )
         : await withSignal(client.createSession(config), controller.signal);
       callbacks.onSession(session.sessionId);
+      const instructionReads = native
+        ? new NativeInstructionReads(
+            input.workspacePath,
+            (await withSignal(session.rpc.instructions.getSources(), controller.signal)).sources,
+          )
+        : undefined;
       abortRuntime = () => {
         void session?.abort().catch(() => {});
       };
@@ -937,9 +980,13 @@ export class CopilotCliAdapter implements AgentAdapter {
             throw new Error('Provenance d’un outil natif invalide.');
           verifyNativeCatalog(
             catalog.tools.map((tool) => tool.name),
-            allAllowed,
+            [...allAllowed, ...skillTools],
             input.nativeReadOnly,
           );
+          if (skillTools.length && !catalog.tools.some((tool) => tool.name === 'skill'))
+            throw new Error(
+              'Le runtime ne propose pas le chargement natif des compétences sélectionnées.',
+            );
           verifyMcpCatalog(
             catalog.tools.filter((tool) => !nativeTools.includes(tool.name)),
             allowed,
@@ -986,7 +1033,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         if (native && !event.ephemeral) callbacks.onNativeEventId?.(event.id);
         const recordTrace = () => {
           if (
-            !/^(user\.message|assistant\.message|assistant\.reasoning|assistant\.usage|tool\.|subagent\.|skill\.|hook\.|permission\.|session\.compaction|session\.error)/.test(
+            !/^(user\.message|assistant\.message|assistant\.reasoning|assistant\.usage|tool\.|subagent\.|skill\.|system\.notification|hook\.|permission\.|session\.compaction|session\.error)/.test(
               event.type,
             ) ||
             event.type.endsWith('_delta')
@@ -1058,6 +1105,22 @@ export class CopilotCliAdapter implements AgentAdapter {
         }
         recordTrace();
         if (event.agentId) return;
+        if (native) {
+          try {
+            const receipt =
+              nativeContextReceipt(event, session!.sessionId, skills, (text) =>
+                redactMcp(text, secrets),
+              ) ??
+              instructionReads?.receive(event, session!.sessionId, (text) =>
+                redactMcp(text, secrets),
+              );
+            if (receipt) callbacks.onNativeContextLoad?.(receipt);
+          } catch (error) {
+            const failure = new Error(redactMcp(errorMessage(error), secrets));
+            rejectIdle(failure);
+            controller.abort(failure);
+          }
+        }
         nativeActivity?.receive(event);
         if (
           native &&
@@ -1135,6 +1198,9 @@ export class CopilotCliAdapter implements AgentAdapter {
         }
       };
       unsubscribe = session.on(onEvent);
+      contextEventsReady = true;
+      for (const event of earlyContextEvents) onEvent(event);
+      if (controller.signal.aborted) throw cancelled(controller.signal);
       callbacks.onPromptSending?.();
       await withSignal(
         session.send({ prompt: input.preparedPrompt ?? buildPrompt(input) }),

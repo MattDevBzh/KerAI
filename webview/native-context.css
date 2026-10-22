@@ -1,0 +1,58 @@
+.native-context-panel {
+  margin: 0.7rem 0;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.native-context-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  cursor: pointer;
+}
+.native-context-panel summary strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.native-context-panel summary span,
+.native-context-panel small,
+.native-context-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.native-context-panel p {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.native-context-entry {
+  margin-top: 0.6rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.native-context-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.7rem;
+}
+.native-context-path {
+  overflow-wrap: anywhere;
+}
+.native-context-entry pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
+  overflow: auto;
+  font-size: 0.8rem;
+  padding: 0.6rem;
+  background: var(--bg);
+  border-radius: 6px;
+}
+.native-context-panel summary:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 4px;
+}

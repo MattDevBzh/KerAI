@@ -12,6 +12,7 @@ import type {
 import { nextPairBlock, pairPlan, type PairAction } from '../src/shared/pair';
 import { permissionLabels } from '../src/shared/native';
 import { Avatar } from './Avatar';
+import { NativeContextPanel } from './NativeContextPanel';
 import { HumanRequests } from './ExecutionUI';
 import { PairPreferencesUI } from './PairPreferencesUI';
 import { savedPairDraft, savePairDraft, subscribe } from './bridge';
@@ -312,6 +313,7 @@ export function SessionConversation({
                           ? 'Point de contrôle · à toi de décider de la suite'
                           : 'Convenons de l’organisation'}
       </div>
+      <NativeContextPanel loads={attempt.nativeContextLoads ?? []} />
       <div
         className="conversation-feed"
         role="log"

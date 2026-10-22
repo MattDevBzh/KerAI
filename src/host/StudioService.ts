@@ -1474,6 +1474,17 @@ export class StudioService extends EventEmitter {
           attempt.nativeActivity.splice(0, attempt.nativeActivity.length - 1000);
         this.schedule();
       },
+      onNativeContextLoad: (load) => {
+        attempt.nativeContextLoads ??= [];
+        if (!attempt.nativeContextLoads.some((item) => item.id === load.id)) {
+          if (attempt.nativeContextLoads.length >= 1000)
+            throw new Error(
+              'Historique des compétences et instructions plein. Crée une nouvelle tentative.',
+            );
+          attempt.nativeContextLoads.push(structuredClone(load));
+          this.schedule();
+        }
+      },
       onNativePermission: async (request) => {
         this.assertTrusted();
         if (controller.signal.aborted) throw new Error('Exécution annulée.');

@@ -43,6 +43,8 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'native-permissions' in ui, 'Native permission picker missing from webview'
         assert b'native-activity' in ui, 'Native evidence missing from webview'
         assert b'nativeConversation' in host, 'Shared native conversation missing from host'
+        assert b'nativeContextLoads' in host, 'Native context receipts missing from host'
+        assert b'native-context-panel' in ui, 'Loaded context panel missing from webview'
         assert b'session-conversation' in ui, 'Step conversation missing from webview'
         assert b'hq-paper-plane' in ui, 'Context transfer missing from webview'
         styles = archive.read('extension/dist/webview/assets/index.css')
@@ -70,6 +72,8 @@ def verify(vsix, root, extract=None, match_build=False):
         assert archive.read('extension/' + pair_guide.as_posix()) == (root / pair_guide).read_bytes()
         native_guide = Path('docs/COPILOT-NATIF.md')
         assert archive.read('extension/' + native_guide.as_posix()) == (root / native_guide).read_bytes()
+        context_guide = Path('docs/COMPETENCES-NATIVES.md')
+        assert archive.read('extension/' + context_guide.as_posix()) == (root / context_guide).read_bytes()
         subplan_guide = Path('docs/SOUS-PLANS.md')
         assert archive.read('extension/' + subplan_guide.as_posix()) == (root / subplan_guide).read_bytes()
         if extract:

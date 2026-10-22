@@ -3,7 +3,11 @@ import { createPairStateSchema } from './pairSchemas';
 import { migrateLegacyPairs } from './pairMigration';
 import { ticketSourceSnapshotSchema } from './devopsTicketSchemas';
 import { mkdir, readFile, rename, open, unlink, readdir } from 'node:fs/promises';
-import { nativeActivitySchema, nativeExecutionSchema } from './nativeSchemas';
+import {
+  nativeActivitySchema,
+  nativeExecutionSchema,
+  nativeContextLoadSchema,
+} from './nativeSchemas';
 import {
   digest,
   sessionDirectory,
@@ -106,6 +110,7 @@ const correctionCycle = z.object({
 });
 const attempt = z.object({
   nativeActivity: z.array(nativeActivitySchema).max(1000).optional(),
+  nativeContextLoads: z.array(nativeContextLoadSchema).max(1000).optional(),
   pair: z.lazy(() => pairStateSchema).optional(),
   profileSnapshot: z
     .object({

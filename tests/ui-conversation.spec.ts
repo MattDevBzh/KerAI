@@ -192,6 +192,63 @@ async function open(page: Page, state: StudioState) {
     'true',
   );
 }
+
+test('shows actual skill and instruction loads, preserves historic content and fits narrow screens', async ({
+  page,
+}) => {
+  const state = scenario('solo');
+  const attempt = state.features[0].steps[0].attempts[0];
+  attempt.nativeContextLoads = [
+    {
+      id: 'loaded-skill',
+      sessionId: 'native-session',
+      at: '2026-10-22T14:00:01Z',
+      kind: 'skill',
+      name: 'Revue d’une API .NET',
+      path: '/catalogue/skills/revue-api/SKILL.md',
+      origin: 'user',
+      trigger: 'agent-invoked',
+      content:
+        'Vérifier les autorisations, les erreurs HTTP et les accès aux données.\nLes tests attendent la validation humaine du code.',
+      digest: 'a'.repeat(64),
+    },
+    {
+      id: 'loaded-instruction',
+      sessionId: 'native-session',
+      at: '2026-10-22T14:00:02Z',
+      kind: 'instruction',
+      name: 'Conventions du backend',
+      path: '.github/instructions/backend.instructions.md',
+      origin: 'project',
+      trigger: 'view-instruction',
+      content:
+        '---\napplyTo: "src/host/**/*.ts"\n---\nConserver les permissions côté hôte. Masquer les secrets dans les traces.',
+      digest: 'b'.repeat(64),
+    },
+  ];
+  await open(page, state);
+  const panel = page.locator('.session-conversation .native-context-panel');
+  await panel.locator(':scope > summary').click();
+  await expect(panel).toContainText('1 compétence · 1 instruction');
+  await panel.getByText('Revue d’une API .NET', { exact: true }).click();
+  await expect(panel).toContainText('Les tests attendent la validation humaine du code.');
+  await panel.getByText('Conventions du backend', { exact: true }).click();
+  await expect(panel).toContainText('Instruction consultée');
+  await expect(panel).toContainText('Extrait effectivement lu');
+  await expect(panel).toContainText('Masquer les secrets');
+  await mkdir(resolve('docs/screenshots'), { recursive: true });
+  await page.screenshot({
+    path: resolve('docs/screenshots/native-context-desktop.png'),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 430, height: 932 });
+  await expect(panel).toBeVisible();
+  expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  await page.screenshot({
+    path: resolve('docs/screenshots/native-context-narrow.png'),
+    fullPage: true,
+  });
+});
 const sent = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'conversationSent') as ClientMessage[]);
 async function update(page: Page, change: 'paused' | 'approved') {

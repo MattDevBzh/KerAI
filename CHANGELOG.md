@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.27.0 — 2026-10-22 · Compétences natives et instructions ciblées
+
+- Catalogue KerAI exposé comme fournisseur de skills natifs, avec chargement à la demande et préchargement des compétences explicitement sélectionnées qui interdisent l’invocation automatique. Aperçu éditable, exclusions et profils personnels conservés.
+- Découverte native des instructions ciblées et des fichiers d’instructions du projet. Suivi distinct des chargements natifs et des instructions effectivement consultées.
+- Panneau dans la conversation et les preuves : nom, provenance, chemin, heure et contenu réellement transmis, conservés après réouverture et dans l’historique des tentatives.
+- Aucune autorisation d’outil issue d’un skill ; hooks de fichiers désactivés, lecture seule et validations humaines conservées.
+- Compatibilité CLI 1.0.103 : retrait de l’option supprimée `--no-remote`, maintien des sessions locales via le SDK.
+
 ## 1.26.0 — 2026-10-22 · Des sessions plus lisibles
 
 - Accès direct à l’étape en cours, focus clavier sur le détail après sélection d’une carte et présentation compacte du cadre de la session.

@@ -4,6 +4,9 @@ import { defaultSettings } from '../src/core/store';
 import { buildPrompt, emptyLaunch, previewContext, selectMemory } from '../src/core/context';
 import type { RunInput, MemoryEntry } from '../src/shared/types';
 import { launchSchema } from '../src/core/evolutionSchemas';
+import { nativeSkillCatalog, nativeContextReceipt } from '../src/host/NativeContext';
+import { nativeContextLoadSchema } from '../src/core/nativeSchemas';
+import type { SessionEvent } from '@github/copilot-sdk';
 
 function input(): RunInput {
   const engine = new WorkflowEngine();
@@ -61,6 +64,107 @@ const entry: MemoryEntry = {
 };
 
 describe('deterministic context compiler', () => {
+  it('offers selected skills lazily, keeps editable sources in preview, strips grants and respects exclusions', async () => {
+    const data = input();
+    data.feature.execution = { mode: 'copilot-native', permissionMode: 'manual' };
+    data.skills = [
+      {
+        id: 'review',
+        name: 'Revue',
+        description: 'Examiner une API',
+        path: '/skills/review/SKILL.md',
+        source: 'user',
+        content:
+          '---\nname: review\ndescription: Review\nallowed-tools: [bash]\nhooks: { preToolUse: dangerous }\n---\nFULL_SKILL_BODY',
+      },
+    ];
+    const preview = previewContext(data);
+    expect(preview.sections.find((s) => s.id === 'skill:review')?.content).toContain(
+      'FULL_SKILL_BODY',
+    );
+    expect(preview.prompt).not.toContain('FULL_SKILL_BODY');
+    expect(preview.prompt).toBe(buildPrompt(data));
+    const catalog = nativeSkillCatalog(data);
+    const [descriptor] = await catalog.provider.listSkills({
+      signal: new AbortController().signal,
+    });
+    const content = await catalog.provider.readSkill(descriptor.name, {
+      signal: new AbortController().signal,
+    });
+    expect(content).toContain('FULL_SKILL_BODY');
+    expect(content).toContain('/skills/review');
+    expect(content).not.toMatch(/allowed-tools|preToolUse/);
+    expect(
+      await catalog.provider.readSkill('foreign', { signal: new AbortController().signal }),
+    ).toBeNull();
+    data.launch!.contextBlocks = { 'skill:review': { content: 'EDITED_BY_HUMAN' } };
+    const edited = nativeSkillCatalog(data);
+    expect(
+      await edited.provider.readSkill(descriptor.name, { signal: new AbortController().signal }),
+    ).toContain('EDITED_BY_HUMAN');
+    expect(previewContext(data).fingerprint).not.toBe(preview.fingerprint);
+    data.launch!.contextBlocks['skill:review'].enabled = false;
+    expect(nativeSkillCatalog(data).byName.size).toBe(0);
+    expect(buildPrompt(data)).not.toContain(descriptor.name);
+    data.launch = { ...emptyLaunch(), contextMode: 'empty' };
+    expect(nativeSkillCatalog(data).byName.size).toBe(0);
+    delete data.feature.execution;
+    data.launch = emptyLaunch();
+    expect(buildPrompt(data)).toContain('FULL_SKILL_BODY');
+  });
+
+  it('records only runtime loads, preserves the delivered body and redacts before persistence', () => {
+    const catalog = nativeSkillCatalog(input());
+    const event = (type: string, data: object) =>
+      ({
+        id: 'receipt',
+        type,
+        data,
+        timestamp: '2026-10-22T12:00:00Z',
+        parentId: null,
+      }) as SessionEvent;
+    expect(
+      nativeContextReceipt(
+        event('session.skills_loaded', { skills: [] }),
+        'session',
+        catalog,
+        (s) => s,
+      ),
+    ).toBeUndefined();
+    expect(
+      nativeContextReceipt(
+        event('assistant.message', { content: 'I loaded a skill' }),
+        'session',
+        catalog,
+        (s) => s,
+      ),
+    ).toBeUndefined();
+    const receipt = nativeContextReceipt(
+      event('system.notification', {
+        content: 'ACTUAL secret CONTENT',
+        kind: {
+          type: 'instruction_discovered',
+          sourcePath: '.github/instructions/api.instructions.md',
+          triggerFile: 'src/api.ts',
+          triggerTool: 'view',
+        },
+      }),
+      'session',
+      catalog,
+      (s) => s.replace('secret', '[masqué]'),
+    )!;
+    expect(receipt.content).toBe('ACTUAL [masqué] CONTENT');
+    expect(receipt.triggerFile).toBe('src/api.ts');
+    expect(nativeContextLoadSchema.parse(receipt)).toEqual(receipt);
+    const long = nativeContextReceipt(
+      event('skill.invoked', { name: 'example', path: '', content: 'x'.repeat(65000) }),
+      'session',
+      catalog,
+      (s) => s,
+    )!;
+    expect(long.truncated).toBe(true);
+    expect(long.content.length).toBe(64000);
+  });
   it('exposes unavailable skills and prevents a content override from bypassing the missing source', () => {
     const data = input();
     data.agent.skills = ['missing'];
