@@ -95,8 +95,7 @@ export function verifyNativeCatalog(
     ? ['view', 'glob', 'ask_user']
     : ['view', 'glob', 'edit', 'create', 'ask_user'];
   const missing = required.filter((name) => !names.includes(name));
-  if (!names.some((name) => name === 'grep' || name === 'rg'))
-    missing.push('grep ou rg');
+  if (!names.some((name) => name === 'grep' || name === 'rg')) missing.push('grep ou rg');
   if (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
     missing.push('bash ou powershell');
   if (missing.length)
