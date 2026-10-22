@@ -212,6 +212,7 @@ jobs:
           `);
           NODE
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - name: Format and verify the modified TypeScript files
         run: |
           npx --no-install prettier --write src/host/NativeCopilot.ts tests/native-patch.test.ts
