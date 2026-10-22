@@ -1,3 +1,4 @@
+import { screenshot } from './image-fixture';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -93,6 +94,22 @@ describe('persisted discussions', () => {
     };
     service = create();
     await service.initialize();
+  });
+  it('persists an attached image and forwards it separately again on the next stateless turn', async () => {
+    const request = { ...input(), images: [screenshot] };
+    await service.send(request);
+    await vi.waitFor(() =>
+      expect(service.state.discussions[0].messages.at(-1)?.status).toBe('complete'),
+    );
+    expect(vi.mocked(adapter.run).mock.calls[0][0].images).toEqual([screenshot]);
+    expect(vi.mocked(adapter.run).mock.calls[0][0].preparedPrompt).not.toContain(screenshot.data);
+    await service.dispose();
+    service = create();
+    await service.initialize();
+    expect(service.state.discussions[0].messages[0].images).toEqual([screenshot]);
+    await service.send({ ...input(request.discussionId), content: 'Et cette zone ?' });
+    await vi.waitFor(() => expect(adapter.run).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(adapter.run).mock.calls[1][0].images).toEqual([screenshot]);
   });
   afterEach(async () => {
     await service.dispose();

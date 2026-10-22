@@ -1,3 +1,5 @@
+import { proofClaimSchema, proofChecksSchema } from './proofSchemas';
+import { imagesSchema } from './imageSchemas';
 import { reconcileTeam } from './teamComposition';
 import { createPairStateSchema } from './pairSchemas';
 import { migrateLegacyPairs } from './pairMigration';
@@ -111,6 +113,7 @@ const correctionCycle = z.object({
 const attempt = z.object({
   nativeActivity: z.array(nativeActivitySchema).max(1000).optional(),
   nativeContextLoads: z.array(nativeContextLoadSchema).max(1000).optional(),
+  proofClaims: z.array(proofClaimSchema).max(300).optional(),
   pair: z.lazy(() => pairStateSchema).optional(),
   profileSnapshot: z
     .object({
@@ -202,6 +205,7 @@ const feature: z.ZodType<Feature> = z
       )
       .optional(),
     execution: nativeExecutionSchema.optional(),
+    proofChecks: proofChecksSchema.optional(),
     id: z.string(),
     optionalRequest: z
       .object({ id: z.string().uuid(), stepId: z.string(), stateKey: z.string().max(5000000) })
@@ -237,6 +241,7 @@ const feature: z.ZodType<Feature> = z
       .optional(),
     title: z.string(),
     description: z.string(),
+    images: imagesSchema.optional(),
     workflowId: z.string(),
     workflowName: z.string(),
     createdAt: z.string(),

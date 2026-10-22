@@ -1,3 +1,4 @@
+import { ImageGallery } from './Images';
 import { executionCallCount } from '../src/core/budgets';
 import { useState, useRef, type ReactNode } from 'react';
 import { searchText, useDialogAccessibility } from './Ergonomics';
@@ -443,7 +444,13 @@ export function FeatureBrief({ feature, state }: { feature: Feature; state: Stud
   const iteration = parent?.steps
     .find((s) => s.id === feature.parent?.stepId)
     ?.subplanState?.iterations.find((i) => i.feature.id === feature.id);
-  if (!iteration) return <p>{feature.description}</p>;
+  if (!iteration)
+    return (
+      <>
+        <p>{feature.description}</p>
+        <ImageGallery images={feature.images} />
+      </>
+    );
   return (
     <div className="subplan-brief">
       <p className="subplan-mission">{iteration.description}</p>

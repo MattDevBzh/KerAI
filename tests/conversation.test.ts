@@ -1,3 +1,4 @@
+import { screenshot } from './image-fixture';
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, realpath, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -127,6 +128,7 @@ async function fixture(pairMode = false) {
     feature,
     step,
     inputs,
+    launch,
     adapter,
     start,
     startRunning,
@@ -383,4 +385,87 @@ it('retries the original approved context when the first runtime connection fail
   expect(f.inputs[0].preparedPrompt).toContain(pair.snapshot.prompt);
   expect(pair.contextDelivered).toBe(true);
   expect(pair.phase).toBe('review');
+});
+
+it('preserves feature and chat images, sends pending attachments and excludes unchecked feature context', async () => {
+  const f = await fixture(true);
+  f.feature.images = [screenshot];
+  await f.start();
+  expect(f.inputs[0].images).toEqual([screenshot]);
+  const chatImage = { ...screenshot, id: randomUUID(), name: 'detail.png' };
+  await f.action('message', { content: 'Regarde cette zone', images: [chatImage] });
+  await f.idle();
+  expect(f.inputs.at(-1)?.images).toEqual([chatImage]);
+  const excluded = await fixture();
+  excluded.feature.images = [screenshot];
+  excluded.launch.contextBlocks = { images: { enabled: false } };
+  await excluded.start();
+  expect(excluded.inputs[0].images).toEqual([]);
+  expect(
+    f.step.attempts.at(-1)?.pair?.messages.find((m) => m.content === 'Regarde cette zone')?.images,
+  ).toEqual([chatImage]);
+});
+
+it('persists factual sources and agent claims, rejects invented sources and checks changed test files', async () => {
+  const f = await fixture();
+  await writeFile(join(f.workspace, 'api.ts'), 'before');
+  const { sha256 } = await import('../src/host/PolicyEngine');
+  f.run(async (_input, callbacks) => {
+    callbacks.onEvidence?.({
+      id: 'test-one',
+      source: 'host',
+      commandId: 'unit',
+      name: 'Erreur réseau',
+      command: 'node',
+      args: ['test'],
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      exitCode: 0,
+      stdout: 'passed',
+      stderr: '',
+      truncated: false,
+      fileHashes: { 'api.ts': sha256('before') },
+    });
+    const source = callbacks.getProofs!().find((s) => s.kind === 'test')!;
+    await expect(
+      callbacks.onProofClaim!({
+        id: randomUUID(),
+        text: 'Inventé',
+        proofIds: ['fake'],
+        verdict: 'supported',
+      }),
+    ).rejects.toThrow('absente');
+    await callbacks.onProofClaim!({
+      id: randomUUID(),
+      text: 'Le cas réseau passe.',
+      proofIds: [source.id],
+      verdict: 'supported',
+    });
+    return result();
+  });
+  await f.start();
+  const attempt = f.step.attempts.at(-1)!;
+  expect(attempt.proofClaims?.[0].reportRevision).toBe(attempt.revision);
+  const saved = (await f.store.load()).features.find((v) => v.id === f.feature.id)!;
+  expect(saved.steps[0].attempts[0].proofClaims).toEqual(attempt.proofClaims);
+  await f.service.checkProofDossier(f.feature.id);
+  expect(Object.values(f.feature.proofChecks!)[0].state).toBe('unchanged');
+  await writeFile(join(f.workspace, 'api.ts'), 'after');
+  await f.service.checkProofDossier(f.feature.id);
+  expect(Object.values(f.feature.proofChecks!)[0].state).toBe('changed');
+  await expect(
+    f.service.saveProofClaim({
+      type: 'saveProofClaim',
+      featureId: f.feature.id,
+      stepId: f.step.id,
+      attemptId: attempt.id,
+      requestId: randomUUID(),
+      revision: attempt.revision!,
+      claim: {
+        text: 'Tout est vérifié',
+        proofIds: attempt.proofClaims![0].proofIds,
+        verdict: 'supported',
+      },
+    }),
+  ).rejects.toThrow('revérifier');
 });

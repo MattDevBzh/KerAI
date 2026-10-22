@@ -1,3 +1,7 @@
+import { proofTools } from './ProofTools';
+import { imageAttachments, assertVision } from './Images';
+import type { ImageAttachment } from '../shared/images';
+import type { ModelInfo } from '@github/copilot-sdk';
 import { randomUUID } from 'node:crypto';
 import { accountCredits, type AccountCredits } from '../shared/credits';
 import { mkdir } from 'node:fs/promises';
@@ -217,6 +221,7 @@ export class CopilotCliAdapter implements AgentAdapter {
       controller: AbortController;
       changing: boolean;
       accepting: boolean;
+      model?: ModelInfo;
       sends: Set<Promise<string>>;
       secrets: Set<string>;
     }
@@ -418,6 +423,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             name: m.name,
             multiplier: m.billing?.multiplier,
             reasoningEfforts: m.supportedReasoningEfforts,
+            vision: m.capabilities?.supports.vision,
           })),
       };
     } catch (error) {
@@ -516,9 +522,12 @@ export class CopilotCliAdapter implements AgentAdapter {
     const native = usesNativeTools(input);
     const skills = nativeSkillCatalog(native ? input : { ...input, skills: [] });
     const skillTools = native && skills.byName.size ? ['skill'] : [];
+    const readOnlyTools = input.nativeReadOnly || input.agent.tools.includes('documentation');
+    const webTools = native && input.agent.tools.includes('web') ? ['web_fetch'] : [];
     const nativeTools = [
-      ...(input.nativeReadOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS),
+      ...(readOnlyTools ? NATIVE_READ_TOOLS : NATIVE_TOOLS),
       ...skillTools,
+      ...webTools,
     ];
     const earlyContextEvents: SessionEvent[] = [];
     let contextEventsReady = false;
@@ -572,7 +581,7 @@ export class CopilotCliAdapter implements AgentAdapter {
     try {
       const mcp = await withSignal(
         resolveMcpPlan(
-          input.mode === 'discussion' || input.nativeReadOnly ? [] : (input.mcpServers ?? []),
+          input.mode === 'discussion' || readOnlyTools ? [] : (input.mcpServers ?? []),
           this.options.resolveMcpSecret,
         ),
         controller.signal,
@@ -587,7 +596,7 @@ export class CopilotCliAdapter implements AgentAdapter {
           'Copilot CLI n’est pas connecté dans l’environnement Feature Studio. Lance le diagnostic de connexion.',
         );
       const tools = [
-        ...(input.mode === 'discussion' || input.nativeReadOnly
+        ...(input.mode === 'discussion' || readOnlyTools
           ? []
           : await withSignal(
               this.options.getTools(input, callbacks, controller.signal),
@@ -667,6 +676,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             return { resultType: 'success', textResultForLlm: JSON.stringify({ answer }) };
           },
         });
+      if (native) tools.push(...proofTools(callbacks, controller.signal));
       const allowed = new Set(tools.map((t) => t.name));
       if (
         (!native && input.mode !== 'discussion' && !tools.length) ||
@@ -695,13 +705,19 @@ export class CopilotCliAdapter implements AgentAdapter {
       ];
       const models = await withSignal(client.listModels(), controller.signal);
       const requestedModel =
-        (input.step.model ?? input.agent.model) || input.settings.defaultModel || undefined;
+        (input.step.model ?? input.agent.model) ||
+        input.settings.defaultModel ||
+        (input.images?.length
+          ? models.find((m) => m.policy?.state !== 'disabled' && m.capabilities?.supports.vision)
+              ?.id
+          : undefined);
       if (
         requestedModel &&
         !models.some((m) => m.id === requestedModel && m.policy?.state !== 'disabled')
       )
         throw new Error(`Le modèle ${requestedModel} n’est pas proposé par ce compte Copilot.`);
       const chosen = models.find((m) => m.id === requestedModel);
+      assertVision(chosen, input.images);
       if (
         input.step.reasoning &&
         (!chosen ||
@@ -720,7 +736,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         // Exact custom names work on older v3 runtimes too. No wildcards or builtin aliases.
         availableTools: native ? [...nativeTools, ...allAllowed] : allAllowed,
         excludedTools: native
-          ? ['task', 'web_fetch', 'web_search']
+          ? ['task', 'web_search', ...(webTools.length ? [] : ['web_fetch'])]
           : [
               'bash',
               'powershell',
@@ -928,6 +944,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             controller,
             changing: false,
             accepting: true,
+            model: chosen,
             sends: new Set(),
             secrets,
           });
@@ -980,9 +997,14 @@ export class CopilotCliAdapter implements AgentAdapter {
             throw new Error('Provenance d’un outil natif invalide.');
           verifyNativeCatalog(
             catalog.tools.map((tool) => tool.name),
-            [...allAllowed, ...skillTools],
-            input.nativeReadOnly,
+            [...allAllowed, ...skillTools, ...webTools],
+            readOnlyTools,
           );
+          for (const tool of webTools)
+            if (!catalog.tools.some((item) => item.name === tool))
+              throw Error(
+                `Outil web requis indisponible : ${tool}. Mets à jour Copilot CLI ou retire le droit web du profil.`,
+              );
           if (skillTools.length && !catalog.tools.some((tool) => tool.name === 'skill'))
             throw new Error(
               'Le runtime ne propose pas le chargement natif des compétences sélectionnées.',
@@ -1045,7 +1067,20 @@ export class CopilotCliAdapter implements AgentAdapter {
               at: event.timestamp,
               type: `sdk.${event.type}`,
               agentId: event.agentId,
-              data: redactMcp(JSON.stringify(event.data), secrets),
+              data: redactMcp(
+                JSON.stringify(event.data, (key, value) =>
+                  key === 'attachments'
+                    ? Array.isArray(value)
+                      ? value.map((item) => ({
+                          type: item.type,
+                          displayName: item.displayName,
+                          mimeType: item.mimeType,
+                        }))
+                      : undefined
+                    : value,
+                ),
+                secrets,
+              ),
             });
           } catch (error) {
             const failure = new Error(redactMcp(errorMessage(error), secrets));
@@ -1203,7 +1238,10 @@ export class CopilotCliAdapter implements AgentAdapter {
       if (controller.signal.aborted) throw cancelled(controller.signal);
       callbacks.onPromptSending?.();
       await withSignal(
-        session.send({ prompt: input.preparedPrompt ?? buildPrompt(input) }),
+        session.send({
+          prompt: input.preparedPrompt ?? buildPrompt(input),
+          ...(input.images?.length ? { attachments: imageAttachments(input.images) } : {}),
+        }),
         controller.signal,
       );
       callbacks.onPromptSent?.();
@@ -1251,13 +1289,22 @@ export class CopilotCliAdapter implements AgentAdapter {
     }
   }
 
-  async sendMessage(sessionId: string, content: string): Promise<string | undefined> {
+  async sendMessage(
+    sessionId: string,
+    content: string,
+    images?: ImageAttachment[],
+  ): Promise<string | undefined> {
     const active = this.nativeSessions.get(sessionId);
     if (!active || !active.accepting || active.controller.signal.aborted) return undefined;
     if (redactMcp(content, active.secrets) !== content)
       throw new Error('Un secret ne peut pas être transmis dans un message au modèle.');
+    assertVision(active.model, images);
     const sent = withSignal(
-      active.session.send({ prompt: content, mode: 'immediate' }),
+      active.session.send({
+        prompt: content,
+        mode: 'immediate',
+        ...(images?.length ? { attachments: imageAttachments(images) } : {}),
+      }),
       active.controller.signal,
     );
     active.sends.add(sent);

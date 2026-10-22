@@ -1,3 +1,4 @@
+import { imagesSchema } from './imageSchemas';
 import { z } from 'zod';
 import { discussionAgentSchema } from './discussionSchemas';
 import { mcpServerSchema } from './evolutionSchemas';
@@ -58,6 +59,7 @@ export const pairActionSchema = z
       'revise',
     ]),
     content: z.string().trim().min(1).max(30000).optional(),
+    images: imagesSchema.optional(),
     messageId: id.optional(),
     preferences: pairPreferencesSchema.optional(),
   })
@@ -92,6 +94,7 @@ export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
               name: z.string(),
               description: z.string(),
               content: z.string(),
+              images: imagesSchema.optional(),
               path: z.string(),
               source: z.enum(['bundled', 'user', 'workspace']),
             }),
@@ -127,6 +130,7 @@ export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
           id: z.string(),
           role: z.enum(['user', 'assistant', 'system']),
           content: z.string(),
+          images: imagesSchema.optional(),
           at: z.string(),
           status: z.enum(['complete', 'streaming', 'interrupted']),
           requestId: z.string().optional(),
@@ -141,6 +145,7 @@ export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
           blockId: id,
           title: z.string(),
           content: z.string(),
+          images: imagesSchema.optional(),
           at: z.string(),
         }),
       ),

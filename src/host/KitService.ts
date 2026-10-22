@@ -51,6 +51,13 @@ const PRESETS: KitMetadata[] = [
     description:
       'Du challenge au test vérifié. Six spécialistes, des preuves et un test hors production maîtrisé.',
   },
+  {
+    id: 'documentation',
+    name: 'Documentation technique',
+    version: '1.0.0',
+    description:
+      'Recherche code et web, plan validé, rédaction et relecture des sources. Exports Markdown, Word, PowerPoint et HTML.',
+  },
 ];
 const splitMarkdown = (content: string) => {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/.exec(content);
@@ -312,9 +319,18 @@ export class KitService {
     const data = await isolated.load();
     const roots = kitNodes(data)
       .filter((n) =>
-        kitId === 'devops'
-          ? n.id === 'devops' || n.id.startsWith('fs-devops-') || n.id.startsWith('devops-')
-          : !(n.id === 'devops' || n.id.startsWith('fs-devops-') || n.id.startsWith('devops-')),
+        kitId === 'documentation'
+          ? n.id === 'documentation' || n.id.startsWith('fs-doc-') || n.id.startsWith('doc-')
+          : kitId === 'devops'
+            ? n.id === 'devops' || n.id.startsWith('fs-devops-') || n.id.startsWith('devops-')
+            : !(
+                n.id === 'devops' ||
+                n.id.startsWith('fs-devops-') ||
+                n.id.startsWith('devops-') ||
+                n.id === 'documentation' ||
+                n.id.startsWith('fs-doc-') ||
+                n.id.startsWith('doc-')
+              ),
       )
       .map((n) => n.ref);
     const builder = new KitService(isolated);

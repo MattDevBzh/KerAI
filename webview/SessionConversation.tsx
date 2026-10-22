@@ -1,3 +1,4 @@
+import { ImagePicker, ImageGallery, useImageDraft } from './Images';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Bot, Check, FileText, Pause, Play, Users } from 'lucide-react';
 import Markdown from 'react-markdown';
@@ -42,6 +43,7 @@ export function SessionConversation({
   dispatch: (message: ClientMessage) => void;
   showArtifact: () => void;
 }) {
+  const imageDraft = useImageDraft();
   const pair = attempt.pair!;
   const historic = step.attempts.at(-1)?.id !== attempt.id;
   const locked =
@@ -74,6 +76,7 @@ export function SessionConversation({
         setError(message.error ?? '');
         if (!message.error && sent.current.draft === draftRef.current) {
           setDraft('');
+          imageDraft.setImages([]);
           savePairDraft(attempt.id, '');
         }
         sent.current = undefined;
@@ -88,9 +91,9 @@ export function SessionConversation({
     if (follow.current && feed.current) feed.current.scrollTop = feed.current.scrollHeight;
   }, [latestMessage?.content, pair.messages.length, attempt.nativeActivity?.length]);
   const act = (action: PairAction['action'], content?: string, messageId?: string) => {
-    if (locked || pending) return;
+    if (locked || pending || imageDraft.loading) return;
     const id = crypto.randomUUID();
-    sent.current = { id, draft: content };
+    sent.current = { id, draft: action === 'message' ? draft : content };
     setPending(id);
     setError('');
     dispatch({
@@ -101,6 +104,7 @@ export function SessionConversation({
       expectedVersion: pair.version,
       requestId: id,
       action,
+      ...(action === 'message' && imageDraft.images.length ? { images: imageDraft.images } : {}),
       ...(content?.trim() ? { content: content.trim() } : {}),
       ...(messageId ? { messageId } : {}),
       ...(action === 'preferences' ? { preferences } : {}),
@@ -167,6 +171,7 @@ export function SessionConversation({
             })}
           </time>
         </div>
+        <ImageGallery images={entry.message.images} />
         {entry.message.kind === 'reasoning' ? (
           <details className="conversation-reasoning">
             <summary>Réflexion transmise par Copilot</summary>
@@ -313,6 +318,7 @@ export function SessionConversation({
                           ? 'Point de contrôle · à toi de décider de la suite'
                           : 'Convenons de l’organisation'}
       </div>
+      <ImageGallery images={feature.images} />
       <NativeContextPanel loads={attempt.nativeContextLoads ?? []} />
       <div
         className="conversation-feed"
@@ -477,7 +483,8 @@ export function SessionConversation({
             className="conversation-composer"
             onSubmit={(event) => {
               event.preventDefault();
-              if (draft.trim()) act('message', draft);
+              if (draft.trim() || imageDraft.images.length)
+                act('message', draft.trim() || 'Analyse les images jointes.');
             }}
           >
             <label className="field">
@@ -486,6 +493,7 @@ export function SessionConversation({
                 rows={3}
                 maxLength={30000}
                 value={draft}
+                onPaste={imageDraft.onPaste}
                 disabled={Boolean(pending)}
                 placeholder="Une question sur son choix, une précision, une correction…"
                 onChange={(event) => {
@@ -493,20 +501,32 @@ export function SessionConversation({
                   savePairDraft(attempt.id, event.target.value);
                 }}
                 onKeyDown={(event) => {
-                  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && draft.trim()) {
+                  if (
+                    (event.ctrlKey || event.metaKey) &&
+                    event.key === 'Enter' &&
+                    (draft.trim() || imageDraft.images.length)
+                  ) {
                     event.preventDefault();
-                    act('message', draft);
+                    act('message', draft.trim() || 'Analyse les images jointes.');
                   }
                 }}
               />
             </label>
+            <ImagePicker draft={imageDraft} disabled={Boolean(pending)} />
             <div className="conversation-composer-actions">
               <small>
                 {pair.busy
                   ? 'Le message est conservé et transmis pendant le travail si Copilot l’accepte ; son état reste visible.'
                   : 'Une question conserve le livrable. Les corrections restent à relire avant validation.'}
               </small>
-              <button className="button primary" disabled={Boolean(pending) || !draft.trim()}>
+              <button
+                className="button primary"
+                disabled={
+                  Boolean(pending) ||
+                  imageDraft.loading ||
+                  (!draft.trim() && !imageDraft.images.length)
+                }
+              >
                 <ArrowUp size={15} /> Envoyer
               </button>
             </div>

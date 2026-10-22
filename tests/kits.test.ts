@@ -60,10 +60,10 @@ describe('portable kit dependency and file contracts', () => {
     expect(restored.steps[1].optional).toBeUndefined();
   });
 
-  it('offers two independent presets including original Copilot profiles and DevOps resources', async () => {
+  it('offers three independent presets including original Copilot profiles and DevOps resources', async () => {
     const f = await fixture();
     const catalog = await f.kits.catalog();
-    expect(catalog.map((k) => k.metadata.id)).toEqual(['copilot', 'devops']);
+    expect(catalog.map((k) => k.metadata.id)).toEqual(['copilot', 'devops', 'documentation']);
     expect(catalog[0].nodes.filter((n) => n.kind === 'agent')).toHaveLength(14);
     expect(catalog[1].nodes.filter((n) => n.kind === 'agent')).toHaveLength(6);
     expect(catalog[1].nodes.filter((n) => n.kind === 'skill')).toHaveLength(8);
@@ -184,7 +184,7 @@ describe('portable kit dependency and file contracts', () => {
     await f.kits.remember(second);
     await writeFile(join(f.registry.userPath, 'feature-studio/kits/broken.fskit.json'), '{}');
     const catalog = await f.kits.catalog();
-    expect(catalog.filter((k) => k.source === 'bundled')).toHaveLength(2);
+    expect(catalog.filter((k) => k.source === 'bundled')).toHaveLength(3);
     const revisions = catalog.filter((k) => k.metadata.id === metadata.id);
     expect(revisions).toHaveLength(2);
     expect(new Set(revisions.map((k) => k.storageId)).size).toBe(2);
@@ -197,7 +197,7 @@ describe('portable kit dependency and file contracts', () => {
     const preview = await f.kits.preview(await f.kits.preset('devops'));
     await f.kits.install(preview.token);
     const catalog = await f.kits.catalog();
-    expect(catalog).toHaveLength(2);
+    expect(catalog).toHaveLength(3);
     expect(catalog.find((k) => k.metadata.id === 'devops')?.installed).toBe(true);
   });
   it('exports the installed shared template revision instead of reverting to the bundled version', async () => {

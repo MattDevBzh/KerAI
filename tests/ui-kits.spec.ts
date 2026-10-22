@@ -112,7 +112,7 @@ async function hosted(page: Page) {
   });
   await page.goto('/');
   await navigate(page, 'Kits');
-  await expect(page.locator('.kit-card')).toHaveCount(2);
+  await expect(page.locator('.kit-card')).toHaveCount(3);
   return { root, kits, registry, exported, imported };
 }
 
@@ -207,4 +207,18 @@ test('kits : conflit préservé, import invalide et mise en page mobile', async 
   expect(await readFile(join(f.registry.userPath, 'agents/fs-devops-plan.agent.md'), 'utf8')).toBe(
     'Personal content',
   );
+});
+
+test('documentation : quatre rôles et ressources installables sans écraser le catalogue', async ({
+  page,
+}) => {
+  await hosted(page);
+  const card = page
+    .locator('.kit-card')
+    .filter({ has: page.getByRole('heading', { name: 'Documentation technique', exact: true }) });
+  await expect(card).toContainText('4 agents');
+  await card.getByRole('button', { name: 'Voir le kit' }).click();
+  await expect(page.getByText('Recherche code et web', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Installer ce kit', exact: true })).toBeEnabled();
+  await page.screenshot({ path: 'docs/screenshots/kit-documentation.png', fullPage: true });
 });

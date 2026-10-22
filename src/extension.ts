@@ -1,3 +1,6 @@
+import { proofDossierMarkdown } from './shared/proofs';
+import { exportDocument } from './host/DocumentExport';
+import { documentFormatLabels } from './shared/documentation';
 import { allFeatures, configurationSteps } from './shared/subplans';
 import { inheritTeamProfiles } from './shared/agentInheritance';
 import { resolvePersonalReviewReport } from './host/PersonalReviewTools';
@@ -914,6 +917,42 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (
+      message.type === 'saveProofClaim' ||
+      message.type === 'checkProofDossier' ||
+      message.type === 'exportProofDossier'
+    ) {
+      try {
+        const current = await ensure(message.featureId);
+        if (message.type === 'saveProofClaim') await current.saveProofClaim(message);
+        else if (message.type === 'checkProofDossier')
+          await current.checkProofDossier(message.featureId);
+        else {
+          const content = proofDossierMarkdown(current.engine.getFeature(message.featureId));
+          const destination = await vscode.window.showSaveDialog({
+            title: 'Exporter le dossier de preuves',
+            defaultUri: vscode.Uri.file(path.join(homedir(), 'dossier-preuves.md')),
+            filters: { Markdown: ['md'] },
+          });
+          if (destination) await vscode.workspace.fs.writeFile(destination, Buffer.from(content));
+        }
+        send({
+          type: 'proofDossierResult',
+          requestId: message.requestId,
+          notice:
+            message.type === 'checkProofDossier'
+              ? 'Empreintes des tests contrôlées. Aucun test relancé, aucune page web revisitée.'
+              : undefined,
+        });
+      } catch (error) {
+        send({
+          type: 'proofDossierResult',
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
     if (message.type === 'exportAgentReport') {
       try {
         const current = await ensure(message.featureId);
@@ -923,14 +962,21 @@ export async function activate(context: vscode.ExtensionContext) {
           message.attemptId,
           message.revision,
         );
+        const format = message.format ?? 'md';
+        const bytes = await exportDocument(
+          report.content,
+          format,
+          current.engine.getFeature(message.featureId).title,
+        );
         const destination = await vscode.window.showSaveDialog({
           title: 'Télécharger le compte rendu de l’agent',
-          saveLabel: 'Enregistrer le Markdown',
-          defaultUri: vscode.Uri.file(path.join(homedir(), report.filename)),
-          filters: { Markdown: ['md'] },
+          saveLabel: `Enregistrer · ${documentFormatLabels[format]}`,
+          defaultUri: vscode.Uri.file(
+            path.join(homedir(), report.filename.replace(/\.md$/, `.${format}`)),
+          ),
+          filters: { [documentFormatLabels[format]]: [format] },
         });
-        if (destination)
-          await vscode.workspace.fs.writeFile(destination, Buffer.from(report.content, 'utf8'));
+        if (destination) await vscode.workspace.fs.writeFile(destination, bytes);
         send({
           type: 'agentReportExported',
           requestId: message.requestId,

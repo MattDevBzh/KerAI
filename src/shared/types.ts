@@ -115,6 +115,7 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  proofClaims?: import('./proofs').ProofClaim[];
   nativeActivity?: import('./native').NativeActivity[];
   nativeContextLoads?: import('./native').NativeContextLoad[];
   pair?: import('./pair').PairState;
@@ -171,6 +172,8 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  proofChecks?: Record<string, import('./proofs').ProofCheck>;
+  images?: import('./images').ImageAttachment[];
   parent?: { featureId: string; stepId: string; iterationId: string };
   pendingTeam?: { expectedRevision: number; steps: WorkflowStep[] };
   teamHistory?: { revision: number; at: string; steps: WorkflowStep[] }[];
@@ -271,6 +274,7 @@ export interface StudioSettings {
   >;
 }
 export interface ModelInfo {
+  vision?: boolean;
   id: string;
   name: string;
   multiplier?: number;
@@ -357,6 +361,7 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      images?: import('./images').ImageAttachment[];
       permissionMode?: import('./native').NativePermissionMode;
       requestId?: string;
       discussionId?: string;
@@ -462,7 +467,19 @@ export type ClientMessage =
     }
   | { type: 'exportFeature'; featureId: string }
   | {
+      type: 'saveProofClaim';
+      featureId: string;
+      stepId: string;
+      attemptId: string;
+      requestId: string;
+      revision: number;
+      claimId?: string;
+      claim: Pick<import('./proofs').ProofClaim, 'text' | 'proofIds' | 'verdict'>;
+    }
+  | { type: 'checkProofDossier' | 'exportProofDossier'; featureId: string; requestId: string }
+  | {
       type: 'exportAgentReport';
+      format?: import('./documentation').DocumentFormat;
       requestId: string;
       featureId: string;
       stepId: string;
@@ -572,6 +589,7 @@ export type HostMessage =
   | { type: 'state'; state: StudioState }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
+  | { type: 'proofDossierResult'; requestId: string; error?: string; notice?: string }
   | { type: 'agentReportExported'; requestId: string; cancelled?: boolean; error?: string }
   | ({ type: 'sessionBatchResult' } & import('./sessionList').SessionBatchResult)
   | { type: 'sessionBatchProgress'; requestId: string; completed: number; total: number }
@@ -598,6 +616,7 @@ export type HostMessage =
       stepId?: string;
     };
 export interface RunInput {
+  images?: import('./images').ImageAttachment[];
   nativeReadOnly?: boolean;
   previousEventIds?: string[];
   observation?: boolean;
@@ -633,6 +652,10 @@ export interface RunResult {
   review?: ReviewReport;
 }
 export interface RunCallbacks {
+  getProofs?(): import('./proofs').ProofEntry[];
+  onProofClaim?(
+    claim: Pick<import('./proofs').ProofClaim, 'id' | 'text' | 'proofIds' | 'verdict'>,
+  ): Promise<import('./proofs').ProofClaim>;
   onPromptSending?(): void;
   onPromptSent?(): void;
   onNativeMessage?(message: {
@@ -668,7 +691,11 @@ export interface RunCallbacks {
   }): Promise<boolean>;
 }
 export interface AgentAdapter {
-  sendMessage?(sessionId: string, content: string): Promise<string | undefined>;
+  sendMessage?(
+    sessionId: string,
+    content: string,
+    images?: import('./images').ImageAttachment[],
+  ): Promise<string | undefined>;
   setPermissionMode?(
     sessionId: string,
     mode: import('./native').NativePermissionMode,

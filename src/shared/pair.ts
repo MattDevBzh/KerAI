@@ -27,6 +27,7 @@ export interface PairPlan {
   acceptedAt?: string;
 }
 export interface PairMessage {
+  images?: import('./images').ImageAttachment[];
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -103,6 +104,7 @@ export type PairAction = {
     | 'revise';
   messageId?: string;
   content?: string;
+  images?: import('./images').ImageAttachment[];
   preferences?: PairPreferences;
 };
 export const pairPlan = (pair: PairState) => pair.plans.at(-1);

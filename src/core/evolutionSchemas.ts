@@ -46,7 +46,7 @@ export const launchSchema = z
           .string()
           .max(160)
           .regex(
-            /^(?:feature|agent|initial-context|feedback|answers|previous|pair-history|criteria|review-comments|(?:skill|memory|artifact):[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/,
+            /^(?:feature|images|agent|initial-context|feedback|answers|previous|pair-history|criteria|review-comments|(?:skill|memory|artifact):[a-zA-Z0-9][a-zA-Z0-9_.-]*)$/,
           ),
         z
           .object({ enabled: z.boolean().optional(), content: z.string().max(60000).optional() })

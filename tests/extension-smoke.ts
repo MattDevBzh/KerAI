@@ -8,6 +8,7 @@ import { THEME_IDS, type ThemeId } from '../src/shared/themes';
 import { themeReward, type RewardState } from '../src/shared/rewards';
 import { DRAGON_BALL_CODE } from '../src/shared/dragonBall';
 import { resolveAvatar } from '../src/shared/avatars';
+import { screenshot } from './image-fixture';
 import { featureStateKey } from '../src/shared/collaboration';
 import { teamSteps } from '../src/shared/team';
 import { newSubplanStep, subplanIssues } from '../src/shared/subplans';
@@ -209,6 +210,8 @@ async function smokeRun(): Promise<void> {
   if (!process.env.FEATURE_STUDIO_TEST_CLI_PATH) assert.ok(api.getState()?.runtime.error);
   assert.ok(api.getState()?.workflows.some((workflow) => workflow.id === 'quality-feature'));
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-visual-tests'));
+  assert.equal(api.getState()?.workflows.find((w) => w.id === 'documentation')?.steps.length, 4);
+  assert.equal(api.getState()?.agents.filter((a) => a.id.startsWith('fs-doc-')).length, 4);
   assert.equal(
     api.getState()?.workflows.find((workflow) => workflow.id === 'devops')?.steps.length,
     6,
@@ -277,9 +280,14 @@ async function smokeRun(): Promise<void> {
   await api.dispatch({
     type: 'createFeature',
     title: 'Smoke extension host',
+    images: [screenshot],
     description: 'No Copilot prompt is sent.',
     workflowId: 'feature',
   });
+  assert.deepEqual(
+    api.getState()?.features.find((f) => f.title === 'Smoke extension host')?.images,
+    [screenshot],
+  );
   const beforeThemeChange = api.getState();
   await api.dispatch({ type: 'refreshQuests' });
   assert.equal(api.getQuestState().error, undefined);

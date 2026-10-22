@@ -166,6 +166,7 @@ async function open(page: Page, state: StudioState) {
                     requestId: message.requestId,
                     role: 'user',
                     content: message.content!,
+                    images: message.images,
                     at: new Date().toISOString(),
                     status: 'complete',
                     delivery: pair.busy ? 'pending' : 'received',
@@ -546,4 +547,122 @@ test('minimizing closes the whole pending queue, keeps independent drafts and fi
   });
   await expect(dialog).toHaveCount(0);
   expect((await sent(page)).filter((m) => m.type === 'answerHumanRequest')).toHaveLength(0);
+});
+
+test('images : fichier et collage, aperçu, retrait et transmission dans la conversation', async ({
+  page,
+}) => {
+  const state = scenario();
+  await open(page, state);
+  const image = await page.screenshot();
+  const file = page
+    .getByRole('region', { name: 'Conversation de l’étape' })
+    .getByLabel('Ajouter des images');
+  await file.setInputFiles({ name: 'bug.png', mimeType: 'image/png', buffer: image });
+  await expect(page.getByRole('img', { name: 'bug.png', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Retirer bug.png' }).click();
+  await expect(page.getByRole('img', { name: 'bug.png', exact: true })).toHaveCount(0);
+  await page.getByLabel('Ton message à l’agent').evaluate((el, base64) => {
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const data = new DataTransfer();
+    data.items.add(new File([bytes], 'capture-collee.png', { type: 'image/png' }));
+    el.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+    );
+  }, image.toString('base64'));
+  await expect(page.getByRole('img', { name: 'capture-collee.png', exact: true })).toBeVisible();
+  await page.getByLabel('Ton message à l’agent').fill('Le problème est dans cette zone.');
+  await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
+  await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('');
+  await expect(page.getByRole('img', { name: 'capture-collee.png', exact: true })).toBeVisible();
+  const sent = await page.evaluate(() => Reflect.get(window, 'conversationSent'));
+  const message = [...sent]
+    .reverse()
+    .find((m: ClientMessage) => m.type === 'pairAction' && m.action === 'message');
+  expect(message.images[0].mimeType).toBe('image/png');
+  expect(message.images[0].data.length).toBeGreaterThan(100);
+  await page.screenshot({ path: 'docs/screenshots/images-conversation.png', fullPage: true });
+});
+
+test('dossier : conclusions reliées, sources datées, export et affichage compact', async ({
+  page,
+}) => {
+  const state = scenario(),
+    feature = state.features[0],
+    attempt = feature.steps[0].attempts[0];
+  attempt.nativeActivity = [
+    {
+      id: 'source-code',
+      source: 'copilot',
+      sessionId: 'native-session',
+      tool: 'view',
+      startedAt: '2026-10-23T00:00:00Z',
+      finishedAt: '2026-10-23T00:00:01Z',
+      directory: '/repo',
+      arguments: '{"path":"src/filters.ts"}',
+      status: 'completed',
+      output: 'Le filtre conserve les contrôles natifs et leur navigation au clavier.',
+    },
+  ];
+  attempt.proofClaims = [
+    {
+      id: 'afc26fe5-d797-4290-a1fa-88ad4f4d049b',
+      text: 'Les contrôles natifs sont conservés.',
+      proofIds: ['runtime:source-code'],
+      verdict: 'supported',
+      author: 'agent',
+      at: '2026-10-23T00:00:02Z',
+      reportRevision: 2,
+    },
+  ];
+  await open(page, state);
+  await page.getByRole('tab', { name: /Preuves/ }).click();
+  const dossier = page.getByRole('region', { name: 'Dossier de preuves' });
+  await expect(dossier).toBeVisible();
+  await expect(dossier).toContainText('Appréciation de l’agent');
+  await dossier.locator('.proof-links').getByRole('button').click();
+  await expect(dossier.locator('pre').filter({ hasText: 'Le filtre conserve' })).toBeVisible();
+  await dossier.getByRole('button', { name: 'Réviser cette conclusion' }).click();
+  await expect(dossier.getByLabel('Conclusion', { exact: true })).toHaveValue(
+    'Les contrôles natifs sont conservés.',
+  );
+  await dossier.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await page.screenshot({ path: 'docs/screenshots/dossier-preuves.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dossier).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'docs/screenshots/dossier-preuves-390.png', fullPage: true });
+  await dossier.getByRole('button', { name: 'Exporter le dossier' }).click();
+  expect((await page.evaluate(() => Reflect.get(window, 'conversationSent'))).at(-1).type).toBe(
+    'exportProofDossier',
+  );
+});
+
+test('exports : chaque format conserve la tentative et la révision affichées', async ({ page }) => {
+  const state = scenario();
+  await open(page, state);
+  await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
+  for (const format of ['md', 'docx', 'pptx', 'html']) {
+    await page.getByLabel('Format du document').selectOption(format);
+    await page.getByRole('button', { name: `Télécharger .${format}`, exact: true }).click();
+    const message = (await sent(page)).at(-1)!;
+    expect(message).toMatchObject({
+      type: 'exportAgentReport',
+      format,
+      attemptId: 'conversation-attempt',
+      revision: 2,
+    });
+    await page.evaluate(
+      (message) =>
+        window.postMessage(
+          {
+            type: 'agentReportExported',
+            requestId: 'requestId' in message ? message.requestId : '',
+            cancelled: true,
+          },
+          '*',
+        ),
+      message,
+    );
+  }
 });

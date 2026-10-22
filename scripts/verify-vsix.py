@@ -44,6 +44,14 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'native-activity' in ui, 'Native evidence missing from webview'
         assert b'nativeConversation' in host, 'Shared native conversation missing from host'
         assert b'nativeContextLoads' in host, 'Native context receipts missing from host'
+        for marker in ('saveProofClaim', 'exportProofDossier', 'exportAgentReport'):
+            assert marker.encode() in host and marker.encode() in ui, f'{marker} missing'
+        assert b'proof-dossier' in ui and b'image-picker' in ui
+        for path in (root / 'defaults/documentation').rglob('*'):
+            if path.is_file():
+                assert archive.read('extension/' + path.relative_to(root).as_posix()) == path.read_bytes()
+        for guide in ('IMAGES-DOCUMENTATION.md', 'DOSSIER-PREUVES.md'):
+            assert archive.read('extension/docs/' + guide) == (root / 'docs' / guide).read_bytes()
         assert b'native-context-panel' in ui, 'Loaded context panel missing from webview'
         assert b'session-conversation' in ui, 'Step conversation missing from webview'
         assert b'hq-paper-plane' in ui, 'Context transfer missing from webview'

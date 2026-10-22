@@ -1,3 +1,4 @@
+import { validateImages } from './Images';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
@@ -156,6 +157,7 @@ export class DiscussionService extends EventEmitter {
         throw new Error('Une réponse est déjà en cours dans cette discussion.');
       if (!input.content.trim() || input.content.length > 40000)
         throw new Error('Écrivez un message de 1 à 40 000 caractères.');
+      const images = validateImages(input.images);
       let discussion = this.state.discussions.find((d) => d.id === input.discussionId);
       if (!discussion?.source) await this.refreshProfiles();
       const selected: DiscussionProfile | undefined = discussion?.source
@@ -199,12 +201,23 @@ export class DiscussionService extends EventEmitter {
         requestId: input.requestId,
         role: 'user',
         content: input.content.trim(),
+        images,
         createdAt: now,
         status: 'complete',
       };
+      const conversationImages = [...discussion.messages, human].flatMap((m) => m.images ?? []);
+      if (conversationImages.length > 4)
+        throw Error(
+          'Cette discussion contient déjà trop d’images. Ouvre une nouvelle discussion pour joindre d’autres captures (4 maximum).',
+        );
+      validateImages(conversationImages);
       const history = [...discussion.messages, human]
         .filter((message) => message.role === 'user' || message.status === 'complete')
-        .map(({ role, content }) => ({ role, content }));
+        .map(({ role, content, images }) => ({
+          role,
+          content,
+          images: images?.map((i) => i.name),
+        }));
       const prompt = [
         ...(discussion.source
           ? [sourcePrompt(discussion.source)]
@@ -372,6 +385,7 @@ export class DiscussionService extends EventEmitter {
       };
       const input: RunInput = {
         mode: 'discussion',
+        images: validateImages(discussion.messages.flatMap((m) => m.images ?? [])),
         feature,
         step: feature.steps[0],
         attempt,

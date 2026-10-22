@@ -1,0 +1,77 @@
+{
+  "id": "documentation",
+  "name": "Documentation technique",
+  "description": "Du code et des sources au document relu. Quatre rôles, validation humaine à chaque étape, quatre formats exportables.",
+  "icon": "book-open",
+  "steps": [
+    {
+      "id": "research",
+      "name": "Recherche code et web",
+      "description": "Explore le code lié au besoin et ses tests sans le modifier. Recherche sur le web les documentations officielles correspondant aux versions réellement utilisées. Lis les pages avant de les citer. Le code prouve le comportement de l’application ; une documentation externe prouve seulement le contrat externe. Ne présente jamais un test non exécuté comme réussi. Ne transmets ni code privé ni secrets aux moteurs de recherche : requêtes publiques génériques seulement.\nProduis un dossier de recherche : périmètre et public envisagés, inventaire des composants et parcours, faits numérotés, sources code avec projet/chemin/lignes et révision si disponible, sources web avec titre/URL/date de consultation/version, extraits brefs pertinents, divergences et questions. Chaque affirmation importante doit renvoyer à une source réellement consultée. Signale toute recherche inaccessible ou partielle. Aucun terminal, modification, publication, sous-agent ou installation. Le dossier doit être validé humainement avant le plan.",
+      "agentId": "fs-doc-research",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "doc-research"
+      ],
+      "maxAttempts": 0,
+      "artifact": "recherche.md",
+      "dependsOn": [],
+      "askBeforeRun": true
+    },
+    {
+      "id": "plan",
+      "name": "Architecture du document",
+      "description": "À partir du besoin et du dossier de recherche validé, propose le plan de documentation pour le public visé. Si le besoin omet public, profondeur, format ou périmètre, pose une question courte via ask_user avec un défaut suggéré. Formats disponibles : Markdown, Word, PowerPoint, HTML, plusieurs possibles. Explique le parcours de lecture, les sections, exemples et sources attendus, les prérequis, limites et critères de qualité. Pour PowerPoint, prévois des titres porteurs de sens, une idée par section, des puces courtes et une annexe de sources. Pour Word/HTML, privilégie un guide structuré, la navigation et les exemples.\nProduis uniquement le plan et les choix éditoriaux. Ne rédige pas le document final avant la validation humaine de ce plan. Aucun accès web, commande ou écriture. Les exports sont réalisés par l’application sans installation de logiciel.",
+      "agentId": "fs-doc-plan",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "doc-plan"
+      ],
+      "maxAttempts": 0,
+      "artifact": "plan-documentation.md",
+      "dependsOn": [
+        "research"
+      ],
+      "askBeforeRun": true
+    },
+    {
+      "id": "write",
+      "name": "Rédaction technique",
+      "description": "Rédige la documentation complète selon le plan approuvé et le dossier sourcé. Tu peux recouper les fichiers de code en lecture seule. N’invente ni API ni comportement ni résultat de test. Chaque affirmation vérifiable importante porte sa référence. Distingue clairement exemples, faits, recommandations, inconnues et limites. Inclus public/prérequis, parcours, contrats pertinents, exemples, exploitation/dépannage si demandé, et les sources de code/web effectivement fournies ou consultées.\nRends un document Markdown complet dans la réponse, sans l’enfermer dans un bloc de code et sans commentaire hors du document. Utilise titres, paragraphes, listes, tableaux simples, liens et blocs de code. Aucun HTML actif, image externe embarquée, script ou fichier généré par une commande. Les exports Word, PowerPoint et HTML sont produits par KerAI depuis ce texte. Pour une présentation, une section par idée avec contenu concis ; mets le détail en annexe. Le brouillon reste à relire et à valider humainement.",
+      "agentId": "fs-doc-write",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "doc-write"
+      ],
+      "maxAttempts": 0,
+      "artifact": "brouillon-documentation.md",
+      "dependsOn": [
+        "research",
+        "plan"
+      ],
+      "askBeforeRun": true
+    },
+    {
+      "id": "review",
+      "name": "Relecture technique et sources",
+      "description": "Vérifie indépendamment le document à partir du code et des pages officielles référencées. Relis les sources importantes, teste la cohérence des liens et versions via les outils de lecture/web disponibles, relève les affirmations sans preuve, les contradictions, exemples inexacts et omissions. Ne lance aucun test ou commande. Ne confonds pas source accessible et affirmation confirmée. Ne prétends pas contrôler visuellement un PowerPoint ou Word que tu n’as pas vu.\nRends la version finale complète en Markdown, corrigée uniquement là où les preuves le justifient, suivie d’une annexe « Vérification technique » : tableau affirmation/référence/contrôle effectué/verdict, changements par rapport au brouillon, points non vérifiés et limites. Si une erreur bloquante ne peut être résolue, indique clairement DOCUMENT À CORRIGER et ses motifs, sans verdict de réussite. Conserve les citations, chemins de code et URLs. Le document final exige une validation humaine avant d’être considéré accepté. Les exports restent téléchargeables pour relecture même avant acceptation.",
+      "agentId": "fs-doc-review",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "doc-review"
+      ],
+      "maxAttempts": 0,
+      "artifact": "documentation.md",
+      "dependsOn": [
+        "research",
+        "plan",
+        "write"
+      ],
+      "askBeforeRun": true
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { imagesSchema } from './imageSchemas';
 import { z } from 'zod';
 import { ROAST_LEVELS } from '../shared/roast';
 
@@ -87,6 +88,7 @@ export const discussionMessageVariants = [
   z
     .object({
       type: z.literal('sendDiscussion'),
+      images: imagesSchema.optional(),
       requestId: id,
       discussionId: id,
       agentKey: z.string().min(1).max(400),
@@ -119,6 +121,7 @@ export const discussionStoreSchema = z
                 requestId: id.optional(),
                 role: z.enum(['user', 'assistant']),
                 content: z.string(),
+                images: imagesSchema.optional(),
                 createdAt: z.string().datetime(),
                 status: z.enum(['complete', 'streaming', 'interrupted', 'error']),
                 agent: z

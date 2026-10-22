@@ -1,3 +1,8 @@
+import {
+  DOCUMENT_FORMATS,
+  documentFormatLabels,
+  type DocumentFormat,
+} from '../src/shared/documentation';
 import { useEffect, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import type { Attempt, ClientMessage } from '../src/shared/types';
@@ -16,6 +21,7 @@ export function AgentReportDownload({
   unsaved: boolean;
   dispatch: (message: ClientMessage) => void;
 }) {
+  const [format, setFormat] = useState<DocumentFormat>('md');
   const [pending, setPending] = useState<string>();
   const pendingRequest = useRef<string | undefined>(undefined);
   const [error, setError] = useState('');
@@ -39,10 +45,25 @@ export function AgentReportDownload({
         : '';
   return (
     <>
+      <select
+        aria-label="Format du document"
+        value={format}
+        disabled={Boolean(pending) || Boolean(unavailable)}
+        onChange={(event) => setFormat(event.target.value as DocumentFormat)}
+      >
+        {DOCUMENT_FORMATS.map((value) => (
+          <option value={value} key={value}>
+            {documentFormatLabels[value]}
+          </option>
+        ))}
+      </select>
       <button
         className="text-button"
         disabled={Boolean(pending) || Boolean(unavailable)}
-        title={unavailable || 'Enregistrer le compte rendu affiché au format Markdown'}
+        title={
+          unavailable ||
+          `Enregistrer le compte rendu affiché au format ${documentFormatLabels[format]}`
+        }
         onClick={() => {
           if (pendingRequest.current) return;
           const requestId = crypto.randomUUID();
@@ -51,6 +72,7 @@ export function AgentReportDownload({
           setPending(requestId);
           dispatch({
             type: 'exportAgentReport',
+            format,
             requestId,
             featureId,
             stepId,
@@ -59,7 +81,7 @@ export function AgentReportDownload({
           });
         }}
       >
-        <Download size={14} /> {pending ? 'Enregistrement…' : 'Télécharger .md'}
+        <Download size={14} /> {pending ? 'Enregistrement…' : `Télécharger .${format}`}
       </button>
       {error && <span role="alert">{error}</span>}
     </>

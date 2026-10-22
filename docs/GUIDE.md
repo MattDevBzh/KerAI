@@ -1,5 +1,7 @@
 # Guide d’utilisation de Feature Studio
 
+[Captures et Documentation technique](IMAGES-DOCUMENTATION.md) · [Dossier de preuves](DOSSIER-PREUVES.md)
+
 [Retour au README](../README.md) · [Kits](KITS.md) · [Kit DevOps](DEVOPS-KIT.md)
 
 ## Sous-plans et sous-équipes

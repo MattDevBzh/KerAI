@@ -27,6 +27,7 @@ export interface DiscussionAgent {
   profile: AgentProfile;
 }
 export interface DiscussionMessage {
+  images?: import('./images').ImageAttachment[];
   id: string;
   requestId?: string;
   role: 'user' | 'assistant';
@@ -95,6 +96,7 @@ export type DiscussionClientMessage =
   | { type: 'returnToDiscussionReport'; discussionId: string; edit: boolean }
   | {
       type: 'sendDiscussion';
+      images?: import('./images').ImageAttachment[];
       requestId: string;
       discussionId: string;
       agentKey: string;

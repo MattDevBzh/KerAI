@@ -1,3 +1,4 @@
+import { proofDossier } from '../shared/proofs';
 import { stepResolved } from '../shared/optionalSteps';
 import { isPairWork } from '../shared/pair';
 import { subplanComplete } from '../shared/subplans';
@@ -94,6 +95,19 @@ export function approvalBlockers(
   const blockers: string[] = [],
     attempt = step.attempts.at(-1);
   if (!attempt) return ['Aucune tentative à valider.'];
+  if (
+    proofDossier(feature).claims.some(
+      (c) => c.attemptId === attempt.id && !c.stale && c.verdict === 'contradicted',
+    )
+  )
+    blockers.push(
+      'Une conclusion du dossier de preuves est contredite. Corrige-la ou révise son appréciation avec ses justificatifs.',
+    );
+  if (
+    actor !== 'human' &&
+    (feature.workflowId === 'documentation' || step.agentId.startsWith('fs-doc-'))
+  )
+    blockers.push('La documentation nécessite une validation humaine à chaque étape.');
   if (feature.parent && actor !== 'human')
     blockers.push('Chaque étape de la sous-équipe nécessite une validation humaine.');
   if (step.subplan && (!subplanComplete(step) || actor !== 'human'))

@@ -1,3 +1,7 @@
+import { proofDossier } from '../shared/proofs';
+import { proofProposalSchema } from '../core/proofSchemas';
+import type { ProofClaim } from '../shared/proofs';
+import { ImageInputError, validateImages } from './Images';
 import {
   allFeatures,
   featurePath as treePath,
@@ -74,7 +78,7 @@ import { boundAnswers } from '../core/questions';
 import { gitInfo, ToolHost } from './ToolHost';
 import { PersonalReviewTools } from './PersonalReviewTools';
 import { runProcess, redact } from './process';
-import { emptyLaunch, previewContext, selectMemory } from '../core/context';
+import { emptyLaunch, previewContext, selectMemory, promptSections } from '../core/context';
 import { defaultBudget, budgetBlockReason } from '../core/budgets';
 import { nextAutopilotAction } from '../core/autopilot';
 import { currentTestEvidence, approvalBlockers } from '../core/validation';
@@ -382,6 +386,7 @@ export class StudioService extends EventEmitter {
     this.publish();
   }
   async createFeature(input: {
+    images?: import('../shared/images').ImageAttachment[];
     permissionMode?: NativePermissionMode;
     requestId?: string;
     ticketSource?: import('../shared/devopsTickets').TicketSourceSnapshot;
@@ -471,6 +476,7 @@ export class StudioService extends EventEmitter {
         mode: 'copilot-native',
         permissionMode: nativePermissionModeSchema.parse(input.permissionMode ?? 'manual'),
       };
+      feature.images = validateImages(input.images);
       feature.discussionId = input.discussionId;
       feature.creationRequestId = input.requestId;
       feature.ticketSource = input.ticketSource ? structuredClone(input.ticketSource) : undefined;
@@ -1323,6 +1329,9 @@ export class StudioService extends EventEmitter {
       attempt.revision = 0;
     }
     input.attempt = structuredClone(attempt);
+    input.images = promptSections(input).some((s) => s.id === 'images' && s.enabled)
+      ? validateImages(input.feature.images)
+      : [];
     input.preparedPrompt = preview?.prompt;
     if ((input.launch?.pair || usesNativeTools(input)) && !continued) {
       attempt.pair = createPair(input);
@@ -1419,7 +1428,26 @@ export class StudioService extends EventEmitter {
         };
       }
     };
+    const newProofClaims = new Set<string>();
     const callbacks: RunCallbacks = {
+      getProofs: () => proofDossier(feature).sources,
+      onProofClaim: async (proposal) => {
+        if (controller.signal.aborted || step.attempts.at(-1)?.id !== attempt.id)
+          throw Error('Tentative terminée.');
+        if ((attempt.proofClaims?.length ?? 0) >= 300)
+          throw Error('Limite de conclusions atteinte.');
+        const { id, ...value } = proposal;
+        const claim = this.checkedProofClaim(feature, value, id, 'agent', attempt.revision ?? 0);
+        (attempt.proofClaims ??= []).push(claim);
+        newProofClaims.add(id);
+        try {
+          await this.persist();
+        } catch (error) {
+          attempt.proofClaims = attempt.proofClaims.filter((c) => c.id !== id);
+          throw error;
+        }
+        return claim;
+      },
       onPromptSending: () => {
         if (pair?.nativeConversation)
           for (const message of pair.messages)
@@ -1625,6 +1653,20 @@ export class StudioService extends EventEmitter {
       if (pair && turn) {
         if (step.subplan && isWorkTurn(turn))
           throw new Error('L’orchestrateur ne peut pas exécuter le travail des sous-équipes.');
+        input.images = validateImages([
+          ...(pair.contextDelivered
+            ? []
+            : promptSections(input).some((s) => s.id === 'images' && s.enabled)
+              ? (input.feature.images ?? [])
+              : []),
+          ...pair.messages
+            .filter(
+              (m) =>
+                pair.pendingMessages.includes(m.id) &&
+                !['sent', 'received', 'skipped'].includes(m.delivery ?? ''),
+            )
+            .flatMap((m) => m.images ?? []),
+        ]);
         input.preparedPrompt = pairTurnPrompt(pair, turn);
         if (step.subplan) input.preparedPrompt += `\n\n${subplanContract(step)}`;
         if (continued && attempt.questions.length)
@@ -1755,6 +1797,8 @@ export class StudioService extends EventEmitter {
           this.engine.refreshFeatureStatus(featureId);
         }
       } else this.engine.finishRun(featureId, stepId, result);
+      for (const claim of attempt.proofClaims ?? [])
+        if (newProofClaims.has(claim.id)) claim.reportRevision = attempt.revision ?? 0;
     } catch (error) {
       const host = this.toolHosts.get(attempt.id);
       attempt.changedFiles = [
@@ -1997,7 +2041,21 @@ export class StudioService extends EventEmitter {
         if (pair.nativeConversation && (pair.requestedMode ?? pair.mode) !== 'pair')
           throw new Error('Passe en pair pour intervenir dans cette conversation.');
         if (!pair.nativeConversation) pair.mode = 'pair';
+        const images = validateImages(command.images);
+        const queuedImages = pair.messages
+          .filter(
+            (m) =>
+              pair.pendingMessages.includes(m.id) &&
+              !['sent', 'received', 'skipped'].includes(m.delivery ?? ''),
+          )
+          .flatMap((m) => m.images ?? []);
+        const initialImages = pair.contextDelivered ? [] : (feature.images ?? []);
+        if (images.length + queuedImages.length + initialImages.length > 4)
+          throw Error(
+            'Quatre images attendent déjà leur transmission, ou cet ajout dépasserait la limite. Attends leur envoi avant de joindre d’autres captures.',
+          );
         const message = pairMessage(pair, 'user', redact(command.content), command.requestId);
+        message.images = images;
         if (pair.nativeConversation) message.delivery = 'pending';
         pair.pendingMessages.push(message.id);
         if (!pair.busy) next = { kind: approved || pair.phase === 'review' ? 'chat' : 'planning' };
@@ -2186,7 +2244,11 @@ export class StudioService extends EventEmitter {
       message.delivery = 'sent';
       await this.persist();
       try {
-        const id = await this.adapter.sendMessage(attempt.sessionId, message.content);
+        const id = await this.adapter.sendMessage(
+          attempt.sessionId,
+          message.content,
+          message.images,
+        );
         if (id) {
           message.nativeId = id;
           const received = pair.deliveredMessageIds?.includes(`native:${id}`);
@@ -2195,8 +2257,10 @@ export class StudioService extends EventEmitter {
             pair.pendingMessages = pair.pendingMessages.filter((pending) => pending !== message.id);
         } else message.delivery = 'pending';
       } catch (error) {
-        message.delivery = 'uncertain';
-        pair.error = `Envoi non confirmé, message conservé : ${(error as Error).message}`;
+        const rejected = error instanceof ImageInputError;
+        message.delivery = rejected ? 'skipped' : 'uncertain';
+        if (rejected) pair.pendingMessages = pair.pendingMessages.filter((id) => id !== message.id);
+        pair.error = `${rejected ? 'Message non envoyé' : 'Envoi non confirmé, message conservé'} : ${(error as Error).message}`;
       }
       await this.persist();
     }
@@ -2708,6 +2772,132 @@ export class StudioService extends EventEmitter {
         throw new Error(
           `La preuve de test est obsolète : ${file} a changé hors de la dernière écriture autorisée de la feature. Relance son étape avant validation.`,
         );
+    }
+  }
+  async saveProofClaim(
+    command: Extract<import('../shared/types').ClientMessage, { type: 'saveProofClaim' }>,
+  ): Promise<void> {
+    this.assertConfigurable(command.featureId);
+    const feature = this.engine.getFeature(command.featureId),
+      step = this.engine.getStep(command.featureId, command.stepId),
+      attempt = step.attempts.at(-1);
+    if (
+      !attempt ||
+      attempt.id !== command.attemptId ||
+      (attempt.revision ?? 0) !== command.revision ||
+      !['awaiting_review', 'waiting_input'].includes(step.status)
+    )
+      throw Error('Relis la tentative actuelle avant de modifier ses conclusions.');
+    if (attempt.proofClaims?.some((c) => c.id === command.requestId)) return;
+    if (command.claimId && !attempt.proofClaims?.some((c) => c.id === command.claimId))
+      throw Error('Conclusion d’origine introuvable.');
+    const claim = this.checkedProofClaim(
+      feature,
+      command.claim,
+      command.requestId,
+      'human',
+      attempt.revision ?? 0,
+    );
+    if (command.claimId) claim.supersedes = command.claimId;
+    if ((attempt.proofClaims?.length ?? 0) >= 300) throw Error('Limite de conclusions atteinte.');
+    (attempt.proofClaims ??= []).push(claim);
+    try {
+      await this.persist();
+    } catch (error) {
+      attempt.proofClaims = attempt.proofClaims.filter((c) => c.id !== claim.id);
+      throw error;
+    }
+  }
+  private checkedProofClaim(
+    feature: Feature,
+    value: Pick<ProofClaim, 'text' | 'proofIds' | 'verdict'>,
+    id: string,
+    author: ProofClaim['author'],
+    reportRevision: number,
+  ): ProofClaim {
+    const proposal = proofProposalSchema.parse(value),
+      sources = proofDossier(feature).sources;
+    if (proposal.verdict !== 'unverified' && !proposal.proofIds.length)
+      throw Error('Associe au moins une preuve ou indique « Non vérifié ».');
+    if (proposal.proofIds.some((id) => !sources.some((s) => s.id === id)))
+      throw Error('Une preuve référencée est absente du dossier.');
+    if (
+      proposal.verdict === 'supported' &&
+      proposal.proofIds.some((id) => sources.some((s) => s.id === id && s.state !== 'observed'))
+    )
+      throw Error('Une preuve est en attente, en échec ou à revérifier.');
+    return {
+      ...proposal,
+      text: redact(proposal.text),
+      proofIds: [...new Set(proposal.proofIds)],
+      id,
+      author,
+      at: new Date().toISOString(),
+      reportRevision,
+    };
+  }
+  async checkProofDossier(featureId: string): Promise<void> {
+    this.assertConfigurable(featureId);
+    const feature = this.engine.getFeature(featureId),
+      checks: NonNullable<Feature['proofChecks']> = {};
+    const snapshot = JSON.stringify(
+      feature.steps.map((s) => [
+        s.id,
+        s.status,
+        s.attempts.at(-1)?.id,
+        s.attempts.at(-1)?.revision,
+      ]),
+    );
+    for (const step of feature.steps)
+      for (const attempt of step.attempts)
+        for (const proof of attempt.evidence ?? []) {
+          const id = `test:${attempt.id}:${proof.id}`;
+          const changed: string[] = [];
+          let unavailable = '';
+          for (const [file, expected] of Object.entries(proof.fileHashes))
+            try {
+              const target = await this.fileLocation(featureId, file);
+              const policy = new PolicyEngine(target.root, 'read-only', []);
+              const actual = sha256(await readFile(await policy.resolve(target.path)));
+              if (actual !== expected) changed.push(file);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code === 'ENOENT') changed.push(file);
+              else unavailable = (error as Error).message;
+            }
+          checks[id] = {
+            at: new Date().toISOString(),
+            state: changed.length
+              ? 'changed'
+              : unavailable || !Object.keys(proof.fileHashes).length
+                ? 'unavailable'
+                : 'unchanged',
+            reason: changed.length
+              ? `Fichiers modifiés depuis le test : ${changed.join(', ')}`
+              : unavailable ||
+                (!Object.keys(proof.fileHashes).length
+                  ? 'Aucune empreinte de fichier dans cette preuve.'
+                  : 'Les fichiers dont une empreinte a été enregistrée sont inchangés à cette date. Le test n’a pas été relancé.'),
+          };
+        }
+    if (
+      snapshot !==
+      JSON.stringify(
+        feature.steps.map((s) => [
+          s.id,
+          s.status,
+          s.attempts.at(-1)?.id,
+          s.attempts.at(-1)?.revision,
+        ]),
+      )
+    )
+      throw Error('La session a changé pendant le contrôle. Actualise le dossier.');
+    const previous = feature.proofChecks;
+    feature.proofChecks = checks;
+    try {
+      await this.persist();
+    } catch (error) {
+      feature.proofChecks = previous;
+      throw error;
     }
   }
   async saveArtifact(

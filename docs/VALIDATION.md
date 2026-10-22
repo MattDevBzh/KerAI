@@ -1,5 +1,14 @@
 # Validation et limites
 
+## Images, documentation et dossier de preuves — v1.28.0
+
+- TypeScript, compilation et **814 tests métier réussis, 7 tests optionnels ignorés**. Les tests ciblés supplémentaires vérifient les images exclues du contexte, les sources inventées refusées, la persistance des conclusions et les empreintes modifiées. Les limites de taille et de pagination des exports sont contrôlées.
+- **273 scénarios Chromium vérifiés** : 272 lors de la dernière passe complète, puis le dernier scénario relancé avec un sélecteur précis après ajout du dossier de preuves. La création avec capture, le collage, le retrait, l’envoi dans les deux conversations, le rechargement, les quatre formats et le dossier à 390 px sont couverts. Les captures documentées utilisent des données de démonstration.
+- Quatre scénarios réussis avec le vrai CLI **1.0.102 / SDK 1.0.20** : catalogue DevOps, permissions natives, compétences/instructions ciblées et images/outils de preuves. Le scénario images/outils de preuves réussit aussi sur **1.0.103**. Le fournisseur local déterministe constate les pixels exacts transmis au modèle, les outils de lecture/web exposés, l’absence d’outils d’écriture/terminal dans les profils documentation et l’exécution des outils de conclusions. Ce n’est pas une évaluation de compréhension d’image ou de rédaction avec inférence réelle.
+- Un exemple de documentation a été exporté dans les quatre formats. Les archives DOCX/PPTX et leurs liens sont vérifiés ; le rendu Word (1 page) et PowerPoint (6 diapositives) a été ouvert par LibreOffice et inspecté visuellement. Le HTML a été rendu dans Chromium. La mise en page PowerPoint reste sobre et dépend de la concision du plan ; les tableaux y sont textuels.
+- `npm audit --omit=dev` : aucune vulnérabilité signalée lors du contrôle. Le paquet est contrôlé par le vérificateur d’archive, puis chargé dans un vrai VS Code avec un profil isolé. La CI Linux/Windows et le téléchargement du paquet publié restent des preuves séparées, rattachées au commit dans la [release v1.28.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.28.0).
+- La recette avec le compte connecté reste limitée par le catalogue de modèles vide observé lors de la préparation de la v1.27.0. Aucun succès d’analyse visuelle réelle ni de campagne documentaire autonome n’est revendiqué. Les sources web dépendent du réseau et des sites ; le dossier conserve des observations datées, pas une certification de fraîcheur ou de conformité.
+
 ## Compétences natives et instructions ciblées — v1.27.0
 
 - Vérification TypeScript, compilation et **803 tests métier réussis, 6 tests optionnels ignorés**. **267 scénarios Chromium réussis**, dont les chargements réellement confirmés, leur contenu et leur affichage compact. Les captures du panneau utilisent des données de démonstration.

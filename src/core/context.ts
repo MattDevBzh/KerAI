@@ -58,11 +58,18 @@ export function promptSections(input: RunInput): PromptSection[] {
     'human',
     `Feature : ${input.feature.title}\n${input.feature.description}`,
   );
+  if (input.feature.images?.length)
+    add(
+      'images',
+      'Images jointes',
+      'human',
+      `Images jointes au besoin : ${input.feature.images.map((i) => i.name).join(', ')}. Elles sont transmises séparément au modèle visuel.`,
+    );
   add(
     'step',
     'Mission de cette étape',
     'system',
-    `Étape : ${input.step.name}\n${input.step.description}\n${native ? `Outils natifs Copilot. Permissions : ${permissionLabels[input.launch?.permissionMode ?? input.feature.execution!.permissionMode]}. Les profils techniques Studio ne limitent pas ces outils. Préserve les modifications humaines existantes.` : `Profil technique : ${input.step.policy}`}`,
+    `Étape : ${input.step.name}\n${input.step.description}\n${input.agent.tools.includes('documentation') ? `Documentation en lecture seule, sans terminal ni écriture. ${input.agent.tools.includes('web') ? 'Recherche et consultation web disponibles avec les permissions Copilot.' : 'Aucun outil web disponible pour ce rôle.'}` : native ? `Outils natifs Copilot. Permissions : ${permissionLabels[input.launch?.permissionMode ?? input.feature.execution!.permissionMode]}. Les profils techniques Studio ne limitent pas ces outils. Préserve les modifications humaines existantes.` : `Profil technique : ${input.step.policy}`}`,
   );
   add(
     'agent',
@@ -309,6 +316,13 @@ export function promptSections(input: RunInput): PromptSection[] {
       'À la fin de cette relecture, ajoute exactement un bloc feature-studio-review. Ne mets pass que si tu ne relèves aucune correction nécessaire. Les constats du modèle restent des constats de relecture et ne remplacent pas les preuves de tests hôtes. Format :\n```feature-studio-review\n{"verdict":"pass","summary":"Bilan précis","findings":[]}\n```\n' +
         'Sinon verdict="changes_requested" et findings=[{"id":"finding_1","severity":"blocking","message":"Correction attendue","file":"src/example.ts","line":1}]. severity vaut info, warning ou blocking ; file et line sont facultatifs.',
     );
+  if (native)
+    add(
+      'proofs',
+      'Dossier de preuves',
+      'system',
+      'Après tes observations, utilise studio_list_proofs pour obtenir les identifiants des sources réellement conservées, puis studio_propose_claim pour relier tes conclusions importantes à ces preuves. Distingue supported (ton appréciation), contradicted et unverified. Un résultat d’outil ou une citation ne prouve pas automatiquement une conclusion ; justifie le lien. Aucun de ces outils ne valide une étape à la place de l’humain. Ne fabrique jamais un identifiant de preuve.',
+    );
   const mode = launch?.contextMode ?? (input.agent.emptyContextByDefault ? 'empty' : 'all');
   return sections.map((section) => {
     const editable = section.source !== 'system';
@@ -359,9 +373,14 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
     errors.push(
       `Le contexte atteint ${prompt.length} caractères pour une limite de ${maxCharacters}. Raccourcis les sources ou ajuste explicitement la limite.`,
     );
+  const imageDigests = input.feature.images?.map(({ data, ...metadata }) => ({
+    ...metadata,
+    sha256: createHash('sha256').update(data).digest('hex'),
+  }));
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify({
+        imageDigests,
         prompt,
         sections,
         nativeSkillSources: usesNativeTools(input)

@@ -105,6 +105,7 @@ async function hosted(page: Page, theme = 'guilde-sombre', preferred = true) {
                 id: crypto.randomUUID(),
                 role: 'user',
                 content: message.content,
+                images: message.images,
                 createdAt: now,
                 status: 'complete',
               });
@@ -455,3 +456,16 @@ for (const theme of [
     for (const color of colors) expect(color.contrast).toBeGreaterThanOrEqual(4.5);
     await page.screenshot({ path: testInfo.outputPath(`discussion-${theme}.png`) });
   });
+
+test('une image est conservée dans le chat libre après envoi et rechargement', async ({ page }) => {
+  await hosted(page);
+  const buffer = await page.screenshot();
+  await page
+    .getByLabel('Ajouter des images')
+    .setInputFiles({ name: 'capture-chat.png', mimeType: 'image/png', buffer });
+  await page.getByLabel('Votre message', { exact: true }).fill('Explique cette capture');
+  await page.getByRole('button', { name: 'Envoyer le message', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'capture-chat.png', exact: true })).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole('img', { name: 'capture-chat.png', exact: true })).toBeVisible();
+});

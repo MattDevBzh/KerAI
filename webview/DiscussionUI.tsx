@@ -1,3 +1,4 @@
+import { ImagePicker, ImageGallery, useImageDraft } from './Images';
 import { searchText } from './Ergonomics';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
@@ -274,6 +275,7 @@ function Conversation({
   error: string;
   visible: boolean;
 }) {
+  const imageDraft = useImageDraft();
   const preferred = state.agents.filter((agent) => agent.profile.discussionAgent);
   const [agentKey, setAgentKey] = useState(discussion?.agentKey ?? preferred[0]?.key ?? '');
   const [model, setModel] = useState(discussion?.model ?? '');
@@ -314,7 +316,10 @@ function Conversation({
   }, [agentKey, preferred[0]?.key, discussion?.id]);
   const wasPending = useRef(pending);
   useEffect(() => {
-    if (visible && wasPending.current && !pending) input.current?.focus();
+    if (visible && wasPending.current && !pending) {
+      input.current?.focus();
+      if (!error) imageDraft.setImages([]);
+    }
     wasPending.current = pending;
   }, [pending, visible]);
   useEffect(() => {
@@ -324,7 +329,8 @@ function Conversation({
   const send = (event?: FormEvent) => {
     event?.preventDefault();
     if (
-      !draft.trim() ||
+      (!draft.trim() && !imageDraft.images.length) ||
+      imageDraft.loading ||
       !selected ||
       pending ||
       running ||
@@ -336,10 +342,11 @@ function Conversation({
     stick.current = true;
     dispatch({
       type: 'sendDiscussion',
+      ...(imageDraft.images.length ? { images: imageDraft.images } : {}),
       requestId,
       discussionId: id,
       agentKey,
-      content: draft.trim(),
+      content: draft.trim() || 'Analyse les images jointes.',
       model: model || undefined,
       reasoning: reasoning || undefined,
     });
@@ -704,7 +711,10 @@ function Conversation({
               </div>
               <div className="discussion-bubble">
                 {message.role === 'user' ? (
-                  <p>{message.content}</p>
+                  <>
+                    <ImageGallery images={message.images} />
+                    <p>{message.content}</p>
+                  </>
                 ) : (
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -766,12 +776,14 @@ function Conversation({
         <label className="team-sr-only" htmlFor={`discussion-input-${id}`}>
           Votre message
         </label>
+        <ImagePicker draft={imageDraft} disabled={pending || running} />
         <div className="discussion-input-box">
           <textarea
             ref={input}
             id={`discussion-input-${id}`}
             aria-describedby={`discussion-note-${id}`}
             value={draft}
+            onPaste={imageDraft.onPaste}
             disabled={pending}
             maxLength={40000}
             placeholder={
@@ -801,7 +813,8 @@ function Conversation({
               aria-label="Envoyer le message"
               disabled={
                 pending ||
-                !draft.trim() ||
+                imageDraft.loading ||
+                (!draft.trim() && !imageDraft.images.length) ||
                 !selected ||
                 !studio.workspace.trusted ||
                 Boolean(state.error)

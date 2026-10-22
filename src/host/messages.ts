@@ -1,3 +1,5 @@
+import { proofMessageVariants } from '../core/proofSchemas';
+import { imagesSchema } from '../core/imageSchemas';
 import { pairActionSchema } from '../core/pairSchemas';
 import { nativePermissionModeSchema } from '../core/nativeSchemas';
 import { ZOOM_LEVELS } from '../shared/zoom';
@@ -29,6 +31,7 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  ...proofMessageVariants,
   z
     .object({
       type: z.literal('setPermissionMode'),
@@ -135,6 +138,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('createFeature'),
+      images: imagesSchema.optional(),
       permissionMode: nativePermissionModeSchema.optional(),
       requestId: z.string().uuid().optional(),
       discussionId: z.string().uuid().optional(),
@@ -361,6 +365,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('exportAgentReport'),
+      format: z.enum(['md', 'docx', 'pptx', 'html']).optional(),
       ...step,
       requestId: id,
       attemptId: id,

@@ -174,6 +174,7 @@ test('renders native command evidence without claiming host test validation', as
   };
   await open(page, state);
   await page.getByRole('tab', { name: /Preuves/ }).click();
+  await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   const activity = page.getByRole('region', { name: 'Activité native Copilot' });
   await activity.locator('summary').first().click();
   await expect(activity).toContainText('Terminé · code 0');

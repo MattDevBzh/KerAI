@@ -1010,8 +1010,9 @@ test('validation : preuves host, critères et remarques ; approbation liée à l
   await navigate(page, 'Validation');
   await page.locator('.validation-card').filter({ hasText: 'Conception' }).click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
+  await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   await expect(page.getByText('Exécuté par le host', { exact: false })).toBeVisible();
-  await expect(page.getByText('4 tests passed')).toBeVisible();
+  await expect(page.getByText('4 tests passed', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Relecture', exact: true }).click();
   await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
   await page.getByLabel('Critère 1', { exact: true }).fill('Échap ferme la palette');
@@ -1944,4 +1945,21 @@ test('dernière étape : afficher les blocages, un refus hôte et la confirmatio
     page.getByText('Décision finale enregistrée — session terminée', { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Valider cette étape' })).toHaveCount(0);
+});
+
+test('le besoin accepte une capture sans lancer un agent', async ({ page }) => {
+  await hosted(page);
+  const buffer = await page.screenshot();
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  await page.getByLabel('Qu’allons-nous faire ?').fill('Corriger ce bug visuel');
+  await page
+    .getByRole('dialog', { name: 'Une nouvelle feature' })
+    .getByLabel('Ajouter des images')
+    .setInputFiles({ name: 'navigateur.png', mimeType: 'image/png', buffer });
+  await expect(page.getByRole('img', { name: 'navigateur.png', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Créer la feature', exact: true }).click();
+  const sent = await messages(page);
+  const created = [...sent].reverse().find((m) => m.type === 'createFeature');
+  expect(created?.type === 'createFeature' && created.images?.[0].name).toBe('navigateur.png');
+  expect(sent.some((m) => m.type === 'runStep')).toBe(false);
 });

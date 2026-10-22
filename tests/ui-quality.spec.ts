@@ -132,6 +132,7 @@ test('qualité : contre-exemple lisible, preuves sélectionnées par id et aucun
   await navigate(page, 'Validation');
   await page.locator('.validation-card').filter({ hasText: 'Conception' }).click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
+  await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   const panel = page.getByRole('region', { name: 'Recette et contre-exemples' });
   await expect(panel.getByText('Profil sauvegardé', { exact: false })).toBeVisible();
   await expect(panel.getByText('Critères : C1')).toBeVisible();

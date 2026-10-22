@@ -1,3 +1,5 @@
+import { ProofDossierPanel } from './ProofDossier';
+import { ImagePicker, ImageGallery, useImageDraft } from './Images';
 import { HumanRequestProvider } from './HumanRequests';
 import { allFeatures, subplanIssues, subplanProgressLabel } from '../src/shared/subplans';
 import { FeatureBrief, SubplanCardVisual, SubplanNavigation, SubplanOverview } from './SubplanUI';
@@ -1440,6 +1442,7 @@ function CreateModal({
   onClose: () => void;
   onCreate: (message: Extract<ClientMessage, { type: 'createFeature' }>) => void;
 }) {
+  const imageDraft = useImageDraft();
   const [restored] = useState(() => {
     const saved = savedFeatureProposal();
     return origin &&
@@ -1497,7 +1500,11 @@ function CreateModal({
   const multiple = (ids?.length ?? 0) > 1;
   const missing = Boolean(state.projectCatalog && !ids?.length);
   const busy =
-    Boolean(state.workspaceOperation) || hasActiveRun(state) || projectPending || Boolean(pending);
+    Boolean(state.workspaceOperation) ||
+    hasActiveRun(state) ||
+    projectPending ||
+    Boolean(pending) ||
+    imageDraft.loading;
   return (
     <Modal
       title="Une nouvelle feature"
@@ -1520,6 +1527,7 @@ function CreateModal({
             setError('');
             onCreate({
               type: 'createFeature',
+              ...(imageDraft.images.length ? { images: imageDraft.images } : {}),
               requestId,
               ...(origin
                 ? {
@@ -1569,9 +1577,11 @@ function CreateModal({
             maxLength={origin ? 30000 : 500000}
             placeholder="Le besoin, les contraintes, le résultat attendu…"
             value={description}
+            onPaste={imageDraft.onPaste}
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
+        <ImagePicker draft={imageDraft} disabled={busy} />
         {origin && (
           <section className="feature-proposal" aria-label="Proposition de feature">
             <label className="field">
@@ -2652,7 +2662,20 @@ function StepPanel({
             />
           )}
           {tab === 'evidence' && (
-            <EvidencePanel attempt={attempt} featureId={feature.id} dispatch={dispatch} />
+            <>
+              <ProofDossierPanel
+                key={attempt?.id ?? step.id}
+                feature={feature}
+                step={step}
+                attempt={attempt}
+                disabled={running || Boolean(feature.archived) || !state.workspace.trusted}
+                dispatch={dispatch}
+              />
+              <details>
+                <summary>Détails des outils et tests de cette tentative</summary>
+                <EvidencePanel attempt={attempt} featureId={feature.id} dispatch={dispatch} />
+              </details>
+            </>
           )}
           {tab === 'review' && (
             <ReviewWorkspace

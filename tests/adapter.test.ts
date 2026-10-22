@@ -1,3 +1,4 @@
+import { screenshot } from './image-fixture';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -225,6 +226,49 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     }));
     return run;
   }
+  it('sends image blobs only to vision models and excludes binary data from traces', async () => {
+    const run = nativeTransport();
+    run.images = [screenshot];
+    run.step.model = 'auto';
+    await expect(adapter.run(run, callbacks, new AbortController().signal)).rejects.toThrow(
+      'compatible',
+    );
+    expect(fake.session.send).not.toHaveBeenCalled();
+    fake.client.listModels.mockResolvedValue([
+      {
+        id: 'auto',
+        name: 'Vision',
+        capabilities: {
+          supports: { reasoningEffort: false, vision: true },
+          limits: { max_context_window_tokens: 8000 },
+        },
+      },
+    ] as never);
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.session.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          {
+            type: 'blob',
+            displayName: screenshot.name,
+            mimeType: screenshot.mimeType,
+            data: screenshot.data,
+          },
+        ],
+      }),
+    );
+  });
+  it('gives documentation researchers only read and web tools and no MCP, while ordinary agents have no web', async () => {
+    const run = nativeTransport();
+    run.agent.tools = ['read', 'search', 'documentation', 'web'];
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config?.availableTools).toContain('web_fetch');
+    for (const denied of ['bash', 'powershell', 'create', 'edit', 'apply_patch', 'task'])
+      expect(fake.config?.availableTools).not.toContain(denied);
+    run.agent.tools = ['read'];
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config?.excludedTools).toContain('web_search');
+  });
   it('loads only selected native skills, keeps file hooks disabled and persists confirmed instruction receipts', async () => {
     const run = nativeTransport();
     run.nativeReadOnly = true;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.28.0 — 2026-10-23 · Images, documentation et preuves
+
+- Captures par fichier ou collage dans le besoin et les conversations, avec aperçu, persistance et transmission visuelle native.
+- Kit Documentation technique à quatre rôles en lecture seule, recherche web autorisée aux chercheurs/relecteurs et validations humaines obligatoires.
+- Export local du livrable en Markdown, Word, PowerPoint et HTML, avec sources et notes conservées.
+- Dossier de preuves : observations datées, conclusions reliées et révisables sans effacer leur historique, contrôle explicite des empreintes et sources à revérifier.
+- Contradictions actuelles bloquantes pour la validation, sans assimilation d’une conclusion d’agent à une preuve ou un accord humain.
+
 ## 1.27.0 — 2026-10-22 · Compétences natives et instructions ciblées
 
 - Catalogue KerAI exposé comme fournisseur de skills natifs, avec chargement à la demande et préchargement des compétences explicitement sélectionnées qui interdisent l’invocation automatique. Aperçu éditable, exclusions et profils personnels conservés.
