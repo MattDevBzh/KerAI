@@ -197,18 +197,46 @@ test('navigates arbitrary levels and historical iterations without changing exec
   page,
 }) => {
   await open(page, scenario(true));
+  await page.getByRole('button', { name: 'Aller à l’étape en cours', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: 'Détail de l’étape : Construire les filtres', exact: true }),
+  ).toBeFocused();
+  await expect(page.getByRole('region', { name: 'Sous-tâches du plan' })).toBeInViewport();
   await page.locator('.journey-step').filter({ hasText: 'Construire les filtres' }).click();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Navigation des filtres' }),
+  ).toBeVisible();
+  await expect(page.locator('.conversation-preferences')).toHaveCount(0);
+  await page
+    .locator('.subplan-overview')
+    .getByRole('button', { name: /Filtres combinés/ })
+    .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Filtres combinés' })).toBeVisible();
+  await expect(page.locator('.subplan-mission')).toHaveText(
+    'Composer les filtres sans perdre le contexte.',
+  );
+  await expect(page.locator('.subplan-context > p')).not.toBeVisible();
+  await page.getByText('Contexte transmis à la sous-équipe', { exact: true }).click();
+  await expect(page.locator('.subplan-context > p')).toContainText('Contexte de la feature');
+  await page.getByText('Contexte transmis à la sous-équipe', { exact: true }).click();
+  await expect(page.locator('.subplan-location')).toContainText('NIVEAU 1');
+  await expect(page.locator('.subplan-location')).toContainText('Itération 2 sur 2');
   await expect(page.getByLabel('Itération de la sous-équipe')).toContainText(
     '1 · Navigation au clavier · Validée',
   );
   await page.locator('.journey-step').filter({ hasText: 'Détailler chaque filtre' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Filtres combinés' })).toBeVisible();
+  await page
+    .locator('.subplan-overview')
+    .getByRole('button', { name: /Navigation au clavier/ })
+    .click();
   await expect(page.getByRole('navigation', { name: 'Navigation des sous-équipes' })).toContainText(
     'Navigation des filtres',
   );
   await expect(
     page.getByRole('heading', { level: 1, name: 'Navigation au clavier' }),
   ).toBeVisible();
+  await expect(page.locator('.subplan-location')).toContainText('NIVEAU 2');
   await page.getByRole('button', { name: 'Niveau précédent', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Filtres combinés' })).toBeVisible();
   const select = page.getByLabel('Itération de la sous-équipe');
@@ -229,12 +257,43 @@ test('navigates arbitrary levels and historical iterations without changing exec
     ),
   ).toBe(false);
 });
+
+test('keeps narrow nested navigation usable with high contrast and reduced motion', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ forcedColors: 'active', reducedMotion: 'reduce' });
+  await open(page, scenario(true));
+  await page
+    .locator('.subplan-overview')
+    .getByRole('button', { name: /Filtres combinés/ })
+    .click();
+  const navigation = page.getByRole('navigation', { name: 'Navigation des sous-équipes' });
+  await expect(navigation).toContainText('NIVEAU 1');
+  expect(
+    (await page.getByLabel('Itération de la sous-équipe').boundingBox())!.width,
+  ).toBeGreaterThan(240);
+  await page
+    .getByLabel('Itération de la sous-équipe')
+    .selectOption({ label: '1 · Navigation au clavier · Validée' });
+  await expect(page.locator('.subplan-history-notice')).toBeVisible();
+  await page.getByRole('button', { name: 'Revenir à l’itération active' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { level: 1, name: 'Filtres combinés' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await navigation.scrollIntoViewIfNeeded();
+  await mkdir(resolve('test-results/subplans'), { recursive: true });
+  await page.screenshot({ path: resolve('test-results/subplans/contraste-mobile.png') });
+});
 test('adds and configures a subplan in a saved team template', async ({ page }) => {
   await open(page, scenario());
   await navigate(page, 'Parcours');
   await page.getByRole('button', { name: 'Nouveau parcours' }).click();
   await page.getByRole('button', { name: 'Sous-plan', exact: true }).click();
   await expect(page.getByLabel('Orchestrateur dédié')).toHaveValue('fs-orchestrator');
+  await expect(page.getByLabel('Agent de l’étape', { exact: true })).toHaveCount(0);
   await page.getByLabel('Équipe à utiliser').selectOption('feature');
   await expect(
     page.getByRole('button', { name: 'Configurer la sous-équipe', exact: true }),
@@ -260,6 +319,13 @@ for (const theme of [
     await expect(card).not.toContainText('Orchestrateur');
     await card.click();
     await expect(
+      page.getByRole('heading', { level: 1, name: 'Navigation des filtres' }),
+    ).toBeVisible();
+    await page
+      .locator('.subplan-overview')
+      .getByRole('button', { name: /Filtres combinés/ })
+      .click();
+    await expect(
       page.getByRole('navigation', { name: 'Navigation des sous-équipes' }),
     ).toBeVisible();
     expect(
@@ -271,6 +337,15 @@ for (const theme of [
         path: resolve('test-results/subplans/sous-equipe.png'),
         fullPage: true,
       });
+      await page.locator('.subplan-navigation').screenshot({
+        path: resolve('test-results/subplans/navigation.png'),
+      });
+    }
+    if (theme === 'papier-clair') {
+      await mkdir(resolve('test-results/subplans'), { recursive: true });
+      await page.locator('.subplan-overview').screenshot({
+        path: resolve('test-results/subplans/sous-plan-clair.png'),
+      });
     }
   });
 
@@ -280,6 +355,10 @@ test('shows a dedicated team card in the living HQ and keeps nested settings usa
   await open(page, scenario(true));
   await page.getByRole('checkbox', { name: 'Afficher le QG vivant' }).click();
   const card = page.locator('.hq-station.subplan-card');
+  await card.click();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Navigation des filtres' }),
+  ).toBeVisible();
   await expect(card.locator('.subplan-card-visual')).toBeVisible();
   await expect(card.locator('.hq-avatar img')).toHaveCount(0);
   await expect(card).not.toContainText('Orchestrateur');
@@ -287,9 +366,165 @@ test('shows a dedicated team card in the living HQ and keeps nested settings usa
   await card.screenshot({ path: resolve('test-results/subplans/carte-sous-plan.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Modifier l’équipe', exact: true }).click();
-  await page.getByRole('button', { name: 'Configurer la sous-équipe', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await page
+    .getByRole('button', {
+      name: 'Configurer la sous-équipe de Construire les filtres',
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole('dialog', { name: 'Sous-équipe de Construire les filtres', exact: true }),
+  ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
 });
+
+test('opens the child team directly from its card, keeps nested drafts local and restores keyboard focus', async ({
+  page,
+}) => {
+  const state = scenario();
+  await open(page, state);
+  await page.getByRole('button', { name: 'Modifier l’équipe', exact: true }).click();
+  await expect(page.locator('.team-settings')).toHaveCount(0);
+  const trigger = page.getByRole('button', {
+    name: 'Configurer la sous-équipe de Construire les filtres',
+    exact: true,
+  });
+  await trigger.click();
+  const panel = page.getByRole('dialog', {
+    name: 'Sous-équipe de Construire les filtres',
+    exact: true,
+  });
+  await expect(panel).toBeVisible();
+  const close = panel.getByRole('button', { name: 'Fermer la sous-équipe', exact: true });
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(panel.getByRole('button', { name: 'Valider l’équipe', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await panel.getByRole('button', { name: 'Ajouter un sous-plan', exact: true }).click();
+  await panel
+    .getByRole('button', { name: 'Configurer la sous-équipe de Sous-plan', exact: true })
+    .click();
+  const nested = page.getByRole('dialog', { name: 'Sous-équipe de Sous-plan', exact: true });
+  await expect(nested).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(nested).toHaveCount(0);
+  await expect(panel).toBeVisible();
+  await expect(
+    panel.getByRole('button', { name: 'Configurer la sous-équipe de Sous-plan', exact: true }),
+  ).toBeFocused();
+  await panel.getByLabel('Équipe à utiliser').selectOption('code-review');
+  await panel.getByRole('button', { name: 'Valider l’équipe', exact: true }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  expect(
+    (await page.evaluate(() => Reflect.get(window, 'subplanMessages'))).some(
+      (m: ClientMessage) => m.type === 'saveFeatureTeam',
+    ),
+  ).toBe(false);
+  await page.getByRole('button', { name: 'Valider l’équipe', exact: true }).click();
+  const saved = (await page.evaluate(() => Reflect.get(window, 'subplanMessages'))).find(
+    (m: ClientMessage) => m.type === 'saveFeatureTeam',
+  );
+  expect(saved.steps[0].subplan.steps).toHaveLength(2);
+  expect(saved.steps[0].subplan.steps[1].subplan.steps).toHaveLength(1);
+});
+
+test('finds revisions in a long history and excludes outdated validations from progress', async ({
+  page,
+}) => {
+  const state = scenario(true),
+    card = state.features[0].steps[0];
+  const iterations = card.subplanState!.iterations;
+  iterations[0].requiresRecheck = true;
+  for (let n = 3; n <= 9; n++) {
+    const copy = structuredClone(iterations[0]);
+    copy.id = `history-${n}`;
+    copy.number = n;
+    copy.taskId = `task-${n}`;
+    copy.title = n === 3 ? 'Révision de la navigation' : `Vérification ${n}`;
+    copy.description = 'Contrôler les résultats.';
+    copy.requiresRecheck = false;
+    copy.cancelled = n === 9;
+    copy.corrects = n === 3 ? iterations[0].id : undefined;
+    copy.feature.id = `feature-${n}`;
+    copy.feature.title = copy.title;
+    copy.feature.parent!.iterationId = copy.id;
+    iterations.push(copy);
+  }
+  await open(page, state);
+  const overview = page.getByRole('region', { name: 'Sous-tâches du plan' });
+  await expect(overview.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '6');
+  await expect(overview.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '8');
+  await expect(page.locator('.journey-step.subplan-card')).toContainText('6/8 tâches validées');
+  await expect(overview.locator('.is-current')).toContainText('Filtres combinés');
+  await expect(overview.locator('.is-current')).toContainText('ITÉRATION ACTIVE');
+  await expect(overview.locator('.needs-review')).toContainText('À revérifier');
+  await mkdir(resolve('test-results/subplans'), { recursive: true });
+  await overview.screenshot({ path: resolve('test-results/subplans/historique.png') });
+  await page.getByLabel('Rechercher une itération').fill('revision');
+  await expect(overview.locator('.subplan-iteration')).toHaveCount(1);
+  await expect(overview.locator('.subplan-iteration')).toContainText('Révision de l’itération 1');
+  await page.getByLabel('Filtrer les itérations').selectOption('review');
+  await expect(overview.getByText('Aucune itération ne correspond à ces critères.')).toBeVisible();
+  await overview.getByRole('button', { name: 'Afficher toutes les itérations' }).click();
+  await expect(overview.locator('.subplan-iteration')).toHaveCount(9);
+  await page.getByLabel('Filtrer les itérations').selectOption('review');
+  await expect(overview.locator('.subplan-iteration')).toHaveCount(1);
+  await overview.getByRole('button', { name: /Navigation au clavier/ }).click();
+  await expect(page.getByRole('navigation', { name: 'Navigation des sous-équipes' })).toContainText(
+    'Une correction ultérieure peut affecter ce résultat.',
+  );
+  await page.getByRole('button', { name: 'Revenir à l’itération active' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Filtres combinés' })).toBeVisible();
+  expect(
+    (await page.evaluate(() => Reflect.get(window, 'subplanMessages'))).some((m: ClientMessage) =>
+      ['runStep', 'approveStep', 'pairAction', 'finalizeFeature'].includes(m.type),
+    ),
+  ).toBe(false);
+});
+
+for (const layout of [
+  { width: 390, height: 844, zoom: 100 },
+  { width: 1440, height: 900, zoom: 200 },
+])
+  test(`nested editor keeps its close button visible at ${layout.width}px and ${layout.zoom}% zoom`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(layout);
+    await open(page, scenario(true));
+    await page.evaluate(
+      (value) => window.postMessage({ type: 'zoomState', zoom: value }, '*'),
+      layout.zoom,
+    );
+    await page.getByRole('button', { name: 'Modifier l’équipe', exact: true }).click();
+    await page
+      .getByRole('button', {
+        name: 'Configurer la sous-équipe de Construire les filtres',
+        exact: true,
+      })
+      .click();
+    const panel = page.getByRole('dialog', {
+      name: 'Sous-équipe de Construire les filtres',
+      exact: true,
+    });
+    const close = panel.getByRole('button', { name: 'Fermer la sous-équipe', exact: true });
+    await panel
+      .getByRole('button', { name: 'Valider l’équipe', exact: true })
+      .scrollIntoViewIfNeeded();
+    await expect(close).toBeInViewport();
+    const bounds = await panel.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(layout.height);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await mkdir(resolve('test-results/subplans'), { recursive: true });
+    await page.screenshot({
+      path: resolve(`test-results/subplans/composition-${layout.width}.png`),
+    });
+    await close.click();
+    await expect(panel).toHaveCount(0);
+  });

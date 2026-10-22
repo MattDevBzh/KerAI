@@ -244,7 +244,7 @@ export const messageSchema = z.discriminatedUnion('type', [
       model: short.optional(),
       reasoning: short.optional(),
       skills: z.array(id).max(50),
-      maxAttempts: z.number().int().min(1).max(100).optional(),
+      maxAttempts: z.number().int().min(0).max(100).optional(),
       initialContext: launchSchema.shape.initialContext.optional(),
       mcpServerIds: z.array(id).max(20).optional(),
       askBeforeRun: z.boolean().optional(),

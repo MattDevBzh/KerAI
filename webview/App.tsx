@@ -1,10 +1,6 @@
-import {
-  allFeatures,
-  currentIteration,
-  subplanIssues,
-  subplanProgressLabel,
-} from '../src/shared/subplans';
-import { SubplanCardVisual, SubplanNavigation, SubplanOverview } from './SubplanUI';
+import { HumanRequestProvider } from './HumanRequests';
+import { allFeatures, subplanIssues, subplanProgressLabel } from '../src/shared/subplans';
+import { FeatureBrief, SubplanCardVisual, SubplanNavigation, SubplanOverview } from './SubplanUI';
 import { PairWorkspace } from './PairWorkspace';
 import { SessionConversation } from './SessionConversation';
 import { PermissionPicker } from './NativeExecutionUI';
@@ -63,6 +59,7 @@ import type { DevOpsState } from '../src/shared/devops';
 import { approvalBlockers, featureCompletionBlockers } from '../src/core/validation';
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
+  ArrowDown,
   ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
@@ -132,6 +129,7 @@ import { QualityCommandFields, QualitySetup } from './QualityUI';
 import brandIcon from '../resources/icon.png';
 import { LaunchDialog, HumanRequests, McpSettings, McpPicker } from './ExecutionUI';
 import './evolution.css';
+import './session-compact.css';
 import {
   GitWorkspacePanel,
   WorkspaceChoice,
@@ -660,7 +658,12 @@ export default function App() {
       </div>
     );
   return (
-    <div className="app-shell">
+    <HumanRequestProvider
+      className="app-shell"
+      requests={state.humanRequests ?? []}
+      features={state.features}
+      dispatch={dispatch}
+    >
       <a className="skip-link" href="#main-content">
         Aller au contenu
       </a>
@@ -1346,7 +1349,7 @@ export default function App() {
           </div>
         </Modal>
       )}
-    </div>
+    </HumanRequestProvider>
   );
 }
 function Library({
@@ -1763,14 +1766,17 @@ function FeatureDetail({
     feature.steps.find((s) => s.id === stepId) ??
     feature.steps.find((s) => s.id === feature.activeStepId) ??
     feature.steps[0];
+  const workbench = useRef<HTMLElement>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
   const selectCard = (id: string) => {
-    const selected = feature.steps.find((s) => s.id === id);
-    const child = selected?.subplan
-      ? (currentIteration(selected) ?? selected.subplanState?.iterations.at(-1))
-      : undefined;
-    if (child) navigate(child.feature.id);
-    else selectStep(id);
+    selectStep(id);
+    setFocusRequest((request) => request + 1);
   };
+  useEffect(() => {
+    if (!focusRequest) return;
+    workbench.current?.scrollIntoView({ block: 'start' });
+    workbench.current?.focus({ preventScroll: true });
+  }, [focusRequest]);
   const [composing, setComposing] = useState(false),
     [teamPending, setTeamPending] = useState(false);
   const { enabled: livingHq } = useSessionView();
@@ -1870,12 +1876,6 @@ function FeatureDetail({
     );
   return (
     <div className="page feature-page">
-      <SubplanNavigation
-        feature={feature}
-        state={state}
-        navigate={navigate}
-        disabled={detailDirty}
-      />
       {feature.pendingTeam && (
         <p className="subplan-warning" role="status">
           Nouvelle composition enregistrée. Elle sera appliquée à la fin de l’appel en cours.
@@ -1934,7 +1934,7 @@ function FeatureDetail({
         <div>
           <Badge {...featureStatus[feature.status]} />
           <h1>{feature.title}</h1>
-          <p>{feature.description}</p>
+          <FeatureBrief feature={feature} state={state} />
           <div className="feature-meta">
             <span>
               <GitBranch size={14} />
@@ -1946,6 +1946,25 @@ function FeatureDetail({
             </span>
           </div>
         </div>
+        {step && (
+          <button
+            className="button secondary small feature-jump-to-work"
+            disabled={detailDirty}
+            onClick={() => selectCard(feature.activeStepId || step.id)}
+          >
+            <ArrowDown size={15} />
+            {feature.status === 'completed' ? 'Voir le résultat' : 'Aller à l’étape en cours'}
+          </button>
+        )}
+      </div>
+      <SubplanNavigation
+        feature={feature}
+        state={state}
+        navigate={navigate}
+        disabled={detailDirty}
+      />
+      <div className="feature-toolbar">
+        <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
         <div className="feature-tools">
           <button
             className="button secondary small"
@@ -2016,7 +2035,6 @@ function FeatureDetail({
       )}
       <DevOpsFeatureLinks state={devops} featureId={feature.id} onOpenDashboard={openDevOps} />
       <TicketSourceCard feature={feature} />
-      <GitWorkspacePanel feature={feature} state={state} dispatch={dispatch} />
       <SkippedInterventions feature={feature} />
       {feature.optionalRequest &&
         (() => {
@@ -2114,7 +2132,7 @@ function FeatureDetail({
                       ? 'À configurer'
                       : subplanProgressLabel(s) || statuses[s.status].label}
                   {s.subplanState
-                    ? ` · ${s.subplanState.iterations.filter((i) => i.feature.status === 'completed' && !i.cancelled).length}/${s.subplanState.iterations.filter((i) => !i.cancelled).length} tâches validées`
+                    ? ` · ${s.subplanState.iterations.filter((i) => i.feature.status === 'completed' && !i.cancelled && !i.requiresRecheck).length}/${s.subplanState.iterations.filter((i) => !i.cancelled).length} tâches validées`
                     : s.subplan
                       ? ' · Sous-équipe'
                       : ''}
@@ -2157,28 +2175,37 @@ function FeatureDetail({
           }}
         />
       )}
-      {step?.subplan && <SubplanOverview step={step} navigate={navigate} />}
       {step ? (
-        <StepPanel
-          configureTeam={() => {
-            setComposing(true);
-            onDirtyChange(true);
-          }}
-          openPair={() => onPairOpenChange(true)}
-          reportTarget={reportTarget?.stepId === step.id ? reportTarget : undefined}
-          key={`${feature.id}-${step.id}`}
-          feature={feature}
-          step={step}
-          state={state}
-          dispatch={dispatch}
-          selectStep={selectCard}
-          onDirtyChange={(value) => {
-            setDetailDirty(value);
-            onDirtyChange(value);
-          }}
-          onCorrection={openCorrection}
-          confirm={confirm}
-        />
+        <section
+          ref={workbench}
+          tabIndex={-1}
+          className="feature-step-detail"
+          aria-label={`Détail de l’étape : ${step.name}`}
+        >
+          {step.subplan && (
+            <SubplanOverview key={step.id} step={step} navigate={navigate} disabled={detailDirty} />
+          )}
+          <StepPanel
+            configureTeam={() => {
+              setComposing(true);
+              onDirtyChange(true);
+            }}
+            openPair={() => onPairOpenChange(true)}
+            reportTarget={reportTarget?.stepId === step.id ? reportTarget : undefined}
+            key={`${feature.id}-${step.id}`}
+            feature={feature}
+            step={step}
+            state={state}
+            dispatch={dispatch}
+            selectStep={selectCard}
+            onDirtyChange={(value) => {
+              setDetailDirty(value);
+              onDirtyChange(value);
+            }}
+            onCorrection={openCorrection}
+            confirm={confirm}
+          />
+        </section>
       ) : (
         <section className="feature-empty-team">
           <Bot size={32} />
@@ -2407,7 +2434,7 @@ function StepPanel({
     !subplanIssues(feature.steps).length &&
     !(feature.parent && feature.status === 'completed') &&
     !feature.archived &&
-    step.attempts.length < step.maxAttempts;
+    (step.maxAttempts === 0 || step.attempts.length < step.maxAttempts);
   const next = feature.steps.find((s) => s.dependsOn.includes(step.id) && !stepResolved(s));
   const agent = state.agents.find((a) => a.id === step.agentId);
   const displayPolicy = step.inheritAgent && agent ? agentPolicy(agent) : step.policy;
@@ -2422,7 +2449,7 @@ function StepPanel({
           ? 'Vérifiez la connexion Copilot avant de lancer une étape.'
           : !unlocked
             ? 'Validez les étapes précédentes pour débloquer celle-ci.'
-            : step.attempts.length >= step.maxAttempts
+            : step.maxAttempts > 0 && step.attempts.length >= step.maxAttempts
               ? `La limite de ${step.maxAttempts} tentative${step.maxAttempts > 1 ? 's' : ''} est atteinte.`
               : feature.archived
                 ? 'Restaurez la session pour poursuivre.'
@@ -3220,7 +3247,7 @@ function StepPanel({
           {blocked && step.status !== 'running' && (
             <p className="action-help">
               {blocked}
-              {step.attempts.length >= step.maxAttempts && (
+              {step.maxAttempts > 0 && step.attempts.length >= step.maxAttempts && (
                 <button
                   className="text-button"
                   disabled={running || Boolean(feature.archived)}
@@ -3425,16 +3452,16 @@ function StepConfig({
         <span>Limite de tentatives</span>
         <input
           type="number"
-          required
           min={Math.max(step.attempts.length, 1)}
           max={100}
-          value={maxAttempts}
+          value={maxAttempts || ''}
+          placeholder="Sans limite"
           onChange={(e) => setMaxAttempts(Number(e.target.value))}
         />
         <small>
           {step.attempts.length} tentative{step.attempts.length > 1 ? 's' : ''} déjà effectuée
           {step.attempts.length > 1 ? 's' : ''}. Chaque nouvelle tentative peut consommer votre
-          quota Copilot. Augmenter la limite autorise ces exécutions supplémentaires.
+          quota Copilot. Laisser vide autorise les relances manuelles sans limite.
         </small>
       </label>
       <label className="field">

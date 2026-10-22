@@ -36,12 +36,12 @@ export function PermissionPicker({
       </select>
       <small>
         {value === 'manual'
-          ? 'Vous répondez aux demandes transmises par Copilot. Chaque accord vaut pour cette demande.'
+          ? 'Choisissez un accord ponctuel, par type pour la session, ou pour les lectures dans la solution.'
           : value === 'assisted'
             ? 'Copilot évalue les actions et vous consulte lorsqu’un accord reste nécessaire.'
             : 'Copilot autorise les outils, les chemins et les adresses sans vous solliciter, dans les limites de votre organisation.'}{' '}
-        Le choix reste le même en solo et en pair. Un changement ne retire pas les effets d’une
-        action déjà lancée.
+        Un changement de mode efface les accords mémorisés. Les actions déjà lancées restent
+        effectuées.
       </small>
       {state.runtime.native?.error && (
         <span className="inline-error">{state.runtime.native.error}</span>

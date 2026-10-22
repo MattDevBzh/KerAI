@@ -14,7 +14,7 @@
       "skills": [
         "ai-implement"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "session.md",
       "dependsOn": []
     }

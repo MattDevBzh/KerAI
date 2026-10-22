@@ -1,5 +1,6 @@
-import { SubplanCardVisual, SubplanSettings } from './SubplanUI';
-import { newSubplanStep, subplanIssues } from '../src/shared/subplans';
+import { SubplanCardVisual, SubplanMark, SubplanSettings, SubplanTeamButton } from './SubplanUI';
+import { searchText } from './Ergonomics';
+import { allFeatures, newSubplanStep, subplanIssues } from '../src/shared/subplans';
 import { inheritTeamProfiles } from '../src/shared/agentInheritance';
 import { AgentModelOverrides } from './AgentModelOverrides';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
@@ -13,6 +14,7 @@ import {
   Settings2,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import type { ClientMessage, Feature, StudioState, WorkflowStep } from '../src/shared/types';
 import {
@@ -66,6 +68,7 @@ export function TeamComposer({
     [announcement, setAnnouncement] = useState('');
   const [pending, setPending] = useState(false),
     [dropAt, setDropAt] = useState<number>();
+  const [dragging, setDragging] = useState(false);
   const dragged = useRef<DragItem | null>(null),
     request = useRef('');
   const locked =
@@ -73,6 +76,13 @@ export function TeamComposer({
   const stale = revision !== (feature.teamRevision ?? 0);
   const busy = pending;
   const disabled = busy || locked || stale || Boolean(feature.archived);
+  const appliesAfterRun =
+    Boolean(state.workspaceOperation) ||
+    allFeatures(state.features).some(
+      (f) =>
+        f.autopilot?.status === 'running' ||
+        f.steps.some((s) => s.status === 'running' || s.attempts.at(-1)?.pair?.busy),
+    );
   useEffect(
     () =>
       subscribe((message) => {
@@ -124,11 +134,13 @@ export function TeamComposer({
       return;
     }
     dragged.current = item;
+    setDragging(true);
     event.dataTransfer.setData(dragType, JSON.stringify(item));
     event.dataTransfer.effectAllowed = item.kind === 'member' ? 'move' : 'copy';
   };
   const end = () => {
     dragged.current = null;
+    setDragging(false);
     setDropAt(undefined);
   };
   const dropZone = (at: number) => (
@@ -151,14 +163,12 @@ export function TeamComposer({
       <Plus size={15} />
     </div>
   );
-  const query = search.trim().toLocaleLowerCase('fr');
+  const query = searchText(search);
   const agents = orderedAgents(state.agents, state.favoriteAgentIds).filter((agent) =>
-    `${agent.name} ${agent.nickname ?? ''} ${agent.description}`
-      .toLocaleLowerCase('fr')
-      .includes(query),
+    searchText(`${agent.name} ${agent.nickname ?? ''} ${agent.description}`).includes(query),
   );
   const teams = state.workflows.filter((team) =>
-    `${team.name} ${team.description}`.toLocaleLowerCase('fr').includes(query),
+    searchText(`${team.name} ${team.description}`).includes(query),
   );
   const selected = steps.find((step) => step.id === editing);
   const update = (patch: Partial<WorkflowStep>) =>
@@ -186,7 +196,7 @@ export function TeamComposer({
     ),
   ].filter((id) => !state.skills.some((skill) => skill.id === id));
   return (
-    <div className="team-composer">
+    <div className={`team-composer ${dragging ? 'dragging' : ''}`}>
       <section className="team-selection" aria-label="Mon équipe">
         <div className="section-heading">
           <h3>
@@ -263,14 +273,19 @@ export function TeamComposer({
                   </strong>
                   {step.subplan && (
                     <>
-                      <button
-                        type="button"
-                        className="text-button"
+                      <SubplanTeamButton
+                        step={step}
+                        state={state}
+                        dispatch={dispatch}
                         disabled={disabled}
-                        onClick={() => setEditing(step.id)}
-                      >
-                        Configurer la sous-équipe
-                      </button>
+                        onCard
+                        onChange={(patch) =>
+                          apply(
+                            () => steps.map((s) => (s.id === step.id ? { ...s, ...patch } : s)),
+                            'Sous-équipe mise à jour.',
+                          )
+                        }
+                      />
                       {subplanIssues([step]).length > 0 && (
                         <p className="subplan-warning">
                           Sous-équipe à configurer · lancement bloqué
@@ -283,7 +298,8 @@ export function TeamComposer({
                       <span className="subplan-card-kicker">SOUS-PLAN</span>
                       <strong>{step.subplan.teamName || 'Aucune sous-équipe'}</strong>
                       <small>
-                        {step.subplan.steps.length} interventions ·{' '}
+                        {step.subplan.steps.length} intervention
+                        {step.subplan.steps.length > 1 ? 's' : ''} ·{' '}
                         {step.subplan.mode === 'pair'
                           ? 'Découpage accompagné'
                           : 'Découpage automatique'}
@@ -432,11 +448,22 @@ export function TeamComposer({
       <label className="team-search">
         <Search size={17} />
         <input
+          type="search"
           aria-label="Rechercher des équipes ou agents"
           placeholder="Rechercher une équipe, un agent, un rôle…"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        {search && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Effacer la recherche d’équipes ou agents"
+            onClick={() => setSearch('')}
+          >
+            <X size={16} />
+          </button>
+        )}
       </label>
       <section className="team-catalog" aria-label="Équipes existantes">
         <h3>Équipes existantes</h3>
@@ -451,13 +478,19 @@ export function TeamComposer({
                 title="Glisser toute l’équipe"
               >
                 <div className="team-template-avatars">
-                  {team.steps.slice(0, 5).map((step) => (
-                    <Avatar
-                      key={step.id}
-                      agent={state.agents.find((agent) => agent.id === step.agentId)}
-                      small
-                    />
-                  ))}
+                  {team.steps
+                    .slice(0, 5)
+                    .map((step) =>
+                      step.subplan ? (
+                        <SubplanMark key={step.id} step={step} />
+                      ) : (
+                        <Avatar
+                          key={step.id}
+                          agent={state.agents.find((agent) => agent.id === step.agentId)}
+                          small
+                        />
+                      ),
+                    )}
                   {team.steps.length > 5 && <span>+{team.steps.length - 5}</span>}
                 </div>
                 <strong>{team.name}</strong>
@@ -552,7 +585,11 @@ export function TeamComposer({
           <span className="muted">
             {!steps.length
               ? 'La feature restera sans équipe.'
-              : 'En cours d’exécution : application au prochain arrêt.'}
+              : onApply
+                ? 'La carte sera mise à jour. Enregistrez ensuite l’équipe qui la contient.'
+                : appliesAfterRun
+                  ? 'Le travail continue. La composition sera appliquée au prochain arrêt.'
+                  : 'La composition sera enregistrée sans lancer d’agent.'}
           </span>
           <button type="button" className="button secondary" disabled={pending} onClick={onClose}>
             Annuler

@@ -37,7 +37,12 @@ export interface NativePermissionPrompt {
   kind: string;
   question: string;
   details: string;
+  /** Canonical execution directory; grants never cross sessions or working directories. */
+  directory?: string;
+  rememberable?: boolean;
+  workspaceRead?: boolean;
 }
+export type NativePermissionAnswer = boolean | 'remembered';
 export function usesNativeTools(input: {
   feature: { execution?: NativeExecution };
   mode?: 'discussion';

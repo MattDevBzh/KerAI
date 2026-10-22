@@ -4,7 +4,7 @@
 
 ## Sous-plans et sous-équipes
 
-Ajoute une carte **Sous-plan** dans une équipe enregistrée ou dans **Modifier l’équipe** d’une feature. Sa carte possède un visuel dédié. Choisis son orchestrateur, son mode de découpage et sa sous-équipe ; celle-ci peut contenir d’autres sous-plans. Le chat sert à discuter le découpage et à ajouter des tâches. Clique sur la carte pour entrer dans les itérations, avec retour au niveau précédent ou à l’équipe de base. [Guide détaillé](SOUS-PLANS.md).
+Ajoute une carte **Sous-plan** dans une équipe enregistrée ou dans **Modifier l’équipe** d’une feature. Sa carte possède un visuel dédié. Choisis son orchestrateur, son mode de découpage et sa sous-équipe ; celle-ci peut contenir d’autres sous-plans. Le chat sert à discuter le découpage et à ajouter des tâches. Clique sur la carte pour afficher son chat et ses tâches au même niveau. Clique ensuite sur une tâche dans le panneau des sous-tâches pour ouvrir sa sous-équipe, avec retour au niveau précédent ou à l’équipe de base. [Guide détaillé](SOUS-PLANS.md).
 
 ## Conversation intégrée de l’étape
 
@@ -191,7 +191,7 @@ Le classement mesure la fréquence d’utilisation, pas la qualité. Les durées
 
 **À la fin du parcours**, choisis **Valider définitivement** ou **Faire une correction**. Seule la validation finale réussie termine la session et affiche la célébration d’équipe. Les fichiers liés aux preuves sont revérifiés avant ce choix. Tu peux rejouer la célébration ou désactiver ses effets ; la réduction des animations est respectée. [Historique, corrections et décision finale](WORKFLOWS.md).
 
-**Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Dans la conversation native intégrée, la reprise conserve la tentative et compte un nouvel appel dans le budget. Dans le parcours historique, elle consomme une nouvelle tentative. Si la limite est atteinte, **Configurer → Limite de tentatives** permet de la relever explicitement.
+**Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Dans la conversation native intégrée, la reprise conserve la tentative et compte un nouvel appel dans le budget. Dans le parcours historique, elle consomme une nouvelle tentative. Par défaut, les appels et relances manuels ne sont pas plafonnés. **Configurer → Limite de tentatives** et **Budget → Nombre maximal d’exécutions** permettent de fixer une limite ; laisse le champ vide pour la retirer. Les limites déjà enregistrées restent appliquées. L’autopilot conserve son propre plafond.
 
 Les sessions restent liées à leur branche et à leur dossier d’exécution. À la création d’une session isolée, Feature Studio crée une branche et un worktree local depuis le dernier commit **HEAD**. Il ne crée aucun commit, push, PR ni déploiement automatiquement.
 

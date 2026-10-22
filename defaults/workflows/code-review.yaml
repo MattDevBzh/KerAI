@@ -14,7 +14,7 @@
       "skills": [
         "ai-relecture"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "review.md",
       "dependsOn": []
     }

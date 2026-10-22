@@ -138,12 +138,7 @@ export function AutopilotBar({
                     : 'À votre rythme'}
             </span>
           </h3>
-          <p>
-            {auto?.reason ??
-              (auto
-                ? 'Le parcours suit vos points de contrôle et votre budget.'
-                : 'Configurez le contexte de chaque étape et les décisions qui restent entre vos mains.')}
-          </p>
+          {auto?.reason && <p>{auto.reason}</p>}
           {auto && (
             <small>
               {auto.runs} / {auto.maxRuns} exécutions · {auto.correctionCycles} /{' '}
@@ -469,11 +464,11 @@ function BudgetFields({
         <label className="field">
           <span>Nombre maximal d’exécutions</span>
           <input
-            required
             type="number"
             min={1}
             max={1000}
-            value={value.maxRuns}
+            placeholder="Sans limite"
+            value={value.maxRuns || ''}
             onChange={(e) => onChange({ ...value, maxRuns: Number(e.target.value) })}
           />
         </label>
@@ -582,24 +577,16 @@ export function BudgetMeter({
           <div>
             <strong>
               {number(calls)}
-              {live && <small> / {live.maxRuns}</small>}
+              {live.maxRuns > 0 ? <small> / {live.maxRuns}</small> : <small> · sans limite</small>}
             </strong>
-            <span>
-              {calls === totals.runs
-                ? 'tentatives réalisées'
-                : `appels agents · ${totals.runs} tentative${totals.runs > 1 ? 's' : ''}`}
-            </span>
+            <span>appels agents</span>
           </div>
           <div>
             <strong>
               {tokens || unknown < totals.runs ? number(tokens) : '—'}
               {live?.maxTokens && <small> / {number(live.maxTokens)}</small>}
             </strong>
-            <span>
-              tokens mesurés{' '}
-              {unknown > 0 &&
-                `· ${unknown} tentative${unknown > 1 ? 's' : ''} avec mesure absente ou partielle`}
-            </span>
+            <span>tokens {unknown > 0 ? '· mesure partielle' : 'mesurés'}</span>
           </div>
           <div>
             <strong>
@@ -613,17 +600,24 @@ export function BudgetMeter({
             <span>crédits {totals.unknownCostRuns ? '· mesure incomplète' : 'mesurés'}</span>
           </div>
         </div>
-        {live && (
+        {live.maxRuns > 0 && (
           <div className="budget-track" aria-label={`${calls} appels sur ${live.maxRuns}`}>
             <span style={{ width: `${Math.min(100, (calls / live.maxRuns) * 100)}%` }} />
           </div>
         )}
-        <p className="field-help">
-          {live
-            ? `${profileLabels[live.modelProfile]} · ${number(live.maxPromptChars)} caractères maximum par prompt`
-            : 'Définissez un budget pour encadrer les prochaines exécutions.'}{' '}
-          Les valeurs inconnues ne comptent jamais comme des consommations nulles.
-        </p>
+        <details className="budget-details">
+          <summary>Détail du cadre</summary>
+          <p className="field-help">
+            {totals.runs} tentative{totals.runs > 1 ? 's' : ''} réalisée{totals.runs > 1 ? 's' : ''}
+            .
+            {unknown > 0 &&
+              ` ${unknown} tentative${unknown > 1 ? 's' : ''} avec mesure absente ou partielle.`}{' '}
+            {live
+              ? `${profileLabels[live.modelProfile]} · ${number(live.maxPromptChars)} caractères maximum par prompt`
+              : 'Définissez un budget pour encadrer les prochaines exécutions.'}{' '}
+            Les valeurs inconnues ne comptent jamais comme des consommations nulles.
+          </p>
+        </details>
       </section>
       {editing && (
         <StudioDialog
@@ -1656,8 +1650,10 @@ function workflowErrors(workflow: WorkflowType, state: StudioState) {
       errors.push(`${s.name} : choisissez un agent disponible.`);
     if (s.dependsOn.some((d) => !ids.has(d)))
       errors.push(`${s.name} : une dépendance n’existe plus.`);
-    if (s.maxAttempts < 1 || s.maxAttempts > 100)
-      errors.push(`${s.name} : la limite doit être comprise entre 1 et 100 tentatives.`);
+    if (s.maxAttempts < 0 || s.maxAttempts > 100)
+      errors.push(
+        `${s.name} : la limite doit être 0 (sans limite) ou comprise entre 1 et 100 tentatives.`,
+      );
     if (s.artifact.includes('..') || s.artifact.includes('/') || s.artifact.includes('\\'))
       errors.push(`${s.name} : utilisez un nom de fichier simple pour le livrable.`);
   }
@@ -1672,7 +1668,7 @@ function newStep(state: StudioState): WorkflowStep {
     agentId: state.agents[0]?.id ?? '',
     policy: 'read-only',
     skills: [],
-    maxAttempts: 3,
+    maxAttempts: 0,
     artifact: `${id}.md`,
     dependsOn: [],
     initialContext: '',
@@ -2056,29 +2052,36 @@ function WorkflowEditor({
                     </button>
                   </div>
                 </div>
-                <label className="field">
-                  <span>Agent de l’étape</span>
-                  <select
-                    value={step.agentId}
-                    onChange={(e) => {
-                      const agent = state.agents.find((a) => a.id === e.target.value);
-                      if (agent)
-                        update(
-                          inheritAgentProfile(
-                            { ...step, agentId: agent.id, model: undefined, reasoning: undefined },
-                            agent,
-                          ),
-                        );
-                    }}
-                  >
-                    <option value="">Choisir un agent…</option>
-                    {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.nickname || a.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {!step.subplan && (
+                  <label className="field">
+                    <span>Agent de l’étape</span>
+                    <select
+                      value={step.agentId}
+                      onChange={(e) => {
+                        const agent = state.agents.find((a) => a.id === e.target.value);
+                        if (agent)
+                          update(
+                            inheritAgentProfile(
+                              {
+                                ...step,
+                                agentId: agent.id,
+                                model: undefined,
+                                reasoning: undefined,
+                              },
+                              agent,
+                            ),
+                          );
+                      }}
+                    >
+                      <option value="">Choisir un agent…</option>
+                      {orderedAgents(state.agents, state.favoriteAgentIds).map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.nickname || a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 {step.subplan && (
                   <SubplanSettings
                     step={step}

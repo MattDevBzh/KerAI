@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Bot, Check, FileText, Pause, Play, Users } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -123,6 +123,115 @@ export function SessionConversation({
       tool,
     })),
   ].sort((a, b) => a.at.localeCompare(b.at));
+  const renderEntry = (entry: (typeof timeline)[number]) =>
+    entry.kind === 'tool' ? (
+      <details className="conversation-tool" key={entry.id}>
+        <summary>
+          <strong>{entry.tool.tool}</strong>
+          <span>
+            {entry.tool.status === 'running'
+              ? 'En cours'
+              : entry.tool.status === 'completed'
+                ? 'Terminé'
+                : entry.tool.status === 'interrupted'
+                  ? 'Interrompu'
+                  : 'Échec'}
+            {entry.tool.exitCode !== undefined && ` · code ${entry.tool.exitCode}`}
+          </span>
+        </summary>
+        <small>Source : Copilot · {entry.tool.directory}</small>
+        <pre>{entry.tool.command ?? entry.tool.arguments}</pre>
+        {entry.tool.output && <pre>{entry.tool.output}</pre>}
+        {entry.tool.truncated && (
+          <small>Extrait tronqué ; événements conservés dans l’archive.</small>
+        )}
+      </details>
+    ) : (
+      <article
+        key={entry.id}
+        className={`conversation-message ${entry.message.role} ${entry.message.kind === 'reasoning' || entry.message.role === 'system' ? 'technical' : ''}`}
+      >
+        <div className="conversation-message-meta">
+          <strong>
+            {entry.message.role === 'user'
+              ? 'Toi'
+              : entry.message.role === 'system'
+                ? 'Suivi du travail'
+                : (attempt.agentName ?? pair.snapshot.agent.name)}
+          </strong>
+          <time dateTime={entry.at}>
+            {new Date(entry.at).toLocaleTimeString('fr-FR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </time>
+        </div>
+        {entry.message.kind === 'reasoning' ? (
+          <details className="conversation-reasoning">
+            <summary>Réflexion transmise par Copilot</summary>
+            <div className="markdown">
+              <Markdown remarkPlugins={[remarkGfm]}>{entry.message.content}</Markdown>
+            </div>
+          </details>
+        ) : (
+          <div className="markdown">
+            <Markdown remarkPlugins={[remarkGfm]}>
+              {visibleText(entry.message.content) ||
+                (entry.message.status === 'streaming'
+                  ? 'La réponse arrive…'
+                  : 'Organisation proposée ci-dessous.')}
+            </Markdown>
+          </div>
+        )}
+        {entry.message.status === 'interrupted' && (
+          <small>Réponse interrompue · contenu conservé</small>
+        )}
+        {entry.message.delivery && (
+          <small className="conversation-delivery">
+            {
+              {
+                pending: 'En attente de transmission',
+                sent: 'Transmission en cours',
+                received: 'Reçu par Copilot',
+                uncertain: 'Transmission à vérifier · message conservé',
+                skipped: 'Conservé sans renvoi',
+              }[entry.message.delivery]
+            }
+          </small>
+        )}
+        {!locked && entry.message.delivery === 'uncertain' && (
+          <div className="conversation-next">
+            <small>
+              Copilot a peut-être déjà traité ce message. Relis sa réponse avant de choisir.
+            </small>
+            <button
+              className="button secondary small"
+              disabled={idleDisabled}
+              onClick={() => act('retry-message', undefined, entry.message.id)}
+            >
+              Renvoyer explicitement
+            </button>
+            <button
+              className="button secondary small"
+              disabled={idleDisabled}
+              onClick={() => act('keep-message', undefined, entry.message.id)}
+            >
+              Garder sans renvoyer
+            </button>
+          </div>
+        )}
+      </article>
+    );
+  const groups: { id: string; intermediate: boolean; entries: typeof timeline }[] = [];
+  for (const entry of timeline) {
+    const intermediate =
+      entry.kind === 'tool' ||
+      entry.message.kind === 'reasoning' ||
+      entry.message.role === 'system';
+    const previous = groups.at(-1);
+    if (intermediate && previous?.intermediate) previous.entries.push(entry);
+    else groups.push({ id: `${entry.kind}:${entry.id}`, intermediate, entries: [entry] });
+  }
   return (
     <section className="session-conversation" aria-label="Conversation de l’étape">
       <header className="conversation-header">
@@ -213,101 +322,17 @@ export function SessionConversation({
           if (el) follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
         }}
       >
-        {timeline.map((entry) =>
-          entry.kind === 'tool' ? (
-            <details className="conversation-tool" key={entry.id}>
-              <summary>
-                <strong>{entry.tool.tool}</strong>
-                <span>
-                  {entry.tool.status === 'running'
-                    ? 'En cours'
-                    : entry.tool.status === 'completed'
-                      ? 'Terminé'
-                      : entry.tool.status === 'interrupted'
-                        ? 'Interrompu'
-                        : 'Échec'}
-                  {entry.tool.exitCode !== undefined && ` · code ${entry.tool.exitCode}`}
-                </span>
-              </summary>
-              <small>Source : Copilot · {entry.tool.directory}</small>
-              <pre>{entry.tool.command ?? entry.tool.arguments}</pre>
-              {entry.tool.output && <pre>{entry.tool.output}</pre>}
-              {entry.tool.truncated && (
-                <small>Extrait tronqué ; événements conservés dans l’archive.</small>
-              )}
-            </details>
+        {groups.map((group, index) =>
+          group.intermediate ? (
+            <IntermediateMessages
+              key={group.id}
+              active={index === groups.length - 1}
+              count={group.entries.length}
+            >
+              {group.entries.map(renderEntry)}
+            </IntermediateMessages>
           ) : (
-            <article key={entry.id} className={`conversation-message ${entry.message.role}`}>
-              <div className="conversation-message-meta">
-                <strong>
-                  {entry.message.role === 'user'
-                    ? 'Toi'
-                    : entry.message.role === 'system'
-                      ? 'Suivi du travail'
-                      : (attempt.agentName ?? pair.snapshot.agent.name)}
-                </strong>
-                <time dateTime={entry.at}>
-                  {new Date(entry.at).toLocaleTimeString('fr-FR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </time>
-              </div>
-              {entry.message.kind === 'reasoning' ? (
-                <details className="conversation-reasoning">
-                  <summary>Réflexion transmise par Copilot</summary>
-                  <div className="markdown">
-                    <Markdown remarkPlugins={[remarkGfm]}>{entry.message.content}</Markdown>
-                  </div>
-                </details>
-              ) : (
-                <div className="markdown">
-                  <Markdown remarkPlugins={[remarkGfm]}>
-                    {visibleText(entry.message.content) ||
-                      (entry.message.status === 'streaming'
-                        ? 'La réponse arrive…'
-                        : 'Organisation proposée ci-dessous.')}
-                  </Markdown>
-                </div>
-              )}
-              {entry.message.status === 'interrupted' && (
-                <small>Réponse interrompue · contenu conservé</small>
-              )}
-              {entry.message.delivery && (
-                <small className="conversation-delivery">
-                  {
-                    {
-                      pending: 'En attente de transmission',
-                      sent: 'Transmission en cours',
-                      received: 'Reçu par Copilot',
-                      uncertain: 'Transmission à vérifier · message conservé',
-                      skipped: 'Conservé sans renvoi',
-                    }[entry.message.delivery]
-                  }
-                </small>
-              )}
-              {!locked && entry.message.delivery === 'uncertain' && (
-                <div className="conversation-next">
-                  <small>
-                    Copilot a peut-être déjà traité ce message. Relis sa réponse avant de choisir.
-                  </small>
-                  <button
-                    className="button secondary small"
-                    disabled={idleDisabled}
-                    onClick={() => act('retry-message', undefined, entry.message.id)}
-                  >
-                    Renvoyer explicitement
-                  </button>
-                  <button
-                    className="button secondary small"
-                    disabled={idleDisabled}
-                    onClick={() => act('keep-message', undefined, entry.message.id)}
-                  >
-                    Garder sans renvoyer
-                  </button>
-                </div>
-              )}
-            </article>
+            group.entries.map(renderEntry)
           ),
         )}
       </div>
@@ -421,7 +446,7 @@ export function SessionConversation({
           {error || pair.error}
         </p>
       )}
-      {!locked && (
+      {!locked && !step.subplan && (
         <details className="conversation-preferences">
           <summary>
             {paceLabels[pair.preferences.pace]} · Ajuster le rythme et les explications
@@ -513,6 +538,32 @@ export function SessionConversation({
           ))}
         </details>
       </footer>
+    </section>
+  );
+}
+
+function IntermediateMessages({
+  active,
+  count,
+  children,
+}: {
+  active: boolean;
+  count: number;
+  children: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(active);
+  useEffect(() => setExpanded(active), [active]);
+  return (
+    <section className="conversation-intermediate" aria-label="Messages intermédiaires">
+      <button
+        className="text-button intermediate-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? 'Masquer les messages intermédiaires' : 'Afficher les messages intermédiaires'}{' '}
+        <span>· {count}</span>
+      </button>
+      {expanded && <div className="intermediate-content">{children}</div>}
     </section>
   );
 }

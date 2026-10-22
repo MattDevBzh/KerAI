@@ -1402,7 +1402,7 @@ it('persists native permissions, refusal, runtime evidence and observed edits wi
   ).rejects.toThrow(/contexte a changé/);
   expect(f.inputs).toHaveLength(0);
   await writeFile(join(f.workspace, 'already-dirty.txt'), 'human work');
-  let permitted: boolean | undefined;
+  let permitted: boolean | 'remembered' | undefined;
   f.run(async (_input, callbacks) => {
     permitted = await callbacks.onNativePermission!({
       kind: 'shell',
@@ -1474,4 +1474,108 @@ it('cancels native permission waits and keeps changes visible after interruption
   expect(feature.steps[0].attempts[0].changedFiles).toContain('partial.txt');
   expect(f.service.state.humanRequests).toHaveLength(0);
   expect(() => f.service.answerHumanRequest(requestId, 'allow')).toThrow(/plus active/);
+});
+
+it('groups native permissions for the root session, including concurrent requests, and clears grants on mode changes', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Scoped grants',
+    description: '',
+    workflowId: 'single',
+  });
+  const prompt = {
+    kind: 'read',
+    question: 'Read file?',
+    details: 'Local file',
+    directory: f.workspace,
+    rememberable: true,
+    workspaceRead: true,
+  };
+  const decisions: (boolean | 'remembered')[] = [];
+  f.run(async (_input, callbacks) => {
+    decisions.push(
+      ...(await Promise.all([
+        callbacks.onNativePermission!(prompt),
+        callbacks.onNativePermission!(prompt),
+      ])),
+    );
+    decisions.push(await callbacks.onNativePermission!(prompt));
+    decisions.push(
+      await callbacks.onNativePermission!({
+        ...prompt,
+        workspaceRead: false,
+        details: 'Outside file',
+      }),
+    );
+    decisions.push(
+      await callbacks.onNativePermission!({
+        ...prompt,
+        rememberable: false,
+        details: 'Managed request',
+      }),
+    );
+    decisions.push(
+      await callbacks.onNativePermission!({
+        ...prompt,
+        kind: 'write',
+        workspaceRead: false,
+        details: 'Write request',
+      }),
+    );
+    decisions.push(
+      await callbacks.onNativePermission!({
+        ...prompt,
+        directory: join(f.workspace, 'different'),
+        details: 'Different workspace',
+      }),
+    );
+    return finished();
+  });
+  const running = f.service.runStep(feature.id, 'session');
+  await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(2), running);
+  const request = f.service.state.humanRequests![0];
+  expect(request.choices).toContain('allow-workspace-read');
+  f.service.answerHumanRequest(request.id, 'allow-workspace-read');
+  for (const detail of [
+    'Outside file',
+    'Managed request',
+    'Write request',
+    'Different workspace',
+  ]) {
+    await waitForInteraction(
+      () => expect(f.service.state.humanRequests?.[0]?.details).toBe(detail),
+      running,
+    );
+    const next = f.service.state.humanRequests![0];
+    if (detail === 'Managed request') expect(next.choices).toEqual(['allow', 'deny']);
+    f.service.answerHumanRequest(next.id, 'deny');
+  }
+  await running;
+  expect(decisions).toEqual([true, 'remembered', 'remembered', false, false, false, false]);
+  // Selecting even the same mode revokes the scoped agreements.
+  await f.service.setPermissionMode(feature.id, 'manual');
+  f.run(async (_input, callbacks) => {
+    decisions.push(await callbacks.onNativePermission!(prompt));
+    decisions.push(await callbacks.onNativePermission!({ ...prompt, workspaceRead: false }));
+    return finished();
+  });
+  const again = f.service.runStep(feature.id, 'session');
+  await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(1), again);
+  f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'allow-kind');
+  await again;
+  expect(decisions.slice(-2)).toEqual([true, 'remembered']);
+  const other = await f.service.createFeature({
+    title: 'Other session',
+    description: '',
+    workflowId: 'single',
+  });
+  f.run(async (_input, callbacks) => {
+    expect(await callbacks.onNativePermission!(prompt)).toBe(false);
+    return finished();
+  });
+  const isolated = f.service.runStep(other.id, 'session');
+  await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(1), isolated);
+  f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'deny');
+  await isolated;
 });

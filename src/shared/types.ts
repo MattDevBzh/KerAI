@@ -57,6 +57,7 @@ export interface WorkflowStep {
   model?: string;
   reasoning?: string;
   skills: string[];
+  /** 0 means no limit on user-requested attempts. */
   maxAttempts: number;
   artifact: string;
   dependsOn: string[];
@@ -643,7 +644,9 @@ export interface RunCallbacks {
   onNativeEventId?(id: string): void;
   onNativeMessageReceived?(id: string): void;
   onNativeActivity?(activity: import('./native').NativeActivity): void;
-  onNativePermission?(request: import('./native').NativePermissionPrompt): Promise<boolean>;
+  onNativePermission?(
+    request: import('./native').NativePermissionPrompt,
+  ): Promise<import('./native').NativePermissionAnswer>;
   onTrace?(trace: import('./observation').SessionTrace): void;
   onEvent(event: RunEvent): void;
   onSession(id: string): void;

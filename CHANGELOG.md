@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.26.0 — 2026-10-22 · Des sessions plus lisibles
+
+- Accès direct à l’étape en cours, focus clavier sur le détail après sélection d’une carte et présentation compacte du cadre de la session.
+- Sous-équipes : mission lisible en tête de page, contexte complet dépliable, niveau et numéro d’itération explicites, retour vers le travail actif. Les cartes gardent leur illustration dédiée dans les catalogues et le QG.
+- Historique des sous-tâches : itération active mise en avant, progression, états distincts, lien vers l’itération corrigée, recherche sans accents et filtres pour les grandes listes. Les résultats à revérifier ne sont plus comptés comme validés dans la progression courante.
+- Composition ouverte directement depuis la carte, en-tête du panneau toujours accessible, retour du focus à la fermeture, adaptation aux petites fenêtres et au zoom. Les modifications imbriquées restent un brouillon jusqu’à l’enregistrement de l’équipe parente.
+- Conversation allégée : outils et réflexions regroupés, détails consultables à la demande, questions humaines dans une popin réductible avec brouillon partagé avec le chat.
+- Permissions natives : accord ponctuel, par type pour la session ou pour les lectures dans le dossier de travail, quand le runtime le permet. Les règles gérées et demandes de contournement restent prioritaires ; un changement de mode efface les accords mémorisés.
+- Appels et relances manuels sans plafond par défaut ; limites explicites existantes conservées et configurables. L’autopilot conserve son propre plafond.
+
 ## 1.24.0 — 2026-10-22 · Sous-plans et sous-équipes
 
 - Carte Sous-plan dédiée, sans portrait ni nom d’orchestrateur, compatible avec les thèmes et le QG vivant. Composition dans une équipe enregistrée ou une feature, configuration récursive dans le même panneau.

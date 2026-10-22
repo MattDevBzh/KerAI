@@ -35,6 +35,9 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'subplanState' in host, 'Recursive execution missing from host'
         assert b'subplan-card-visual' in ui, 'Dedicated subplan card missing from webview'
         assert b'subplan-navigation' in ui, 'Iteration navigation missing from webview'
+        for marker in ('subplan-history-tools', 'subplan-context', 'feature-jump-to-work', 'human-prompt-dialog'):
+            assert marker.encode() in ui, f'{marker} missing from webview'
+        assert b'allow-workspace-read' in host, 'Scoped native permission grants missing from host'
         assert archive.read('extension/defaults/agents/fs-orchestrator.agent.md') == (root / 'defaults/agents/fs-orchestrator.agent.md').read_bytes()
         assert b'copilot-native' in host, 'Native execution missing from host'
         assert b'native-permissions' in ui, 'Native permission picker missing from webview'
@@ -79,7 +82,7 @@ def verify(vsix, root, extract=None, match_build=False):
         'sha256': hashlib.sha256(vsix.read_bytes()).hexdigest(),
         'verifiedBuildFiles': len(built_files),
         'verifiedPublicAssets': len(assets),
-        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes', 'stepConversation', 'recursiveSubplans'],
+        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes', 'stepConversation', 'recursiveSubplans', 'subplanErgonomics', 'humanPrompts', 'scopedPermissions'],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

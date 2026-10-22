@@ -1,6 +1,6 @@
 .session-conversation {
   min-width: 0;
-  padding: 22px;
+  padding: 16px;
 }
 .conversation-header {
   display: flex;
@@ -33,7 +33,8 @@
   padding: 14px 0;
 }
 .conversation-feed {
-  height: clamp(300px, 44vh, 600px);
+  max-height: clamp(360px, 52vh, 720px);
+  min-height: 180px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 6px 4px 12px;
@@ -81,10 +82,33 @@
   overflow-wrap: anywhere;
 }
 .conversation-tool {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 16px;
-  margin: 0 22px 12px 0;
+  border: 0;
+  border-left: 2px solid var(--border);
+  padding: 5px 10px;
+  margin: 2px 0;
+}
+.conversation-intermediate {
+  margin: 8px 0 14px;
+}
+.intermediate-toggle {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 0;
+}
+.intermediate-content {
+  margin-top: 5px;
+}
+.conversation-message.technical {
+  margin: 2px 0;
+  padding: 5px 10px;
+  border: 0;
+  border-left: 2px solid var(--border);
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.conversation-message.technical .conversation-message-meta {
+  display: none;
 }
 .conversation-tool summary {
   cursor: pointer;

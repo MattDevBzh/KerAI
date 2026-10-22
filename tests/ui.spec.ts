@@ -750,6 +750,7 @@ test('MCP : serveur off par défaut, preset explicite, secret password et permis
     },
   ];
   await hosted(page, state);
+  await page.getByRole('button', { name: 'Réduire au chat' }).click();
   await page.getByRole('button', { name: 'Ouvrir la demande' }).click();
   await page.getByRole('button', { name: 'Autoriser cette demande' }).click();
   expect((await messages(page)).at(-1)).toEqual({
@@ -1074,7 +1075,7 @@ test('budgets : conversion des crédits vers le stockage nano-AIU et valeurs abs
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'saveBudget',
     budget: {
-      maxRuns: 10,
+      maxRuns: 0,
       maxPromptChars: 60000,
       maxTokens: 5000,
       maxNanoAiu: 1_000_000_000_000,

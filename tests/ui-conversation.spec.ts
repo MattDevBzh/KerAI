@@ -215,6 +215,7 @@ test('shows the same native timeline in solo, joins pair without changing permis
   await open(page, scenario('solo', true));
   await expect(page.getByLabel('Ton message à l’agent')).toHaveCount(0);
   await expect(page.getByRole('tab', { name: 'Livrable', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Afficher les messages intermédiaires/ }).click();
   await page.locator('.conversation-tool summary').click();
   await expect(page.locator('.conversation-tool')).toContainText('src/filters.ts');
   await page.getByText('Réflexion transmise par Copilot', { exact: true }).click();
@@ -339,4 +340,153 @@ test('renders the shared conversation in the project theme and fits a narrow VS 
     path: resolve('docs/screenshots/conversation-narrow.png'),
     fullPage: true,
   });
+});
+
+test('shares the prompt draft across the popin and chat, avoids duplicate answers and advances the queue', async ({
+  page,
+}) => {
+  const state = scenario('pair', true),
+    feature = state.features[0],
+    step = feature.steps[0];
+  state.humanRequests = [
+    {
+      id: 'question-one',
+      kind: 'question',
+      featureId: feature.id,
+      stepId: step.id,
+      question: 'Quel comportement pour les filtres ?',
+      allowFreeform: true,
+      choices: ['Conserver le choix', 'Réinitialiser'],
+    },
+  ];
+  await open(page, state);
+  const dialog = page.getByRole('dialog', { name: 'Votre réponse est attendue' });
+  const chat = page.locator('.session-conversation');
+  await expect(dialog).toBeVisible();
+  await expect(
+    chat.getByRole('heading', { name: 'Quel comportement pour les filtres ?' }),
+  ).toBeAttached();
+  await dialog
+    .getByLabel('Votre réponse', { exact: true })
+    .fill('Conserver les filtres pendant la session.');
+  await mkdir(resolve('docs/screenshots/session-ergonomics'), { recursive: true });
+  await page.screenshot({ path: resolve('docs/screenshots/session-ergonomics/prompt-popin.png') });
+  await dialog.getByRole('button', { name: 'Réduire au chat' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(chat.getByLabel('Votre réponse', { exact: true })).toHaveValue(
+    'Conserver les filtres pendant la session.',
+  );
+  await chat
+    .getByLabel('Votre réponse', { exact: true })
+    .fill('Conserver aussi la navigation au clavier.');
+  await page.evaluate(() => Reflect.get(window, 'conversationPublish')());
+  await expect(dialog).toHaveCount(0);
+  await chat.getByRole('button', { name: 'Mettre en avant le prompt' }).click();
+  await expect(dialog.getByLabel('Votre réponse', { exact: true })).toHaveValue(
+    'Conserver aussi la navigation au clavier.',
+  );
+  await dialog.getByRole('button', { name: 'Transmettre la réponse' }).click();
+  await expect(dialog.getByRole('button', { name: 'Transmettre la réponse' })).toBeDisabled();
+  expect((await sent(page)).filter((m) => m.type === 'answerHumanRequest')).toEqual([
+    {
+      type: 'answerHumanRequest',
+      requestId: 'question-one',
+      answer: 'Conserver aussi la navigation au clavier.',
+    },
+  ]);
+  await page.evaluate(() => {
+    const data = Reflect.get(window, 'conversationState') as StudioState;
+    data.humanRequests = [
+      { ...data.humanRequests![0], id: 'question-two', question: 'Une dernière précision ?' },
+    ];
+    Reflect.get(window, 'conversationPublish')();
+  });
+  await expect(dialog.getByRole('heading', { name: 'Une dernière précision ?' })).toBeVisible();
+  await expect(dialog.getByLabel('Votre réponse', { exact: true })).toHaveValue('');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await page.evaluate(() => {
+    const data = Reflect.get(window, 'conversationState') as StudioState;
+    data.humanRequests = [];
+    Reflect.get(window, 'conversationPublish')();
+  });
+  await expect(chat.getByRole('button', { name: 'Mettre en avant le prompt' })).toHaveCount(0);
+});
+
+test('automatically folds live technical messages when a user-facing message arrives', async ({
+  page,
+}) => {
+  const state = scenario('pair', true),
+    pair = state.features[0].steps[0].attempts[0].pair!;
+  pair.messages = pair.messages.filter((m) => m.id !== 'assistant');
+  await open(page, state);
+  await expect(
+    page.getByRole('button', { name: /Masquer les messages intermédiaires/ }),
+  ).toBeVisible();
+  await expect(page.locator('.conversation-tool')).toBeVisible();
+  await page.evaluate(() => {
+    const data = Reflect.get(window, 'conversationState') as StudioState;
+    data.features[0].steps[0].attempts[0].pair!.messages.push({
+      id: 'reply',
+      role: 'assistant',
+      kind: 'text',
+      content: 'Les filtres sont prêts.',
+      at: '2026-10-21T12:00:04Z',
+      status: 'streaming',
+    });
+    Reflect.get(window, 'conversationPublish')();
+  });
+  await expect(
+    page.getByRole('button', { name: /Afficher les messages intermédiaires/ }),
+  ).toBeVisible();
+  await expect(page.locator('.conversation-tool')).toHaveCount(0);
+  await expect(page.getByText('Les filtres sont prêts.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Afficher les messages intermédiaires/ }).click();
+  await expect(page.locator('.conversation-tool')).toBeVisible();
+  await page.getByRole('button', { name: /Masquer les messages intermédiaires/ }).click();
+  await expect(page.locator('.conversation-tool')).toHaveCount(0);
+});
+
+test('minimizing closes the whole pending queue, keeps independent drafts and fits a narrow window', async ({
+  page,
+}) => {
+  const state = scenario('pair', true),
+    feature = state.features[0];
+  state.humanRequests = ['Première question ?', 'Deuxième question ?'].map((question, i) => ({
+    id: `queue-${i}`,
+    kind: 'question',
+    featureId: feature.id,
+    stepId: feature.activeStepId,
+    question,
+    allowFreeform: true,
+  }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, state);
+  const dialog = page.getByRole('dialog', { name: 'Votre réponse est attendue' });
+  await dialog.getByLabel('Votre réponse', { exact: true }).fill('Premier brouillon');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  expect(await dialog.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await dialog.getByRole('button', { name: 'Réduire au chat' }).click();
+  await expect(dialog).toHaveCount(0);
+  const cards = page.locator('.session-conversation .human-request');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0).getByLabel('Votre réponse', { exact: true })).toHaveValue(
+    'Premier brouillon',
+  );
+  await cards.nth(1).getByRole('button', { name: 'Mettre en avant le prompt' }).click();
+  await expect(dialog.getByLabel('Votre réponse', { exact: true })).toHaveValue('');
+  await expect(dialog.getByRole('heading', { name: 'Deuxième question ?' })).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+  ).toBe(true);
+  await mkdir(resolve('docs/screenshots/session-ergonomics'), { recursive: true });
+  await page.screenshot({ path: resolve('docs/screenshots/session-ergonomics/prompt-narrow.png') });
+  await page.evaluate(() => {
+    const data = Reflect.get(window, 'conversationState') as StudioState;
+    data.humanRequests = [];
+    Reflect.get(window, 'conversationPublish')();
+  });
+  await expect(dialog).toHaveCount(0);
+  expect((await sent(page)).filter((m) => m.type === 'answerHumanRequest')).toHaveLength(0);
 });

@@ -133,7 +133,10 @@ export function GitWorkspacePanel({
   const count = feature.checkpoints?.length ?? 0;
   return (
     <>
-      <section className={`git-workspace-band ${feature.worktree ? 'isolated' : 'shared'}`}>
+      <section
+        aria-label="Espace Git"
+        className={`git-workspace-band ${feature.worktree ? 'isolated' : 'shared'}`}
+      >
         <span className="workspace-band-symbol">
           {feature.worktree ? <GitBranch size={20} /> : <FolderOpen size={20} />}
         </span>
@@ -178,7 +181,9 @@ export function GitWorkspacePanel({
         </div>
         <div className="workspace-band-actions">
           <button
-            className="text-button"
+            className="icon-button"
+            aria-label="Ouvrir le dossier"
+            title="Ouvrir le dossier"
             onClick={() =>
               dispatch({
                 type: 'openFeatureWorkspace',
@@ -187,7 +192,7 @@ export function GitWorkspacePanel({
               })
             }
           >
-            <FolderOpen size={13} /> Ouvrir le dossier <ArrowRight size={12} />
+            <FolderOpen size={15} />
           </button>
           <button className="button secondary small" onClick={() => setOpen(true)}>
             <History size={14} /> Points de restauration <span className="count-pill">{count}</span>

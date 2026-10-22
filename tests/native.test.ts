@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { CopilotSession, PermissionRequest, SessionEvent } from '@github/copilot-sdk';
 import {
   applyNativePermissions,
@@ -6,7 +9,7 @@ import {
   NativeActivityCollector,
   verifyNativeCatalog,
 } from '../src/host/NativeCopilot';
-import type { NativeActivity } from '../src/shared/native';
+import type { NativeActivity, NativePermissionPrompt } from '../src/shared/native';
 import { usesNativeTools } from '../src/shared/native';
 import { nativeActivitySchema } from '../src/core/nativeSchemas';
 import { observedNativeChanges } from '../src/host/NativeChanges';
@@ -23,6 +26,64 @@ const shell: PermissionRequest = {
 };
 
 describe('native permissions and evidence', () => {
+  it('offers solution reads only for canonical paths inside the workspace and excludes managed asks', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'native-grants-')));
+    try {
+      const directory = join(root, 'repo');
+      await mkdir(directory);
+      await writeFile(join(directory, 'inside.txt'), 'inside');
+      await writeFile(join(root, 'outside.txt'), 'outside');
+      await symlink(
+        root,
+        join(directory, 'escape'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      const ask = vi.fn(async (_prompt: NativePermissionPrompt) => false);
+      for (const [path, expected] of [
+        ['inside.txt', true],
+        ['../outside.txt', false],
+        ['escape/outside.txt', false],
+        ['missing.txt', false],
+      ] as const) {
+        await decideNativePermission(
+          { kind: 'read', intention: 'Inspect context', path },
+          'manual',
+          ask,
+          directory,
+        );
+        expect(Boolean(ask.mock.calls.at(-1)![0].workspaceRead)).toBe(expected);
+      }
+      await decideNativePermission(
+        {
+          kind: 'read',
+          intention: 'Inspect context',
+          path: 'inside.txt',
+          managedApprovalRequired: true,
+        },
+        'manual',
+        ask,
+        directory,
+      );
+      expect(ask.mock.calls.at(-1)![0]).toMatchObject({ rememberable: false });
+      await decideNativePermission(
+        { ...shell, canOfferSessionApproval: false },
+        'manual',
+        ask,
+        directory,
+      );
+      expect(ask.mock.calls.at(-1)![0].rememberable).toBe(false);
+      expect(
+        await decideNativePermission(
+          { kind: 'read', intention: 'Inspect context', path: 'inside.txt' },
+          'manual',
+          async () => 'remembered',
+          directory,
+        ),
+      ).toEqual({ kind: 'approve-once', approvedInteractively: false });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it('keeps manual approvals single-use and honors refusals, including managed asks in allow-all', async () => {
     const ask = vi.fn(async () => false);
     expect(await decideNativePermission(shell, 'manual', ask, '/repo')).toMatchObject({

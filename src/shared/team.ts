@@ -83,7 +83,7 @@ export function agentStep(agent: AgentProfile): WorkflowStep {
       reasoning: agent.reasoning ?? '',
       policy: agentPolicy(agent),
       skills: [],
-      maxAttempts: 3,
+      maxAttempts: 0,
       artifact: 'COMPTE_RENDU.md',
       dependsOn: [],
     },

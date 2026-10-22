@@ -147,14 +147,16 @@ test('shows native permission scope, disables concurrent mode changes and sends 
   page,
 }) => {
   await open(page, fixture(true));
-  await expect(page.getByText('AUTORISATION COPILOT · CETTE DEMANDE')).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: 'Votre réponse est attendue' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('AUTORISATION COPILOT · CETTE DEMANDE')).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Permissions Copilot' })).toBeDisabled();
   await expect(
-    page.getByText('Dossier : /workspace/website\nCommande : npm run build'),
+    dialog.getByText('Dossier : /workspace/website\nCommande : npm run build'),
   ).toBeVisible();
   await mkdir(resolve('test-results/native'), { recursive: true });
   await page.screenshot({ path: resolve('test-results/native/permission.png'), fullPage: true });
-  await page.locator('.native-permission').getByRole('button', { name: 'Refuser' }).click();
+  await dialog.getByRole('button', { name: 'Refuser' }).click();
   await expect
     .poll(() => sent(page, 'answerHumanRequest'))
     .toEqual([{ type: 'answerHumanRequest', requestId: 'native-permission', answer: 'deny' }]);
@@ -183,3 +185,32 @@ test('renders native command evidence without claiming host test validation', as
   await expect.poll(() => sent(page, 'setPermissionMode')).toMatchObject([{ mode: 'allow-all' }]);
   expect(await sent(page, 'pairAction')).toHaveLength(0);
 });
+
+for (const [label, answer] of [
+  ['Autoriser les lectures dans cette solution', 'allow-workspace-read'],
+  ['Autoriser ce type pour la session', 'allow-kind'],
+] as const) {
+  test(`sends the explicit native permission scope: ${answer}`, async ({ page }) => {
+    const state = fixture(true);
+    Object.assign(state.humanRequests![0], {
+      question: 'Autoriser cette lecture ?',
+      details: 'Dossier de la session : /workspace/website\nChemin : src/filters.ts',
+      permissionKind: 'read',
+      choices: ['allow', 'deny', 'allow-kind', 'allow-workspace-read'],
+    });
+    await open(page, state);
+    const dialog = page.getByRole('dialog', { name: 'Votre réponse est attendue' });
+    await expect(dialog.getByRole('button', { name: label })).toBeEnabled();
+    if (answer === 'allow-workspace-read') {
+      await mkdir(resolve('docs/screenshots/session-ergonomics'), { recursive: true });
+      await page.screenshot({
+        path: resolve('docs/screenshots/session-ergonomics/permissions.png'),
+      });
+    }
+    await dialog.getByRole('button', { name: label }).click();
+    await expect
+      .poll(() => sent(page, 'answerHumanRequest'))
+      .toEqual([{ type: 'answerHumanRequest', requestId: 'native-permission', answer }]);
+    await expect(dialog.getByRole('button', { name: label })).toBeDisabled();
+  });
+}

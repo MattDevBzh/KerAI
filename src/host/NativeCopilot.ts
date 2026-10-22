@@ -6,12 +6,15 @@ import type {
   SessionConfig,
   SessionEvent,
 } from '@github/copilot-sdk';
+import { realpath } from 'node:fs/promises';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import {
   NATIVE_PERMISSION_MODES,
   type NativeActivity,
   type NativeCapabilities,
   type NativePermissionMode,
   type NativePermissionPrompt,
+  type NativePermissionAnswer,
 } from '../shared/native';
 
 // The first native scope: file tools, shell lifecycle and human questions.
@@ -195,7 +198,7 @@ export function nativePermissionPrompt(
 export async function decideNativePermission(
   request: PermissionRequest,
   mode: NativePermissionMode,
-  ask: (prompt: NativePermissionPrompt) => Promise<boolean>,
+  ask: (prompt: NativePermissionPrompt) => Promise<NativePermissionAnswer>,
   directory: string,
 ): Promise<PermissionRequestResult> {
   // Requests still reaching us in allow-all may be managed asks. Never approve them blindly.
@@ -207,8 +210,30 @@ export async function decideNativePermission(
     advice?.recommendation === 'approve'
   )
     return { kind: 'approve-once' };
-  return (await ask(nativePermissionPrompt(request, directory)))
-    ? { kind: 'approve-once', approvedInteractively: true }
+  const prompt = nativePermissionPrompt(request, directory);
+  const canonicalDirectory = await realpath(directory).catch(() => undefined);
+  prompt.directory = canonicalDirectory;
+  prompt.rememberable =
+    Boolean(canonicalDirectory) &&
+    ['read', 'write', 'shell', 'url', 'mcp'].includes(request.kind) &&
+    !request.managedApprovalRequired &&
+    !('requestSandboxBypass' in request && request.requestSandboxBypass) &&
+    !('canOfferSessionApproval' in request && request.canOfferSessionApproval === false);
+  if (prompt.rememberable && request.kind === 'read') {
+    const target = await realpath(resolve(canonicalDirectory!, request.path)).catch(
+      () => undefined,
+    );
+    if (target) {
+      const distance = relative(canonicalDirectory!, target);
+      prompt.workspaceRead =
+        !isAbsolute(distance) && distance !== '..' && !distance.startsWith(`..${sep}`);
+    }
+  }
+  const answer = await ask(prompt);
+  if (answer === 'remembered' && !prompt.rememberable)
+    return { kind: 'reject', feedback: 'Cette action requiert un nouvel accord humain.' };
+  return answer
+    ? { kind: 'approve-once', approvedInteractively: answer !== 'remembered' }
     : {
         kind: 'reject',
         feedback: 'Action refusée par l’utilisateur. Adapte la suite sans exécuter cette action.',

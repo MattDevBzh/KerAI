@@ -12,9 +12,13 @@ Le mode est visible à la création de la session, avant le lancement et dans le
 | Assisté | Les demandes avec une recommandation d’approbation valide du runtime peuvent être acceptées ; les autres restent humaines. Disponible uniquement si le diagnostic confirme ce mode. |
 | Tout autoriser | Copilot autorise les actions natives selon son mode `allow-all`. Les règles imposées par l’organisation restent prioritaires ; une demande résiduelle est présentée à l’utilisateur. |
 
-Chaque demande affiche les informations disponibles : dossier, commande, chemin, modification ou outil MCP. **Autoriser une fois** répond à cette demande uniquement ; **Refuser** transmet un refus. Une demande trop volumineuse pour être présentée entièrement est refusée. Les questions `ask_user` attendent une réponse effective, libre ou choisie.
+Chaque demande affiche les informations disponibles : dossier, commande, chemin, modification ou outil MCP. **Autoriser cette demande** répond à cette demande uniquement ; **Refuser** transmet un refus. Une demande trop volumineuse pour être présentée entièrement est refusée. Les questions `ask_user` attendent une réponse effective, libre ou choisie.
 
-Solo/pair, permissions et validation du résultat sont trois choix distincts. Les changements de mode ne reviennent pas sur les effets déjà produits. Avant chaque exécution ou reprise, les anciens accords locaux sont remis à zéro et le mode courant est réappliqué. La politique gérée par Copilot reste en vigueur.
+Quand le runtime le permet, **Autoriser ce type pour la session** couvre les prochaines demandes du même type (lecture, écriture, commande, adresse ou MCP), y compris celles déjà en attente. **Autoriser les lectures dans cette solution** limite cet accord aux chemins réellement situés dans le dossier de travail ; un lien qui sort du dossier reste soumis à une demande. L’accord est partagé avec les sous-équipes de cette session dans le même dossier, sans être partagé avec les autres sessions. Il reste en mémoire jusqu’à la fermeture du projet ou au choix d’un mode de permissions. Les demandes imposées par l’organisation ou demandant un contournement de l’isolation restent ponctuelles.
+
+Les demandes apparaissent automatiquement dans une popin. **Réduire au chat** la ferme ; la demande et le brouillon restent disponibles dans le panneau de chat. **Mettre en avant le prompt** rouvre la même demande. Une réponse n’est transmise qu’après ton clic sur son bouton de validation.
+
+Solo/pair, permissions et validation du résultat sont trois choix distincts. Les changements de mode ne reviennent pas sur les effets déjà produits. Avant chaque exécution ou reprise, les accords internes du runtime sont remis à zéro et le mode courant est réappliqué. Les accords de session explicitement choisis dans le cockpit restent contrôlés par le host pour chaque demande. La politique gérée par Copilot reste en vigueur.
 
 ## Voir les résultats
 

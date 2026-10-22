@@ -1,0 +1,129 @@
+.feature-page .feature-heading {
+  margin-bottom: 14px;
+}
+.feature-page .feature-heading h1 {
+  font-size: 27px;
+  margin: 8px 0 5px;
+}
+.feature-page .feature-meta {
+  margin-top: 8px;
+}
+.feature-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.feature-toolbar .feature-tools {
+  margin: 0;
+  gap: 6px;
+}
+.feature-toolbar .git-workspace-band {
+  flex: 1 1 360px;
+  min-width: 0;
+  padding: 8px 10px;
+  margin: 0;
+  gap: 8px;
+}
+.feature-toolbar .workspace-band-symbol {
+  display: none;
+}
+.feature-toolbar .workspace-band-info > div {
+  margin: 0 0 3px;
+  gap: 5px;
+}
+.feature-toolbar .workspace-mode {
+  padding: 0;
+  background: none;
+}
+.feature-toolbar .workspace-band-info > strong {
+  font-size: 11px;
+}
+.feature-toolbar .workspace-band-meta {
+  margin-top: 3px;
+  gap: 4px;
+  line-height: 1.4;
+}
+.feature-toolbar .workspace-band-actions {
+  gap: 5px;
+}
+.feature-toolbar .workspace-band-actions .button {
+  font-size: 11px;
+  padding: 6px 8px;
+}
+.feature-page .feature-control-band {
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.feature-page .autopilot-bar,
+.feature-page .budget-meter {
+  padding: 12px 14px;
+}
+.feature-page .autopilot-bar {
+  gap: 8px;
+  align-content: center;
+}
+.feature-page .autopilot-symbol {
+  width: 28px;
+  height: 28px;
+}
+.feature-page .autopilot-bar h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.feature-page .autopilot-bar p {
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.feature-page .autopilot-bar small {
+  margin-top: 4px;
+}
+.feature-page .autopilot-actions {
+  padding-top: 5px;
+  border: 0;
+  gap: 12px;
+}
+.feature-page .budget-heading {
+  margin-bottom: 8px;
+}
+.feature-page .budget-stats {
+  gap: 8px;
+}
+.feature-page .budget-stats strong {
+  font-size: 17px;
+}
+.feature-page .budget-stats > div {
+  gap: 2px;
+}
+.feature-page .budget-stats > div > span {
+  line-height: 1.4;
+}
+.feature-page .budget-track {
+  margin-top: 8px;
+}
+.budget-details {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.budget-details summary {
+  cursor: pointer;
+  min-height: 24px;
+  padding-block: 3px;
+}
+.feature-page .feature-team-heading {
+  margin-bottom: 10px;
+}
+@media (max-width: 650px) {
+  .feature-toolbar .git-workspace-band {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+  .feature-toolbar .workspace-band-actions {
+    width: auto;
+  }
+  .feature-toolbar .feature-tools {
+    width: 100%;
+  }
+}

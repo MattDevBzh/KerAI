@@ -22,9 +22,20 @@
   border-radius: 50%;
 }
 .subplan-card {
-  border-style: double !important;
-  border-width: 3px !important;
-  background: color-mix(in srgb, var(--lavender) 5%, var(--panel)) !important;
+  border: 1px solid color-mix(in srgb, var(--lavender) 45%, var(--border)) !important;
+  border-radius: 14px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--lavender) 10%, var(--panel)),
+    var(--panel)
+  ) !important;
+}
+.subplan-card:is(.current, .selected, .editing) {
+  outline: 2px solid var(--lavender);
+  outline-offset: -3px;
+}
+.subplan-card:focus-visible {
+  outline-offset: 3px;
 }
 .subplan-warning {
   display: flex;
@@ -32,17 +43,67 @@
   gap: 8px;
   color: var(--fg);
   padding: 10px 12px;
-  border: 1px dashed var(--lavender);
+  border: 1px solid color-mix(in srgb, var(--apricot) 55%, var(--border));
   border-radius: 10px;
-  background: color-mix(in srgb, var(--lavender) 8%, var(--panel));
+  background: color-mix(in srgb, var(--apricot) 8%, var(--panel));
   font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .subplan-warning svg {
   flex-shrink: 0;
 }
 .subplan-settings {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.subplan-settings .field {
+  margin: 0;
+}
+.subplan-wide-field {
+  grid-column: 1 / -1;
+}
+.subplan-team-choice {
+  display: grid;
   gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--lavender) 4%, var(--panel));
+}
+.subplan-team-choice-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.subplan-team-choice-heading > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.subplan-team-choice-heading .subplan-card-visual {
+  width: 64px;
+  height: 54px;
+}
+.subplan-team-choice small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.team-member .subplan-team-button {
+  width: 100%;
+  justify-content: center;
+  white-space: normal;
+  font-size: 11px;
+  padding: 8px;
+  line-height: 1.4;
+}
+.team-member .subplan-team-button > span {
+  min-width: 0;
+}
+.subplan-team-button > svg {
+  flex-shrink: 0;
 }
 .subplan-settings > small {
   color: var(--muted);
@@ -57,14 +118,16 @@
   background: #0009;
 }
 .subplan-config-panel {
+  container: subplan-panel / inline-size;
   width: min(1100px, 100%);
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  max-height: calc(100 * var(--studio-vh, 1dvh) - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--panel);
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 24px;
   box-shadow: 0 22px 90px #0005;
 }
 .subplan-config-panel > header {
@@ -72,7 +135,34 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 20px;
+  padding: 20px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.subplan-config-panel > header > div {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.subplan-config-body {
+  padding: 20px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.subplan-config-body .team-save-bar {
+  bottom: -20px;
+}
+.subplan-config-body .team-members {
+  max-height: none;
+  flex-wrap: nowrap;
+}
+.subplan-config-body .team-member-slot {
+  flex-shrink: 0;
+}
+.subplan-config-body .team-save-bar .modal-actions {
+  position: static;
+  padding: 0;
 }
 .subplan-config-panel h2 {
   margin: 6px 0;
@@ -85,12 +175,32 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--panel);
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+  box-shadow: inset 3px 0 var(--lavender);
 }
 .subplan-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   font-size: 12px;
   overflow-wrap: anywhere;
-  margin-bottom: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.subplan-breadcrumb > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.subplan-breadcrumb svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.subplan-breadcrumb [aria-current] {
+  font-weight: 600;
+  padding: 3px;
 }
 .subplan-breadcrumb button {
   border: 0;
@@ -98,6 +208,40 @@
   color: var(--lavender);
   padding: 3px;
   cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.subplan-location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.subplan-location-title {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 170px;
+  overflow-wrap: anywhere;
+}
+.subplan-location-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.subplan-location .subplan-iteration-picker {
+  flex: 1 1 240px;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.subplan-iteration-picker select {
+  width: 100%;
+  text-overflow: ellipsis;
 }
 .subplan-navigation-actions {
   display: flex;
@@ -105,14 +249,53 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.subplan-navigation-actions .field {
-  margin: 0;
-  min-width: 180px;
-  max-width: 100%;
-  flex: 1;
+.subplan-return-current {
+  margin-left: auto;
 }
-.subplan-navigation-actions select {
-  max-width: 100%;
+.subplan-shared-budget {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.subplan-history-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.subplan-history-notice svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.subplan-context {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.subplan-context summary,
+.subplan-history-help summary {
+  cursor: pointer;
+  width: fit-content;
+  min-height: 30px;
+  padding-block: 6px;
+}
+.subplan-context > p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.feature-heading .subplan-mission {
+  color: var(--fg);
+  font-size: 14px;
+  white-space: pre-wrap;
 }
 .subplan-overview {
   border: 1px solid var(--border);
@@ -125,14 +308,52 @@
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
+}
+.subplan-overview-title {
+  flex: 1;
+  min-width: 140px;
+  overflow-wrap: anywhere;
 }
 .subplan-overview h3 {
-  margin: 0;
+  margin: 4px 0 0;
 }
 .subplan-overview header p {
   margin: 5px 0;
   color: var(--muted);
   font-size: 12px;
+}
+.subplan-completion {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.subplan-completion > strong {
+  font-size: 24px;
+  color: var(--fg);
+}
+.subplan-completion > strong > span {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.subplan-completion > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.subplan-progress {
+  height: 4px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+  margin-top: 16px;
+}
+.subplan-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
 }
 .subplan-iterations {
   display: grid;
@@ -150,45 +371,200 @@
   padding: 12px;
   border-radius: 10px;
   cursor: pointer;
+  width: 100%;
+  min-width: 0;
 }
-.subplan-iteration:hover {
+.subplan-iteration:hover:not(:disabled) {
   border-color: var(--lavender);
+  background: color-mix(in srgb, var(--lavender) 5%, var(--panel));
 }
-.subplan-iteration > span:nth-child(2) {
+.subplan-iteration-content {
   flex: 1;
   min-width: 0;
 }
-.subplan-iteration strong,
-.subplan-iteration small {
+.subplan-iteration-content > strong {
   display: block;
   overflow-wrap: anywhere;
+  line-height: 1.5;
+  font-size: 13px;
 }
-.subplan-iteration small {
+.subplan-iteration-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+.subplan-iteration-meta small {
   color: var(--muted);
-  margin-top: 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .subplan-iteration-number {
+  display: grid;
+  place-items: center;
+  align-self: flex-start;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   color: var(--lavender);
-  font-size: 20px;
+  font-size: 13px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.subplan-iteration.is-current {
+  border-color: color-mix(in srgb, var(--lavender) 65%, var(--border));
+  background: color-mix(in srgb, var(--lavender) 7%, var(--panel));
+  box-shadow: inset 3px 0 var(--lavender);
+}
+.subplan-current-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--lavender);
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 600;
+}
+.subplan-iteration.is-cancelled .subplan-iteration-content > strong {
+  color: var(--muted);
+}
+.subplan-iteration-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--lavender);
 }
 .subplan-iteration.needs-review {
   border-style: dashed;
-  border-color: var(--lavender);
+  border-color: var(--apricot);
+}
+.subplan-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--panel-soft);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.subplan-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.subplan-status.complete {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, var(--panel));
+}
+.subplan-status.warning {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--apricot) 12%, var(--panel));
+}
+.subplan-status.active {
+  color: var(--lavender);
+  background: color-mix(in srgb, var(--lavender) 10%, var(--panel));
+}
+.subplan-history-help {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.subplan-history-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.subplan-history-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 180px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.subplan-history-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+.subplan-history-tools > select {
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 100%;
+}
+.subplan-no-results {
+  text-align: center;
+  color: var(--muted);
+  padding: 16px;
+  font-size: 12px;
 }
 @media (max-width: 600px) {
   .subplan-modal-backdrop {
     padding: 6px;
   }
   .subplan-config-panel {
-    padding: 14px;
-    max-height: calc(100vh - 12px);
+    max-height: calc(100 * var(--studio-vh, 1dvh) - 12px);
   }
-  .subplan-navigation-actions .field {
-    flex-basis: 100%;
+  .subplan-config-panel > header,
+  .subplan-config-body {
+    padding: 14px;
+  }
+  .subplan-config-body .team-save-bar {
+    bottom: -14px;
+  }
+  .subplan-config-panel > header > .subplan-mark {
+    display: none;
+  }
+  .subplan-settings {
+    grid-template-columns: minmax(0, 1fr);
   }
   .subplan-iteration > span:last-child {
     font-size: 11px;
+  }
+}
+@container studio (max-width: 650px) {
+  .subplan-location .subplan-iteration-picker {
+    flex-basis: 100%;
+  }
+  .subplan-navigation-actions .button {
+    flex: 1 1 auto;
+    justify-content: center;
+    white-space: normal;
+  }
+  .subplan-return-current {
+    margin-left: 0;
+    flex-basis: 100% !important;
+  }
+}
+@container subplan-panel (max-width: 760px) {
+  .subplan-config-panel > header > .subplan-mark {
+    display: none;
+  }
+  .subplan-config-panel > header {
+    padding: 14px;
+    gap: 10px;
+  }
+  .subplan-config-panel > header h2 {
+    font-size: 18px;
+  }
+  .subplan-config-panel > header p {
+    font-size: 12px;
+    margin: 0;
+  }
+  .subplan-config-panel .subplan-settings {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -266,6 +642,7 @@
   min-width: 72px;
   height: 54px;
   background: none;
+  border: 0;
 }
 .journey-step.subplan-card .subplan-card-visual {
   width: 72px;
@@ -281,4 +658,24 @@
 }
 .hq-station.subplan-card .hq-portrait {
   background: transparent;
+}
+@media (forced-colors: active) {
+  .subplan-card,
+  .subplan-iteration.is-current {
+    border: 2px solid ButtonText !important;
+  }
+  .subplan-card:is(.current, .selected, .editing),
+  .subplan-iteration.is-current {
+    outline: 2px solid Highlight;
+  }
+  .subplan-status {
+    border: 1px solid currentColor;
+  }
+  .subplan-progress {
+    border: 1px solid CanvasText;
+  }
+  .subplan-progress > span {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
 }

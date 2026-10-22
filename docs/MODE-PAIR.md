@@ -2,6 +2,8 @@
 
 Depuis la v1.23.0, chaque nouvelle tentative native possède un onglet **Conversation**, à côté du livrable, des fichiers, des preuves et de la relecture. Il montre les messages de l’agent, ses réflexions lorsqu’elles sont transmises par Copilot et ses outils réels. Les sorties longues sont signalées comme tronquées ; les événements détaillés restent dans l’archive.
 
+Les outils, réflexions et messages de suivi occupent des lignes compactes. Dès qu’un message destiné à l’utilisateur arrive, le groupe technique précédent se replie sous **Afficher les messages intermédiaires**. **Masquer les messages intermédiaires** le replie après consultation. Les demandes de réponse restent affichées dans le chat et s’ouvrent aussi dans une popin réductible ; le brouillon est commun aux deux vues.
+
 ## Solo, pair et passage de relais
 
 En **solo**, tu suis la conversation en lecture seule. **Passer en pair** ouvre la saisie dans la même tentative et demande un arrêt au prochain point de contrôle. Le travail déjà en cours continue ; l’indicateur distingue le mode demandé du mode effectif.

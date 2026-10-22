@@ -123,7 +123,7 @@ export const mcpServerSchema = z
   });
 export const budgetSchema = z
   .object({
-    maxRuns: z.number().int().min(1).max(1000),
+    maxRuns: z.number().int().min(0).max(1000),
     maxTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
     maxNanoAiu: z.number().nonnegative().finite().max(Number.MAX_SAFE_INTEGER).optional(),
     maxPromptChars: z.number().int().min(1000).max(500000),

@@ -802,7 +802,7 @@ export class CopilotCliAdapter implements AgentAdapter {
                           });
                           emit(
                             'info',
-                            `Permission Copilot ${request.kind} : ${allowed ? 'accordée pour cette demande' : 'refusée'}.`,
+                            `Permission Copilot ${request.kind} : ${allowed === 'remembered' ? 'accord de session appliqué' : allowed ? 'accordée par l’utilisateur' : 'refusée'}.`,
                           );
                           return allowed;
                         },

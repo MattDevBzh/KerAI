@@ -8,6 +8,19 @@ import {
   reviewSchema,
 } from '../src/core/evolutionSchemas';
 describe('bounded strict evolution configuration', () => {
+  it('persists an unlimited manual budget but still requires a finite autopilot bound', () => {
+    expect(
+      budgetSchema.parse({ maxRuns: 0, maxPromptChars: 60000, modelProfile: 'current' }).maxRuns,
+    ).toBe(0);
+    expect(() =>
+      autopilotConfigSchema.parse({
+        maxRuns: 0,
+        checkpoints: [],
+        maxCorrectionCycles: 3,
+        stepInputs: {},
+      }),
+    ).toThrow();
+  });
   it('accepts secret references only and rejects embedded URL credentials or transport ambiguity', () => {
     const server = {
       id: 'local',
@@ -43,7 +56,7 @@ describe('bounded strict evolution configuration', () => {
     expect(() => launchSchema.parse({ ...launch, initialContext: 'x'.repeat(60001) })).toThrow();
     expect(() => launchSchema.parse({ ...launch, memoryIds: ['a', 'a'] })).toThrow();
     expect(() =>
-      budgetSchema.parse({ maxRuns: 0, maxPromptChars: 60000, modelProfile: 'current' }),
+      budgetSchema.parse({ maxRuns: -1, maxPromptChars: 60000, modelProfile: 'current' }),
     ).toThrow();
     expect(() =>
       reviewSchema.parse({

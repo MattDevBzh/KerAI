@@ -18,7 +18,7 @@ function fixture(usages: (Usage | undefined)[]) {
             agentId: 'agent',
             policy: 'read-only',
             skills: [],
-            maxAttempts: 10,
+            maxAttempts: 0,
             artifact: 'run.md',
             dependsOn: [],
           },
@@ -50,7 +50,16 @@ describe('measured feature consumption', () => {
       unknownTokenRuns: 1,
       unknownCostRuns: 2,
     });
-    expect(defaultBudget).toEqual({ maxRuns: 10, maxPromptChars: 60000, modelProfile: 'current' });
+    expect(defaultBudget).toEqual({ maxRuns: 0, maxPromptChars: 60000, modelProfile: 'current' });
+  });
+  it('allows repeated manual calls by default, while respecting a later explicit cap', () => {
+    const feature = fixture(Array(25).fill(undefined));
+    expect(feature.steps[0].attempts).toHaveLength(25);
+    expect(budgetBlockReason(feature)).toBeUndefined();
+    feature.budget = { ...defaultBudget, maxRuns: 25 };
+    expect(budgetBlockReason(feature)).toMatch(/maximal/);
+    feature.budget.maxRuns = 0;
+    expect(budgetBlockReason(feature)).toBeUndefined();
   });
   it('stops on measured thresholds and unknown usage only when that limit is configured', () => {
     const unknown = fixture([undefined]);

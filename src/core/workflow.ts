@@ -47,7 +47,7 @@ export const workflowStepSchema = z
     model: z.string().optional(),
     reasoning: z.string().optional(),
     skills: z.array(id),
-    maxAttempts: z.number().int().min(1).max(100),
+    maxAttempts: z.number().int().min(0).max(100),
     artifact: z.string().regex(/^[^/\\]+\.md$/),
     dependsOn: z.array(id),
     initialContext: z.string().max(60000).optional(),
@@ -296,7 +296,7 @@ export class WorkflowEngine {
       throw new Error('Une tentative est déjà en cours.');
     if (!step.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep))))
       throw new Error('Les étapes préalables doivent être validées.');
-    if (step.attempts.length >= step.maxAttempts)
+    if (step.maxAttempts > 0 && step.attempts.length >= step.maxAttempts)
       throw new Error('Nombre maximal de tentatives atteint.');
     const previous = step.attempts.at(-1);
     if (resume && (previous?.descriptionRevision ?? 0) !== (feature.descriptionRevision ?? 0))
@@ -672,12 +672,12 @@ export class WorkflowEngine {
     if (
       config.maxAttempts !== undefined &&
       (!Number.isInteger(config.maxAttempts) ||
-        config.maxAttempts < 1 ||
+        config.maxAttempts < 0 ||
         config.maxAttempts > 100 ||
-        config.maxAttempts < step.attempts.length)
+        (config.maxAttempts > 0 && config.maxAttempts < step.attempts.length))
     )
       throw new Error(
-        'Le maximum doit être un entier entre 1 et 100, au moins égal aux tentatives déjà enregistrées.',
+        'Le maximum doit être 0 (sans limite) ou un entier entre 1 et 100, au moins égal aux tentatives déjà enregistrées.',
       );
     const changed =
       step.agentId !== config.agentId ||

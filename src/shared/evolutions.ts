@@ -60,6 +60,7 @@ export interface HumanRequest {
   featureId: string;
   stepId: string;
   kind: 'question' | 'mcp-permission' | 'native-permission';
+  permissionKind?: string;
   question: string;
   choices?: string[];
   allowFreeform: boolean;
@@ -67,6 +68,7 @@ export interface HumanRequest {
 }
 export type ModelProfile = 'current' | 'economy' | 'balanced' | 'quality';
 export interface FeatureBudget {
+  /** 0 means no call limit. Autopilot has its own finite limit. */
   maxRuns: number;
   maxTokens?: number;
   maxNanoAiu?: number;

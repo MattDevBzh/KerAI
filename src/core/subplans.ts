@@ -139,7 +139,7 @@ export function acceptSubplan(feature: Feature, step: FeatureStep, agents: Agent
     // Every child step is a human checkpoint, including development before the test agent.
     child.autopilot = {
       checkpoints: child.steps.map((s) => s.id),
-      maxRuns: child.budget?.maxRuns ?? 10,
+      maxRuns: child.budget?.maxRuns || 10,
       maxCorrectionCycles: 3,
       stepInputs: {},
       status: 'idle',

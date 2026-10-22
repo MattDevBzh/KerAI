@@ -146,7 +146,7 @@ export function newSubplanStep(): WorkflowStep {
     inheritAgent: true,
     policy: 'read-only',
     skills: [],
-    maxAttempts: 20,
+    maxAttempts: 0,
     artifact: `${id}.md`,
     dependsOn: [],
     subplan: { mode: 'pair', teamName: '', steps: [] },

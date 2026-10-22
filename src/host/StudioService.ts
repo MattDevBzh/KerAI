@@ -32,7 +32,11 @@ import {
   type PairTurn,
 } from '../shared/pair';
 import { pairActionSchema } from '../core/pairSchemas';
-import { usesNativeTools, type NativePermissionMode } from '../shared/native';
+import {
+  usesNativeTools,
+  type NativePermissionMode,
+  type NativePermissionPrompt,
+} from '../shared/native';
 import { nativePermissionModeSchema } from '../core/nativeSchemas';
 import { nativeChangesSnapshot, observedNativeChanges } from './NativeChanges';
 import { inheritTeamProfiles, resolveAgentProfile } from '../shared/agentInheritance';
@@ -245,6 +249,11 @@ export class StudioService extends EventEmitter {
   private disposed = false;
   private toolHosts = new Map<string, ToolHost | MultiProjectTools>();
   private automation?: { featureId: string; done: Promise<void> };
+  private nativePermissionGrants = new Map<string, Map<string, Set<string>>>();
+  private pendingNativePermissions = new Map<
+    string,
+    { scopeId: string; prompt: NativePermissionPrompt }
+  >();
   private pendingHumans = new Map<
     string,
     {
@@ -426,7 +435,7 @@ export class StudioService extends EventEmitter {
               id: ids[index],
               skills: [],
               inheritAgent: true,
-              maxAttempts: 3,
+              maxAttempts: 0,
               artifact: `${ids[index]}.md`,
               dependsOn: index ? [ids[index - 1]] : [],
             };
@@ -1297,8 +1306,13 @@ export class StudioService extends EventEmitter {
       modelOverride: Boolean(step.model),
     };
     attempt.launch = structuredClone(input.launch!);
-    if (feature.execution && input.launch?.permissionMode)
+    if (feature.execution && input.launch?.permissionMode) {
+      if (feature.execution.permissionMode !== input.launch.permissionMode)
+        this.nativePermissionGrants.delete(
+          treePath(this.state.features, featureId)[0]?.id ?? featureId,
+        );
       feature.execution.permissionMode = input.launch.permissionMode;
+    }
     if (!continued) attempt.memorySnapshot = structuredClone(input.memory ?? []);
     if (preview) {
       attempt.promptFingerprint = preview.fingerprint;
@@ -1461,20 +1475,67 @@ export class StudioService extends EventEmitter {
         this.schedule();
       },
       onNativePermission: async (request) => {
+        this.assertTrusted();
+        if (controller.signal.aborted) throw new Error('Exécution annulée.');
+        const scopeId = treePath(this.state.features, featureId)[0]?.id ?? featureId;
+        const grants = request.directory
+          ? this.nativePermissionGrants.get(scopeId)?.get(request.directory)
+          : undefined;
+        if (
+          request.rememberable &&
+          (grants?.has(request.kind) || (request.workspaceRead && grants?.has('workspace-read')))
+        )
+          return 'remembered';
+        const choices = ['allow', 'deny'];
+        if (request.rememberable && request.directory) {
+          choices.push('allow-kind');
+          if (request.workspaceRead) choices.push('allow-workspace-read');
+        }
+        const requestId = 'native-' + randomUUID();
+        this.pendingNativePermissions.set(requestId, { scopeId, prompt: request });
         const answer = await this.askHuman(
           {
-            id: 'native-' + randomUUID(),
+            id: requestId,
             featureId,
             stepId,
             kind: 'native-permission',
             question: request.question,
             details: request.details.slice(0, 30000),
-            choices: ['allow', 'deny'],
+            choices,
+            permissionKind: request.kind,
             allowFreeform: false,
           },
           controller.signal,
-        );
-        return answer === 'allow';
+        ).finally(() => this.pendingNativePermissions.delete(requestId));
+        if (controller.signal.aborted) throw new Error('Exécution annulée.');
+        if ((answer === 'allow-kind' || answer === 'allow-workspace-read') && request.directory) {
+          let scope = this.nativePermissionGrants.get(scopeId);
+          if (!scope) this.nativePermissionGrants.set(scopeId, (scope = new Map()));
+          const remembered = scope.get(request.directory) ?? new Set<string>();
+          remembered.add(answer === 'allow-kind' ? request.kind : 'workspace-read');
+          scope.set(request.directory, remembered);
+          // Already visible requests are covered too; managed asks never carry these choices.
+          for (const [id, other] of this.pendingNativePermissions) {
+            if (
+              other.scopeId !== scopeId ||
+              other.prompt.directory !== request.directory ||
+              !other.prompt.rememberable
+            )
+              continue;
+            if (
+              !remembered.has(other.prompt.kind) &&
+              !(other.prompt.workspaceRead && remembered.has('workspace-read'))
+            )
+              continue;
+            const pending = this.pendingHumans.get(id);
+            if (pending) {
+              pending.cleanup();
+              pending.resolve('remembered');
+            }
+          }
+        }
+        if (answer === 'remembered') return 'remembered';
+        return answer !== 'deny';
       },
       onTrace: trace,
       onUsage: (usage) => {
@@ -2232,6 +2293,9 @@ export class StudioService extends EventEmitter {
         throw new Error('La tentative est terminée ; choisis le mode pour la prochaine reprise.');
     }
     feature.execution.permissionMode = mode;
+    this.nativePermissionGrants.delete(
+      treePath(this.state.features, featureId)[0]?.id ?? featureId,
+    );
     if (
       (attempt?.pair && !['approved', 'stale'].includes(step!.status)) ||
       this.active?.featureId === featureId
@@ -2652,7 +2716,7 @@ export class StudioService extends EventEmitter {
     if (!feature.autopilot) {
       feature.autopilot = {
         checkpoints: [request.sourceStepId],
-        maxRuns: feature.budget?.maxRuns ?? defaultBudget.maxRuns,
+        maxRuns: feature.budget?.maxRuns || 10,
         maxCorrectionCycles: 3,
         stepInputs: {},
         status: 'idle',
@@ -3066,6 +3130,7 @@ export class StudioService extends EventEmitter {
   }
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.nativePermissionGrants.clear();
     if (this.automation)
       this.pauseAutopilot(this.automation.featureId, 'Cockpit fermé ; reprise manuelle requise.');
     const active = this.active;

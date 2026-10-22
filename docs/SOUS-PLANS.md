@@ -6,7 +6,7 @@ Une carte **Sous-plan** confie le découpage d’une mission à un orchestrateur
 
 Dans **Parcours**, ajoute un sous-plan à une équipe enregistrée. Dans une feature, utilise **Composer mon équipe** ou **Modifier l’équipe**. La carte a une illustration de sous-équipe distincte des portraits d’agents et reprend le thème courant, y compris dans le QG vivant.
 
-Les réglages réunissent son nom, sa mission, l’orchestrateur obligatoire et l’organisation par défaut :
+Les réglages réunissent son nom, sa mission, un seul sélecteur d’orchestrateur et l’organisation par défaut. Le chat de l’orchestrateur utilise ce mode de découpage ; il n’affiche pas le réglage de rythme des agents exécutants :
 
 - **Découpage accompagné** : discute le plan dans le chat, demande des ajustements, puis valide explicitement le découpage avant le démarrage de la première tâche.
 - **Découpage automatique** : l’orchestrateur propose un découpage et lance la première sous-équipe dès que ce découpage est valide.
@@ -23,7 +23,7 @@ Une carte vide peut être enregistrée. Elle affiche un avertissement et empêch
 
 Une seule tâche progresse à la fois dans le même projet. Pour un parcours sous-plan → développement → tests, place ces trois interventions dans la sous-équipe. Chaque étape attend ta validation ; l’étape Tests ne démarre pas avant validation de celle de développement. Les contrôles et permissions Copilot restent indépendants du découpage automatique ou accompagné.
 
-Clique sur la carte Sous-plan pour entrer dans son équipe. Le bandeau indique le chemin, le numéro et l’état de l’itération. La liste **Itération** permet de consulter les précédentes ; **Niveau précédent**, **Équipe de base** et **Revenir à l’itération active** permettent de retrouver le travail en cours. **Chat de l’orchestrateur** revient à la conversation qui pilote ce niveau. Naviguer ne lance ni ne valide rien.
+Clique sur la carte Sous-plan pour afficher son chat et le panneau des sous-tâches sans quitter l’équipe courante. Clique sur une tâche dans ce panneau pour entrer dans sa sous-équipe. Le bandeau indique le chemin, le numéro et l’état de l’itération. La liste **Changer d’itération** permet de consulter les précédentes ; **Niveau précédent**, **Équipe de base** et **Revenir à l’itération active** permettent de retrouver le travail en cours. **Chat de l’orchestrateur** revient à la conversation qui pilote ce niveau. Naviguer ne lance ni ne valide rien.
 
 Chaque itération conserve ses tentatives, chats, fichiers observés, points de restauration et validations. Après les étapes, **Valider cette tâche** ouvre la tâche suivante. Après toutes les tâches et revérifications nécessaires, **Valider l’ensemble des sous-tâches** clôt la carte parente. La validation finale de la feature reste distincte.
 
@@ -50,3 +50,11 @@ La pause de l’orchestrateur suspend la progression de ses descendants et inter
 Les appels et crédits des descendants comptent dans le budget de l’équipe de base. Ils sont aussi inclus dans les statistiques. Les sous-équipes travaillent dans le même dossier ou worktree que leur équipe de base ; elles ne créent pas une branche par tâche. Archiver ou supprimer une session se fait depuis son équipe de base et concerne tout son historique.
 
 [Conversation de l’étape](MODE-PAIR.md) · [Outils natifs et permissions](COPILOT-NATIF.md) · [Validation et limites](VALIDATION.md)
+
+## Lisibilité et accès rapide (v1.26.0)
+
+**Aller à l’étape en cours** rejoint directement le détail actif. Sélectionner une carte y place aussi le focus clavier. Dans une sous-équipe, la mission de la tâche est affichée en premier ; **Contexte transmis à la sous-équipe** permet de relire le brief complet.
+
+L’itération active est mise en avant et le compteur distingue les tâches validées de celles à revérifier. À partir de sept itérations, recherche une tâche par son nom, son numéro ou sa mission, avec ou sans accents ; les filtres isolent le travail restant, les revérifications ou l’historique. Les tâches retirées restent consultables.
+
+Dans le compositeur, le bouton de la carte ouvre directement sa sous-équipe. Valider ce panneau met à jour le brouillon de la carte ; il faut ensuite enregistrer l’équipe parente. Échap ferme seulement le panneau au premier plan et rend le focus à son bouton d’ouverture.

@@ -14,7 +14,7 @@
       "skills": [
         "devops-challenge"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "devops-challenge.md",
       "dependsOn": []
     },
@@ -29,7 +29,7 @@
         "devops-plan",
         "devops-azure-preflight"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "devops-plan.md",
       "dependsOn": [
         "challenge"
@@ -45,7 +45,7 @@
       "skills": [
         "devops-implement"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "devops-implement.md",
       "dependsOn": [
         "plan"
@@ -62,7 +62,7 @@
         "devops-review",
         "devops-azure-preflight"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "devops-review.md",
       "dependsOn": [
         "implement"
@@ -79,7 +79,7 @@
         "devops-test-guide",
         "devops-azure-preflight"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "devops-test-guide.md",
       "dependsOn": [
         "review"
@@ -96,7 +96,7 @@
         "devops-validate",
         "devops-azure-preflight"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "devops-validate.md",
       "dependsOn": [
         "test-guide"

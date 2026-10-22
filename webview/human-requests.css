@@ -1,0 +1,79 @@
+.human-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #080d18a6;
+  backdrop-filter: blur(5px);
+}
+.human-prompt-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--apricot) 45%, var(--border));
+  border-radius: 18px;
+  background: var(--bg);
+  box-shadow: 0 24px 90px #0006;
+  padding: 24px;
+}
+.human-prompt-dialog > header,
+.human-request-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.human-prompt-dialog h2 {
+  margin: 0;
+  font-size: 24px;
+}
+.human-prompt-dialog header p {
+  color: var(--muted);
+  font-size: 12px;
+}
+.human-prompt-context {
+  overflow-wrap: anywhere;
+}
+.human-request-heading > .eyebrow {
+  font-size: 10px;
+  color: var(--apricot);
+}
+.human-prompt-dialog .human-request {
+  margin: 12px 0 0;
+}
+.human-prompt-dialog .human-request h3 {
+  font-size: 18px;
+  line-height: 1.5;
+}
+.human-prompt-dialog .human-request pre {
+  max-height: 28vh;
+  overflow: auto;
+}
+.human-response {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.human-response .human-actions {
+  flex-wrap: wrap;
+}
+.human-response button {
+  white-space: normal;
+  text-align: left;
+}
+.human-prompt-dialog .field textarea {
+  min-height: 100px;
+}
+@media (max-width: 600px) {
+  .human-prompt-backdrop {
+    padding: 10px;
+  }
+  .human-prompt-dialog {
+    padding: 16px;
+    max-height: calc(100dvh - 20px);
+  }
+}

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CopilotClient, RuntimeConnection, type SessionConfig } from '@github/copilot-sdk';
@@ -6,6 +6,7 @@ import { expect, it } from 'vitest';
 import { CopilotLaunch } from '../src/host/CopilotLaunch';
 import {
   applyNativePermissions,
+  decideNativePermission,
   NATIVE_TOOLS,
   NATIVE_READ_TOOLS,
   verifyNativeCatalog,
@@ -33,6 +34,7 @@ it.skipIf(!cliPath)(
       logLevel: 'none',
     });
     let approve = false,
+      remembered = false,
       permissions = 0;
     try {
       await client.start();
@@ -53,11 +55,14 @@ it.skipIf(!cliPath)(
         remoteSession: 'off',
         // A real runtime-managed deny must win even in allow-all.
         managedSettings: { permissions: { deny: ['Shell(node --version)'] } },
-        onPermissionRequest: () => {
+        onPermissionRequest: (request) => {
           permissions++;
-          return approve
-            ? { kind: 'approve-once', approvedInteractively: true }
-            : { kind: 'reject' };
+          return decideNativePermission(
+            request,
+            'manual',
+            async () => (approve ? (remembered ? 'remembered' : true) : false),
+            root,
+          );
         },
         onUserInputRequest: async () => ({ answer: 'Blue', wasFreeform: false }),
       };
@@ -90,6 +95,20 @@ it.skipIf(!cliPath)(
         arguments: '*** Begin Patch\n*** Add File: patch-fixture.txt\n+native patch\n*** End Patch',
       });
       expect((await readFile(join(root, 'patch-fixture.txt'), 'utf8')).trim()).toBe('native patch');
+      const beforeRemembered = permissions;
+      const permissionWorkspace = join(root, 'permission-root');
+      await mkdir(permissionWorkspace);
+      // Force an actual read request while the host still scopes the grant to this fixture.
+      await applyNativePermissions(session, 'manual', permissionWorkspace);
+      remembered = true;
+      const rememberedRead = await session.rpc.tools.execute({
+        name: 'view',
+        arguments: { path: join(root, 'fixture.txt') },
+      });
+      expect(JSON.stringify(rememberedRead)).toContain('after');
+      expect(permissions).toBeGreaterThan(beforeRemembered);
+      remembered = false;
+      await applyNativePermissions(session, 'manual', root);
       expect(JSON.stringify(await execute('node -e "console.log(42)"'))).toContain('42');
       const answer = await session.rpc.tools.execute({
         name: 'ask_user',

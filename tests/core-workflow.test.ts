@@ -241,7 +241,7 @@ describe('workflow transitions', () => {
         reasoning: step.reasoning,
         skills: [...step.skills],
       };
-    for (const maxAttempts of [0, 101, 1.5])
+    for (const maxAttempts of [-1, 101, 1.5])
       expect(() => engine.configureStep(id, 'specs', { ...selection, maxAttempts })).toThrow(
         /maximum/,
       );
@@ -256,6 +256,13 @@ describe('workflow transitions', () => {
     expect(() => engine.configureStep(id, 'specs', { ...selection, maxAttempts: 1 })).toThrow(
       /tentatives/,
     );
+    engine.configureStep(id, 'specs', { ...selection, maxAttempts: 0 });
+    expect(step.maxAttempts).toBe(0);
+    for (let i = 0; i < 6; i++) {
+      engine.beginRun(id, 'specs');
+      engine.cancelRun(id);
+    }
+    expect(step.attempts).toHaveLength(8);
   });
 });
 describe('strict workflow DAG validation', () => {

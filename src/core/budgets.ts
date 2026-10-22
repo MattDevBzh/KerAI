@@ -2,7 +2,7 @@ import type { Feature, FeatureBudget, UsageTotals } from '../shared/types';
 import { allFeatures } from '../shared/subplans';
 
 export const defaultBudget: FeatureBudget = {
-  maxRuns: 10,
+  maxRuns: 0,
   maxPromptChars: 60000,
   modelProfile: 'current',
 };
@@ -56,7 +56,7 @@ export function executionCallCount(feature: Feature): number {
 export function budgetBlockReason(feature: Feature): string | undefined {
   const budget = feature.budget ?? defaultBudget,
     totals = usageTotals(feature);
-  if (executionCallCount(feature) >= budget.maxRuns)
+  if (budget.maxRuns > 0 && executionCallCount(feature) >= budget.maxRuns)
     return 'Budget : nombre maximal de runs atteint.';
   if (budget.maxTokens !== undefined) {
     if (totals.unknownTokenRuns)

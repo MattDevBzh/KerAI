@@ -10,7 +10,6 @@ import {
   Fingerprint,
   KeyRound,
   LoaderCircle,
-  MessageSquare,
   Play,
   Plug,
   Plus,
@@ -23,7 +22,6 @@ import type {
   ClientMessage,
   Feature,
   FeatureStep,
-  HumanRequest,
   McpServerConfig,
   RunLaunchOptions,
   RunPreview,
@@ -269,7 +267,7 @@ export function LaunchDialog({
     !feature.archived &&
     !state.features.some((f) => f.steps.some((s) => s.status === 'running')) &&
     !state.workspaceOperation &&
-    step.attempts.length < step.maxAttempts;
+    (step.maxAttempts === 0 || step.attempts.length < step.maxAttempts);
   const canStart =
     eligible &&
     preview !== null &&
@@ -316,7 +314,7 @@ export function LaunchDialog({
               </p>
             </>
           )}
-          {launch.pair && (
+          {launch.pair && !step.subplan && (
             <PairPreferencesUI value={launch.pair} onChange={(pair) => update({ pair })} />
           )}
           {needsDevOpsEvidence(step) && (
@@ -703,90 +701,7 @@ export function MemoryPicker({
     </div>
   );
 }
-export function HumanRequests({
-  requests,
-  dispatch,
-}: {
-  requests: HumanRequest[];
-  dispatch: Dispatch;
-}) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  return (
-    <div className="human-requests">
-      {requests.map((r) => (
-        <section className={`human-request ${r.kind}`} key={r.id}>
-          <span className="eyebrow">
-            {r.kind !== 'question' ? <ShieldCheck size={13} /> : <MessageSquare size={13} />}{' '}
-            {r.kind === 'native-permission'
-              ? 'AUTORISATION COPILOT · CETTE DEMANDE'
-              : r.kind === 'mcp-permission'
-                ? 'AUTORISATION MCP'
-                : 'VOTRE RÉPONSE EST NÉCESSAIRE'}
-          </span>
-          <h3>{r.question}</h3>
-          {r.details && <pre>{r.details}</pre>}
-          {r.kind !== 'question' ? (
-            <div className="human-actions">
-              <button
-                className="button secondary small"
-                onClick={() =>
-                  dispatch({ type: 'answerHumanRequest', requestId: r.id, answer: 'deny' })
-                }
-              >
-                Refuser
-              </button>
-              <button
-                className="button primary small"
-                onClick={() =>
-                  dispatch({ type: 'answerHumanRequest', requestId: r.id, answer: 'allow' })
-                }
-              >
-                <ShieldCheck size={13} /> Autoriser cette demande
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="human-choices">
-                {r.choices?.map((choice) => (
-                  <button
-                    key={choice}
-                    className={`button small ${answers[r.id] === choice ? 'primary' : 'secondary'}`}
-                    onClick={() => setAnswers({ ...answers, [r.id]: choice })}
-                  >
-                    {choice}
-                  </button>
-                ))}
-              </div>
-              {r.allowFreeform && (
-                <label className="field">
-                  <span>Votre réponse</span>
-                  <textarea
-                    rows={3}
-                    value={answers[r.id] ?? ''}
-                    onChange={(e) => setAnswers({ ...answers, [r.id]: e.target.value })}
-                  />
-                </label>
-              )}
-              <button
-                className="button primary small"
-                disabled={!answers[r.id]?.trim()}
-                onClick={() =>
-                  dispatch({
-                    type: 'answerHumanRequest',
-                    requestId: r.id,
-                    answer: answers[r.id].trim(),
-                  })
-                }
-              >
-                Transmettre la réponse <Check size={14} />
-              </button>
-            </>
-          )}
-        </section>
-      ))}
-    </div>
-  );
-}
+export { HumanRequests } from './HumanRequests';
 function HeaderMapping({
   value,
   onChange,

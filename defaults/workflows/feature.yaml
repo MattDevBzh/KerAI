@@ -14,7 +14,7 @@
       "skills": [
         "ai-ticket"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "specs.md",
       "dependsOn": []
     },
@@ -28,7 +28,7 @@
       "skills": [
         "ai-plan"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "plan.md",
       "dependsOn": [
         "specs"
@@ -44,7 +44,7 @@
       "skills": [
         "ai-implement"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "dev.md",
       "dependsOn": [
         "plan"
@@ -61,7 +61,7 @@
         "ai-tdd",
         "ai-verifier"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "tests.md",
       "dependsOn": [
         "dev"
@@ -77,7 +77,7 @@
       "skills": [
         "ai-relecture"
       ],
-      "maxAttempts": 5,
+      "maxAttempts": 0,
       "artifact": "review.md",
       "dependsOn": [
         "tests"

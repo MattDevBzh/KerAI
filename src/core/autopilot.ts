@@ -138,7 +138,7 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
         );
       if (target.askBeforeRun)
         return pause('La correction exige une confirmation avant exécution.');
-      if (target.attempts.length >= target.maxAttempts)
+      if (target.maxAttempts > 0 && target.attempts.length >= target.maxAttempts)
         return pause('Nombre maximal de tentatives de correction atteint.');
       const budget = callBlocker();
       if (budget) return pause(budget);
@@ -174,7 +174,7 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
       'Mets en place et lance le test hors production, puis renseigne ses références dans le lancement manuel de la validation DevOps.',
     );
   if (step.askBeforeRun) return pause(`Confirmation avant exécution requise : ${step.name}.`);
-  if (step.attempts.length >= step.maxAttempts)
+  if (step.maxAttempts > 0 && step.attempts.length >= step.maxAttempts)
     return pause('Nombre maximal de tentatives atteint.');
   const budget = callBlocker();
   if (budget) return pause(budget);
