@@ -146,7 +146,9 @@ describe('native permissions and evidence', () => {
     expect(() => verifyNativeCatalog(names)).not.toThrow();
     expect(() => verifyNativeCatalog([...names, 'task'])).toThrow(/inattendu/);
     expect(() => verifyNativeCatalog([...names, 'edit'])).toThrow(/dupliqué/);
-    expect(() => verifyNativeCatalog(names.filter((n) => n !== 'ask_user'))).toThrow(/ask_user.*Outils reçus/);
+    expect(() => verifyNativeCatalog(names.filter((n) => n !== 'ask_user'))).toThrow(
+      /ask_user.*Outils reçus/,
+    );
     expect(
       usesNativeTools({
         feature: { execution: { mode: 'copilot-native', permissionMode: 'allow-all' } },
