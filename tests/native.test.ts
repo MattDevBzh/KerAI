@@ -34,11 +34,16 @@ describe.each([false, true])('native catalog (readOnly=%s)', (readOnly) => {
     },
   );
   it('requires a search tool and all other mandatory capabilities', () => {
-    expect(() => verifyNativeCatalog(required, [], readOnly)).toThrow(/nécessaires/);
+    expect(() => verifyNativeCatalog(required, [], readOnly)).toThrow(/absents.*grep ou rg/);
     for (const missing of required)
       expect(() =>
         verifyNativeCatalog([...required.filter((name) => name !== missing), 'rg'], [], readOnly),
-      ).toThrow(/nécessaires/);
+      ).toThrow(/absents/);
+  });
+  it('reports the exact missing capabilities and received catalog', () => {
+    expect(() => verifyNativeCatalog(['view', 'glob', 'grep'])).toThrow(
+      /ask_user, edit, create, bash ou powershell.*Outils reçus \(3\): view, glob, grep/,
+    );
   });
   it('keeps rejecting unknown tools and duplicates when rg is present', () => {
     expect(() => verifyNativeCatalog([...required, 'rg', 'task'], [], readOnly)).toThrow(
@@ -141,7 +146,7 @@ describe('native permissions and evidence', () => {
     expect(() => verifyNativeCatalog(names)).not.toThrow();
     expect(() => verifyNativeCatalog([...names, 'task'])).toThrow(/inattendu/);
     expect(() => verifyNativeCatalog([...names, 'edit'])).toThrow(/dupliqué/);
-    expect(() => verifyNativeCatalog(names.filter((n) => n !== 'ask_user'))).toThrow(/nécessaires/);
+    expect(() => verifyNativeCatalog(names.filter((n) => n !== 'ask_user'))).toThrow(/ask_user.*Outils reçus/);
     expect(
       usesNativeTools({
         feature: { execution: { mode: 'copilot-native', permissionMode: 'allow-all' } },
