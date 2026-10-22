@@ -75,11 +75,17 @@ export async function applyNativePermissions(
     );
 }
 
-export function verifyNativeCatalog(names: string[], extra: string[] = [], readOnly = false): void {
+export function verifyNativeCatalog(
+  names: string[],
+  extra: string[] = [],
+  readOnly = false,
+): void {
   const allowed = new Set([...(readOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS), ...extra]);
   const unexpected = names.filter((name) => !allowed.has(name));
   if (new Set(names).size !== names.length)
-    throw new Error(`Catalogue natif dupliqué. Outils reçus : ${names.join(', ') || '(aucun)'}.`);
+    throw new Error(
+      `Catalogue natif dupliqué. Outils reçus : ${names.join(', ') || '(aucun)'}.`,
+    );
   if (unexpected.length)
     throw new Error(
       `Catalogue natif inattendu : ${unexpected.join(', ')}. Outils reçus : ${names.join(', ') || '(aucun)'}.`,
@@ -89,7 +95,8 @@ export function verifyNativeCatalog(names: string[], extra: string[] = [], readO
     ? ['view', 'glob', 'ask_user']
     : ['view', 'glob', 'edit', 'create', 'ask_user'];
   const missing = required.filter((name) => !names.includes(name));
-  if (!names.some((name) => name === 'grep' || name === 'rg')) missing.push('grep ou rg');
+  if (!names.some((name) => name === 'grep' || name === 'rg'))
+    missing.push('grep ou rg');
   if (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
     missing.push('bash ou powershell');
   if (missing.length)
