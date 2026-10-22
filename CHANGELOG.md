@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.25.1 — 2026-10-22 · Diagnostic natif et validation
+
+- Le diagnostic Copilot natif conserve les outils réellement annoncés par le runtime en cas d’échec et indique les capacités obligatoires manquantes.
+- Les tests vérifient le détail du catalogue et des capacités absentes.
+- Le contrôle de formatage Prettier n’est plus bloquant dans `npm run check` ; le typage TypeScript, les tests et la compilation restent obligatoires.
+
 ## 1.25.0 — 2026-10-22 · Mes équipes
 
 - Le menu **Parcours** devient **Mes équipes**.
