@@ -78,19 +78,23 @@ export async function applyNativePermissions(
 export function verifyNativeCatalog(names: string[], extra: string[] = [], readOnly = false): void {
   const allowed = new Set([...(readOnly ? NATIVE_READ_TOOLS : NATIVE_TOOLS), ...extra]);
   const unexpected = names.filter((name) => !allowed.has(name));
-  if (new Set(names).size !== names.length) throw new Error('Catalogue natif dupliqué.');
-  if (unexpected.length) throw new Error(`Catalogue natif inattendu : ${unexpected.join(', ')}.`);
+  if (new Set(names).size !== names.length)
+    throw new Error(`Catalogue natif dupliqué. Outils reçus : ${names.join(', ') || '(aucun)'}.`);
+  if (unexpected.length)
+    throw new Error(
+      `Catalogue natif inattendu : ${unexpected.join(', ')}. Outils reçus : ${names.join(', ') || '(aucun)'}.`,
+    );
   // Copilot can expose grep, rg, or both for the same search capability.
   const required = readOnly
     ? ['view', 'glob', 'ask_user']
     : ['view', 'glob', 'edit', 'create', 'ask_user'];
-  if (
-    required.some((name) => !names.includes(name)) ||
-    !names.some((name) => name === 'grep' || name === 'rg') ||
-    (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
-  )
+  const missing = required.filter((name) => !names.includes(name));
+  if (!names.some((name) => name === 'grep' || name === 'rg')) missing.push('grep ou rg');
+  if (!readOnly && !names.some((name) => name === 'bash' || name === 'powershell'))
+    missing.push('bash ou powershell');
+  if (missing.length)
     throw new Error(
-      'Le runtime ne propose pas tous les outils natifs nécessaires (fichiers, terminal et questions).',
+      `Outils natifs obligatoires absents : ${missing.join(', ')}. Outils reçus (${names.length}) : ${names.join(', ') || '(aucun)'}. Mode : ${readOnly ? 'lecture seule' : 'complet'}.`,
     );
 }
 
@@ -100,6 +104,7 @@ export async function probeNativeCapabilities(
   directory: string,
 ): Promise<NativeCapabilities> {
   let session: CopilotSession | undefined;
+  let tools: string[] = [];
   try {
     session = await client.createSession({
       ...nativeGates,
@@ -116,7 +121,7 @@ export async function probeNativeCapabilities(
       onPermissionRequest: () => ({ kind: 'reject', feedback: 'Diagnostic sans exécution.' }),
     });
     await session.rpc.tools.initializeAndValidate();
-    const tools = ((await session.rpc.tools.getCurrentMetadata()).tools ?? []).map(
+    tools = ((await session.rpc.tools.getCurrentMetadata()).tools ?? []).map(
       (tool) => tool.name,
     );
     verifyNativeCatalog(tools);
@@ -136,9 +141,9 @@ export async function probeNativeCapabilities(
   } catch (error) {
     return {
       available: false,
-      tools: [],
+      tools,
       permissionModes: [],
-      error: `Copilot natif indisponible : ${(error as Error).message} Couple de référence : CLI 1.0.102, SDK 1.0.20. Vérifie la compatibilité de Feature Studio avec le CLI utilisé, puis relance le diagnostic.`,
+      error: `Copilot natif indisponible : ${(error as Error).message} Couple de référence : CLI 1.0.102, SDK 1.0.20.`,
     };
   } finally {
     if (session) {
