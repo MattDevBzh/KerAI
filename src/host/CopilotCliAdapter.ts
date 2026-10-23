@@ -1,4 +1,5 @@
 import { proofTools } from './ProofTools';
+import { taskBoardTools } from './TaskBoardTools';
 import { imageAttachments, assertVision } from './Images';
 import type { ImageAttachment } from '../shared/images';
 import type { ModelInfo } from '@github/copilot-sdk';
@@ -522,7 +523,15 @@ export class CopilotCliAdapter implements AgentAdapter {
     const native = usesNativeTools(input);
     const skills = nativeSkillCatalog(native ? input : { ...input, skills: [] });
     const skillTools = native && skills.byName.size ? ['skill'] : [];
-    const readOnlyTools = input.nativeReadOnly || input.agent.tools.includes('documentation');
+    const navigationEnabled =
+      Boolean(input.navigation) &&
+      !input.nativeReadOnly &&
+      !input.observation &&
+      input.mode !== 'discussion';
+    const readOnlyTools =
+      input.nativeReadOnly ||
+      input.agent.tools.includes('documentation') ||
+      (navigationEnabled && input.step.policy === 'read-only');
     const webTools = native && input.agent.tools.includes('web') ? ['web_fetch'] : [];
     const nativeTools = [
       ...(readOnlyTools ? NATIVE_READ_TOOLS : NATIVE_TOOLS),
@@ -571,6 +580,7 @@ export class CopilotCliAdapter implements AgentAdapter {
     let unsubscribe: (() => void) | undefined;
     let abortRuntime: (() => void) | undefined;
     let secrets = new Set<string>();
+    let selectedImageModel: ModelInfo | undefined;
     const emit = (kind: RunEvent['kind'], message: string) =>
       callbacks.onEvent({
         id: randomUUID(),
@@ -596,16 +606,31 @@ export class CopilotCliAdapter implements AgentAdapter {
           'Copilot CLI n’est pas connecté dans l’environnement Feature Studio. Lance le diagnostic de connexion.',
         );
       const tools = [
-        ...(input.mode === 'discussion' || readOnlyTools
+        ...(input.mode === 'discussion' || (readOnlyTools && !navigationEnabled)
           ? []
           : await withSignal(
-              this.options.getTools(input, callbacks, controller.signal),
+              this.options.getTools(
+                input,
+                {
+                  ...callbacks,
+                  onQuestion: callbacks.onQuestion
+                    ? (request) =>
+                        humanWait(() =>
+                          withSignal(callbacks.onQuestion!(request), controller.signal),
+                        )
+                    : undefined,
+                  validateModelImages: (images) => assertVision(selectedImageModel, images),
+                },
+                controller.signal,
+              ),
               controller.signal,
             )),
       ];
       if (native) {
         const business = tools.filter(
           (tool) =>
+            tool.name.startsWith('studio_navigation_') ||
+            tool.name.startsWith('studio_browser_') ||
             tool.name === 'studio_run_test' ||
             tool.name.startsWith('studio_devops_') ||
             [
@@ -614,7 +639,15 @@ export class CopilotCliAdapter implements AgentAdapter {
               'studio_write_review_report',
             ].includes(tool.name),
         );
-        tools.splice(0, tools.length, ...business);
+        const scoped =
+          navigationEnabled && readOnlyTools
+            ? business.filter(
+                (tool) =>
+                  tool.name.startsWith('studio_navigation_') ||
+                  tool.name.startsWith('studio_browser_'),
+              )
+            : business;
+        tools.splice(0, tools.length, ...scoped);
       }
       if (!native && !input.observation && input.mode !== 'discussion')
         tools.push({
@@ -677,6 +710,10 @@ export class CopilotCliAdapter implements AgentAdapter {
           },
         });
       if (native) tools.push(...proofTools(callbacks, controller.signal));
+      if (!input.observation && input.mode !== 'discussion')
+        tools.push(
+          ...taskBoardTools(callbacks, controller.signal, (text) => redactMcp(text, secrets)),
+        );
       const allowed = new Set(tools.map((t) => t.name));
       if (
         (!native && input.mode !== 'discussion' && !tools.length) ||
@@ -717,6 +754,7 @@ export class CopilotCliAdapter implements AgentAdapter {
       )
         throw new Error(`Le modèle ${requestedModel} n’est pas proposé par ce compte Copilot.`);
       const chosen = models.find((m) => m.id === requestedModel);
+      selectedImageModel = chosen;
       assertVision(chosen, input.images);
       if (
         input.step.reasoning &&
@@ -852,6 +890,16 @@ export class CopilotCliAdapter implements AgentAdapter {
               ),
         hooks: {
           onPreToolUse: (request) => {
+            if (
+              callbacks.navigationBlocked?.() &&
+              request.toolName !== 'ask_user' &&
+              request.toolName !== 'studio_ask_human'
+            )
+              return {
+                permissionDecision: 'deny',
+                permissionDecisionReason:
+                  'Contexte de navigation à compléter. Termine le compte rendu ; l’intervention du Navigateur et la reprise sont décidées par l’humain.',
+              };
             if (request.toolName === 'skill') {
               const name = (request.toolArgs as { skill?: unknown } | null)?.skill;
               if (typeof name !== 'string' || !skills.byName.has(name))
@@ -1069,7 +1117,7 @@ export class CopilotCliAdapter implements AgentAdapter {
               agentId: event.agentId,
               data: redactMcp(
                 JSON.stringify(event.data, (key, value) =>
-                  key === 'attachments'
+                  key === 'attachments' || key === 'binaryResultsForLlm'
                     ? Array.isArray(value)
                       ? value.map((item) => ({
                           type: item.type,
@@ -1106,6 +1154,11 @@ export class CopilotCliAdapter implements AgentAdapter {
             usage.inputTokens = (usage.inputTokens ?? 0) + data.inputTokens;
           if (numeric(data.outputTokens))
             usage.outputTokens = (usage.outputTokens ?? 0) + data.outputTokens;
+          if (numeric(data.cacheReadTokens))
+            usage.cacheReadTokens = (usage.cacheReadTokens ?? 0) + data.cacheReadTokens;
+          if (numeric(data.cacheWriteTokens))
+            usage.cacheWriteTokens = (usage.cacheWriteTokens ?? 0) + data.cacheWriteTokens;
+          if (numeric(data.duration)) usage.durationMs = (usage.durationMs ?? 0) + data.duration;
           if (numeric(data.copilotUsage?.totalNanoAiu)) {
             usage.cost = (usage.cost ?? 0) + data.copilotUsage.totalNanoAiu;
             usage.unit = 'nano-AIU';

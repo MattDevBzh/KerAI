@@ -31,12 +31,14 @@ export function HumanRequestProvider({
   className,
   dispatch,
   children,
+  presentationOnly = false,
 }: {
   requests: HumanRequest[];
   features: Feature[];
   className?: string;
   dispatch: Dispatch;
   children: ReactNode;
+  presentationOnly?: boolean;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [reduced, setReduced] = useState(new Set<string>());
@@ -83,7 +85,7 @@ export function HumanRequestProvider({
       value={{
         answers,
         answer: (id, value) => setAnswers((current) => ({ ...current, [id]: value })),
-        foreground: active?.id,
+        foreground: presentationOnly ? undefined : active?.id,
         highlight: setSelected,
         pending,
         submit: (id, value) => {
@@ -94,8 +96,11 @@ export function HumanRequestProvider({
         },
       }}
     >
-      <div className={className}>{children}</div>
+      <div className={className} inert={presentationOnly || undefined}>
+        {children}
+      </div>
       {active &&
+        !presentationOnly &&
         createPortal(
           <PromptDialog
             key={active.id}

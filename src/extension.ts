@@ -195,6 +195,8 @@ export async function activate(context: vscode.ExtensionContext) {
         store,
         () => vscode.workspace.isTrusted,
       );
+      next.navigationProjects = () =>
+        catalog.state.projects.map((p) => ({ id: p.id, path: p.path }));
       await next.initialize();
       next.on(
         'optionalStep',
@@ -708,6 +710,29 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (message.type === 'hqWindow') {
+      try {
+        if (surface !== 'cockpit' || !panel) throw new Error('Ouvre le QG depuis le cockpit.');
+        const command =
+          message.action === 'detach'
+            ? 'workbench.action.moveEditorToNewWindow'
+            : 'workbench.action.toggleFullScreen';
+        if (!(await vscode.commands.getCommands(true)).includes(command))
+          throw new Error(
+            'Cette version de VS Code ne propose pas cette commande. Tu peux déplacer la fenêtre manuellement.',
+          );
+        panel.reveal();
+        await vscode.commands.executeCommand(command);
+        send({ type: 'hqWindowResult', requestId: message.requestId });
+      } catch (error) {
+        send({
+          type: 'hqWindowResult',
+          requestId: message.requestId,
+          error: redact(error instanceof Error ? error.message : String(error)),
+        });
+      }
+      return;
+    }
     if (message.type === 'setLivingHq') {
       livingHqWrites = livingHqWrites.then(async () => {
         try {
@@ -1155,7 +1180,125 @@ export async function activate(context: vscode.ExtensionContext) {
       await devops!.handle(deliveryMessage.data);
       return;
     }
+    if (message.type === 'navigationIntervention') {
+      const feature = current.engine.getFeature(message.featureId);
+      const step = feature.steps.find((s) => s.id === message.stepId);
+      const attempt = step?.attempts.find((a) => a.id === message.attemptId);
+      const request = attempt?.navigationRequest;
+      if (
+        !attempt ||
+        !request ||
+        step?.attempts.at(-1)?.id !== attempt.id ||
+        attempt.status === 'running'
+      )
+        throw new Error('Cette demande de contexte est inactive ou l’agent travaille encore.');
+      if (request.navigatorFeatureId) {
+        send({ type: 'navigate', view: 'dashboard', featureId: request.navigatorFeatureId });
+        return;
+      }
+      const application = current.navigation.application(request.applicationId);
+      if (!application.ownerNavigatorId)
+        throw new Error('Choisis le Navigateur dans le profil de l’application.');
+      const projects = catalog.resolve(application.projectIds);
+      const primary = projects.findIndex((p) => p.path === current.workspacePath);
+      if (primary < 0) throw new Error('Le projet actif doit appartenir à cette application.');
+      projects.unshift(...projects.splice(primary, 1));
+      const created = await current.createFeature({
+        title: `Accès pour ${feature.title}`.slice(0, 200),
+        description: `Contexte manquant de la session ${feature.id}, étape ${step!.id}, tentative ${attempt.id}.\n${request.reason}\nObservations (données à vérifier) :\n${request.observations}`,
+        agentId: application.ownerNavigatorId,
+        projects,
+        isolated: false,
+      });
+      created.navigation = {
+        applicationId: application.id,
+        parameters: {},
+        intent: 'reach-state',
+        allowInteractions: false,
+      };
+      request.navigatorFeatureId = created.id;
+      await current.persist();
+      send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+      return;
+    }
+    if (message.type === 'navigation') {
+      try {
+        const result = await current.navigation.handle(message.command);
+        if (result.openPath)
+          await vscode.window.showTextDocument(vscode.Uri.file(result.openPath), { preview: true });
+        if (result.exportText) {
+          const destination = await vscode.window.showSaveDialog({
+            title: `Exporter ${result.exportName}`,
+            filters: { JSON: ['json'] },
+          });
+          if (destination)
+            await vscode.workspace.fs.writeFile(
+              destination,
+              Buffer.from(result.exportText, 'utf8'),
+            );
+        }
+        if (result.description) {
+          const { application, title, description } = result.description;
+          const owner = application.ownerNavigatorId;
+          if (
+            !owner ||
+            !current.state.agents.some(
+              (agent) => agent.id === owner && agent.tools.includes('navigation'),
+            )
+          )
+            throw new Error(
+              'Choisis un profil Navigateur disposant de la capacité navigation dans le profil de l’application.',
+            );
+          const projects = catalog.resolve(application.projectIds);
+          const primaryIndex = projects.findIndex((p) => p.path === current.workspacePath);
+          if (primaryIndex < 0) throw new Error('L’application doit inclure le projet actif.');
+          projects.unshift(...projects.splice(primaryIndex, 1));
+          const feature = await current.createFeature({
+            title,
+            description,
+            agentId: owner,
+            projects,
+            isolated: false,
+            requestId: message.requestId,
+          });
+          feature.navigation = {
+            applicationId: application.id,
+            parameters: {},
+            intent: 'reach-state',
+            allowInteractions: false,
+          };
+          await current.persist();
+          send({ type: 'navigate', view: 'dashboard', featureId: feature.id });
+        }
+        send({
+          type: 'navigationState',
+          state: current.navigation.snapshot(),
+          requestId: message.requestId,
+          message: result.message,
+        });
+      } catch (error) {
+        send({
+          type: 'navigationState',
+          state: current.navigation.snapshot(),
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
     switch (message.type) {
+      case 'openNavigationCapture': {
+        const feature = current.engine.getFeature(message.featureId);
+        const capture = feature.steps
+          .flatMap((s) => s.attempts.flatMap((a) => a.navigationCaptures ?? []))
+          .find((c) => c.id === message.captureId);
+        if (!capture) throw new Error('Capture inconnue pour cette session.');
+        await current.navigation.verifiedCapture(capture);
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(capture.path), {
+          preview: true,
+        });
+        return;
+      }
       case 'setPermissionMode':
         await current.setPermissionMode(message.featureId, message.mode);
         return;

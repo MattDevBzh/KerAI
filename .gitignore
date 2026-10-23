@@ -13,3 +13,6 @@ playwright-report/
 /releases/local/
 /releases/published/
 /scripts/__pycache__/
+
+# Local QA outputs and isolated candidate snapshots.
+/artifacts/

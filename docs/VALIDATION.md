@@ -1,5 +1,14 @@
 # Validation et limites
 
+## QG grand écran et navigation documentée — v1.29.0
+
+- TypeScript, mise en forme, construction et **940 tests de logique/intégration réussis, 8 tests optionnels ignorés** (80 fichiers réussis, 5 ignorés).
+- **287 scénarios Chromium réussis** sur la version intégrée : tous les thèmes du QG, messages publics, tableaux persistés, plan initial, listes longues, zoom, ateliers imbriqués, transmissions, demandes humaines après réduction, bibliothèque Applications et rejeu traversant l’interface, l’hôte, Chromium et le stockage.
+- Le tableau est aussi vérifié avec le vrai **Copilot CLI 1.0.103 / SDK 1.0.20**, en utilisant des réponses déterministes d’un serveur local : outil disponible, progression enregistrée et absence de permission d’écriture sur le dépôt. Ce contrôle ne mesure pas la qualité des notes produites par un modèle réel.
+- La navigation dispose de tests de navigateur réels et de tests SDK à transport simulé. Les captures de la documentation et les chiffres des campagnes de recette sont synthétiques. La recette avec le compte professionnel et les gains économiques restent à mesurer selon le [protocole](features/navigation-documentee/PROTOCOLE-EVALUATION.md).
+- La chaîne de livraison exige Linux et Windows, le contrôle du contenu du VSIX, son chargement dans un vrai VS Code avec un profil isolé et le rejeu par le worker embarqué. Le fichier téléchargé depuis GitHub est vérifié contre son SHA-256. Le commit et la CI figurent dans la [release v1.29.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.29.0) ; une construction locale possède sa propre empreinte.
+- Les cases barrées restent des déclarations d’avancement. Les approbations du plan, du code avant les tests agent et des résultats restent humaines. Le plein écran permet de suivre la session ; il faut le réduire pour intervenir.
+
 ## Images, documentation et dossier de preuves — v1.28.0
 
 - TypeScript, compilation et **814 tests métier réussis, 7 tests optionnels ignorés**. Les tests ciblés supplémentaires vérifient les images exclues du contexte, les sources inventées refusées, la persistance des conclusions et les empreintes modifiées. Les limites de taille et de pagination des exports sont contrôlées.

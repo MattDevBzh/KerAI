@@ -1,4 +1,5 @@
 import { screenshot } from './image-fixture';
+import { updateTaskBoard } from '../src/core/taskBoard';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -226,6 +227,35 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     }));
     return run;
   }
+  it('offers the live task board in the actual native catalog, including a read-only planning turn', async () => {
+    const run = nativeTransport();
+    run.nativeReadOnly = true;
+    callbacks.onTaskBoard = vi.fn(async (update) => updateTaskBoard(undefined, update));
+    fake.setOnSend(() => {
+      const tool = fake.config!.tools!.find((t) => t.name === 'studio_update_task_board')!;
+      void Promise.resolve(
+        tool.handler!(
+          {
+            mode: 'task',
+            title: 'Cadrage',
+            items: [{ id: 'read', text: 'Lire les critères', status: 'in_progress' }],
+          },
+          { sessionId: 's', toolCallId: 't', toolName: tool.name, arguments: {} },
+        ),
+      ).then(
+        () => {
+          fake.emit('assistant.message', { content: 'Organisation proposée.' });
+          fake.emit('session.idle', {});
+        },
+        (error) => fake.emit('session.error', { message: String(error), errorType: 'tool' }),
+      );
+    });
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config?.availableTools).toContain('studio_update_task_board');
+    expect(fake.config?.availableTools).not.toContain('edit');
+    expect(callbacks.onTaskBoard).toHaveBeenCalledOnce();
+    expect(fake.session.rpc.tools.getCurrentMetadata).toHaveBeenCalledBefore(fake.session.send);
+  });
   it('sends image blobs only to vision models and excludes binary data from traces', async () => {
     const run = nativeTransport();
     run.images = [screenshot];

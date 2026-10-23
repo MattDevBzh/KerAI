@@ -1,4 +1,5 @@
 import * as assert from 'node:assert/strict';
+import { navigationExtensionSmoke } from './navigation-extension-smoke';
 import * as vscode from 'vscode';
 import { readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -101,6 +102,11 @@ async function smokeRun(): Promise<void> {
   }
   for (const backdrop of ['atelier', 'papier', 'guilde', 'halloween', 'dragonball'])
     assert.ok(await readFile(join(extension.extensionPath, `dist/webview/qg/${backdrop}.png`)));
+  for (const asset of ['Caveat.ttf', 'Caveat-OFL.txt'])
+    assert.ok(await readFile(join(extension.extensionPath, `dist/webview/fonts/${asset}`)));
+  const cinemaCommands = await vscode.commands.getCommands(true);
+  assert.ok(cinemaCommands.includes('workbench.action.moveEditorToNewWindow'));
+  assert.ok(cinemaCommands.includes('workbench.action.toggleFullScreen'));
   for (const image of ['eiffel', 'kitten'])
     assert.ok(await readFile(join(extension.extensionPath, `dist/webview/rewards/${image}.png`)));
   for (let sheet = 1; sheet <= 4; sheet++)
@@ -208,6 +214,7 @@ async function smokeRun(): Promise<void> {
     'The cockpit connects automatically; a missing CLI leaves the UI usable with a diagnostic',
   );
   if (!process.env.FEATURE_STUDIO_TEST_CLI_PATH) assert.ok(api.getState()?.runtime.error);
+  if (process.env.FEATURE_STUDIO_TEST_NAVIGATION === '1') await navigationExtensionSmoke(api);
   assert.ok(api.getState()?.workflows.some((workflow) => workflow.id === 'quality-feature'));
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-visual-tests'));
   assert.equal(api.getState()?.workflows.find((w) => w.id === 'documentation')?.steps.length, 4);
@@ -759,7 +766,7 @@ async function smokeRun(): Promise<void> {
     api.getState()?.features.find((f) => f.id === feature.id)?.title,
     'Smoke extension host',
   );
-  assert.equal(api.getState()?.schemaVersion, 10);
+  assert.equal(api.getState()?.schemaVersion, 11);
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-observer'));
   await api.dispatch({
     type: 'previewObservation',

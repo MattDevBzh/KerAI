@@ -90,6 +90,9 @@ export interface RunEvent {
   message: string;
 }
 export interface Usage {
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  durationMs?: number;
   inputTokens?: number;
   outputTokens?: number;
   model?: string;
@@ -115,6 +118,18 @@ export interface Artifact {
   updatedAt: string;
 }
 export interface Attempt {
+  taskBoard?: import('./taskBoard').TaskBoard;
+  navigationRequest?: {
+    id: string;
+    applicationId: string;
+    reason: string;
+    observations: string;
+    createdAt: string;
+    navigatorFeatureId?: string;
+  };
+  navigation?: import('./navigation').NavigationContextSnapshot;
+  navigationRuns?: import('./navigation').NavigationRun[];
+  navigationCaptures?: import('./navigation').NavigationCapture[];
   proofClaims?: import('./proofs').ProofClaim[];
   nativeActivity?: import('./native').NativeActivity[];
   nativeContextLoads?: import('./native').NativeContextLoad[];
@@ -172,6 +187,7 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  navigation?: import('./navigation').NavigationSelection;
   proofChecks?: Record<string, import('./proofs').ProofCheck>;
   images?: import('./images').ImageAttachment[];
   parent?: { featureId: string; stepId: string; iterationId: string };
@@ -292,10 +308,11 @@ export interface RuntimeStatus {
   error?: string;
 }
 export interface StudioState {
+  navigation?: import('./navigation').NavigationSnapshot;
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
   workspace: {
     name: string;
     path: string;
@@ -317,6 +334,9 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | { type: 'navigationIntervention'; featureId: string; stepId: string; attemptId: string }
+  | { type: 'openNavigationCapture'; featureId: string; captureId: string }
+  | { type: 'navigation'; requestId: string; command: import('./navigation').NavigationCommand }
   | import('./pair').PairAction
   | import('./statistics').StatsClientMessage
   | { type: 'refreshSecretThemes' }
@@ -344,6 +364,7 @@ export type ClientMessage =
     }
   | { type: 'setAgentFavorite'; agentId: string; favorite: boolean; requestId: string }
   | { type: 'setLivingHq'; enabled: boolean; requestId: string }
+  | { type: 'hqWindow'; action: 'detach' | 'fullscreen'; requestId: string }
   | { type: 'setZoom'; zoom: ZoomPreference; requestId: string }
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
   | { type: 'installQualityKit'; featureId?: string }
@@ -533,6 +554,13 @@ export type ClientMessage =
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
   | {
+      type: 'navigationState';
+      state: import('./navigation').NavigationSnapshot;
+      requestId?: string;
+      error?: string;
+      message?: string;
+    }
+  | {
       type: 'pairActionResult';
       requestId: string;
       featureId: string;
@@ -587,6 +615,7 @@ export type HostMessage =
     >)
   | { type: 'devopsState'; state: DevOpsState }
   | { type: 'state'; state: StudioState }
+  | { type: 'hqWindowResult'; requestId: string; error?: string }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
   | { type: 'proofDossierResult'; requestId: string; error?: string; notice?: string }
@@ -616,6 +645,7 @@ export type HostMessage =
       stepId?: string;
     };
 export interface RunInput {
+  navigation?: import('./navigation').NavigationContextSnapshot;
   images?: import('./images').ImageAttachment[];
   nativeReadOnly?: boolean;
   previousEventIds?: string[];
@@ -652,6 +682,15 @@ export interface RunResult {
   review?: ReviewReport;
 }
 export interface RunCallbacks {
+  /** Runtime validates the selected model before any optional browser image is sent. */
+  validateModelImages?(images: import('./images').ImageAttachment[]): void;
+  onTaskBoard?(
+    update: import('./taskBoard').TaskBoardUpdate,
+  ): Promise<import('./taskBoard').TaskBoard>;
+  navigationBlocked?(): boolean;
+  onNavigationRequest?(request: { reason: string; observations: string }): Promise<void>;
+  onNavigationRun?(run: import('./navigation').NavigationRun): Promise<void>;
+  onNavigationCapture?(capture: import('./navigation').NavigationCapture): Promise<void>;
   getProofs?(): import('./proofs').ProofEntry[];
   onProofClaim?(
     claim: Pick<import('./proofs').ProofClaim, 'id' | 'text' | 'proofIds' | 'verdict'>,

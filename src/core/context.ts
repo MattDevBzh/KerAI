@@ -1,4 +1,5 @@
 import { subplanContract } from '../shared/subplans';
+import { taskBoardInstructions } from '../shared/taskBoard';
 import { createHash } from 'node:crypto';
 import { boundAnswers } from './questions';
 import { correctionContext } from '../shared/collaboration';
@@ -69,8 +70,12 @@ export function promptSections(input: RunInput): PromptSection[] {
     'step',
     'Mission de cette étape',
     'system',
-    `Étape : ${input.step.name}\n${input.step.description}\n${input.agent.tools.includes('documentation') ? `Documentation en lecture seule, sans terminal ni écriture. ${input.agent.tools.includes('web') ? 'Recherche et consultation web disponibles avec les permissions Copilot.' : 'Aucun outil web disponible pour ce rôle.'}` : native ? `Outils natifs Copilot. Permissions : ${permissionLabels[input.launch?.permissionMode ?? input.feature.execution!.permissionMode]}. Les profils techniques Studio ne limitent pas ces outils. Préserve les modifications humaines existantes.` : `Profil technique : ${input.step.policy}`}`,
+    `Étape : ${input.step.name}\n${input.step.description}\n${input.navigation && input.step.policy === 'read-only' ? 'Code en lecture seule, aucun terminal ni écriture. Outils navigateur limités au contexte et aux interactions autorisées dans KerAI.' : input.agent.tools.includes('documentation') ? `Documentation en lecture seule, sans terminal ni écriture. ${input.agent.tools.includes('web') ? 'Recherche et consultation web disponibles avec les permissions Copilot.' : 'Aucun outil web disponible pour ce rôle.'}` : native ? `Outils natifs Copilot. Permissions : ${permissionLabels[input.launch?.permissionMode ?? input.feature.execution!.permissionMode]}. Les profils techniques Studio ne limitent pas ces outils. Préserve les modifications humaines existantes.` : `Profil technique : ${input.step.policy}`}`,
   );
+  if (input.navigation)
+    add('navigation', 'Parcours et état applicatif', 'system', input.navigation.contextText);
+  if (!input.observation && input.mode !== 'discussion')
+    add('task-board', 'Tableau de suivi de l’agent', 'system', taskBoardInstructions);
   add(
     'agent',
     `Instructions · ${input.agent.name}`,
@@ -381,6 +386,7 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
     .update(
       JSON.stringify({
         imageDigests,
+        navigation: input.navigation,
         prompt,
         sections,
         nativeSkillSources: usesNativeTools(input)

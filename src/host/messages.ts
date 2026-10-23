@@ -1,3 +1,4 @@
+import { navigationCommandSchema } from '../core/navigationSchemas';
 import { proofMessageVariants } from '../core/proofSchemas';
 import { imagesSchema } from '../core/imageSchemas';
 import { pairActionSchema } from '../core/pairSchemas';
@@ -31,6 +32,13 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  z
+    .object({ type: z.literal('navigation'), requestId: id, command: navigationCommandSchema })
+    .strict(),
+  z.object({ type: z.literal('openNavigationCapture'), featureId: id, captureId: id }).strict(),
+  z
+    .object({ type: z.literal('navigationIntervention'), featureId: id, stepId: id, attemptId: id })
+    .strict(),
   ...proofMessageVariants,
   z
     .object({
@@ -111,6 +119,13 @@ export const messageSchema = z.discriminatedUnion('type', [
     .strict(),
   z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
   z.object({ type: z.literal('setLivingHq'), enabled: z.boolean(), requestId: id }).strict(),
+  z
+    .object({
+      type: z.literal('hqWindow'),
+      action: z.enum(['detach', 'fullscreen']),
+      requestId: id,
+    })
+    .strict(),
   z.object({ type: z.literal('installQualityKit'), featureId: id.optional() }).strict(),
   z
     .object({

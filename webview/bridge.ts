@@ -1,5 +1,6 @@
 import type { ClientMessage, HostMessage } from '../src/shared/types';
 interface PersistedView {
+  hqFeatureId?: string;
   statistics?: import('../src/shared/statistics').StatsFilters;
   sessionList?: import('../src/shared/sessionList').SessionListFilters;
   navigationVersion?: number;
@@ -67,6 +68,8 @@ export function subscribe(callback: (message: HostMessage) => void) {
         'dashboardState',
         'dashboardSaved',
         'state',
+        'hqWindowResult',
+        'navigationState',
         'accountCredits',
         'questState',
         'rewardState',

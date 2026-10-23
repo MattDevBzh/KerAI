@@ -1,5 +1,8 @@
 import { z } from 'zod';
 export const usageSchema = z.object({
+  cacheReadTokens: z.number().finite().nonnegative().optional(),
+  cacheWriteTokens: z.number().finite().nonnegative().optional(),
+  durationMs: z.number().finite().nonnegative().optional(),
   source: z.literal('measured'),
   inputTokens: z.number().finite().nonnegative().optional(),
   outputTokens: z.number().finite().nonnegative().optional(),

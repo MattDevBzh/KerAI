@@ -18,6 +18,7 @@ const host = vi.hoisted(() => {
     dedicated: false,
     mode: 3,
     executeCommand: vi.fn(),
+    extraCommands: [] as string[],
     enqueue: vi.fn(),
     createPanel: vi.fn(),
     acquireLease: vi.fn(),
@@ -156,6 +157,7 @@ vi.mock('vscode', () => ({
       'workbench.action.closeSidebar',
       'workbench.action.closePanel',
       'workbench.action.closeAuxiliaryBar',
+      ...host.extraCommands,
     ],
     registerCommand: (name: string, command: () => Promise<void>) => {
       host.commands.set(name, command);
@@ -263,6 +265,7 @@ describe('personal theme host boundary', () => {
     host.dedicated = false;
     host.mode = 3;
     host.executeCommand.mockClear();
+    host.extraCommands = [];
     host.enqueue.mockClear();
     host.createPanel.mockClear();
     host.acquireLease.mockClear();
@@ -313,6 +316,30 @@ describe('personal theme host boundary', () => {
       'Écran de confiance indisponible',
     );
     expect(host.state.workspace.trusted).toBe(false);
+  });
+  it('detaches the existing HQ window and toggles fullscreen without changing the run or creating another cockpit', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    const before = structuredClone(host.state),
+      panels = host.createPanel.mock.calls.length;
+    await api.dispatch({ type: 'hqWindow', action: 'detach', requestId: 'missing' });
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'hqWindowResult',
+      requestId: 'missing',
+      error: expect.any(String),
+    });
+    host.extraCommands = [
+      'workbench.action.moveEditorToNewWindow',
+      'workbench.action.toggleFullScreen',
+    ];
+    await api.dispatch({ type: 'hqWindow', action: 'detach', requestId: 'detach' });
+    expect(host.executeCommand).toHaveBeenCalledWith('workbench.action.moveEditorToNewWindow');
+    expect(host.messages.at(-1)).toEqual({ type: 'hqWindowResult', requestId: 'detach' });
+    await api.dispatch({ type: 'hqWindow', action: 'fullscreen', requestId: 'full' });
+    expect(host.executeCommand).toHaveBeenCalledWith('workbench.action.toggleFullScreen');
+    expect(host.state).toEqual(before);
+    expect(host.createPanel).toHaveBeenCalledTimes(panels);
+    expect(host.writes).toHaveLength(0);
   });
   it('keeps Dragon Ball hidden until the exact code, then persists it once without touching business state or trophies', async () => {
     const api = await activate();

@@ -3,6 +3,7 @@ import {
   BarChart3,
   ChartNoAxesCombined,
   BookOpen,
+  AppWindow,
   Bot,
   BrainCircuit,
   ChevronDown,
@@ -28,6 +29,7 @@ export const navigationScreens = [
   { id: 'stats', label: 'Stats', icon: ChartNoAxesCombined },
   { id: 'discussion', label: 'Discussion', icon: MessageSquare },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
+  { id: 'applications', label: 'Applications', icon: AppWindow },
   { id: 'workflows', label: 'Mes équipes', icon: Workflow },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'skills', label: 'Skills', icon: BookOpen },
@@ -123,9 +125,9 @@ export function StudioNavigation({
         )
       ) : (
         <>
-          {(['dashboard', 'sessions', 'stats', 'discussion', 'validation'] as const).map((id) =>
-            renderScreen(id),
-          )}
+          {(
+            ['dashboard', 'sessions', 'stats', 'discussion', 'validation', 'applications'] as const
+          ).map((id) => renderScreen(id))}
           <div className="nav-groups">
             {navigationGroups.map((group) => {
               const current = group.views.includes(view);

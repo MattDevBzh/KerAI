@@ -44,6 +44,21 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'native-activity' in ui, 'Native evidence missing from webview'
         assert b'nativeConversation' in host, 'Shared native conversation missing from host'
         assert b'nativeContextLoads' in host, 'Native context receipts missing from host'
+        navigation_worker = 'extension/dist/navigation-runtime/worker.cjs'
+        assert archive.read(navigation_worker), 'Packaged browser worker missing'
+        for marker in ('studio_navigation_replay', 'studio_browser_capture', 'navigationIntervention'):
+            assert marker.encode() in host, f'{marker} missing from host'
+        assert b'Applications' in ui and b'evaluationSaveEntry' in ui, 'Navigation interface incomplete'
+        runtime_prefix = 'extension/dist/navigation-runtime/node_modules/playwright-core/'
+        runtime_package = json.loads(archive.read(runtime_prefix + 'package.json'))
+        assert runtime_package['version'] == embedded['dependencies']['playwright-core']
+        for asset in ('browsers.json', 'LICENSE', 'lib/serverRegistry.js'):
+            assert archive.read(runtime_prefix + asset), f'Runtime asset missing: {asset}'
+        assert archive.read('extension/dist/navigation-runtime/PNGJS-LICENSE')
+        assert archive.read('extension/defaults/agents/fs-navigator.agent.md') == (root / 'defaults/agents/fs-navigator.agent.md').read_bytes()
+        for skill in ('navigation-context', 'navigation-discovery', 'screen-code-analysis', 'navigation-verification'):
+            member = Path('defaults/kit/.github/skills') / skill / 'SKILL.md'
+            assert archive.read('extension/' + member.as_posix()) == (root / member).read_bytes()
         for marker in ('saveProofClaim', 'exportProofDossier', 'exportAgentReport'):
             assert marker.encode() in host and marker.encode() in ui, f'{marker} missing'
         assert b'proof-dossier' in ui and b'image-picker' in ui
@@ -55,7 +70,13 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'native-context-panel' in ui, 'Loaded context panel missing from webview'
         assert b'session-conversation' in ui, 'Step conversation missing from webview'
         assert b'hq-paper-plane' in ui, 'Context transfer missing from webview'
+        assert b'studio_update_task_board' in host, 'Agent task board tool missing from host'
+        assert b'hqWindow' in host and b'hqWindow' in ui, 'Detached cinema commands missing'
+        assert b'hq-cinema' in ui and b'cinema-workshop-wall' in ui, 'Cinema or workshop missing'
+        for font in ('Caveat.ttf', 'Caveat-OFL.txt'):
+            assert archive.read('extension/dist/webview/fonts/' + font) == (root / 'webview/public/fonts' / font).read_bytes()
         styles = archive.read('extension/dist/webview/assets/index.css')
+        assert b'hq-cinema' in styles, 'Cinema styles missing'
         assert b'hq-paper-delivery' in styles, 'Paper plane animation missing from stylesheet'
         assert b'conversation-composer' in styles, 'Conversation layout missing from stylesheet'
         properties = embedded['contributes']['configuration']['properties']
@@ -94,7 +115,7 @@ def verify(vsix, root, extract=None, match_build=False):
         'sha256': hashlib.sha256(vsix.read_bytes()).hexdigest(),
         'verifiedBuildFiles': len(built_files),
         'verifiedPublicAssets': len(assets),
-        'features': ['rewards', 'livingHq', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes', 'stepConversation', 'recursiveSubplans', 'subplanErgonomics', 'humanPrompts', 'scopedPermissions'],
+        'features': ['rewards', 'livingHq', 'hqCinema', 'agentTaskBoards', 'documentedNavigation', 'dragonball', 'optionalSteps', 'pair', 'hqContextTransfer', 'copilotNative', 'nativePermissionModes', 'stepConversation', 'recursiveSubplans', 'subplanErgonomics', 'humanPrompts', 'scopedPermissions'],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

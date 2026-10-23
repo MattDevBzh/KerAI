@@ -1,3 +1,7 @@
+import { NavigationService } from './NavigationService';
+import { updateTaskBoard } from '../core/taskBoard';
+import { navigationTools } from './NavigationTools';
+import { freezeNavigationContext, sameApplicationAuthority } from './NavigationContext';
 import { proofDossier } from '../shared/proofs';
 import { proofProposalSchema } from '../core/proofSchemas';
 import type { ProofClaim } from '../shared/proofs';
@@ -241,6 +245,8 @@ export class StudioService extends EventEmitter {
   readonly registry: AgentRegistry;
   readonly kits: KitService;
   readonly workspaces: FeatureWorkspace;
+  readonly navigation: NavigationService;
+  navigationProjects?: () => { id: string; path: string }[];
   private workspaceTask?: Promise<void>;
   private active?: {
     featureId: string;
@@ -277,6 +283,20 @@ export class StudioService extends EventEmitter {
     this.registry = new AgentRegistry(workspacePath, defaultsPath);
     this.kits = new KitService(this.registry);
     this.workspaces = new FeatureWorkspace(workspacePath, join(store.rootPath, 'workspaces'));
+    this.navigation = new NavigationService({
+      storageRoot: join(store.rootPath, 'navigation'),
+      workerPath: join(defaultsPath, '..', 'dist', 'navigation-runtime', 'worker.cjs'),
+      trusted: isTrusted,
+      features: () => this.engine.features,
+      projects: () =>
+        this.navigationProjects?.() ?? [{ id: 'workspace', path: this.workspacePath }],
+    });
+    this.navigation.on('state', () => {
+      if (this.state) {
+        this.state.navigation = this.navigation.snapshot();
+        this.publish();
+      }
+    });
   }
   async initialize(): Promise<void> {
     const persisted = await this.store.load();
@@ -284,7 +304,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 10,
+      schemaVersion: 11,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -310,6 +330,8 @@ export class StudioService extends EventEmitter {
         (m) => m.source?.featureId !== deletion.featureId,
       );
     }
+    await this.navigation.initialize();
+    this.state.navigation = this.navigation.snapshot();
     await this.refreshIsolationSupport();
   }
   private async refreshIsolationSupport(): Promise<void> {
@@ -324,6 +346,7 @@ export class StudioService extends EventEmitter {
   }
   snapshot(): StudioState {
     this.state.workspace.trusted = this.isTrusted();
+    this.state.navigation = this.navigation.snapshot();
     return structuredClone(this.state);
   }
   publish(): void {
@@ -959,6 +982,8 @@ export class StudioService extends EventEmitter {
           }),
         },
       ];
+    const browserTools = navigationTools(this.navigation, input, callbacks, signal);
+    if (input.navigation?.application.ownerNavigatorId === input.agent.id) return browserTools;
     const host =
       (input.projects?.length ?? 0) > 1
         ? new MultiProjectTools(input, callbacks, signal, this.projectInspector)
@@ -971,7 +996,41 @@ export class StudioService extends EventEmitter {
       callbacks,
       signal,
     );
-    return [...(await host.createTools()), ...personal.createTools()];
+    const codeTools = await host.createTools();
+    if (input.navigation && input.step.policy === 'read-only')
+      return [
+        ...codeTools.filter((tool) =>
+          [
+            'studio_list_files',
+            'studio_read_file',
+            'studio_search',
+            'studio_git_branches',
+            'studio_git_changes',
+            'studio_git_diff',
+          ].includes(tool.name),
+        ),
+        ...browserTools,
+      ];
+    return [...codeTools, ...personal.createTools(), ...browserTools];
+  }
+  private async verifyNavigationAnchors(featureId: string, launch?: RunLaunchOptions) {
+    const feature = this.engine.getFeature(featureId);
+    const selected = launch ? launch.navigation : feature.navigation;
+    if (!selected) return;
+    const roots = feature.projects?.map((project, index) => ({
+      id: project.id,
+      path: index === 0 ? this.workspaces.executionPath(feature) : project.path,
+    })) ?? [
+      {
+        id:
+          this.navigationProjects?.().find((p) => p.path === this.workspacePath)?.id ?? 'workspace',
+        path: this.workspaces.executionPath(feature),
+      },
+    ];
+    await this.navigation.anchors.verify(roots, {
+      applicationId: selected.applicationId,
+      limit: 64,
+    });
   }
   private prepareInput(
     featureId: string,
@@ -995,6 +1054,7 @@ export class StudioService extends EventEmitter {
       launch ?? {
         ...emptyLaunch(),
         initialContext: step.initialContext ?? '',
+        navigation: feature.navigation,
         mcpServerIds: step.mcpServerIds ?? [],
       },
     );
@@ -1096,6 +1156,28 @@ export class StudioService extends EventEmitter {
         throw new Error(
           `La mémoire « ${entry.title} » provient d’une étape que cette tentative va invalider. Désélectionne-la avant de continuer.`,
         );
+    const navigation = selected.navigation
+      ? freezeNavigationContext(
+          this.navigation.snapshot(),
+          selected.navigation,
+          feature.projects?.map((project, index) => ({
+            id: project.id,
+            path: index === 0 ? this.workspaces.executionPath(feature) : project.path,
+          })) ?? [
+            {
+              id:
+                this.navigationProjects?.().find((p) => p.path === this.workspacePath)?.id ??
+                'workspace',
+              path: this.workspaces.executionPath(feature),
+            },
+          ],
+        )
+      : undefined;
+    if (navigation && !agent.tools.includes('navigation'))
+      throw new Error(
+        'Ce profil ne possède pas la capacité navigation. Adopte le profil proposé dans le catalogue ou ajoute cette capacité explicitement.',
+      );
+    if (navigation?.application.ownerNavigatorId === agent.id) step.policy = 'read-only';
     const previous = originalStep.attempts.at(-1);
     const answerBindings = boundAnswers(
       (previous?.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0)
@@ -1127,6 +1209,7 @@ export class StudioService extends EventEmitter {
     };
     return {
       devopsProjectKey: this.devopsProjectKey?.(),
+      navigation,
       feature,
       step,
       attempt,
@@ -1154,6 +1237,7 @@ export class StudioService extends EventEmitter {
       // A resumed transcript could reintroduce blocks removed from the new prompt.
       resumeSessionId:
         resume &&
+        previous?.navigation?.digest === navigation?.digest &&
         (previous?.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0) &&
         normalizeRoastLevel(previous?.roastLevel) === normalizeRoastLevel(agent.roastLevel) &&
         !agent.emptyContextByDefault &&
@@ -1182,6 +1266,7 @@ export class StudioService extends EventEmitter {
     this.assertTrusted();
     await this.featurePath(featureId);
     Object.assign(this.state, await this.registry.load());
+    await this.verifyNavigationAnchors(featureId, launch);
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     const blocked = treePath(this.engine.features, featureId)
       .map((f) => budgetBlockReason(f))
@@ -1256,6 +1341,7 @@ export class StudioService extends EventEmitter {
       );
     Object.assign(this.state, await this.registry.load());
     this.assertTrusted();
+    await this.verifyNavigationAnchors(featureId, launch);
     const continued = pairContinuation ? step.attempts.at(-1) : undefined;
     const input = pairContinuation
       ? this.pairInput(featureId, stepId)
@@ -1312,6 +1398,7 @@ export class StudioService extends EventEmitter {
       modelOverride: Boolean(step.model),
     };
     attempt.launch = structuredClone(input.launch!);
+    if (!continued) attempt.navigation = input.navigation && structuredClone(input.navigation);
     if (feature.execution && input.launch?.permissionMode) {
       if (feature.execution.permissionMode !== input.launch.permissionMode)
         this.nativePermissionGrants.delete(
@@ -1429,7 +1516,52 @@ export class StudioService extends EventEmitter {
       }
     };
     const newProofClaims = new Set<string>();
+    let boardWrites = Promise.resolve();
     const callbacks: RunCallbacks = {
+      onTaskBoard: (update) => {
+        const write = boardWrites.then(async () => {
+          if (
+            controller.signal.aborted ||
+            step.attempts.at(-1)?.id !== attempt.id ||
+            this.active?.controller !== controller
+          )
+            throw new Error('Cette tentative ne peut plus modifier son tableau.');
+          const previous = attempt.taskBoard;
+          const next = updateTaskBoard(previous, update);
+          attempt.taskBoard = next;
+          try {
+            await this.persist();
+          } catch (error) {
+            if (attempt.taskBoard === next) attempt.taskBoard = previous;
+            throw error;
+          }
+          return structuredClone(next);
+        });
+        boardWrites = write.then(
+          () => {},
+          () => {},
+        );
+        return write;
+      },
+      navigationBlocked: () => Boolean(attempt.navigationRequest),
+      onNavigationRequest: async (request) => {
+        if (!input.navigation || controller.signal.aborted) throw new Error('Tentative inactive.');
+        attempt.navigationRequest = {
+          id: randomUUID(),
+          applicationId: input.navigation.application.id,
+          ...request,
+          createdAt: new Date().toISOString(),
+        };
+        await this.persist();
+      },
+      onNavigationRun: async (run) => {
+        (attempt.navigationRuns ??= []).push(structuredClone(run));
+        await this.persist();
+      },
+      onNavigationCapture: async (capture) => {
+        (attempt.navigationCaptures ??= []).push(structuredClone(capture));
+        await this.persist();
+      },
       getProofs: () => proofDossier(feature).sources,
       onProofClaim: async (proposal) => {
         if (controller.signal.aborted || step.attempts.at(-1)?.id !== attempt.id)
@@ -1797,6 +1929,10 @@ export class StudioService extends EventEmitter {
           this.engine.refreshFeatureStatus(featureId);
         }
       } else this.engine.finishRun(featureId, stepId, result);
+      if (attempt.navigationRequest) {
+        step.status = attempt.status = 'waiting_input';
+        this.engine.refreshFeatureStatus(featureId);
+      }
       for (const claim of attempt.proofClaims ?? [])
         if (newProofClaims.has(claim.id)) claim.reportRevision = attempt.revision ?? 0;
     } catch (error) {
@@ -1822,6 +1958,9 @@ export class StudioService extends EventEmitter {
           );
       }
     } finally {
+      this.navigation.endAgent(attempt.id);
+      if (input.navigation && controller.signal.aborted)
+        await this.navigation.browser.stop().catch(() => undefined);
       if (nativeBefore) {
         try {
           const observed = observedNativeChanges(nativeBefore, await nativeChangesSnapshot(input));
@@ -1941,12 +2080,24 @@ export class StudioService extends EventEmitter {
           `Les réglages de ${project.name} ont changé. Prépare une nouvelle tentative.`,
         );
     }
+    if (attempt.navigationRequest)
+      throw new Error(
+        'Le contexte de navigation reste à compléter. Choisis le parcours vérifié dans une nouvelle tentative.',
+      );
     if (attempt.questions.some((q) => !attempt.answers[q.id]?.trim()))
       throw new Error('Réponds aux questions conservées avant de reprendre le travail.');
     if (pair.messages.some((m) => m.delivery === 'uncertain'))
       throw new Error(
         'Un message a une transmission incertaine. Choisis de le renvoyer ou de le garder sans renvoyer avant de reprendre.',
       );
+    if (
+      pair.snapshot.navigation &&
+      !sameApplicationAuthority(
+        pair.snapshot.navigation.application,
+        this.navigation.application(pair.snapshot.navigation.application.id),
+      )
+    )
+      throw new Error('Le profil de navigation a changé. Prépare une nouvelle tentative.');
     const { prompt: _prompt, ...snapshot } = structuredClone(pair.snapshot);
     return {
       ...snapshot,
@@ -2879,6 +3030,26 @@ export class StudioService extends EventEmitter {
                   : 'Les fichiers dont une empreinte a été enregistrée sont inchangés à cette date. Le test n’a pas été relancé.'),
           };
         }
+    for (const step of feature.steps)
+      for (const attempt of step.attempts)
+        for (const capture of attempt.navigationCaptures ?? []) {
+          const id = `navigation-capture:${attempt.id}:${capture.id}`;
+          try {
+            await this.navigation.verifiedCapture(capture);
+            checks[id] = {
+              at: new Date().toISOString(),
+              state: 'unchanged',
+              reason:
+                'Capture privée et empreinte intactes ; le parcours et les critères métier n’ont pas été rejoués.',
+            };
+          } catch (error) {
+            checks[id] = {
+              at: new Date().toISOString(),
+              state: 'unavailable',
+              reason: (error as Error).message,
+            };
+          }
+        }
     if (
       snapshot !==
       JSON.stringify(
@@ -3338,6 +3509,7 @@ export class StudioService extends EventEmitter {
     active?.controller.abort();
     if (this.saveTimer) clearTimeout(this.saveTimer);
     if (this.publishTimer) clearTimeout(this.publishTimer);
+    await this.navigation.dispose();
     await this.adapter?.dispose();
     await active?.done;
     await this.workspaceTask;

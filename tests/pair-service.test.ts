@@ -12,6 +12,59 @@ import { defaultPairPreferences } from '../src/shared/pair';
 import { digest, sessionDirectory, writePrivate } from '../src/host/SessionFiles';
 import { pairSourceKey } from '../src/core/pairSource';
 
+it('persists each agent checklist update on its attempt without approving work, and refuses late writes', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Tableau vivant',
+    description: 'Suivre le plan',
+    workflowId: 'single',
+  });
+  const step = feature.steps[0];
+  let callback: RunCallbacks['onTaskBoard'];
+  f.run(async (_input, callbacks) => {
+    callback = callbacks.onTaskBoard;
+    const [first, second] = await Promise.all([
+      callback!({
+        mode: 'plan',
+        title: 'Mon travail',
+        items: [{ id: 'read', text: 'Lire les critères', status: 'in_progress' }],
+      }),
+      callback!({
+        mode: 'plan',
+        title: 'Mon travail',
+        items: [{ id: 'read', text: 'Lire les critères', status: 'done' }],
+      }),
+    ]);
+    expect(first.revision).toBe(1);
+    expect(second.revision).toBe(2);
+    const index = JSON.parse(await readFile(new Store(f.storage).path, 'utf8'));
+    const entry = index.entries.find((e: { id: string }) => e.id === feature.id);
+    const disk = JSON.parse(
+      await readFile(
+        join(f.storage, sessionDirectory(entry.id), `state-${entry.hash}.json`),
+        'utf8',
+      ),
+    );
+    expect(disk.steps[0].attempts[0].taskBoard).toEqual(second);
+    expect(step.status).toBe('running');
+    return finished();
+  });
+  const preview = await f.service.previewRun(feature.id, step.id, '', false, emptyLaunch());
+  await f.service.runStep(feature.id, step.id, '', false, emptyLaunch(), preview.fingerprint);
+  expect(step.attempts[0].error).toBeUndefined();
+  expect(step.status).toBe('awaiting_review');
+  expect(step.attempts[0].taskBoard?.items[0].status).toBe('done');
+  await expect(
+    callback!({
+      mode: 'plan',
+      title: 'Trop tard',
+      items: [{ id: 'read', text: 'Après la fin', status: 'done' }],
+    }),
+  ).rejects.toThrow('tentative');
+  expect(step.attempts[0].taskBoard?.revision).toBe(2);
+});
+
 // End-to-end scenarios perform real Git checkpoints and spawn local test processes.
 // Keep the Windows allowance consistent across this integration suite.
 if (process.platform === 'win32') vi.setConfig({ testTimeout: 60_000 });
@@ -162,7 +215,7 @@ it.each(['planning', 'paused', 'working', 'review'] as const)(
     const f = await legacyFixture(phase);
     const loaded = await new Store(f.storage).load();
     const attempt = loaded.features[0].steps[0].attempts[0];
-    expect(loaded.schemaVersion).toBe(10);
+    expect(loaded.schemaVersion).toBe(11);
     expect(attempt.pair).toMatchObject({
       calls: 3,
       busy: false,

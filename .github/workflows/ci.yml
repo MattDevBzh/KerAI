@@ -22,10 +22,15 @@ jobs:
       - run: npm run typecheck
       - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.102
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
-      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts tests/native-context-runtime.test.ts tests/images-runtime.test.ts
+      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts tests/native-context-runtime.test.ts tests/images-runtime.test.ts tests/task-board-runtime.test.ts
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot.cmd
+      - run: npx playwright install chromium
+        if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
+      - name: Verify navigation and task boards on Windows
+        run: npx vitest run navigation- tests/task-board.test.ts
+        if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - run: npx vitest run tests/subplans.test.ts tests/native.test.ts tests/native-patch.test.ts tests/team.test.ts tests/personal-review.test.ts tests/optional-steps.test.ts tests/core-store.test.ts tests/autopilot.test.ts tests/service.test.ts tests/conversation.test.ts tests/pair.test.ts tests/pair-service.test.ts tests/workflow-collaboration.test.ts tests/dashboard.test.ts tests/devops-tickets-api.test.ts tests/devops-controller.test.ts tests/workspaces.test.ts tests/workspace-service.test.ts tests/quests.test.ts tests/copilot-path.test.ts tests/copilot-launcher.test.ts tests/adapter.test.ts tests/discussions.test.ts tests/discussion-context.test.ts tests/core-registry.test.ts tests/registry-migration.test.ts tests/host-policy.test.ts tests/git-review.test.ts tests/git-read.test.ts tests/context.test.ts tests/kits.test.ts tests/devops-kit.test.ts tests/devops-inspector.test.ts tests/devops-delivery.test.ts tests/explorer.test.ts tests/credits.test.ts tests/cockpit-launcher.test.ts tests/account-credits-monitor.test.ts tests/theme-host.test.ts tests/shortcut-icon.test.ts tests/rewards.test.ts tests/dragonball.test.ts tests/session-hq.test.ts tests/statistics.test.ts tests/images-documents.test.ts tests/proofs.test.ts
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
   validate:
@@ -48,13 +53,15 @@ jobs:
         run: npm run typecheck && npm run build
       - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.102
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
-      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts tests/native-context-runtime.test.ts tests/images-runtime.test.ts
+      - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts tests/native-context-runtime.test.ts tests/images-runtime.test.ts tests/task-board-runtime.test.ts
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot
       - run: npm run test:ui
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - run: xvfb-run -a npm run test:extension
+        env:
+          FEATURE_STUDIO_TEST_NAVIGATION: '1'
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - run: mkdir -p releases && npm run package
       - run: python3 scripts/verify-vsix.py --match-build
@@ -151,11 +158,15 @@ jobs:
           (output / 'SHA256SUMS').write_text(f'{digest}  {vsix.name}\n{icon_digest}  {icon.name}\n')
           print(f'Verified {vsix.name}: {vsix.stat().st_size} bytes, SHA-256 {digest}')
           PY
+      - name: Install Chromium for packaged navigation verification
+        if: steps.release.outputs.publish == 'true' && env.FEATURE_STUDIO_SKIP_TESTS != 'true'
+        run: npx playwright install --with-deps chromium
       - name: Load the packaged extension in VS Code
         if: steps.release.outputs.publish == 'true' && env.FEATURE_STUDIO_SKIP_TESTS != 'true'
         run: xvfb-run -a npm run test:extension
         env:
           FEATURE_STUDIO_EXTENSION_PATH: ${{ runner.temp }}/feature-studio-vsix/extension
+          FEATURE_STUDIO_TEST_NAVIGATION: '1'
       - name: Publish and verify release assets
         if: steps.release.outputs.publish == 'true'
         env:

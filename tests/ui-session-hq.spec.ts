@@ -333,7 +333,7 @@ test('les vingt avatars, les agents répétés et les profils supprimés gardent
   }));
   feature.activeStepId = feature.steps[0].id;
   await hosted(page, { state });
-  await expect(qg(page).getByRole('button')).toHaveCount(22);
+  await expect(qg(page).getByRole('button', { name: /^Étape / })).toHaveCount(22);
   for (const avatar of avatarOptions)
     await expect(qg(page).locator(`img[src*="/avatars/${avatar.id}/"]`).first()).toBeVisible();
   await qg(page)
@@ -370,7 +370,7 @@ for (const [width, theme] of [
   test(`QG et détail lisibles à ${width}px, ${theme}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1100 });
     await hosted(page, { theme });
-    await expect(qg(page).getByRole('button')).toHaveCount(5);
+    await expect(qg(page).getByRole('button', { name: /^Étape / })).toHaveCount(5);
     const images = qg(page).locator('img');
     await expect
       .poll(() =>

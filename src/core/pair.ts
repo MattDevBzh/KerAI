@@ -70,6 +70,7 @@ export function createPair(input: RunInput): PairState {
       workspacePath: input.workspacePath,
       qualityStoragePath: input.qualityStoragePath,
       existingChangeGrants: input.existingChangeGrants,
+      navigation: input.navigation,
     }),
     plans: [],
     messages: [],
@@ -236,6 +237,9 @@ export function addPairUsage(
     source: 'measured',
     model: turn.model ?? before.model,
     inputTokens: sum(before.inputTokens, turn.inputTokens),
+    cacheReadTokens: sum(before.cacheReadTokens, turn.cacheReadTokens),
+    cacheWriteTokens: sum(before.cacheWriteTokens, turn.cacheWriteTokens),
+    durationMs: sum(before.durationMs, turn.durationMs),
     outputTokens: sum(before.outputTokens, turn.outputTokens),
     incompleteTokens: Boolean(
       before.incompleteTokens ||

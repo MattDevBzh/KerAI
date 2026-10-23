@@ -1,3 +1,4 @@
+import { navigationContextSnapshotSchema } from './navigationSchemas';
 import { imagesSchema } from './imageSchemas';
 import { z } from 'zod';
 import { discussionAgentSchema } from './discussionSchemas';
@@ -117,6 +118,7 @@ export function createPairStateSchema(settings: z.ZodType<StudioSettings>) {
           workspacePath: z.string(),
           qualityStoragePath: z.string().optional(),
           existingChangeGrants: z.record(z.string(), z.string()).optional(),
+          navigation: navigationContextSnapshotSchema.optional(),
         })
         .strict(),
       plans: z.array(

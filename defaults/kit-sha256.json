@@ -19,7 +19,7 @@
   "SOURCES.md": "90a9cd942dabf73f833291327e1c2bb980e507940b60b3fa38300bbc4a415cb5",
   "VALIDATION.md": "fecfa4be88b5203635c6965e84ca4686e0bb5367e424270e84e520f555178dfd",
   "VERSION": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
-  "install-manifest.json": "0a806424f330156029612e7e51a6fc9c0f778481fa7381277c0d0744f5f9f58a",
+  "install-manifest.json": "e6e51ef3a971f5e044bc98e76ced5178d4f18726ebb38453ed2b24e3ac7e1be8",
   "install.py": "ac8664a327524030e81aec21ac269b3cb5f3e47595edca4a1e153bd927ab827e",
   "options/gitignore.append.txt": "a818567e30461804cbb0d96cd1cb420aa40d61b80ae77b3c30629da68b0ad7e0",
   "options/handoffs-local.yaml": "a9198ea376bf9e1f21f7292fdd165fda2c5f9c685a379b5e96a973dc53de16dd",
@@ -32,5 +32,9 @@
   "templates/plan.md": "0776930f8f5606be4045ff1a20549d4cc4963adee7fe5dfd56a79b0726d16889",
   "templates/review.md": "c4c22afb86d2241c1d92a93aa2473cd054f3418a911b49ab73326d0770b4f671",
   "templates/tests.md": "363e6594d4f1917c14b53e3a962b06952742f10335760feed467baadf98d4fb0",
-  "templates/ticket.md": "df5a6086cb4e3e6cd566e042a0ffc2df1e0567d08fed39bd7d33f8ecd7ab9975"
+  "templates/ticket.md": "df5a6086cb4e3e6cd566e042a0ffc2df1e0567d08fed39bd7d33f8ecd7ab9975",
+  ".github/skills/navigation-discovery/SKILL.md": "07d4570963424b0ce8e13a21e33eb5c498e758e06d46a3addd3d860ba534360f",
+  ".github/skills/navigation-context/SKILL.md": "017b3fbc6953c02bae7bf8f9e4d6ab77f287a36b86ffe210ed5182ddf9115851",
+  ".github/skills/screen-code-analysis/SKILL.md": "1921cacc63bfec8190836c2007ab96f9388265a1773589b32d852857120ffa68",
+  ".github/skills/navigation-verification/SKILL.md": "22ed5fc0bc33e1c9980fc147f6f4cf3812e890c991bad357eab4425a74aef8a8"
 }

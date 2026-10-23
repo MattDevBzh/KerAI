@@ -244,6 +244,34 @@
       "policy": "managed",
       "sha256": "c28fcca53637bc88e124af1725df13cb98c69dedefd62fb3cdbe1cdb6b760624",
       "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/navigation-discovery/SKILL.md",
+      "target": ".github/skills/navigation-discovery/SKILL.md",
+      "policy": "managed",
+      "sha256": "07d4570963424b0ce8e13a21e33eb5c498e758e06d46a3addd3d860ba534360f",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/navigation-context/SKILL.md",
+      "target": ".github/skills/navigation-context/SKILL.md",
+      "policy": "managed",
+      "sha256": "56375383a0e6921ffa6f16d14096e0fc0de362321065a661ccd11d170dca3833",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/screen-code-analysis/SKILL.md",
+      "target": ".github/skills/screen-code-analysis/SKILL.md",
+      "policy": "managed",
+      "sha256": "1921cacc63bfec8190836c2007ab96f9388265a1773589b32d852857120ffa68",
+      "previous_sha256": []
+    },
+    {
+      "source": ".github/skills/navigation-verification/SKILL.md",
+      "target": ".github/skills/navigation-verification/SKILL.md",
+      "policy": "managed",
+      "sha256": "22ed5fc0bc33e1c9980fc147f6f4cf3812e890c991bad357eab4425a74aef8a8",
+      "previous_sha256": []
     }
   ]
 }

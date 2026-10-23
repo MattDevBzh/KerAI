@@ -6,6 +6,7 @@ import {
   Circle,
   Coffee,
   Lightbulb,
+  Maximize2,
   MessageCircle,
   Pause,
   RefreshCw,
@@ -22,7 +23,7 @@ import { QgKitten } from './RewardEffects';
 import { HqPaperPlanes, type ActiveHqTransfer } from './HqContextTransfer';
 import './session-hq.css';
 
-const rooms = {
+export const hqRooms = {
   native: { backdrop: 'papier', title: 'L’atelier de l’équipe' },
   jardin: { backdrop: 'atelier', title: 'Le jardin des idées' },
   papier: { backdrop: 'papier', title: 'L’atelier des idées' },
@@ -53,6 +54,7 @@ export function SessionHq({
   disabled,
   selectStep,
   transfer,
+  onExpand,
 }: {
   feature: Feature;
   state: StudioState;
@@ -60,11 +62,12 @@ export function SessionHq({
   disabled: boolean;
   selectStep: (id: string) => void;
   transfer?: ActiveHqTransfer;
+  onExpand?: () => void;
 }) {
   const roomRef = useRef<HTMLDivElement>(null);
   const portraits = useRef(new Map<string, HTMLSpanElement>());
   const { family, theme } = useThemeAppearance();
-  const room = rooms[family];
+  const room = hqRooms[family];
   const stations = feature.steps.map((step) => ({
     step,
     ...sessionHqStation(
@@ -93,6 +96,11 @@ export function SessionHq({
           <h3>{room.title}</h3>
         </div>
         <div className="hq-summary">
+          {onExpand && (
+            <button className="button secondary small" disabled={disabled} onClick={onExpand}>
+              <Maximize2 size={14} /> Agrandir le QG
+            </button>
+          )}
           {feature.archived ? (
             <span>Session archivée · dernier état enregistré</span>
           ) : (

@@ -11,6 +11,7 @@ export interface ProofClaim {
   reportRevision: number;
 }
 export interface ProofEntry {
+  navigationCaptureId?: string;
   id: string;
   kind: 'image' | 'test' | 'file' | 'web' | 'context' | 'activity' | 'report' | 'approval';
   title: string;
@@ -99,6 +100,35 @@ export function proofDossier(feature: Feature): ProofDossier {
             state: message.delivery === 'received' ? 'observed' : 'pending',
             image,
           });
+      for (const run of attempt.navigationRuns ?? [])
+        add({
+          id: `navigation-run:${attempt.id}:${run.id}`,
+          kind: 'activity',
+          title: `Parcours ${run.journeyId} · révision ${run.revision}`,
+          at: run.finishedAt ?? run.startedAt,
+          origin: 'runtime',
+          content: `Rejeu ${run.status}. Arrivée vérifiée : ${run.arrivalVerified}. ${run.binding.reason}\n${run.events.map((e) => `${e.stepId}: ${e.status} ${e.message ?? ''}`).join('\n')}`,
+          state:
+            run.status === 'succeeded'
+              ? 'observed'
+              : run.status === 'running'
+                ? 'pending'
+                : 'failed',
+        });
+      for (const capture of attempt.navigationCaptures ?? []) {
+        const check = feature.proofChecks?.[`navigation-capture:${attempt.id}:${capture.id}`];
+        add({
+          id: `navigation-capture:${attempt.id}:${capture.id}`,
+          kind: 'image',
+          title: `Capture navigateur · ${capture.journeyId || 'exploration'}`,
+          at: capture.createdAt,
+          origin: 'runtime',
+          content: `Capture collectée par KerAI, ${capture.bytes} octets. Parcours ${capture.journeyId ?? 'non sélectionné'} r${capture.revision ?? '—'}. État observé ; critères métier à vérifier.${check ? ` ${check.reason}` : ''}`,
+          state: check && check.state !== 'unchanged' ? 'recheck' : 'observed',
+          digest: capture.sha256,
+          navigationCaptureId: capture.id,
+        });
+      }
       for (const proof of attempt.evidence ?? []) {
         const id = `test:${attempt.id}:${proof.id}`,
           check = feature.proofChecks?.[id];

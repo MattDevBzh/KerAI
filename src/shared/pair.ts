@@ -40,6 +40,7 @@ export interface PairMessage {
 }
 export type PairTurn = { kind: 'planning' | 'chat' | 'work' | 'solo'; blockId?: string };
 export interface PairSnapshot {
+  navigation?: import('./navigation').NavigationContextSnapshot;
   prompt: string;
   agent: AgentProfile;
   step: WorkflowStep;

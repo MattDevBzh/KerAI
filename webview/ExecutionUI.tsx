@@ -1,3 +1,4 @@
+import { NavigationLaunchPicker } from './ApplicationsUI';
 import { defaultPairPreferences } from '../src/shared/pair';
 import { PermissionPicker } from './NativeExecutionUI';
 import { PairPreferencesUI } from './PairPreferencesUI';
@@ -157,6 +158,9 @@ export function LaunchDialog({
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
     ...(feature.execution ? { permissionMode: feature.execution.permissionMode } : {}),
+    ...((previous?.navigation ?? feature.navigation)
+      ? { navigation: previous?.navigation ?? feature.navigation }
+      : {}),
     ...(pairMode ? { pair: previous?.pair ?? { ...defaultPairPreferences } } : {}),
     ...(previous?.devopsTest
       ? { devopsTest: { ...previous.devopsTest, isolationConfirmed: false } }
@@ -186,6 +190,7 @@ export function LaunchDialog({
     settings: state.settings,
     memory: state.memory,
     runtime: state.runtime,
+    navigation: state.navigation,
   });
   const priorRevision = useRef(revision);
   const invalidate = () => {
@@ -323,6 +328,11 @@ export function LaunchDialog({
               onChange={(devopsTest) => update({ devopsTest })}
             />
           )}
+          <NavigationLaunchPicker
+            data={state.navigation}
+            value={launch.navigation}
+            onChange={(navigation) => update({ navigation })}
+          />
           <label className="field">
             <span>US, demande ou contexte initial</span>
             <textarea

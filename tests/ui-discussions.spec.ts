@@ -194,13 +194,21 @@ test('navigation order and project selector match each page; common settings pre
     'Stats',
     'Discussion',
     'Validation',
+    'Applications',
     'Atelier',
     'DevOps',
     'Automatisations',
     'Mémoire',
     'Quêtes—',
   ]);
-  for (const name of ['Sessions', 'Stats', 'Discussion', 'Validation', 'Consommation']) {
+  for (const name of [
+    'Sessions',
+    'Stats',
+    'Discussion',
+    'Validation',
+    'Applications',
+    'Consommation',
+  ]) {
     await navigate(page, name);
     await expect(page.getByLabel('Projet actif', { exact: true })).toHaveCount(0);
   }

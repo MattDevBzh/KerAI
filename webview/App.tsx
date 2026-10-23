@@ -1,7 +1,13 @@
+import { ApplicationsUI, NavigationInterventionCard } from './ApplicationsUI';
 import { ProofDossierPanel } from './ProofDossier';
 import { ImagePicker, ImageGallery, useImageDraft } from './Images';
 import { HumanRequestProvider } from './HumanRequests';
-import { allFeatures, subplanIssues, subplanProgressLabel } from '../src/shared/subplans';
+import {
+  allFeatures,
+  featurePath,
+  subplanIssues,
+  subplanProgressLabel,
+} from '../src/shared/subplans';
 import { FeatureBrief, SubplanCardVisual, SubplanNavigation, SubplanOverview } from './SubplanUI';
 import { PairWorkspace } from './PairWorkspace';
 import { SessionConversation } from './SessionConversation';
@@ -23,6 +29,7 @@ import {
 import { ProjectPicker, ProjectSettings, ProjectSwitcher } from './ProjectUI';
 import { TeamComposer } from './TeamComposer';
 import { SessionHq } from './SessionHq';
+import { HqCinema } from './HqCinema';
 import { useHqContextTransfer } from './HqContextTransfer';
 import { SessionViewToggle, useSessionView } from './SessionViewPreference';
 import { AgentFavorite } from './AgentFavorite';
@@ -369,6 +376,7 @@ export default function App() {
     edit: boolean;
   }>();
   const [featureId, setFeatureId] = useState(initialView.featureId ?? '');
+  const [hqFeatureId, setHqFeatureId] = useState(initialView.hqFeatureId);
   const [stepId, setStepId] = useState(initialView.stepId ?? '');
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -399,6 +407,8 @@ export default function App() {
   useEffect(() => {
     const cleanup = subscribe((message) => {
       if (message.type === 'state') setState(message.state);
+      else if (message.type === 'navigationState')
+        setState((previous) => (previous ? { ...previous, navigation: message.state } : previous));
       else if (message.type === 'accountCredits') setAccountCredits(message.state);
       else if (message.type === 'questState') {
         setQuestState(message.state);
@@ -448,6 +458,7 @@ export default function App() {
           });
           return;
         }
+        setHqFeatureId(undefined);
         setView(
           message.view === 'devops-prs' ||
             message.view === 'devops-tickets' ||
@@ -465,8 +476,8 @@ export default function App() {
     return cleanup;
   }, []);
   useEffect(
-    () => persistView({ view, featureId, stepId, pairOpen }),
-    [view, featureId, stepId, pairOpen],
+    () => persistView({ view, featureId, stepId, pairOpen, hqFeatureId }),
+    [view, featureId, stepId, pairOpen, hqFeatureId],
   );
   const pairLocation = useRef(`${featureId}:${stepId}`);
   useEffect(() => {
@@ -528,6 +539,27 @@ export default function App() {
       return;
     }
     if (isDemo) {
+      if (message.type === 'navigation') {
+        window.postMessage(
+          {
+            type: 'navigationState',
+            requestId: message.requestId,
+            state: state?.navigation ?? {
+              navigationVersion: 1,
+              applications: [],
+              journeys: [],
+              contributions: [],
+              runs: [],
+            },
+            error:
+              message.command.action === 'load'
+                ? undefined
+                : 'Ouvrez KerAI dans VS Code pour utiliser le navigateur dédié et enregistrer les parcours.',
+          },
+          '*',
+        );
+        return;
+      }
       if (message.type === 'dashboardOpen') {
         setView(message.page ?? 'sessions');
         setFeatureId(message.featureId ?? '');
@@ -599,6 +631,10 @@ export default function App() {
     send(message);
   };
   const selected = state && allFeatures(state.features).find((f) => f.id === featureId);
+  const hqRoot = state?.features.find((f) => f.id === hqFeatureId);
+  useEffect(() => {
+    if (state && hqFeatureId && !hqRoot) setHqFeatureId(undefined);
+  }, [Boolean(state), hqFeatureId, Boolean(hqRoot)]);
   const activeFeatures = state?.features.filter((f) => !f.archived) ?? [];
   const openCreate = (_id?: string) => {
     setCreateFrom(undefined);
@@ -665,6 +701,7 @@ export default function App() {
       requests={state.humanRequests ?? []}
       features={state.features}
       dispatch={dispatch}
+      presentationOnly={Boolean(hqRoot)}
     >
       <a className="skip-link" href="#main-content">
         Aller au contenu
@@ -937,6 +974,10 @@ export default function App() {
           {view === 'sessions' &&
             (selected ? (
               <FeatureDetail
+                onExpandHq={() => {
+                  if (!draftDirtyRef.current)
+                    setHqFeatureId(featurePath(state.features, selected.id)[0]?.id ?? selected.id);
+                }}
                 pairOpen={pairOpen}
                 onPairOpenChange={setPairOpen}
                 key={selected.id}
@@ -1080,6 +1121,7 @@ export default function App() {
               }}
             />
           </div>
+          {view === 'applications' && <ApplicationsUI state={state} dispatch={dispatch} />}
           {view === 'memory' && <ProjectMemoryView state={state} dispatch={dispatch} />}
           {view === 'workflows' && <WorkflowLibrary state={state} dispatch={dispatch} />}
           {view === 'kits' && <KitsUI state={state} dispatch={dispatch} />}
@@ -1350,6 +1392,18 @@ export default function App() {
             </button>
           </div>
         </Modal>
+      )}
+      {hqRoot && (
+        <HqCinema
+          root={hqRoot}
+          state={state}
+          reduce={(id, step) => {
+            setHqFeatureId(undefined);
+            setFeatureId(id);
+            setStepId(step ?? '');
+            setView('sessions');
+          }}
+        />
       )}
     </HumanRequestProvider>
   );
@@ -1738,6 +1792,7 @@ function CreateModal({
   );
 }
 function FeatureDetail({
+  onExpandHq,
   navigate,
   pairOpen,
   onPairOpenChange,
@@ -1755,6 +1810,7 @@ function FeatureDetail({
   confirm,
   onDirtyChange,
 }: {
+  onExpandHq: () => void;
   navigate: (id: string, stepId?: string) => void;
   pairOpen: boolean;
   onPairOpenChange: (open: boolean) => void;
@@ -1863,6 +1919,7 @@ function FeatureDetail({
       <div className="feature-pair-page">
         {livingHq && (
           <SessionHq
+            onExpand={onExpandHq}
             feature={feature}
             state={state}
             transfer={hqTransfer}
@@ -2097,6 +2154,7 @@ function FeatureDetail({
       </div>
       {livingHq && feature.steps.length > 0 ? (
         <SessionHq
+          onExpand={onExpandHq}
           feature={feature}
           state={state}
           transfer={hqTransfer}
@@ -2644,6 +2702,15 @@ function StepPanel({
             <MessageSquare size={15} /> Relecture
           </button>
         </div>
+        {attempt?.navigationRequest && (
+          <NavigationInterventionCard
+            featureId={feature.id}
+            stepId={step.id}
+            attempt={attempt}
+            disabled={running || Boolean(feature.archived) || !state.workspace.trusted}
+            dispatch={dispatch}
+          />
+        )}
         <div
           id="step-content"
           role="tabpanel"

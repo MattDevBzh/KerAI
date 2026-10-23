@@ -1,3 +1,4 @@
+import { navigationSelectionSchema } from './navigationSchemas';
 import { pairPreferencesSchema } from './pairPreferences';
 import { z } from 'zod';
 import { qualityEvidenceSchema } from './qualitySchemas';
@@ -27,6 +28,7 @@ const path = z
 import { nativePermissionModeSchema } from './nativeSchemas';
 export const launchSchema = z
   .object({
+    navigation: navigationSelectionSchema.optional(),
     permissionMode: nativePermissionModeSchema.optional(),
     pair: pairPreferencesSchema.optional(),
     devopsTest: devOpsTestTargetSchema.optional(),

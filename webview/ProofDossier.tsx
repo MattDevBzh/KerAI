@@ -336,6 +336,20 @@ export function ProofDossierPanel({
           </p>
           {source.reason && <p className="proof-caution">{source.reason}</p>}
           {source.image && <ImageGallery images={[source.image]} />}
+          {source.navigationCaptureId && (
+            <button
+              className="text-button"
+              onClick={() =>
+                dispatch({
+                  type: 'openNavigationCapture',
+                  featureId: feature.id,
+                  captureId: source.navigationCaptureId!,
+                })
+              }
+            >
+              Ouvrir la capture du navigateur
+            </button>
+          )}
           {source.url && (
             <a href={source.url} target="_blank" rel="noreferrer">
               Ouvrir la source web

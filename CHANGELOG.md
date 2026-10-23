@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.29.0 — 2026-10-23 · QG grand écran et navigation documentée
+
+- QG détachable en plein écran, bulles BD des messages publics, transmissions animées et ateliers dédiés aux sous-tâches avec pancarte numérotée.
+- Tableaux manuscrits par agent et tentative : plan initial conservé, tâche courante en repli, notes, progression, pagination et adaptation à tous les thèmes.
+- Espace Applications : profils, droits, bibliothèque de parcours, import, démonstration, édition, variantes, rejeu et historique.
+- Agent Navigateur et compétences de navigation, contexte figé par tentative, contributions, relais humain, inspection ciblée de l’écran et pistes de code.
+- Captures masquées et preuves liées aux parcours ; journal de campagne A/B avec coûts, échecs et inconnus explicités.
+- Runtime navigateur livré dans le VSIX et stockage version 11, avec conservation des historiques et des validations humaines.
+
 ## 1.28.0 — 2026-10-23 · Images, documentation et preuves
 
 - Captures par fichier ou collage dans le besoin et les conversations, avec aperçu, persistance et transmission visuelle native.

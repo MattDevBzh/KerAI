@@ -20,6 +20,7 @@ export interface McpCatalog {
   checkedAt?: string;
 }
 export interface RunLaunchOptions {
+  navigation?: import('./navigation').NavigationSelection;
   permissionMode?: import('./native').NativePermissionMode;
   pair?: import('./pair').PairPreferences;
   devopsTest?: import('./devopsKit').DevOpsTestTarget;
