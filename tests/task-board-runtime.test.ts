@@ -29,7 +29,7 @@ it.skipIf(!cliPath)(
       workingDirectory: root,
       baseDirectory: join(root, 'runtime'),
       useLoggedInUser: false,
-      env: { COPILOT_HOME: join(root, 'home') },
+      env: { ...process.env, COPILOT_HOME: join(root, 'home') },
       logLevel: 'none',
     });
     let board: TaskBoard | undefined;
