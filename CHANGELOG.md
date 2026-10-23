@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.29.2 · Compétences natives préchargées
+
+- Ne requiert l’outil natif `skill` que pour les compétences invocables à la demande. Une sélection exclusivement marquée `disable-model-invocation: true` reste préchargée par le runtime sans faux refus avant le prompt.
+- Préserve le fournisseur de skills, les préchargements explicites, les permissions et les preuves de chargement. Le hook refuse aussi l’invocation automatique d’une compétence manuelle dans un catalogue mixte.
+- Précise le diagnostic quand une compétence à la demande ne peut réellement pas être chargée.
+- Ajoute des régressions au niveau de l’adaptateur et du vrai CLI, sans inférence payante, pour les sélections manuelles et mixtes.
+
 ## 1.29.1 — 2026-10-23 · Retour visible lors de la création
 
 - Avancement affiché dans la fenêtre de création, avec bouton explicite pendant l’attente.

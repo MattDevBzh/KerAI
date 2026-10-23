@@ -20,6 +20,7 @@ import {
 } from '../src/host/CopilotCliAdapter';
 import type { RunCallbacks, RunInput } from '../src/shared/types';
 import { NATIVE_TOOLS, NATIVE_READ_TOOLS } from '../src/host/NativeCopilot';
+import { nativeSkillName } from '../src/core/nativeSkills';
 
 function input(): RunInput {
   const attempt = {
@@ -360,6 +361,130 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
       ),
     ).toMatchObject({ permissionDecision: 'deny' });
   });
+
+  it.each([
+    { readOnly: false, resume: false },
+    { readOnly: true, resume: false },
+    { readOnly: false, resume: true },
+    { readOnly: true, resume: true },
+  ])(
+    'preloads manual-only skills without requiring a skill tool (readOnly=$readOnly, resume=$resume)',
+    async ({ readOnly, resume }) => {
+      const run = nativeTransport();
+      run.nativeReadOnly = readOnly;
+      if (resume) run.resumeSessionId = 'persistent-session';
+      run.skills = [
+        {
+          id: 'manual',
+          name: 'Manual skill',
+          description: 'Explicit only',
+          path: '',
+          source: 'user',
+          content: '---\nname: manual\ndisable-model-invocation: true\n---\nMANUAL_BODY',
+        },
+      ];
+      // Mirror the real runtime, which omits skill when every skill is manual-only.
+      fake.session.rpc.tools.getCurrentMetadata.mockImplementation(async () => ({
+        tools: (Array.isArray(fake.config?.availableTools) ? fake.config.availableTools : [])
+          .filter((name) => name !== 'skill')
+          .map((name) => ({ name, description: name })),
+      }));
+      callbacks.onNativeContextLoad = vi.fn();
+      await adapter.run(run, callbacks, new AbortController().signal);
+      expect(fake.session.send).toHaveBeenCalledOnce();
+      expect(fake.config?.enableSkills).toBe(true);
+      expect(fake.config?.skillProvider).toBeDefined();
+      expect(fake.config?.customAgents?.[0].skills).toEqual([nativeSkillName('manual')]);
+      expect(fake.config?.availableTools).not.toContain('skill');
+      expect(fake.config?.customAgents?.[0].tools).not.toContain('skill');
+      expect(callbacks.onNativeContextLoad).not.toHaveBeenCalled();
+      if (resume) expect(fake.client.resumeSession).toHaveBeenCalledOnce();
+      else expect(fake.client.createSession).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([false, true])(
+    'still rejects missing on-demand skill tools before a prompt (mixed=%s)',
+    async (mixed) => {
+      const run = nativeTransport();
+      run.skills = [
+        {
+          id: 'lazy',
+          name: 'Lazy skill',
+          description: 'On demand',
+          path: '',
+          source: 'user',
+          content: 'LAZY_BODY',
+        },
+      ];
+      if (mixed)
+        run.skills.push({
+          id: 'manual',
+          name: 'Manual skill',
+          description: 'Explicit only',
+          path: '',
+          source: 'user',
+          content: '---\nname: manual\ndisable-model-invocation: true\n---\nMANUAL_BODY',
+        });
+      fake.session.rpc.tools.getCurrentMetadata.mockImplementation(async () => ({
+        tools: (Array.isArray(fake.config?.availableTools) ? fake.config.availableTools : [])
+          .filter((name) => name !== 'skill')
+          .map((name) => ({ name, description: name })),
+      }));
+      await expect(adapter.run(run, callbacks, new AbortController().signal)).rejects.toThrow(
+        /compétences à la demande : Lazy skill.*Outil attendu : skill.*Outils reçus/,
+      );
+      expect(fake.session.send).not.toHaveBeenCalled();
+    },
+  );
+  it('preserves mixed native skills without making manual skills model-invocable', async () => {
+    const run = nativeTransport();
+    run.skills = [
+      {
+        id: 'manual',
+        name: 'Manual skill',
+        description: 'Explicit only',
+        path: '',
+        source: 'user',
+        content: '---\nname: manual\ndisable-model-invocation: true\n---\nMANUAL_BODY',
+      },
+      {
+        id: 'lazy',
+        name: 'Lazy skill',
+        description: 'On demand',
+        path: '',
+        source: 'user',
+        content: 'LAZY_BODY',
+      },
+    ];
+    // Exercise the hook while the attempt is active; completed attempts must deny every tool.
+    fake.setOnSend(() => {
+      void (async () => {
+        const hook = fake.config!.hooks!.onPreToolUse!;
+        expect(
+          await hook(
+            { toolName: 'skill', toolArgs: { skill: nativeSkillName('manual') } } as never,
+            {} as never,
+          ),
+        ).toMatchObject({ permissionDecision: 'deny' });
+        expect(
+          await hook(
+            { toolName: 'skill', toolArgs: { skill: nativeSkillName('lazy') } } as never,
+            {} as never,
+          ),
+        ).toEqual({});
+      })().then(
+        () => {
+          fake.emit('assistant.message', { messageId: 'answer', content: 'Skills verified.' });
+          fake.emit('session.idle', {});
+        },
+        (error) => fake.emit('session.error', { message: String(error), errorType: 'tool' }),
+      );
+    });
+    await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config?.availableTools).toContain('skill');
+    expect(fake.config?.customAgents?.[0].skills).toEqual([nativeSkillName('manual')]);
+  });
+
   beforeEach(async () => {
     storage = await mkdtemp(join(tmpdir(), 'studio-adapter-test-'));
     fake = transport();

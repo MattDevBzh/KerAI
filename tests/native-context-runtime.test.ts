@@ -14,9 +14,9 @@ import { nativeSkillName } from '../src/core/nativeSkills';
 
 const cliPath = process.env.FEATURE_STUDIO_CATALOG_CLI;
 
-it.skipIf(!cliPath)(
-  'real runtime injects selected skills and targeted instructions, records receipts, and refuses unapproved shell after loading a skill',
-  async () => {
+it.skipIf(!cliPath).each([true, false])(
+  'real runtime injects selected skills and targeted instructions, records receipts, and refuses unapproved shell (onDemand=%s)',
+  async (onDemand) => {
     const root = await mkdtemp(join(tmpdir(), 'kerai-native-context-'));
     await mkdir(join(root, '.github/instructions'), { recursive: true });
     await mkdir(join(root, 'src'), { recursive: true });
@@ -33,7 +33,9 @@ it.skipIf(!cliPath)(
         name: 'view',
         arguments: JSON.stringify({ path: join(root, '.github/instructions/api.instructions.md') }),
       },
-      { name: 'skill', arguments: JSON.stringify({ skill: nativeSkillName('review') }) },
+      ...(onDemand
+        ? [{ name: 'skill', arguments: JSON.stringify({ skill: nativeSkillName('review') }) }]
+        : []),
       {
         name: process.platform === 'win32' ? 'powershell' : 'bash',
         arguments: JSON.stringify({
@@ -142,6 +144,11 @@ it.skipIf(!cliPath)(
         },
       ],
     };
+    if (!onDemand) {
+      input.skills = input.skills.filter((skill) => skill.id === 'manual');
+      input.agent.skills = ['manual'];
+      input.step.skills = ['manual'];
+    }
     const loads: NativeContextLoad[] = [];
     let shellRequests = 0;
     const adapter = new CopilotCliAdapter({
@@ -202,7 +209,12 @@ it.skipIf(!cliPath)(
         ),
       ).toBe(true);
       expect(requests[0]).toContain('api.instructions.md');
-      expect(requests.at(-1)).toContain('SELECTED_SKILL_BODY');
+      if (onDemand) expect(requests.at(-1)).toContain('SELECTED_SKILL_BODY');
+      else expect(requests.at(-1)).not.toContain('SELECTED_SKILL_BODY');
+      const modelTools = (JSON.parse(requests[0]).tools ?? []).map(
+        (tool: { function?: { name?: string } }) => tool.function?.name,
+      );
+      expect(modelTools.includes('skill')).toBe(onDemand);
       expect(requests.at(-1)).toContain('TARGETED_INSTRUCTION_BODY');
       expect(
         loads.some(
@@ -211,7 +223,7 @@ it.skipIf(!cliPath)(
             load.name === 'API Review' &&
             load.content.includes('SELECTED_SKILL_BODY'),
         ),
-      ).toBe(true);
+      ).toBe(onDemand);
       expect(
         loads.some(
           (load) =>

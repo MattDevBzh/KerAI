@@ -522,7 +522,12 @@ export class CopilotCliAdapter implements AgentAdapter {
   async run(input: RunInput, callbacks: RunCallbacks, signal: AbortSignal): Promise<RunResult> {
     const native = usesNativeTools(input);
     const skills = nativeSkillCatalog(native ? input : { ...input, skills: [] });
-    const skillTools = native && skills.byName.size ? ['skill'] : [];
+    // Manual-only skills are preloaded by customAgents.skills, not invoked by the model.
+    // The runtime may omit the skill tool when there is no callable skill in the selection.
+    const callableSkills = [...skills.byName.values()].filter(
+      (item) => !item.descriptor.disableModelInvocation,
+    );
+    const skillTools = native && callableSkills.length ? ['skill'] : [];
     const navigationEnabled =
       Boolean(input.navigation) &&
       !input.nativeReadOnly &&
@@ -902,11 +907,15 @@ export class CopilotCliAdapter implements AgentAdapter {
               };
             if (request.toolName === 'skill') {
               const name = (request.toolArgs as { skill?: unknown } | null)?.skill;
-              if (typeof name !== 'string' || !skills.byName.has(name))
+              if (
+                typeof name !== 'string' ||
+                !skills.byName.has(name) ||
+                skills.byName.get(name)!.descriptor.disableModelInvocation
+              )
                 return {
                   permissionDecision: 'deny',
                   permissionDecisionReason:
-                    'Compétence absente du catalogue sélectionné pour cette étape.',
+                    'Compétence absente du catalogue sélectionné ou réservée au préchargement explicite.',
                 };
             }
             if (
@@ -1055,7 +1064,7 @@ export class CopilotCliAdapter implements AgentAdapter {
               );
           if (skillTools.length && !catalog.tools.some((tool) => tool.name === 'skill'))
             throw new Error(
-              'Le runtime ne propose pas le chargement natif des compétences sélectionnées.',
+              `Le runtime ne propose pas le chargement natif des compétences à la demande : ${callableSkills.map((item) => item.skill.name).join(', ')}. Outil attendu : skill. Outils reçus : ${catalog.tools.map((tool) => tool.name).join(', ') || '(aucun)'}.`,
             );
           verifyMcpCatalog(
             catalog.tools.filter((tool) => !nativeTools.includes(tool.name)),
