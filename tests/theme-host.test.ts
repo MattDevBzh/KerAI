@@ -317,6 +317,52 @@ describe('personal theme host boundary', () => {
     );
     expect(host.state.workspace.trusted).toBe(false);
   });
+  it('returns invalid creation requests to their modal without initializing or mutating a session', async () => {
+    const api = await activate();
+    await host.commands.get('featureStudio.open')!();
+    const before = structuredClone(host.state);
+    const initializations = host.initialize.mock.calls.length;
+    host.messages.length = 0;
+    const requestId = 'ac7b31e0-6d01-4c97-a51c-b74ad249d740';
+    await api.dispatch({ type: 'createFeature', requestId, title: '', description: '' });
+    expect(host.messages).toEqual([
+      {
+        type: 'featureCreateResult',
+        requestId,
+        error: 'Le formulaire de création est invalide. Rouvre-le puis réessaie.',
+      },
+    ]);
+    expect(host.initialize).toHaveBeenCalledTimes(initializations);
+    expect(host.state).toEqual(before);
+  });
+  it('returns initialization failures to the creation modal, with a redacted error and no navigation', async () => {
+    const api = await activate();
+    host.initialize.mockRejectedValue(new Error('Stockage indisponible · password=private-value'));
+    try {
+      // A restored panel exists before its project store is ready.
+      await expect(host.restorePanel!(host.panel)).rejects.toThrow('Stockage indisponible');
+      host.messages.length = 0;
+      const requestId = '770b2fa4-73df-4acd-adf4-93f6cc493812';
+      await api.dispatch({
+        type: 'createFeature',
+        requestId,
+        title: 'Mon besoin',
+        description: '',
+      });
+      expect(host.messages.filter((message) => message.type === 'featureCreateResult')).toEqual([
+        {
+          type: 'featureCreateResult',
+          requestId,
+          error: 'Stockage indisponible · password=[secret masqué]',
+        },
+      ]);
+      expect(
+        host.messages.some((message) => message.type === 'navigate' || message.type === 'error'),
+      ).toBe(false);
+    } finally {
+      host.initialize.mockReset();
+    }
+  });
   it('detaches the existing HQ window and toggles fullscreen without changing the run or creating another cockpit', async () => {
     const api = await activate();
     await host.commands.get('featureStudio.open')!();

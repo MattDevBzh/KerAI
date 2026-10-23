@@ -1520,6 +1520,11 @@ function CreateModal({
   }, [title, description, criteria, team]);
   const [pending, setPending] = useState<string>();
   const [error, setError] = useState('');
+  const lastCreation = useRef<{ content: string; requestId: string } | undefined>(undefined);
+  const creationError = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) creationError.current?.focus();
+  }, [error]);
   useEffect(
     () =>
       subscribe((message) => {
@@ -1576,13 +1581,9 @@ function CreateModal({
         onSubmit={(event) => {
           event.preventDefault();
           if (title.trim() && !busy && !missing && !invalidProposal) {
-            const requestId = crypto.randomUUID();
-            if (isHosted) setPending(requestId);
-            setError('');
-            onCreate({
+            const request: Extract<ClientMessage, { type: 'createFeature' }> = {
               type: 'createFeature',
               ...(imageDraft.images.length ? { images: imageDraft.images } : {}),
-              requestId,
               ...(origin
                 ? {
                     discussionId: origin.discussionId,
@@ -1598,7 +1599,17 @@ function CreateModal({
               description: description.trim(),
               isolated: !multiple && isolated && Boolean(state.workspace.canIsolate),
               ...(ids ? { projectIds: ids } : {}),
-            });
+            };
+            // A failed save may already own a worktree. Retry the same request without duplicating it.
+            const content = JSON.stringify(request);
+            const requestId =
+              lastCreation.current?.content === content
+                ? lastCreation.current.requestId
+                : crypto.randomUUID();
+            lastCreation.current = { content, requestId };
+            if (isHosted) setPending(requestId);
+            setError('');
+            onCreate({ ...request, requestId });
           }
         }}
       >
@@ -1756,7 +1767,6 @@ function CreateModal({
             )}
           </section>
         )}
-        {error && <p role="alert">{error}</p>}
         {multiple ? (
           <p className="muted">
             Cette session travaille dans les dossiers sélectionnés. L’isolation en worktree est
@@ -1768,6 +1778,21 @@ function CreateModal({
             isolated={isolated && Boolean(state.workspace.canIsolate)}
             onChange={setIsolated}
           />
+        )}
+        {pending && (
+          <div className="creation-feedback" role="status">
+            <LoaderCircle className="spin" size={18} aria-hidden="true" />
+            <span>{state.workspaceOperation?.label ?? 'Création de la session…'}</span>
+          </div>
+        )}
+        {error && (
+          <div className="creation-feedback error" role="alert" tabIndex={-1} ref={creationError}>
+            <TriangleAlert size={18} aria-hidden="true" />
+            <div>
+              <strong>Impossible de créer la session</strong>
+              <p>{error}</p>
+            </div>
+          </div>
         )}
         <div className="modal-actions">
           <span className="muted">Créer ne lance aucune exécution.</span>
@@ -1784,7 +1809,7 @@ function CreateModal({
             className="button primary"
             disabled={!title.trim() || busy || missing || invalidProposal}
           >
-            Créer la feature <ArrowRight size={16} />
+            {pending ? 'Création en cours…' : 'Créer la feature'} <ArrowRight size={16} />
           </button>
         </div>
       </form>

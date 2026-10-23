@@ -22,12 +22,13 @@ async function hosted(page: Page, state = fresh()) {
       testMessages: messages,
       autoPreview: true,
       autoComparison: true,
+      autoCreate: true,
       acquireVsCodeApi: () => ({
         getState: () => saved,
         setState: (v: object) => (saved = v),
         postMessage: (m: ClientMessage) => {
           messages.push(m);
-          if (m.type === 'createFeature' && m.requestId)
+          if (m.type === 'createFeature' && m.requestId && Reflect.get(window, 'autoCreate'))
             setTimeout(
               () =>
                 window.postMessage(
@@ -1335,6 +1336,59 @@ test('création Git sans équipe : worktree par défaut et choix explicite du do
     type: 'createFeature',
     isolated: false,
   });
+  expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
+});
+test('création : activité et erreur visibles dans la fenêtre, saisie conservée et nouvelle tentative possible', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1000, height: 650 });
+  const state = checkpointState();
+  await hosted(page, state);
+  await page.evaluate(() => Reflect.set(window, 'autoCreate', false));
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Une nouvelle feature' });
+  await dialog.getByLabel('Qu’allons-nous faire ?').fill('Une session à conserver');
+  await dialog.getByLabel('Le contexte et le résultat souhaité').fill('Mon contexte reste ici.');
+  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  const request = (await messages(page)).filter((m) => m.type === 'createFeature').at(-1)!;
+  await expect(dialog.getByRole('status')).toContainText('Création de la session');
+  await expect(dialog.getByRole('button', { name: 'Création en cours' })).toBeDisabled();
+  await page.evaluate((requestId) => {
+    window.postMessage(
+      { type: 'featureCreateResult', requestId, error: 'Le dossier enregistré a changé.' },
+      '*',
+    );
+  }, request.requestId);
+  const error = dialog.getByRole('alert');
+  await expect(error).toContainText('Impossible de créer la session');
+  await expect(error).toContainText('Le dossier enregistré a changé.');
+  await expect(error).toBeFocused();
+  await expect(error).toBeInViewport();
+  await expect(dialog.getByLabel('Qu’allons-nous faire ?')).toHaveValue('Une session à conserver');
+  await expect(dialog.getByLabel('Le contexte et le résultat souhaité')).toHaveValue(
+    'Mon contexte reste ici.',
+  );
+  await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: 'Créer la feature' })).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('creation-error.png') });
+  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  const retry = (await messages(page)).filter((m) => m.type === 'createFeature').at(-1)!;
+  expect(retry.requestId).toBe(request.requestId);
+  await page.evaluate((requestId) => {
+    window.postMessage(
+      { type: 'featureCreateResult', requestId, error: 'Le dossier enregistré a changé.' },
+      '*',
+    );
+  }, retry.requestId);
+  await expect(dialog.getByRole('button', { name: 'Créer la feature' })).toBeEnabled();
+  await page.evaluate(() => Reflect.set(window, 'autoCreate', true));
+  await dialog.getByRole('radio', { name: 'Dossier courant' }).check();
+  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  await expect(dialog).not.toBeVisible();
+  expect((await messages(page)).filter((m) => m.type === 'createFeature')).toHaveLength(3);
+  expect(
+    (await messages(page)).filter((m) => m.type === 'createFeature').at(-1)!.requestId,
+  ).not.toBe(request.requestId);
   expect((await messages(page)).some((m) => m.type === 'runStep')).toBe(false);
 });
 test('espace courant legacy, isolation indisponible et opérations Git bloquent les mutations', async ({

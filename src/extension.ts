@@ -134,6 +134,13 @@ export async function activate(context: vscode.ExtensionContext) {
     output.appendLine(message);
     send({ type: 'error', message });
   };
+  const reportCreationError = (requestId: string, error: unknown) => {
+    const message =
+      redact(error instanceof Error ? error.message : String(error)).trim() ||
+      'La création a échoué. Réessaie après avoir vérifié le dossier du projet.';
+    output.appendLine(`Création de session : ${message}`);
+    send({ type: 'featureCreateResult', requestId, error: message });
+  };
   context.subscriptions.push(
     output,
     launcher,
@@ -577,6 +584,21 @@ export async function activate(context: vscode.ExtensionContext) {
         raw &&
         typeof raw === 'object' &&
         'type' in raw &&
+        raw.type === 'createFeature' &&
+        'requestId' in raw &&
+        typeof raw.requestId === 'string' &&
+        raw.requestId.length <= 150
+      ) {
+        reportCreationError(
+          raw.requestId,
+          new Error('Le formulaire de création est invalide. Rouvre-le puis réessaie.'),
+        );
+        return;
+      }
+      if (
+        raw &&
+        typeof raw === 'object' &&
+        'type' in raw &&
         raw.type === 'dashboardSave' &&
         'requestId' in raw &&
         typeof raw.requestId === 'string' &&
@@ -1016,6 +1038,32 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (message.type === 'createFeature') {
+      try {
+        await bootstrap();
+        if (
+          message.discussionId &&
+          !discussions.state.discussions.some((item) => item.id === message.discussionId)
+        )
+          throw new Error('La discussion d’origine n’est plus disponible.');
+        const projects = catalog.resolve(message.projectIds ?? catalog.state.selectedProjectIds);
+        const entry = await hub.select(projects.map((project) => project.id));
+        service = entry.service;
+        devops = entry.devops;
+        const created = await service.createFeature({ ...message, projects });
+        if (message.requestId)
+          send({
+            type: 'featureCreateResult',
+            requestId: message.requestId,
+            featureId: created.id,
+          });
+        send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+      } catch (error) {
+        if (!message.requestId) throw error;
+        reportCreationError(message.requestId, error);
+      }
+      return;
+    }
     await bootstrap();
     if (message.type === 'refreshDiscussions') {
       await discussions.refreshProfiles();
@@ -1129,35 +1177,6 @@ export async function activate(context: vscode.ExtensionContext) {
       devops = entry.devops;
       hub.publish();
       send({ type: 'devopsState', state: devops.getState() });
-      return;
-    }
-    if (message.type === 'createFeature') {
-      try {
-        if (
-          message.discussionId &&
-          !discussions.state.discussions.some((item) => item.id === message.discussionId)
-        )
-          throw new Error('La discussion d’origine n’est plus disponible.');
-        const projects = catalog.resolve(message.projectIds ?? catalog.state.selectedProjectIds);
-        const entry = await hub.select(projects.map((project) => project.id));
-        service = entry.service;
-        devops = entry.devops;
-        const created = await service.createFeature({ ...message, projects });
-        if (message.requestId)
-          send({
-            type: 'featureCreateResult',
-            requestId: message.requestId,
-            featureId: created.id,
-          });
-        send({ type: 'navigate', view: 'dashboard', featureId: created.id });
-      } catch (error) {
-        if (!message.requestId) throw error;
-        send({
-          type: 'featureCreateResult',
-          requestId: message.requestId,
-          error: redact((error as Error).message),
-        });
-      }
       return;
     }
     const requestOwner =

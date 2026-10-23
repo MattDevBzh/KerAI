@@ -1,5 +1,13 @@
 # Validation et limites
 
+## Résultat de création visible — v1.29.1
+
+- TypeScript, mise en forme, construction et **942 tests de logique/intégration réussis, 8 ignorés**. **288 scénarios Chromium réussis**.
+- Le scénario de création vérifie l’activité dans la fenêtre, l’erreur visible et focalisée à 1000 × 650, la conservation du besoin, les boutons réactivés et une nouvelle tentative. Un formulaire inchangé garde le même identifiant ; changer le choix du dossier produit une nouvelle demande. Les erreurs de ce scénario sont simulées.
+- Les tests de l’hôte vérifient qu’un formulaire invalide ou une initialisation refusée reçoit une réponse liée à sa demande, sans navigation ni mutation de session. Les secrets reconnus sont masqués. Les tests de stockage existants vérifient qu’une nouvelle tentative identique retrouve le même worktree après un échec d’enregistrement.
+- Deux scénarios de création dans Chromium sont ajoutés à la validation Windows. La chaîne de publication exige également Linux, le chargement du paquet dans VS Code et le contrôle de l’archive publiée.
+- Le refus de création signalé sur le poste Windows concerné n’a pas été reproduit avec son environnement et ses données. Cette livraison corrige la visibilité et le traitement des erreurs ; la cause propre à ce poste reste à identifier à partir du message exact.
+
 ## QG grand écran et navigation documentée — v1.29.0
 
 - TypeScript, mise en forme, construction et **940 tests de logique/intégration réussis, 8 tests optionnels ignorés** (80 fichiers réussis, 5 ignorés).

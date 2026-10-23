@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.29.1 — 2026-10-23 · Retour visible lors de la création
+
+- Avancement affiché dans la fenêtre de création, avec bouton explicite pendant l’attente.
+- Erreur mise en évidence et automatiquement amenée à l’écran, sans perdre le nom ni le contexte saisis.
+- Échecs de validation et d’initialisation renvoyés à la demande de création ; diagnostic également conservé dans la sortie Feature Studio.
+- Nouvelle tentative identique associée à la même demande pour éviter de recréer une session après un échec d’enregistrement.
+- Le refus de création signalé sur le poste Windows concerné reste à diagnostiquer à partir de son message exact ; cette version corrige la visibilité du résultat et la récupération après erreur.
+
 ## 1.29.0 — 2026-10-23 · QG grand écran et navigation documentée
 
 - QG détachable en plein écran, bulles BD des messages publics, transmissions animées et ateliers dédiés aux sous-tâches avec pancarte numérotée.
@@ -78,7 +86,6 @@
 - Messages conservés pendant le travail, transmission immédiate quand Copilot l’accepte et traitement au point de contrôle sinon. Un envoi incertain exige un choix avant renvoi.
 - Le lien du livrable revient à sa conversation. Les questions préservent le résultat ; les corrections convenues le mettent à jour avant validation humaine. Conversation consultable après validation, discussion libre indépendante.
 - Stockage version 9 : modes, messages, états de transmission et événements conservés ; aucune reprise automatique après fermeture.
-
 
 ## 1.22.0 — 2026-10-21 · Copilot natif et permissions
 
