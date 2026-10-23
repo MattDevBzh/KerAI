@@ -12,147 +12,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Prepare fix and version 1.29.2
+      - name: Prepare the exact previously reviewed fix and version 1.29.2
         run: |
-          cp src/host/CopilotCliAdapter.ts "$RUNNER_TEMP/original-adapter.ts"
-          node <<'NODE'
+          node <<'BOOTSTRAP'
           const fs = require('node:fs');
           const assert = require('node:assert/strict');
-          const version = '1.29.2';
-          const changed = [];
-          function edit(path, replacements) {
-            let source = fs.readFileSync(path, 'utf8');
-            for (const [before, after] of replacements) {
-              assert.equal(source.split(before).length, 2, `Expected exactly one target in ${path}: ${before.slice(0, 100)}`);
-              source = source.replace(before, () => after);
-            }
-            fs.writeFileSync(path, source);
-            changed.push(path);
-          }
-          edit('src/host/CopilotCliAdapter.ts', [
-            ["    const skillTools = native && skills.byName.size ? ['skill'] : [];", `    // Manual-only skills are preloaded by customAgents.skills, not invoked by the model.
-              // The runtime may omit the skill tool when there is no callable skill in the selection.
-              const callableSkills = [...skills.byName.values()].filter(
-                (item) => !item.descriptor.disableModelInvocation,
-              );
-              const skillTools = native && callableSkills.length ? ['skill'] : [];`],
-            ["              if (typeof name !== 'string' || !skills.byName.has(name))", `              if (
-                          typeof name !== 'string' ||
-                          !skills.byName.has(name) ||
-                          skills.byName.get(name)!.descriptor.disableModelInvocation
-                        )`],
-            ["                    'Compétence absente du catalogue sélectionné pour cette étape.',", "                    'Compétence absente du catalogue sélectionné ou réservée au préchargement explicite.',"],
-            ["              'Le runtime ne propose pas le chargement natif des compétences sélectionnées.',", "              `Le runtime ne propose pas le chargement natif des compétences à la demande : ${callableSkills.map((item) => item.skill.name).join(', ')}. Outil attendu : skill. Outils reçus : ${catalog.tools.map((tool) => tool.name).join(', ') || '(aucun)'}.`,"],
-          ]);
-          const unitTests = String.raw`
-            it.each([
-              { readOnly: false, resume: false },
-              { readOnly: true, resume: false },
-              { readOnly: false, resume: true },
-              { readOnly: true, resume: true },
-            ])('preloads manual-only skills without requiring a skill tool (readOnly=$readOnly, resume=$resume)', async ({ readOnly, resume }) => {
-              const run = nativeTransport();
-              run.nativeReadOnly = readOnly;
-              if (resume) run.resumeSessionId = 'persistent-session';
-              run.skills = [{
-                id: 'manual', name: 'Manual skill', description: 'Explicit only', path: '', source: 'user',
-                content: '---\nname: manual\ndisable-model-invocation: true\n---\nMANUAL_BODY',
-              }];
-              // Mirror the real runtime, which omits skill when every skill is manual-only.
-              fake.session.rpc.tools.getCurrentMetadata.mockImplementation(async () => ({
-                tools: (Array.isArray(fake.config?.availableTools) ? fake.config.availableTools : []).filter((name) => name !== 'skill')
-                  .map((name) => ({ name, description: name })),
-              }));
-              callbacks.onNativeContextLoad = vi.fn();
-              await adapter.run(run, callbacks, new AbortController().signal);
-              expect(fake.session.send).toHaveBeenCalledOnce();
-              expect(fake.config?.enableSkills).toBe(true);
-              expect(fake.config?.skillProvider).toBeDefined();
-              expect(fake.config?.customAgents?.[0].skills).toEqual([nativeSkillName('manual')]);
-              expect(fake.config?.availableTools).not.toContain('skill');
-              expect(fake.config?.customAgents?.[0].tools).not.toContain('skill');
-              expect(callbacks.onNativeContextLoad).not.toHaveBeenCalled();
-              if (resume) expect(fake.client.resumeSession).toHaveBeenCalledOnce();
-              else expect(fake.client.createSession).toHaveBeenCalledOnce();
-            });
-            it.each([false, true])('still rejects missing on-demand skill tools before a prompt (mixed=%s)', async (mixed) => {
-              const run = nativeTransport();
-              run.skills = [{
-                id: 'lazy', name: 'Lazy skill', description: 'On demand', path: '', source: 'user',
-                content: 'LAZY_BODY',
-              }];
-              if (mixed) run.skills.push({
-                id: 'manual', name: 'Manual skill', description: 'Explicit only', path: '', source: 'user',
-                content: '---\nname: manual\ndisable-model-invocation: true\n---\nMANUAL_BODY',
-              });
-              fake.session.rpc.tools.getCurrentMetadata.mockImplementation(async () => ({
-                tools: (Array.isArray(fake.config?.availableTools) ? fake.config.availableTools : []).filter((name) => name !== 'skill')
-                  .map((name) => ({ name, description: name })),
-              }));
-              await expect(adapter.run(run, callbacks, new AbortController().signal)).rejects.toThrow(
-                /compétences à la demande : Lazy skill.*Outil attendu : skill.*Outils reçus/,
-              );
-              expect(fake.session.send).not.toHaveBeenCalled();
-            });
-            it('preserves mixed native skills without making manual skills model-invocable', async () => {
-              const run = nativeTransport();
-              run.skills = [
-                { id: 'manual', name: 'Manual skill', description: 'Explicit only', path: '', source: 'user',
-                  content: '---\nname: manual\ndisable-model-invocation: true\n---\nMANUAL_BODY' },
-                { id: 'lazy', name: 'Lazy skill', description: 'On demand', path: '', source: 'user', content: 'LAZY_BODY' },
-              ];
-              await adapter.run(run, callbacks, new AbortController().signal);
-              expect(fake.config?.availableTools).toContain('skill');
-              expect(fake.config?.customAgents?.[0].skills).toEqual([nativeSkillName('manual')]);
-              const hook = fake.config!.hooks!.onPreToolUse!;
-              expect(await hook({ toolName: 'skill', toolArgs: { skill: nativeSkillName('manual') } } as never, {} as never))
-                .toMatchObject({ permissionDecision: 'deny' });
-              expect(await hook({ toolName: 'skill', toolArgs: { skill: nativeSkillName('lazy') } } as never, {} as never))
-                .toEqual({});
-            });
-          `;
-          edit('tests/adapter.test.ts', [
-            ["import { NATIVE_TOOLS, NATIVE_READ_TOOLS } from '../src/host/NativeCopilot';", "import { NATIVE_TOOLS, NATIVE_READ_TOOLS } from '../src/host/NativeCopilot';\nimport { nativeSkillName } from '../src/core/nativeSkills';"],
-            ["  beforeEach(async () => {", unitTests + "\n  beforeEach(async () => {"],
-          ]);
-          edit('tests/native-context-runtime.test.ts', [
-            ["it.skipIf(!cliPath)(", "it.skipIf(!cliPath).each([true, false])("],
-            ["'real runtime injects selected skills and targeted instructions, records receipts, and refuses unapproved shell after loading a skill'", "'real runtime injects selected skills and targeted instructions, records receipts, and refuses unapproved shell (onDemand=%s)'"],
-            ["  async () => {", "  async (onDemand) => {"],
-            ["      { name: 'skill', arguments: JSON.stringify({ skill: nativeSkillName('review') }) },", "      ...(onDemand ? [{ name: 'skill', arguments: JSON.stringify({ skill: nativeSkillName('review') }) }] : []),"],
-            ["    const loads: NativeContextLoad[] = [];", "    if (!onDemand) input.skills = input.skills.filter((skill) => skill.id === 'manual');\n    const loads: NativeContextLoad[] = [];"],
-            ["      expect(requests.at(-1)).toContain('SELECTED_SKILL_BODY');", "      if (onDemand) expect(requests.at(-1)).toContain('SELECTED_SKILL_BODY');\n      else expect(requests.at(-1)).not.toContain('SELECTED_SKILL_BODY');\n      const modelTools = (JSON.parse(requests[0]).tools ?? []).map((tool: { function?: { name?: string } }) => tool.function?.name);\n      expect(modelTools.includes('skill')).toBe(onDemand);"],
-            ["            load.name === 'API Review' &&\n            load.content.includes('SELECTED_SKILL_BODY'),\n        ),\n      ).toBe(true);", "            load.name === 'API Review' &&\n            load.content.includes('SELECTED_SKILL_BODY'),\n        ),\n      ).toBe(onDemand);"],
-          ]);
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-          assert.equal(pkg.version, '1.29.1');
-          assert.equal(lock.version, '1.29.1');
-          assert.equal(lock.packages[''].version, '1.29.1');
-          assert.ok(pkg.scripts.package.includes('feature-studio-1.29.1.vsix'));
-          pkg.version = version;
-          pkg.scripts.package = pkg.scripts.package.replace('feature-studio-1.29.1.vsix', `feature-studio-${version}.vsix`);
-          lock.version = version;
-          lock.packages[''].version = version;
-          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
-          changed.push('package.json', 'package-lock.json');
-          const entry = `## ${version} · Compétences natives préchargées\n\n- Ne requiert l’outil natif \`skill\` que pour les compétences invocables à la demande. Une sélection exclusivement marquée \`disable-model-invocation: true\` reste préchargée par le runtime sans faux refus avant le prompt.\n- Préserve le fournisseur de skills, les préchargements explicites, les permissions et les preuves de chargement. Le hook refuse aussi l’invocation automatique d’une compétence manuelle dans un catalogue mixte.\n- Précise le diagnostic quand une compétence à la demande ne peut réellement pas être chargée.\n- Ajoute des régressions au niveau de l’adaptateur et du vrai CLI, sans inférence payante, pour les sélections manuelles et mixtes.\n\n`;
-          edit('CHANGELOG.md', [['# Changelog\n\n', '# Changelog\n\n' + entry]]);
-          const notesPath = `docs/releases/v${version}.md`;
-          assert.ok(!fs.existsSync(notesPath));
-          fs.writeFileSync(notesPath, `# Feature Studio ${version} — Compétences natives préchargées\n\nCorrige le refus « Le runtime ne propose pas le chargement natif des compétences sélectionnées » lorsque toutes les compétences sélectionnées interdisent l’invocation automatique (\`disable-model-invocation: true\`).\n\nCes compétences continuent d’être préchargées par le runtime pour l’agent sélectionné. L’outil \`skill\` n’est désormais requis que lorsqu’au moins une compétence du contexte est invocable à la demande. Les sélections mixtes gardent les deux modes. Les permissions, les exclusions de contexte et les preuves de chargement restent en place.\n\nLe contrôle reste bloquant pour une véritable absence d’outil de chargement à la demande, avec le nom des compétences concernées et le catalogue reçu. Les fichiers personnels et les versions du SDK/CLI ne sont pas modifiés.\n\nInstalle \`feature-studio-${version}.vsix\`, recharge VS Code et relance la même étape.\n`);
-          changed.push(notesPath);
-          fs.writeFileSync(process.env.RUNNER_TEMP + '/kerai-skill-fix-files.json', JSON.stringify(changed));
-          console.log(`Prepared version ${version}: ${changed.join(', ')}`);
-          NODE
+          const { execFileSync } = require('node:child_process');
+          const source = execFileSync('git', ['show', '139e8c3146ca47775b39552b1eae12720623d3ea:.github/workflows/verify-manual-skills-fix.yml'], { encoding: 'utf8' });
+          const marker = "          node <<'NODE'\n";
+          const start = source.indexOf(marker);
+          const end = source.indexOf('          NODE\n', start + marker.length);
+          assert.ok(start >= 0 && end > start, 'Pinned preparation script was not found');
+          const script = source.slice(start + marker.length, end).split('\n').map(line => line.startsWith('          ') ? line.slice(10) : line).join('\n');
+          fs.copyFileSync('src/host/CopilotCliAdapter.ts', process.env.RUNNER_TEMP + '/original-adapter.ts');
+          execFileSync(process.execPath, ['-e', script], { stdio: 'inherit' });
+          BOOTSTRAP
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
+        timeout-minutes: 3
       - run: npm install --prefix "$RUNNER_TEMP/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.102
       - name: Format changed TypeScript and verify types
         run: |
