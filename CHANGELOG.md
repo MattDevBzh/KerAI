@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.30.0 — 2026-10-26
+
+- Pilote automatique : profils de validation, aperçu du parcours, budget restant, contexte et permissions par étape, journal borné et accès aux étapes à débloquer.
+- Navigation : arrêt sur demande de parcours et transmission du contexte choisi, avec exclusion explicite possible.
+- Tests natifs : preuves liées aux commandes configurées et aux empreintes des fichiers. Si le CLI omet son code de sortie structuré, une vérification locale signalée réexécute la commande autorisée.
+- Configuration DevOps enregistrable avant le lancement manuel ; saisie conservée si la sauvegarde échoue.
+- Compteurs conservés à la reconfiguration ; les préalables refusés ne consomment plus de cycle de correction.
+- Stockage v12 : migration des formats précédents, journal et preuves natives conservés.
+
 ## 1.29.2 · Compétences natives préchargées
 
 - Ne requiert l’outil natif `skill` que pour les compétences invocables à la demande. Une sélection exclusivement marquée `disable-model-invocation: true` reste préchargée par le runtime sans faux refus avant le prompt.

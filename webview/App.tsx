@@ -539,6 +539,18 @@ export default function App() {
       return;
     }
     if (isDemo) {
+      if (message.type === 'saveAutopilot' || message.type === 'previewAutopilot') {
+        window.postMessage(
+          {
+            type: message.type === 'saveAutopilot' ? 'autopilotSaved' : 'autopilotPreview',
+            requestId: message.requestId,
+            error:
+              'Mode démonstration : ouvre KerAI dans VS Code pour configurer et lancer le pilote.',
+          },
+          '*',
+        );
+        return;
+      }
       if (message.type === 'navigation') {
         window.postMessage(
           {
@@ -2147,7 +2159,12 @@ function FeatureDetail({
         })()}
       <div className="feature-control-band">
         {!!feature.steps.length && (
-          <AutopilotBar feature={feature} state={state} dispatch={dispatch} />
+          <AutopilotBar
+            feature={feature}
+            state={state}
+            dispatch={dispatch}
+            selectStep={selectStep}
+          />
         )}
         <BudgetMeter feature={feature} state={state} dispatch={dispatch} />
       </div>

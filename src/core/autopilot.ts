@@ -41,6 +41,11 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   );
   if (stopped)
     return pause(`La tentative ${stopped.name} est ${stopped.status}. Reprise manuelle requise.`);
+  const navigation = scopedSteps.find((step) => step.attempts.at(-1)?.navigationRequest);
+  if (navigation)
+    return pause(
+      `Navigation à compléter : ${navigation.name}. Choisis un parcours vérifié dans une nouvelle tentative.`,
+    );
   if (
     scopedSteps.some(
       (step) =>

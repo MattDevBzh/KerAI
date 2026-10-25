@@ -62,7 +62,7 @@ describe('durable versioned store', () => {
     ];
     await store.save(engine.features, defaultSettings);
     const reopened = await new Store(store.rootPath).load();
-    expect(reopened.schemaVersion).toBe(11);
+    expect(reopened.schemaVersion).toBe(12);
     expect(reopened.features[0].execution).toEqual(item.execution);
     const restored = reopened.features[0].steps[0].attempts[0];
     expect(restored.status).toBe('interrupted');
@@ -99,7 +99,7 @@ describe('durable versioned store', () => {
     const reopened = await new Store(store.rootPath).load();
     expect(reopened.features[0]).toEqual(item);
     expect(reopened.settings.defaultModel).toBe('project-model');
-    expect(reopened.schemaVersion).toBe(11);
+    expect(reopened.schemaVersion).toBe(12);
   });
   it('persists exact question provenance across a replay and reload', async () => {
     const { store } = await setup();
@@ -140,7 +140,7 @@ describe('durable versioned store', () => {
     const migrated = await store.load();
     expect(migrated.features).toEqual(engine.features);
     expect(migrated.features[0].worktree).toBeUndefined();
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(11);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(12);
   });
   it('retains worktree identity, per-attempt checkpoints and restored ownership across reload', async () => {
     const { store } = await setup(),
@@ -173,7 +173,7 @@ describe('durable versioned store', () => {
     item.workspaceFileHashes = { 'restored.txt': 'a'.repeat(64), 'deleted.txt': '<missing>' };
     await store.save(engine.features, defaultSettings);
     const restored = await store.load();
-    expect(restored.schemaVersion).toBe(11);
+    expect(restored.schemaVersion).toBe(12);
     expect(restored.features).toEqual(engine.features);
     const invalid = { ...item, worktree: { ...item.worktree, branch: 'wrong-branch' } };
     const original = await readFile(store.path, 'utf8');
@@ -209,16 +209,38 @@ describe('durable versioned store', () => {
     expect((await store.load()).features[0].title).toBe('last');
     expect((await readdir(root)).sort()).toEqual(['sessions', 'state.json']);
   });
-  it('migrates v0 settings omissions, persisting v5', async () => {
+  it('migrates a v11 index without losing session history or pilot counters', async () => {
+    const { store } = await setup();
+    const { engine, item } = feature();
+    item.autopilot = {
+      status: 'paused',
+      checkpoints: ['run'],
+      maxRuns: 10,
+      maxCorrectionCycles: 2,
+      runs: 4,
+      correctionCycles: 1,
+      stepInputs: {},
+      updatedAt: 'then',
+    };
+    await store.save(engine.features, defaultSettings);
+    const previous = JSON.parse(await readFile(store.path, 'utf8'));
+    previous.schemaVersion = 11;
+    await writeFile(store.path, JSON.stringify(previous));
+    const restored = await store.load();
+    expect(restored.schemaVersion).toBe(12);
+    expect(restored.features).toEqual(engine.features);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(12);
+  });
+  it('migrates v0 settings omissions, persisting v12', async () => {
     const { store } = await setup();
     await writeFile(
       store.path,
       JSON.stringify({ schemaVersion: 0, features: [], settings: { defaultModel: '' } }),
     );
     const state = await store.load();
-    expect(state.schemaVersion).toBe(11);
+    expect(state.schemaVersion).toBe(12);
     expect(state.settings.timeoutMinutes).toBe(20);
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(11);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(12);
   });
   it('rejects unknown versions and corruption without changing the original file', async () => {
     const { store } = await setup();
@@ -282,7 +304,7 @@ describe('durable versioned store', () => {
       }),
     );
     const migrated = await store.load();
-    expect(migrated.schemaVersion).toBe(11);
+    expect(migrated.schemaVersion).toBe(12);
     expect(migrated.features).toEqual(historical);
     expect(migrated.memory).toEqual([]);
     expect(migrated.features[0].autopilot).toBeUndefined();

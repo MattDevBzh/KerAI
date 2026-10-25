@@ -66,6 +66,8 @@ export function subscribe(callback: (message: HostMessage) => void) {
       event.data &&
       [
         'dashboardState',
+        'autopilotSaved',
+        'autopilotPreview',
         'dashboardSaved',
         'state',
         'hqWindowResult',

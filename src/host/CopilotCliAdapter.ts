@@ -894,7 +894,7 @@ export class CopilotCliAdapter implements AgentAdapter {
                 ),
               ),
         hooks: {
-          onPreToolUse: (request) => {
+          onPreToolUse: async (request) => {
             if (
               callbacks.navigationBlocked?.() &&
               request.toolName !== 'ask_user' &&
@@ -929,6 +929,7 @@ export class CopilotCliAdapter implements AgentAdapter {
                 permissionDecisionReason:
                   'Outil hors du périmètre Feature Studio ou tentative annulée.',
               };
+            if (native) await callbacks.onNativeToolStart?.(request.toolName, request.toolArgs);
             // Hook 'ask' creates kind:'hook' without a readOnly attestation; use native MCP asks.
             return {};
           },

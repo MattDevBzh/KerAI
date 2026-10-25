@@ -28,6 +28,31 @@ async function hosted(page: Page, state = fresh()) {
         setState: (v: object) => (saved = v),
         postMessage: (m: ClientMessage) => {
           messages.push(m);
+          if (m.type === 'saveAutopilot' && m.requestId)
+            setTimeout(
+              () => window.postMessage({ type: 'autopilotSaved', requestId: m.requestId }, '*'),
+              0,
+            );
+          if (m.type === 'previewAutopilot')
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'autopilotPreview',
+                    requestId: m.requestId,
+                    preview: {
+                      featureId: m.featureId,
+                      next: 'Exécuter : Conception.',
+                      remainingRuns: 5,
+                      remainingCorrections: 0,
+                      errors: [],
+                      steps: [],
+                    },
+                  },
+                  '*',
+                ),
+              0,
+            );
           if (m.type === 'createFeature' && m.requestId && Reflect.get(window, 'autoCreate'))
             setTimeout(
               () =>

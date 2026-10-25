@@ -84,7 +84,10 @@ import { PersonalReviewTools } from './PersonalReviewTools';
 import { runProcess, redact } from './process';
 import { emptyLaunch, previewContext, selectMemory, promptSections } from '../core/context';
 import { defaultBudget, budgetBlockReason } from '../core/budgets';
+import { stepResolved } from '../shared/optionalSteps';
 import { nextAutopilotAction } from '../core/autopilot';
+import { NativeTestEvidence, nativeTestSnapshot, nativeTestCommand } from './NativeTestEvidence';
+import type { AutopilotDecision, AutopilotPreview } from '../shared/evolutions';
 import { currentTestEvidence, approvalBlockers } from '../core/validation';
 import { currentOwnedFileHashes } from '../core/ownership';
 import { featureStateKey, finalValidationReady } from '../shared/collaboration';
@@ -304,7 +307,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 11,
+      schemaVersion: 12,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -1015,7 +1018,9 @@ export class StudioService extends EventEmitter {
   }
   private async verifyNavigationAnchors(featureId: string, launch?: RunLaunchOptions) {
     const feature = this.engine.getFeature(featureId);
-    const selected = launch ? launch.navigation : feature.navigation;
+    const selected = launch?.omitNavigation
+      ? undefined
+      : (launch?.navigation ?? feature.navigation);
     if (!selected) return;
     const roots = feature.projects?.map((project, index) => ({
       id: project.id,
@@ -1038,6 +1043,7 @@ export class StudioService extends EventEmitter {
     feedback = '',
     resume = false,
     launch?: RunLaunchOptions,
+    configurationOnly = false,
   ): RunInput {
     const originalFeature = this.engine.getFeature(featureId);
     const originalStep = this.engine.getStep(featureId, stepId);
@@ -1058,6 +1064,9 @@ export class StudioService extends EventEmitter {
         mcpServerIds: step.mcpServerIds ?? [],
       },
     );
+    selected.navigation = selected.omitNavigation
+      ? undefined
+      : (selected.navigation ?? feature.navigation);
     if (originalFeature.parent) {
       const parent = this.engine.getStep(
         originalFeature.parent.featureId,
@@ -1085,7 +1094,7 @@ export class StudioService extends EventEmitter {
     if (step.subplan)
       selected.pair ??= { pace: 'blocks', explanation: 'detailed', instructions: '' };
     if (feature.execution) selected.permissionMode ??= feature.execution.permissionMode;
-    if (needsDevOpsEvidence(step) && !selected.devopsTest?.isolationConfirmed)
+    if (!configurationOnly && needsDevOpsEvidence(step) && !selected.devopsTest?.isolationConfirmed)
       throw new Error(
         'Renseigne le test exécuté et confirme sa mise en place hors production dans le formulaire de lancement.',
       );
@@ -1481,10 +1490,6 @@ export class StudioService extends EventEmitter {
       input.mode = isWorkTurn(turn) || pair.nativeConversation ? undefined : 'discussion';
       input.nativeReadOnly = pair.nativeConversation && !isWorkTurn(turn);
     }
-    if (automated && feature.autopilot) {
-      feature.autopilot.runs++;
-      feature.autopilot.updatedAt = new Date().toISOString();
-    }
     let complete!: () => void;
     const done = new Promise<void>((resolve) => {
       complete = resolve;
@@ -1517,7 +1522,23 @@ export class StudioService extends EventEmitter {
     };
     const newProofClaims = new Set<string>();
     let boardWrites = Promise.resolve();
+    const nativeTests = new NativeTestEvidence(input, {
+      recheckMissingExit: automated,
+      signal: controller.signal,
+      onRecheck: (name) =>
+        callbacks.onEvent({
+          id: randomUUID(),
+          at: new Date().toISOString(),
+          kind: 'info',
+          message:
+            'Test natif ' +
+            name +
+            ' sans code de sortie structuré : nouvelle exécution de la commande autorisée par KerAI pour vérifier son résultat.',
+        }),
+    });
     const callbacks: RunCallbacks = {
+      onNativeToolStart: (tool, args) =>
+        automated ? nativeTests.before(tool, args) : Promise.resolve(),
       onTaskBoard: (update) => {
         const write = boardWrites.then(async () => {
           if (
@@ -1552,6 +1573,10 @@ export class StudioService extends EventEmitter {
           ...request,
           createdAt: new Date().toISOString(),
         };
+        this.pauseAutopilot(
+          featureId,
+          'Navigation à compléter. Choisis un parcours vérifié dans une nouvelle tentative.',
+        );
         await this.persist();
       },
       onNavigationRun: async (run) => {
@@ -1626,6 +1651,7 @@ export class StudioService extends EventEmitter {
         this.schedule();
       },
       onNativeActivity: (activity) => {
+        nativeTests.receive(activity);
         attempt.nativeActivity ??= [];
         const index = attempt.nativeActivity.findIndex((item) => item.id === activity.id);
         if (index >= 0) attempt.nativeActivity[index] = structuredClone(activity);
@@ -1880,7 +1906,22 @@ export class StudioService extends EventEmitter {
         await this.persist();
         pairCallStarted = true;
       }
+      if (automated && feature.autopilot) {
+        if (feature.autopilot.status !== 'running')
+          throw new Error('Le pilote a été mis en pause avant l’appel.');
+        feature.autopilot.runs++;
+        feature.autopilot.updatedAt = new Date().toISOString();
+        if (feedback) feature.autopilot.correctionCycles++;
+        this.recordAutopilot(
+          feature,
+          feedback ? 'correct' : 'run',
+          feedback ? 'Correction lancée.' : 'Étape disponible lancée.',
+          stepId,
+        );
+        await this.persist();
+      }
       const result = await this.adapter.run(input, callbacks, controller.signal);
+      for (const evidence of await nativeTests.finish()) callbacks.onEvidence?.(evidence);
       promptSent();
       await archive.flush();
       if (controller.signal.aborted) throw new Error('Exécution annulée.');
@@ -2615,6 +2656,117 @@ export class StudioService extends EventEmitter {
         'Mets le pilote en pause et attends la fin de sa tentative avant de modifier sa configuration.',
       );
   }
+  private recordAutopilot(
+    feature: Feature,
+    kind: AutopilotDecision['kind'],
+    message: string,
+    stepId?: string,
+  ): void {
+    const pilot = feature.autopilot;
+    if (!pilot) return;
+    pilot.decisions = [
+      ...(pilot.decisions ?? []),
+      {
+        at: new Date().toISOString(),
+        kind,
+        ...(stepId ? { stepId } : {}),
+        message: redact(message).slice(0, 2000),
+        runs: pilot.runs,
+        correctionCycles: pilot.correctionCycles,
+      },
+    ].slice(-200);
+  }
+  async previewAutopilot(featureId: string): Promise<AutopilotPreview> {
+    const feature = this.engine.getFeature(featureId),
+      pilot = feature.autopilot;
+    if (!pilot) throw new Error('Configure le pilote avant de préparer son lancement.');
+    const errors: string[] = [];
+    if (!this.isTrusted()) errors.push('Approuve le projet avant de lancer le pilote.');
+    if (feature.archived) errors.push('Cette session est archivée.');
+    if (this.active || this.automation || this.workspaceTask)
+      errors.push('Une opération est encore en cours.');
+    if (this.state.runtime.state !== 'ready' || !this.state.runtime.authenticated)
+      errors.push('Connecte Copilot avant le lancement.');
+    const info = await gitInfo(await this.featurePath(featureId));
+    if (info.branch !== feature.branch) errors.push(`Reviens sur la branche ${feature.branch}.`);
+    const decision = nextAutopilotAction({
+      ...feature,
+      autopilot: { ...pilot, status: 'running' },
+    });
+    if (decision.kind === 'pause') errors.push(decision.reason);
+    const label =
+      'stepId' in decision
+        ? feature.steps.find((step) => step.id === decision.stepId)?.name
+        : undefined;
+    const next =
+      decision.kind === 'pause'
+        ? decision.reason
+        : decision.kind === 'complete'
+          ? 'Parcours terminé.'
+          : `${decision.kind === 'approve' ? 'Valider' : decision.kind === 'correct' ? 'Corriger' : 'Exécuter'} : ${label}.`;
+    const steps = feature.steps
+      .filter((step) => !stepResolved(step))
+      .map((step) => {
+        const notes: string[] = [];
+        if (step.askBeforeRun) notes.push('Confirmation avant lancement.');
+        if (step.optional && !step.optionalDecision)
+          notes.push('Choix humain : exécuter ou passer.');
+        if (
+          feature.parent ||
+          step.subplan ||
+          feature.workflowId === 'documentation' ||
+          step.agentId.startsWith('fs-doc-') ||
+          pilot.checkpoints.includes(step.id)
+        )
+          notes.push('Validation humaine après cette étape.');
+        if (needsDevOpsEvidence(step))
+          notes.push('Lancement manuel : renseigner les preuves du test hors production.');
+        if (step.policy === 'tests') {
+          notes.push(
+            'Si le CLI ne fournit pas de code de sortie structuré, KerAI réexécute la commande autorisée pour vérifier le résultat, sans nouvel appel IA.',
+          );
+          const commands = this.state.settings.testCommands;
+          notes.push(
+            commands.length
+              ? `Commandes de tests autorisées : ${commands.map((command) => nativeTestCommand(command) ?? command.name).join(', ')}.`
+              : 'Aucune commande de test configurée : ajoute-la dans Réglages pour produire une preuve automatique.',
+          );
+        }
+        if (!['awaiting_review', 'failed', 'cancelled', 'interrupted'].includes(step.status)) {
+          try {
+            const input = this.prepareInput(
+              featureId,
+              step.id,
+              '',
+              false,
+              pilot.stepInputs[step.id],
+              true,
+            );
+            const preview = previewContext(input);
+            for (const error of preview.errors) errors.push(`${step.name} : ${error}`);
+            notes.push(
+              `Contexte : ${preview.characters.toLocaleString('fr-FR')} caractères ; ${input.mcpServers?.length ?? 0} connexion(s) MCP ; ${input.memory?.length ?? 0} entrée(s) de mémoire.`,
+            );
+            if (input.navigation) notes.push(`Navigation : ${input.navigation.application.name}.`);
+            if (input.launch?.permissionMode)
+              notes.push(
+                `Permissions : ${{ manual: 'Manuel', assisted: 'Assisté', 'allow-all': 'Tout autoriser' }[input.launch.permissionMode]}.`,
+              );
+          } catch (error) {
+            errors.push(`${step.name} : ${(error as Error).message}`);
+          }
+        }
+        return { id: step.id, name: step.name, notes };
+      });
+    return {
+      featureId,
+      next,
+      remainingRuns: Math.max(0, pilot.maxRuns - pilot.runs),
+      remainingCorrections: Math.max(0, pilot.maxCorrectionCycles - pilot.correctionCycles),
+      errors,
+      steps,
+    };
+  }
   async saveAutopilot(featureId: string, config: AutopilotConfig): Promise<void> {
     this.assertConfigurable(featureId);
     const feature = this.engine.getFeature(featureId),
@@ -2649,15 +2801,23 @@ export class StudioService extends EventEmitter {
         throw new Error('L’étape à corriger doit précéder la relecture dans ce parcours.');
     }
     for (const [id, input] of Object.entries(parsed.stepInputs))
-      this.prepareInput(featureId, id, '', false, input);
+      this.prepareInput(featureId, id, '', false, input, true);
+    const previous = feature.autopilot;
     feature.autopilot = {
       ...parsed,
-      status: 'idle',
-      runs: 0,
-      correctionCycles: 0,
+      status: feature.autopilot ? 'paused' : 'idle',
+      runs: feature.autopilot?.runs ?? 0,
+      correctionCycles: feature.autopilot?.correctionCycles ?? 0,
+      decisions: feature.autopilot?.decisions ?? [],
       updatedAt: new Date().toISOString(),
     };
-    await this.persist();
+    this.recordAutopilot(feature, 'configure', 'Configuration enregistrée ; compteurs conservés.');
+    try {
+      await this.persist();
+    } catch (error) {
+      feature.autopilot = previous;
+      throw error;
+    }
   }
   pauseAutopilot(
     featureId: string,
@@ -2667,6 +2827,12 @@ export class StudioService extends EventEmitter {
     if (feature.autopilot?.status === 'running') {
       feature.autopilot.status = 'paused';
       feature.autopilot.reason = reason.slice(0, 2000);
+      this.recordAutopilot(
+        feature,
+        'pause',
+        reason,
+        this.active?.featureId === featureId ? this.active.stepId : feature.activeStepId,
+      );
       feature.autopilot.updatedAt = new Date().toISOString();
       this.schedule();
     }
@@ -2756,6 +2922,7 @@ export class StudioService extends EventEmitter {
         if (action.kind === 'complete') {
           feature.autopilot.status = 'completed';
           feature.autopilot.reason = 'Parcours terminé.';
+          this.recordAutopilot(feature, 'complete', 'Parcours terminé.');
           break;
         }
         if (action.kind === 'approve') {
@@ -2767,8 +2934,13 @@ export class StudioService extends EventEmitter {
             attempt.revision ?? 0,
             'autopilot',
           );
+          this.recordAutopilot(
+            feature,
+            'approve',
+            'Résultat et preuves validés automatiquement.',
+            action.stepId,
+          );
         } else {
-          if (action.kind === 'correct') feature.autopilot.correctionCycles++;
           await this.runStep(
             featureId,
             action.stepId,
@@ -2876,6 +3048,19 @@ export class StudioService extends EventEmitter {
       if (!attempt) continue;
       const proofs = currentTestEvidence(attempt);
       for (const evidence of proofs) {
+        if (evidence.native) {
+          const snapshot = await nativeTestSnapshot(
+            root,
+            feature.projects?.map((project, index) => ({
+              id: project.id,
+              path: index === 0 ? root : project.path,
+            })),
+          );
+          if (snapshot.digest !== evidence.native.snapshot)
+            throw new Error(
+              'La preuve native est obsolète : les fichiers ou le commit ont changé. Relance les tests.',
+            );
+        }
         if (evidence.devops) {
           const proofRoot = evidence.projectId
             ? feature.projects?.find((project) => project.id === evidence.projectId)?.path
@@ -2894,7 +3079,7 @@ export class StudioService extends EventEmitter {
             );
         }
       }
-      const snapshots = proofs.map((proof) => proof.fileHashes);
+      const snapshots = proofs.filter((proof) => !proof.native).map((proof) => proof.fileHashes);
       for (const hashes of snapshots)
         for (const [file, hash] of Object.entries(hashes)) {
           let current = '<missing>';
@@ -3132,6 +3317,7 @@ export class StudioService extends EventEmitter {
         await this.verifyProofFiles(feature, new Set(feature.steps.map((step) => step.id)));
         this.assertTrusted();
         const id = this.engine.finalizeFeature(featureId, expectedStateKey);
+        this.recordAutopilot(feature, 'complete', 'Validation définitive humaine enregistrée.');
         await this.persist();
         return id;
       },

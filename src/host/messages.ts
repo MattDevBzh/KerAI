@@ -453,9 +453,15 @@ export const messageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('saveWorkflow'), workflow: workflowSchema }).strict(),
   z.object({ type: z.literal('deleteWorkflow'), workflowId: id, requestId: id }).strict(),
   z
-    .object({ type: z.literal('saveAutopilot'), featureId: id, config: autopilotConfigSchema })
+    .object({
+      type: z.literal('saveAutopilot'),
+      featureId: id,
+      config: autopilotConfigSchema,
+      requestId: id.optional(),
+    })
     .strict(),
   z.object({ type: z.enum(['startAutopilot', 'pauseAutopilot']), featureId: id }).strict(),
+  z.object({ type: z.literal('previewAutopilot'), featureId: id, requestId: id }).strict(),
   z
     .object({
       type: z.literal('resolveOptionalStep'),

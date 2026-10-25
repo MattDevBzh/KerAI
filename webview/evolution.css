@@ -525,6 +525,7 @@
 }
 .autopilot-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 18px;
@@ -1816,4 +1817,54 @@
 }
 .approval-blockers strong {
   color: var(--error);
+}
+
+.autopilot-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.autopilot-preflight {
+  padding-left: 22px;
+  max-height: 42vh;
+  overflow: auto;
+}
+.autopilot-preflight > li {
+  margin: 14px 0;
+}
+.autopilot-preflight ul {
+  padding-left: 18px;
+  line-height: 1.6;
+}
+.autopilot-journal {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.autopilot-journal summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.autopilot-journal ol {
+  max-height: 300px;
+  overflow: auto;
+  padding-left: 24px;
+}
+.autopilot-journal li {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.autopilot-journal small {
+  display: block;
+  color: var(--muted);
+}
+
+.autopilot-panel {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
 }

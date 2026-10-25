@@ -29,6 +29,7 @@ import { nativePermissionModeSchema } from './nativeSchemas';
 export const launchSchema = z
   .object({
     navigation: navigationSelectionSchema.optional(),
+    omitNavigation: z.boolean().optional(),
     permissionMode: nativePermissionModeSchema.optional(),
     pair: pairPreferencesSchema.optional(),
     devopsTest: devOpsTestTargetSchema.optional(),
@@ -146,6 +147,21 @@ export const autopilotConfigSchema = z
   .strict();
 export const autopilotStateSchema = autopilotConfigSchema
   .extend({
+    decisions: z
+      .array(
+        z
+          .object({
+            at: timestamp,
+            kind: z.enum(['run', 'approve', 'correct', 'pause', 'complete', 'configure']),
+            stepId: boundedId.optional(),
+            message: shortText,
+            runs: z.number().int().nonnegative(),
+            correctionCycles: z.number().int().nonnegative(),
+          })
+          .strict(),
+      )
+      .max(200)
+      .optional(),
     status: z.enum(['idle', 'running', 'paused', 'completed']),
     runs: z.number().int().nonnegative(),
     correctionCycles: z.number().int().nonnegative(),
@@ -227,6 +243,15 @@ export const reviewSchema = z
   });
 export const evidenceSchema = z
   .object({
+    native: z
+      .object({
+        activityId: z.string().min(1).max(1000),
+        sessionId: z.string().min(1).max(300),
+        snapshot: z.string().regex(/^[a-f0-9]{64}$/),
+        verification: z.enum(['runtime', 'host-recheck']),
+      })
+      .strict()
+      .optional(),
     projectId: z.string().min(1).max(150).optional(),
     devops: devOpsEvidenceSchema.optional(),
     quality: qualityEvidenceSchema.optional(),

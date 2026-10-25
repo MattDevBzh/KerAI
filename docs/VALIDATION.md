@@ -1,5 +1,15 @@
 # Validation et limites
 
+## Pilote automatique v1.30.0
+
+Les régressions couvrent la pause sur navigation manquante, la transmission et l’exclusion du contexte, la configuration DevOps, les compteurs après un prévol refusé, la persistance du journal et des preuves, et l’invalidation après ajout ou modification de fichiers. Les tests de terminal natif refusent les commandes non configurées, les exécutions asynchrones, les reçus incomplets et les marqueurs de sortie falsifiés. Le test conditionnel native-test-runtime.test.ts utilise le vrai CLI avec un fournisseur local déterministe ; il n’envoie aucun prompt payant.
+
+Les scénarios Chromium couvrent les profils, l’attente de l’aperçu, les erreurs de sauvegarde avec conservation de la saisie et un écran de 390 px. La CI inclut ces contrôles sous Windows ainsi que le reçu du terminal avec le CLI épinglé. Le contrôle du VSIX vérifie les nouveaux messages, le journal et la vérification native dans les bundles.
+
+Validation locale : TypeScript, mise en forme, construction et contrôle du VSIX réussis ; **974 tests de logique/intégration**, plus **7 tests avec le vrai CLI 1.0.102**, et **291 scénarios Chromium** réussis. Trois tests de disque/Git ont dépassé leur délai pendant la première passe simultanée avec Chromium ; leurs suites complètes passent lors de la relance séparée. Le débordement des boutons à 390 px a été corrigé, puis les 41 scénarios concernés revérifiés. Les trois tests propres à Windows restent pris en charge par la CI Windows.
+
+Le VSIX extrait a été chargé avec succès dans un profil VS Code Insiders isolé sur macOS, y compris le navigateur embarqué. La publication reste soumise à la CI du commit livré. Ces tests ne mesurent pas la qualité d’un modèle réel.
+
 ## Résultat de création visible — v1.29.1
 
 - TypeScript, mise en forme, construction et **942 tests de logique/intégration réussis, 8 ignorés**. **288 scénarios Chromium réussis**.
@@ -50,7 +60,6 @@
 - Un contrôle sans inférence utilise le vrai CLI pour exécuter le patch natif et vérifier son refus en lecture seule. Les interruptions, révisions multiples et niveaux imbriqués sont vérifiés par les tests déterministes avec agents simulés ; ils ne sont pas présentés comme une campagne multi-modèles réelle.
 - La carte et les écrans ont été vérifiés en thèmes clairs, sombres et événementiels, ainsi qu’en petite largeur. Les [captures du sous-plan](screenshots/carte-sous-plan.png) et de [navigation](screenshots/sous-equipe.png) utilisent des données de démonstration. Le paquet, son chargement dans VS Code, la CI Linux/Windows du commit et l’archive téléchargée restent des vérifications séparées avant livraison.
 
-
 ## Conversation native intégrée — v1.23.0, 21 octobre 2026
 
 - Le vrai CLI 1.0.102 avec SDK 1.0.20 reprend une même session en passant du catalogue de lecture au catalogue de travail, puis à la lecture. Le test automatisé sans inférence vérifie les outils réellement exposés dans les deux sens.
@@ -58,7 +67,6 @@
 - Le premier essai a refusé un modèle explicitement demandé absent du catalogue avant tout prompt. Un essai suivant avait réalisé le travail mais une assertion de recette imposait à tort un saut de ligne final ; la recette réussie contrôle le contenu demandé et l’absence de changement pendant l’explication.
 - Les scénarios de service et d’interface vérifient solo/pair, organisation acceptée, préférences, messages pendant le travail, envois incertains sans renvoi automatique, arrêt confirmé, questions sur le livrable, correction, verrouillage après validation et stockage version 9.
 - Les captures de conversation sont des fixtures visuelles. Les preuves locales, le chargement du VSIX, la CI Linux/Windows du commit et le paquet téléchargé sont contrôlés séparément lors de la publication.
-
 
 ## Copilot natif — v1.22.0, 21 octobre 2026
 
@@ -68,7 +76,6 @@
 - Les suites automatisées couvrent permissions, refus, annulation, persistance version 8, événements natifs, fichiers observés sans attribution de propriété et interface. Les jobs Linux/Windows utilisent un CLI 1.0.102 épinglé et n’envoient aucun prompt payant.
 - La procédure de publication contrôle séparément le paquet, son chargement dans VS Code, la CI du commit et l’archive téléchargée. Un succès local n’atteste pas à lui seul ces étapes.
 - Les outils web, sous-agents, plugins, hooks et skills natifs, la conversation native continue et le compagnon latéral restent hors de cette version. [Périmètre et limites](COPILOT-NATIF.md).
-
 
 ## Intégration des travaux locaux — v1.14.0
 

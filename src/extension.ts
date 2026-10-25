@@ -2213,7 +2213,33 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'saveAutopilot':
-        await current.saveAutopilot(message.featureId, message.config);
+        try {
+          await current.saveAutopilot(message.featureId, message.config);
+          if (message.requestId) send({ type: 'autopilotSaved', requestId: message.requestId });
+        } catch (error) {
+          if (message.requestId)
+            send({
+              type: 'autopilotSaved',
+              requestId: message.requestId,
+              error: redact((error as Error).message),
+            });
+          else report(error);
+        }
+        return;
+      case 'previewAutopilot':
+        try {
+          send({
+            type: 'autopilotPreview',
+            requestId: message.requestId,
+            preview: await current.previewAutopilot(message.featureId),
+          });
+        } catch (error) {
+          send({
+            type: 'autopilotPreview',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        }
         return;
       case 'resolveOptionalStep':
         void current

@@ -121,3 +121,62 @@ describe('StudioService freezes navigation before the simulated agent begins', (
     expect(f.inputs).toEqual([]);
   });
 });
+
+it('pauses on a navigation request without spending the remaining automatic calls', async () => {
+  const f = await fixture();
+  let calls = 0;
+  f.adapter.run = async (_input, callbacks) => {
+    calls++;
+    callbacks.onSession('nav-session-' + calls);
+    await callbacks.onNavigationRequest!({
+      reason: 'missing-journey',
+      observations: 'A verified journey is needed.',
+    });
+    return { content: 'Navigation requires input', questions: [], changedFiles: [] };
+  };
+  await f.service.saveAutopilot(f.feature.id, {
+    checkpoints: [],
+    maxRuns: 3,
+    maxCorrectionCycles: 0,
+    stepInputs: { [f.step.id]: f.launch },
+  });
+  await f.service.startAutopilot(f.feature.id);
+  expect(calls).toBe(1);
+  expect(f.feature.autopilot).toMatchObject({ status: 'paused', runs: 1 });
+  expect(f.feature.autopilot?.reason).toMatch(/Navigation/);
+  await f.service.startAutopilot(f.feature.id);
+  expect(calls).toBe(1);
+  expect(f.feature.autopilot?.decisions?.some((entry) => entry.kind === 'pause')).toBe(true);
+});
+
+it.each([false, true])(
+  'inherits session navigation unless explicitly omitted (%s)',
+  async (omitNavigation) => {
+    const f = await fixture();
+    f.feature.navigation = f.launch.navigation;
+    const launch = {
+      initialContext: '',
+      mcpServerIds: [],
+      memoryIds: [],
+      useProjectMemory: false,
+      omitNavigation,
+    };
+    await f.service.saveAutopilot(f.feature.id, {
+      checkpoints: [],
+      maxRuns: 1,
+      maxCorrectionCycles: 0,
+      stepInputs: { [f.step.id]: launch },
+    });
+    const preview = await f.service.previewAutopilot(f.feature.id);
+    expect(f.inputs).toHaveLength(0);
+    expect(preview.errors).toEqual([]);
+    expect(preview.steps[0].notes.some((note) => note.startsWith('Navigation :'))).toBe(
+      !omitNavigation,
+    );
+    await f.service.startAutopilot(f.feature.id);
+    expect(f.inputs).toHaveLength(1);
+    expect(f.inputs[0].navigation?.selection).toEqual(
+      omitNavigation ? undefined : f.feature.navigation,
+    );
+  },
+);

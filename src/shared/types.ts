@@ -312,7 +312,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
   workspace: {
     name: string;
     path: string;
@@ -540,7 +540,8 @@ export type ClientMessage =
   | { type: 'saveWorkflow'; workflow: Workflow }
   | { type: 'deleteWorkflow'; workflowId: string; requestId: string }
   | import('./discussions').DiscussionClientMessage
-  | { type: 'saveAutopilot'; featureId: string; config: AutopilotConfig }
+  | { type: 'saveAutopilot'; featureId: string; config: AutopilotConfig; requestId?: string }
+  | { type: 'previewAutopilot'; featureId: string; requestId: string }
   | { type: 'startAutopilot' | 'pauseAutopilot'; featureId: string }
   | { type: 'saveBudget'; featureId: string; budget: FeatureBudget }
   | { type: 'saveCriteria'; featureId: string; criteria: AcceptanceCriterion[] }
@@ -553,6 +554,13 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'autopilotSaved'; requestId: string; error?: string }
+  | {
+      type: 'autopilotPreview';
+      requestId: string;
+      preview?: import('./evolutions').AutopilotPreview;
+      error?: string;
+    }
   | {
       type: 'navigationState';
       state: import('./navigation').NavigationSnapshot;
@@ -707,6 +715,7 @@ export interface RunCallbacks {
   onNativeEventId?(id: string): void;
   onNativeMessageReceived?(id: string): void;
   onNativeActivity?(activity: import('./native').NativeActivity): void;
+  onNativeToolStart?(tool: string, args: unknown): Promise<void>;
   onNativeContextLoad?(load: import('./native').NativeContextLoad): void;
   onNativePermission?(
     request: import('./native').NativePermissionPrompt,

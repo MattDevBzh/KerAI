@@ -1602,3 +1602,190 @@ it('groups native permissions for the root session, including concurrent request
   f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'deny');
   await isolated;
 });
+
+it('saves DevOps pilot configuration before the human supplies the execution evidence', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'DevOps pilot',
+    description: '',
+    workflowId: 'devops',
+  });
+  await f.service.saveAutopilot(feature.id, {
+    checkpoints: [],
+    maxRuns: feature.steps.length,
+    maxCorrectionCycles: 0,
+    stepInputs: Object.fromEntries(
+      feature.steps.map((step) => [
+        step.id,
+        {
+          initialContext: '',
+          mcpServerIds: [],
+          memoryIds: [],
+          useProjectMemory: false,
+        },
+      ]),
+    ),
+  });
+  expect(feature.autopilot?.status).toBe('idle');
+  expect(f.inputs).toHaveLength(0);
+  const preview = await f.service.previewAutopilot(feature.id);
+  expect(preview.steps.flatMap((step) => step.notes).join(' ')).toContain('hors production');
+  const validation = feature.steps.find((step) => step.agentId === 'fs-devops-validate')!;
+  await expect(f.service.runStep(feature.id, validation.id)).rejects.toThrow(/hors production/);
+  expect(f.inputs).toHaveLength(0);
+});
+
+it('keeps pilot counters and the decision journal when configuration is saved again', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Counters',
+    description: '',
+    workflowId: 'single',
+  });
+  const config = { checkpoints: [], maxRuns: 1, maxCorrectionCycles: 0, stepInputs: {} };
+  await f.service.saveAutopilot(feature.id, config);
+  await f.service.startAutopilot(feature.id);
+  expect(feature.autopilot?.runs).toBe(1);
+  await f.service.saveAutopilot(feature.id, { ...config, maxRuns: 2 });
+  expect(feature.autopilot).toMatchObject({ runs: 1, status: 'paused', correctionCycles: 0 });
+  expect(feature.autopilot?.decisions?.map((entry) => entry.kind)).toEqual([
+    'configure',
+    'run',
+    'approve',
+    'pause',
+    'configure',
+  ]);
+  const restored = await new Store(f.storage).load();
+  expect(restored.schemaVersion).toBe(12);
+  expect(restored.features[0].autopilot).toEqual(feature.autopilot);
+  expect((await f.service.previewAutopilot(feature.id)).remainingRuns).toBe(1);
+  expect(f.inputs).toHaveLength(1);
+});
+
+it('retains the previous pilot configuration if persistence fails', async () => {
+  const f = await fixture();
+  const feature = await f.service.createFeature({
+    title: 'Save failure',
+    description: '',
+    workflowId: 'single',
+  });
+  const config = { checkpoints: [], maxRuns: 1, maxCorrectionCycles: 0, stepInputs: {} };
+  await f.service.saveAutopilot(feature.id, config);
+  const previous = structuredClone(feature.autopilot);
+  vi.spyOn(f.service, 'persist').mockRejectedValueOnce(new Error('Disk full'));
+  await expect(f.service.saveAutopilot(feature.id, { ...config, maxRuns: 5 })).rejects.toThrow(
+    'Disk full',
+  );
+  expect(feature.autopilot).toEqual(previous);
+  expect((await new Store(f.storage).load()).features[0].autopilot).toEqual(previous);
+});
+
+it('accepts a native test receipt and rejects new files added before final validation', async () => {
+  const f = await fixture();
+  await writeFile(join(f.workspace, 'test.js'), 'console.log("passed");');
+  await f.service.checkRuntime();
+  await f.service.saveSettings({
+    ...f.service.state.settings,
+    testCommands: [{ id: 'unit', name: 'Unit', command: 'node', args: ['test.js'] }],
+  });
+  const feature = await f.service.createFeature({
+    title: 'Native proof',
+    description: '',
+    workflowId: 'single',
+  });
+  const step = feature.steps[0];
+  step.agentId = 'fs-tests';
+  step.policy = 'tests';
+  f.run(async (_input, callbacks) => {
+    await callbacks.onNativeToolStart!('bash', { command: 'node test.js', mode: 'sync' });
+    const activity = {
+      id: 'fixture:test',
+      source: 'copilot' as const,
+      sessionId: 'fixture',
+      tool: 'bash',
+      startedAt: new Date().toISOString(),
+      status: 'running' as const,
+      directory: f.workspace,
+      arguments: '{}',
+      command: 'node test.js',
+    };
+    callbacks.onNativeActivity!(activity);
+    const result = await runProcess('node', ['test.js'], f.workspace);
+    callbacks.onNativeActivity!({
+      ...activity,
+      status: 'completed',
+      finishedAt: new Date().toISOString(),
+      output: result.stdout,
+      exitCode: result.code,
+    });
+    return finished();
+  });
+  await f.service.saveAutopilot(feature.id, {
+    checkpoints: [],
+    maxRuns: 1,
+    maxCorrectionCycles: 0,
+    stepInputs: {},
+  });
+  await f.service.startAutopilot(feature.id);
+  expect(step.status).toBe('approved');
+  expect(feature.status).toBe('awaiting_final_validation');
+  expect(step.attempts[0].evidence?.[0]).toMatchObject({
+    native: { activityId: 'fixture:test' },
+    exitCode: 0,
+  });
+  const restored = await new Store(f.storage).load();
+  expect(restored.features[0].steps[0].attempts[0].evidence).toEqual(step.attempts[0].evidence);
+  await writeFile(join(f.workspace, 'new-source.js'), 'export const changed = true;');
+  await expect(f.service.finalizeFeature(feature.id, featureStateKey(feature))).rejects.toThrow(
+    /preuve native est obsolète/,
+  );
+});
+
+it('does not spend a correction cycle when the branch preflight refuses its launch', async () => {
+  const f = await fixture();
+  await git(f.workspace, 'config', 'user.name', 'Fixture');
+  await git(f.workspace, 'config', 'user.email', 'fixture@example.invalid');
+  await git(f.workspace, 'commit', '--allow-empty', '-m', 'fixture');
+  await f.service.checkRuntime();
+  const feature = await f.service.createFeature({
+    title: 'Correction preflight',
+    description: '',
+    team: [
+      { name: 'Dev', description: 'Implement', agentId: 'fs-dev', policy: 'workspace-write' },
+      { name: 'Review', description: 'Review result', agentId: 'fs-review', policy: 'read-only' },
+    ],
+  });
+  const [dev, review] = feature.steps;
+  let reviews = 0;
+  f.run(async (input) => {
+    if (input.step.id !== review.id) return finished();
+    reviews++;
+    if (reviews === 1) await git(f.workspace, 'checkout', '-b', 'wrong-branch');
+    return {
+      ...finished(),
+      review: {
+        verdict: reviews === 1 ? 'changes_requested' : 'pass',
+        summary: 'Review fixture',
+        findings: [],
+      },
+    };
+  });
+  await f.service.saveAutopilot(feature.id, {
+    checkpoints: [],
+    maxRuns: 5,
+    maxCorrectionCycles: 1,
+    reviewStepId: review.id,
+    correctionStepId: dev.id,
+    stepInputs: {},
+  });
+  await f.service.startAutopilot(feature.id);
+  expect(feature.autopilot).toMatchObject({ runs: 2, correctionCycles: 0, status: 'paused' });
+  expect(feature.autopilot?.reason).toMatch(/branche/);
+  await git(f.workspace, 'checkout', 'fixture');
+  await f.service.startAutopilot(feature.id);
+  expect(feature.autopilot).toMatchObject({ runs: 4, correctionCycles: 1 });
+  expect(feature.status).toBe('awaiting_final_validation');
+  expect(feature.autopilot?.decisions?.filter((entry) => entry.kind === 'correct')).toHaveLength(1);
+});

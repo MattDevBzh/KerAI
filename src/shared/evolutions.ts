@@ -21,6 +21,8 @@ export interface McpCatalog {
 }
 export interface RunLaunchOptions {
   navigation?: import('./navigation').NavigationSelection;
+  /** Explicitly omit the session navigation for this launch. */
+  omitNavigation?: boolean;
   permissionMode?: import('./native').NativePermissionMode;
   pair?: import('./pair').PairPreferences;
   devopsTest?: import('./devopsKit').DevOpsTestTarget;
@@ -92,7 +94,24 @@ export interface AutopilotConfig {
   correctionStepId?: string;
   stepInputs: Record<string, RunLaunchOptions>;
 }
+export interface AutopilotDecision {
+  at: string;
+  kind: 'run' | 'approve' | 'correct' | 'pause' | 'complete' | 'configure';
+  stepId?: string;
+  message: string;
+  runs: number;
+  correctionCycles: number;
+}
+export interface AutopilotPreview {
+  featureId: string;
+  next: string;
+  remainingRuns: number;
+  remainingCorrections: number;
+  errors: string[];
+  steps: { id: string; name: string; notes: string[] }[];
+}
 export interface AutopilotState extends AutopilotConfig {
+  decisions?: AutopilotDecision[];
   status: 'idle' | 'running' | 'paused' | 'completed';
   runs: number;
   correctionCycles: number;
@@ -100,6 +119,13 @@ export interface AutopilotState extends AutopilotConfig {
   updatedAt: string;
 }
 export interface TestEvidence {
+  /** Host-verified native shell receipt matched to a configured test command. */
+  native?: {
+    activityId: string;
+    sessionId: string;
+    snapshot: string;
+    verification: 'runtime' | 'host-recheck';
+  };
   projectId?: string;
   devops?: import('./devopsKit').DevOpsEvidence;
   quality?: import('./quality').QualityEvidence;

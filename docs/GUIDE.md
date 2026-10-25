@@ -259,6 +259,22 @@ Les sept scénarios de permissions ont été vérifiés avec une fixture locale 
 
 ## Pilote automatique, validation et coût
 
+**Configurer** propose trois profils : **Valider chaque étape**, **Valider le plan et la revue**, ou **Enchaîner jusqu’au bilan**. Les cases permettent un choix personnalisé. Ces profils règlent les validations, pas les permissions Copilot ; les validations obligatoires des sous-équipes et de la documentation restent applicables.
+
+Avant **Démarrer**, KerAI présente la prochaine action, les appels et corrections restants, les arrêts attendus, les connexions MCP, la mémoire, les permissions et le contexte de navigation de chaque étape. Cette vérification n’envoie aucun prompt. Une erreur empêche le démarrage ; les points de validation futurs sont annoncés. Le contexte de navigation de la session est repris par défaut ; choisir aucune application dans une étape l’exclut explicitement pour cette étape.
+
+Une demande de parcours manquant suspend le pilote dès le premier appel. **Compléter la navigation** ouvre l’étape concernée : prépare une nouvelle tentative avec un parcours vérifié. Les autres pauses proposent de relire le résultat ou de reprendre l’étape. **Demander la pause** laisse finir l’appel actif ; **Arrêter maintenant** l’annule.
+
+Le **Journal du pilote** conserve les 200 dernières décisions avec l’heure, l’étape et les compteurs : configuration, lancement, correction, validation et pause. Modifier la configuration conserve les compteurs ; pour donner des appels supplémentaires, augmente explicitement le plafond. Une correction refusée avant l’appel, par exemple sur une mauvaise branche, ne consomme aucun cycle.
+
+Pour valider automatiquement les tests, configure leurs commandes dans **Réglages → Commandes de test autorisées**. Le terminal natif peut produire une preuve lorsqu’il exécute exactement une commande configurée, en mode synchrone, dans le dossier de la session. KerAI compare les fichiers et le commit avant/après, puis à la validation. Il refuse une preuve incomplète, concurrente ou périmée. Si le CLI ne fournit pas son code de sortie structuré, KerAI réexécute la commande autorisée, sans appel IA supplémentaire ; ce second passage est annoncé dans l’aperçu, l’activité et le nom de la preuve. L’arrêt de la tentative annule aussi cette vérification.
+
+Les commandes avec arguments complexes et les rapports qualité/visuels utilisent toujours **studio_run_test**. La capture native est limitée à 5 000 fichiers Git suivis ou non ignorés, 8 Mo par fichier et 64 Mo au total ; un inventaire incomplet exige une preuve hôte ou une reprise humaine. Cette mesure ne couvre pas les dépendances ignorées ni les services externes. Une validation finale humaine reste nécessaire.
+
+Les équipes DevOps peuvent enregistrer leur pilote avant de connaître le résultat du test hors production. L’étape de validation DevOps attend toujours son lancement manuel et ses références vérifiées. Une sauvegarde refusée garde le formulaire et sa saisie ouverts.
+
+Le stockage passe à la version 12 pour conserver ces preuves et le journal. Les formats précédents migrent à la lecture ; les anciens binaires refusent ce nouveau format.
+
 Dans une feature, le **pilote automatique** enchaîne les étapes disponibles suivant les dépendances. Configure les points de validation humaine, le contexte/MCP de chaque étape et les limites avant de le démarrer. Il s’arrête sur une question, une permission MCP, un échec, un seuil atteint ou un checkpoint. **Pause** laisse finir la tentative courante ; **Arrêter** l’annule. Après une question, il faut reprendre explicitement le pilote pour continuer le parcours. Une tentative échouée ou interrompue se relance manuellement.
 
 La boucle de correction est facultative : choisis une étape de relecture et une étape de développement en amont. Le pilote utilise le verdict structuré de la relecture ou une preuve de tests en échec ; il rejoue ensuite les étapes devenues obsolètes. Un checkpoint reste prioritaire sur cette boucle. Par défaut, **zéro cycle de correction supplémentaire** : augmente le nombre seulement si tu le souhaites. Il n’y a aucun agent chargé de décider du prochain agent ; l’orchestration est du code local.

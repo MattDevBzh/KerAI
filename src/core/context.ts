@@ -306,6 +306,21 @@ export function promptSections(input: RunInput): PromptSection[] {
           'Si cet outil est indisponible, termine avec un seul bloc :\n```feature-studio-questions\n{"questions":[{"id":"question_id","text":"Question précise","choices":["Option A","Option B"]}]}\n```\n' +
           'Les choices sont facultatifs. Les outils shell natifs, les outils hors catalogue, le push et la publication ne sont pas autorisés. Ne prétends pas avoir exécuté une commande ou obtenu une preuve sans l’avoir réellement observée.',
   );
+  if (native && input.step.policy === 'tests')
+    add(
+      'native-test-proof',
+      'Preuves de tests natifs',
+      'system',
+      'Pour une validation automatique, utilise studio_run_test avec une commande configurée, ou exécute exactement une commande ci-dessous dans le terminal natif en mode synchrone, sans préfixe, suffixe, changement de dossier ni outil concurrent. Le host vérifie le code de sortie réel et les fichiers avant/après. Une commande non configurée ne produit pas de preuve automatique. Pour les preuves visuelles/qualité ou une commande avec arguments complexes, utilise studio_run_test. Après toute modification des sources, relance les tests. Commandes autorisées : ' +
+        JSON.stringify(
+          input.settings.testCommands.map(({ id, command, args, quality }) => ({
+            id,
+            command,
+            args,
+            quality: Boolean(quality),
+          })),
+        ),
+    );
   if (
     input.automation?.reviewStepId === input.step.id ||
     input.feature.workflowId === 'code-review' ||

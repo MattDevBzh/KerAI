@@ -331,7 +331,7 @@ export function LaunchDialog({
           <NavigationLaunchPicker
             data={state.navigation}
             value={launch.navigation}
-            onChange={(navigation) => update({ navigation })}
+            onChange={(navigation) => update({ navigation, omitNavigation: !navigation })}
           />
           <label className="field">
             <span>US, demande ou contexte initial</span>

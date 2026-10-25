@@ -822,7 +822,7 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
       fake.emit('session.idle', {});
     });
     await adapter.run(run, callbacks, new AbortController().signal);
-    expect(decision).toEqual({});
+    expect(await decision).toEqual({});
     expect(fake.config?.availableTools).toEqual([
       'studio_read_file',
       'studio_ask_human',

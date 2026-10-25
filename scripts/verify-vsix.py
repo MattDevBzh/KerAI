@@ -29,9 +29,11 @@ def verify(vsix, root, extract=None, match_build=False):
         host_path = embedded['main'].removeprefix('./')
         host = archive.read('extension/' + host_path)
         ui = archive.read('extension/dist/webview/assets/app.js')
-        for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction', 'setPermissionMode'):
+        for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction', 'setPermissionMode', 'previewAutopilot', 'autopilotSaved'):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
+        assert b'autopilot-journal' in ui, 'Autopilot journal missing'
+        assert b'host-recheck' in host, 'Native test verification missing'
         assert b'subplanState' in host, 'Recursive execution missing from host'
         assert b'subplan-card-visual' in ui, 'Dedicated subplan card missing from webview'
         assert b'subplan-navigation' in ui, 'Iteration navigation missing from webview'
