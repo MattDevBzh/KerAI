@@ -57,8 +57,8 @@ import type {
 import { HumanRequests, McpPicker, MemoryPicker, StudioDialog, type Dispatch } from './ExecutionUI';
 import { usageTotals, defaultBudget } from '../src/core/budgets';
 const number = (v: number) => v.toLocaleString('fr-FR');
-const stamp = (v: string) =>
-  new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(v));
+const dateFormatter = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+const stamp = (v: string) => dateFormatter.format(new Date(v));
 const slug = (v: string) =>
   v
     .normalize('NFD')
@@ -510,6 +510,7 @@ export function ValidationCenter({
   onOpen: (featureId: string, stepId: string) => void;
 }) {
   const [filter, setFilter] = useState('all');
+  const [page, setPage] = useState(0);
   const requests = (state.humanRequests ?? []).filter((request) =>
     state.features.some((feature) => feature.id === request.featureId && !feature.archived),
   );
@@ -523,6 +524,12 @@ export function ValidationCenter({
           ? ['review', 'final'].includes(item.kind)
           : item.kind === filter),
   );
+  const pageCount = Math.max(1, Math.ceil(items.length / 50));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageItems = items.slice(currentPage * 50, (currentPage + 1) * 50);
+  useEffect(() => {
+    setPage((previous) => Math.min(previous, pageCount - 1));
+  }, [pageCount]);
   return (
     <div className="page validation-page">
       <div className="page-heading library-heading">
@@ -553,7 +560,10 @@ export function ValidationCenter({
           <select
             aria-label="Filtrer le centre de validation"
             value={filter}
-            onChange={(event) => setFilter(event.target.value)}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setPage(0);
+            }}
           >
             <option value="all">Tous les points d’attention</option>
             <option value="blocked">Blocages prioritaires</option>
@@ -565,7 +575,7 @@ export function ValidationCenter({
         </label>
       </div>
       <div className="validation-grid">
-        {items.map((item) => (
+        {pageItems.map((item) => (
           <article
             className="validation-card validation-decision"
             key={item.id}
@@ -712,6 +722,28 @@ export function ValidationCenter({
           </article>
         ))}
       </div>
+      {items.length > 0 && (
+        <nav className="work-pagination" aria-label="Pages des décisions">
+          <button
+            className="button secondary small"
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            Précédentes
+          </button>
+          <span role="status">
+            Page {currentPage + 1}/{pageCount} · {items.length} décision
+            {items.length > 1 ? 's' : ''}
+          </span>
+          <button
+            className="button secondary small"
+            disabled={currentPage + 1 === pageCount}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            Suivantes
+          </button>
+        </nav>
+      )}
       {!items.length && (
         <div className="evidence-empty">
           <CheckCircle2 size={29} />

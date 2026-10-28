@@ -38,6 +38,8 @@ test('built webview loads lazy pages under CSP and applies 1000-session state an
     updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 1000 - index)).toISOString(),
     archived: false,
   }));
+  // A question outside the first review page proves filters apply before pagination.
+  state.features[0].steps[1].status = 'waiting_input';
   const encoder = new StateEncoder();
   const initial = encoder.encode(state);
   const nonce = randomBytes(16).toString('hex');
@@ -168,11 +170,59 @@ test('built webview loads lazy pages under CSP and applies 1000-session state an
     await expect(page.getByRole('heading', { name: 'Discussion', exact: true })).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Votre message', exact: true })).toBeVisible();
     expect(requests.some((url) => /\/DiscussionUI-[^/]+\.js$/.test(url))).toBe(true);
+    const validationNavigationStartedAt = performance.now();
     await navigate(page, 'Validation');
     await expect(
       page.getByRole('heading', { name: 'Votre regard, au bon moment.', exact: true }),
     ).toBeVisible();
+    const validationNavigationMs = performance.now() - validationNavigationStartedAt;
+    const cards = page.locator('.validation-decision');
+    const pagination = page.getByRole('navigation', { name: 'Pages des décisions' });
+    const filter = page.getByRole('combobox', { name: 'Filtrer le centre de validation' });
+    await expect(cards).toHaveCount(50);
+    await expect(page.locator('.validation-counter')).toContainText('1000 points d’attention');
+    await expect(pagination.getByRole('status')).toHaveText('Page 1/20 · 1000 décisions');
+    await expect(pagination.getByRole('button', { name: 'Précédentes' })).toBeDisabled();
+    const firstPageTitles = await cards.locator('h3 + p').allTextContents();
+    await pagination.getByRole('button', { name: 'Suivantes' }).click();
+    await expect(pagination.getByRole('status')).toHaveText('Page 2/20 · 1000 décisions');
+    await expect(cards).toHaveCount(50);
+    const secondPageTitles = await cards.locator('h3 + p').allTextContents();
+    expect(secondPageTitles.some((value) => firstPageTitles.includes(value))).toBe(false);
+    await pagination.getByRole('button', { name: 'Précédentes' }).click();
+    await expect(cards.first().locator('h3 + p')).toHaveText(firstPageTitles[0]);
+    await pagination.getByRole('button', { name: 'Suivantes' }).click();
+    await filter.selectOption('review');
+    await expect(pagination.getByRole('status')).toHaveText('Page 1/20 · 999 décisions');
+    await expect(cards).toHaveCount(50);
+    await filter.selectOption('question');
+    await expect(pagination.getByRole('status')).toHaveText('Page 1/1 · 1 décision');
+    await expect(cards).toHaveCount(1);
+    await expect(cards.first()).toContainText(title);
+    await expect(page.locator('.validation-counter')).toContainText('1000 points d’attention');
+    await expect(pagination.getByRole('button', { name: 'Suivantes' })).toBeDisabled();
+    await filter.selectOption('all');
+    await pagination.getByRole('button', { name: 'Suivantes' }).click();
+    // An incoming state can shrink the list while a later page is selected.
+    const allFeatures = state.features;
+    state.features = allFeatures.slice(0, 20);
+    await page.evaluate((delta) => window.postMessage(delta, '*'), encoder.encode(state));
+    await expect(pagination.getByRole('status')).toHaveText('Page 1/1 · 20 décisions');
+    await expect(cards).toHaveCount(20);
+    await expect(page.locator('.validation-counter')).toContainText('20 points d’attention');
+    state.features = allFeatures;
+    await page.evaluate((delta) => window.postMessage(delta, '*'), encoder.encode(state));
+    await expect(pagination.getByRole('status')).toHaveText('Page 1/20 · 1000 décisions');
+    await expect(cards).toHaveCount(50);
+    await pagination.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath('built-validation-pagination-1280.png') });
     await page.setViewportSize({ width: 390, height: 844 });
+    await pagination.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath('built-validation-pagination-390.png') });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+      false,
+    );
+
     await navigate(page, 'Sessions');
     await expect(page.getByRole('button', { name: title, exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
@@ -192,6 +242,7 @@ test('built webview loads lazy pages under CSP and applies 1000-session state an
     ])
       expect(typeof metrics[key], `Mesure ${key} observée dans le DOM`).toBe('number');
     const timings = {
+      validationNavigationMs,
       initialStateToFirstRowMs: metrics.firstRowRenderedAt! - metrics.stateInjectedAt!,
       deltaToTitleMs: metrics.updatedTitleRenderedAt! - metrics.deltaInjectedAt!,
     };

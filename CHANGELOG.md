@@ -1,11 +1,12 @@
 # Changelog
 
-## 1.33.0 — 2026-10-28
+## 1.33.0 — 2026-10-29
 
 - Boucle de correction : suivi facultatif des progrès, objectif et critères figés, commandes et parcours vérifiés avant chaque appel automatique. Une modification exige un renouvellement humain explicite.
 - Comparaisons par contrôle : nouveaux problèmes, problèmes persistants et constats levés ; arrêt en cas de stagnation, oscillation ou historique plein, sans effacer les observations.
 - Bilan accessible dans le pilote, preuves et tentatives référencées, historique des contrats et export Markdown. Les constats de relecture restent distincts des tests exécutés et de la validation finale.
 - Renouvellement sans appel IA ni remise à zéro des budgets, sauvegarde version 13 et migration des sessions existantes. Les checkpoints, validations des sous-équipes, permissions et limites restent applicables.
+- Centre de validation : affichage par pages de 50 décisions pour garder l'ouverture rapide avec de nombreuses sessions, en conservant les compteurs, le tri et les filtres globaux.
 
 ## 1.32.0 — 2026-10-28
 
