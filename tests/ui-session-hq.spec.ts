@@ -166,17 +166,19 @@ test('le QG conserve le choix facultatif et distingue un passage de la validatio
   delete feature.optionalRequest;
   feature.status = 'awaiting_final_validation';
   await page.evaluate((data) => window.postMessage({ type: 'state', state: data }, '*'), state);
-  await expect(qg(page)).toContainText('Passée · non exécutée');
+  await expect(qg(page).locator('.status-skipped .hq-status')).toHaveText('Passée');
   await expect(qg(page).locator('.status-approved')).toHaveCount(0);
   await expect(qg(page).locator('img[src$="approved.png"]')).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Interventions passées' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Interventions passées' })).toContainText(
+    'Aucun livrable ni test réussi n’est attribué à ces interventions.',
+  );
   await expect(page.getByText('0 validée · 1 passée / 1 intervention').first()).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Valider définitivement', exact: true }),
   ).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('hq-optional-skipped.png'), fullPage: true });
   await toggle(page).uncheck();
-  await expect(page.locator('.journey-step')).toContainText('Passée · non exécutée');
+  await expect(page.locator('.journey-step.skipped small')).toHaveText('Passée');
   expect((await messages(page)).some((m) => ['runStep', 'approveStep'].includes(m.type))).toBe(
     false,
   );
