@@ -1,5 +1,25 @@
 import type { AnsweredQuestion, Attempt, Question } from '../shared/types';
 
+/** Only a single explicit recommendation is actionable; never infer one from the prose. */
+export function recommendedChoice(choices?: string[]): string | undefined {
+  const recommended = choices?.filter((choice) => {
+    if (!choice.trim() || choice.length > 30000) return false;
+    const label = choice
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[*_`]/g, '')
+      .trim()
+      .toLowerCase();
+    return (
+      /(?:\(\s*(?:recommended|recommandee?)\s*\)|\[\s*(?:recommended|recommandee?)\s*\])/.test(
+        label,
+      ) ||
+      /(?:\s[-–—:]\s*(?:recommended|recommandee?)$|^(?:recommended|recommandee?)\s*:)/.test(label)
+    );
+  });
+  return recommended?.length === 1 ? recommended[0] : undefined;
+}
+
 export function sameQuestion(left: Question, right: Question): boolean {
   return (
     left.id === right.id &&

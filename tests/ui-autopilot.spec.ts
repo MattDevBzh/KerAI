@@ -54,6 +54,45 @@ async function hosted(page: Page, configured = false) {
 const messages = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'testMessages') as ClientMessage[]);
 
+for (const width of [1440, 390]) {
+  test(`automatic answers recap is readable and closable at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const state = await hosted(page, true);
+    state.features[0].autopilot!.automaticAnswers = [
+      {
+        at: '2026-10-28T09:00:00Z',
+        stepId: 'design',
+        attemptId: 'attempt-1',
+        questionId: 'q-1',
+        question: 'Comment organiser les modifications ?',
+        answer: 'Par petits lots (Recommandé)',
+      },
+    ];
+    state.features[0].autopilot!.resumeAfterInteraction = true;
+    await page.evaluate((state) => window.postMessage({ type: 'state', state }, '*'), state);
+    await page.getByRole('button', { name: 'Réponses automatiques · 1' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Réponses automatiques de l’autopilot' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('Comment organiser les modifications ?');
+    await expect(dialog).toContainText('Par petits lots (Recommandé)');
+    await expect(dialog).toContainText('Conception');
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+      true,
+    );
+    await page.screenshot({
+      path: test.info().outputPath(`automatic-answers-${width}.png`),
+      fullPage: true,
+    });
+    await dialog.getByRole('button', { name: 'Fermer le récapitulatif' }).click();
+    await expect(dialog).toHaveCount(0);
+    await page.getByRole('button', { name: 'Rester en pause' }).click();
+    expect((await messages(page)).at(-1)).toEqual({
+      type: 'pauseAutopilot',
+      featureId: state.features[0].id,
+    });
+  });
+}
+
 test('autopilot preserves configuration after a rejected save and waits for acknowledgement', async ({
   page,
 }) => {

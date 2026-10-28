@@ -1794,7 +1794,12 @@ function CreateModal({
         {pending && (
           <div className="creation-feedback" role="status">
             <LoaderCircle className="spin" size={18} aria-hidden="true" />
-            <span>{state.workspaceOperation?.label ?? 'Création de la session…'}</span>
+            <span>
+              {state.workspaceOperation?.label ?? 'Création de la session…'}
+              {isolated &&
+                !multiple &&
+                ' Le checkout du nouveau worktree peut prendre plusieurs minutes.'}
+            </span>
           </div>
         )}
         {error && (

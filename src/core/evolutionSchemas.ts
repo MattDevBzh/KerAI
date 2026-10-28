@@ -152,7 +152,16 @@ export const autopilotStateSchema = autopilotConfigSchema
         z
           .object({
             at: timestamp,
-            kind: z.enum(['run', 'approve', 'correct', 'pause', 'complete', 'configure']),
+            kind: z.enum([
+              'run',
+              'approve',
+              'correct',
+              'pause',
+              'complete',
+              'configure',
+              'resume',
+              'answer',
+            ]),
             stepId: boundedId.optional(),
             message: shortText,
             runs: z.number().int().nonnegative(),
@@ -162,6 +171,22 @@ export const autopilotStateSchema = autopilotConfigSchema
       )
       .max(200)
       .optional(),
+    automaticAnswers: z
+      .array(
+        z
+          .object({
+            at: timestamp,
+            stepId: boundedId,
+            attemptId: boundedId,
+            questionId: z.string().max(1000),
+            question: z.string().max(30000),
+            answer: z.string().max(30000),
+          })
+          .strict(),
+      )
+      .max(200)
+      .optional(),
+    resumeAfterInteraction: z.boolean().optional(),
     status: z.enum(['idle', 'running', 'paused', 'completed']),
     runs: z.number().int().nonnegative(),
     correctionCycles: z.number().int().nonnegative(),

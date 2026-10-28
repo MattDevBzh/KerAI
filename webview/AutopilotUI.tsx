@@ -24,6 +24,7 @@ import { needsDevOpsEvidence } from '../src/shared/devopsKit';
 import { subscribe } from './bridge';
 import { HumanRequests, McpPicker, MemoryPicker, StudioDialog, type Dispatch } from './ExecutionUI';
 import { NavigationLaunchPicker } from './ApplicationsUI';
+import './autopilot-answers.css';
 
 const blankLaunch = (step: FeatureStep, feature: Feature): RunLaunchOptions => ({
   initialContext: step.initialContext ?? '',
@@ -54,7 +55,8 @@ export function AutopilotBar({
   selectStep?: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false),
-    [starting, setStarting] = useState(false);
+    [starting, setStarting] = useState(false),
+    [showAnswers, setShowAnswers] = useState(false);
   const auto = feature.autopilot;
   const [preview, setPreview] = useState<AutopilotPreview>();
   const [previewError, setPreviewError] = useState('');
@@ -118,7 +120,9 @@ export function AutopilotBar({
               {auto?.status === 'running'
                 ? 'En cours'
                 : auto?.status === 'paused'
-                  ? 'En pause'
+                  ? auto.resumeAfterInteraction
+                    ? 'En attente de réponse'
+                    : 'En pause'
                   : auto?.status === 'completed'
                     ? 'Parcours terminé'
                     : 'À votre rythme'}
@@ -159,6 +163,11 @@ export function AutopilotBar({
           )}
         </div>
         <div className="autopilot-actions">
+          {auto && (
+            <button className="button secondary small" onClick={() => setShowAnswers(true)}>
+              Réponses automatiques · {auto.automaticAnswers?.length ?? 0}
+            </button>
+          )}
           {feature.steps.some((step) => step.status === 'running') && (
             <button
               className="button secondary small"
@@ -181,12 +190,13 @@ export function AutopilotBar({
           >
             <Settings2 size={14} /> Configurer
           </button>
-          {auto?.status === 'running' ? (
+          {auto?.status === 'running' || auto?.resumeAfterInteraction ? (
             <button
               className="button secondary small"
               onClick={() => dispatch({ type: 'pauseAutopilot', featureId: feature.id })}
             >
-              <Pause size={13} /> Demander la pause
+              <Pause size={13} />{' '}
+              {auto.resumeAfterInteraction ? 'Rester en pause' : 'Demander la pause'}
             </button>
           ) : (
             <button
@@ -200,6 +210,45 @@ export function AutopilotBar({
           )}
         </div>
       </section>
+      {showAnswers && (
+        <StudioDialog
+          title="Réponses automatiques de l’autopilot"
+          subtitle="Choix explicitement recommandés retenus par le pilote. Les 200 dernières réponses sont conservées."
+          onClose={() => setShowAnswers(false)}
+        >
+          {!auto?.automaticAnswers?.length ? (
+            <p>Aucune réponse automatique pour cette feature.</p>
+          ) : (
+            <ol className="autopilot-answer-list">
+              {[...auto.automaticAnswers].reverse().map((entry, index) => (
+                <li key={`${entry.attemptId}-${entry.questionId}-${index}`}>
+                  <div className="autopilot-answer-meta">
+                    <strong>
+                      {feature.steps.find((step) => step.id === entry.stepId)?.name ?? entry.stepId}
+                    </strong>
+                    <time dateTime={entry.at}>{new Date(entry.at).toLocaleString('fr-FR')}</time>
+                  </div>
+                  <p>
+                    <strong>Question</strong>
+                    <br />
+                    {entry.question}
+                  </p>
+                  <p className="autopilot-answer-value">
+                    <strong>Réponse choisie automatiquement</strong>
+                    <br />
+                    {entry.answer}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+          <div className="modal-actions">
+            <button className="button secondary" onClick={() => setShowAnswers(false)}>
+              Fermer le récapitulatif
+            </button>
+          </div>
+        </StudioDialog>
+      )}
       {!!auto?.decisions?.length && (
         <details className="autopilot-journal">
           <summary>Journal du pilote · {auto.decisions.length} décisions conservées</summary>
@@ -236,7 +285,7 @@ export function AutopilotBar({
       {starting && (
         <StudioDialog
           title="Confier la suite à l’autopilot ?"
-          subtitle="Vérifie les prochaines étapes, leurs arrêts et le contexte transmis. Les questions et permissions humaines suspendent le pilote."
+          subtitle="Le pilote retient les choix explicitement recommandés et conserve ses réponses. Les autres questions attendent ta réponse, puis le parcours reprend. Les permissions restent manuelles."
           onClose={() => setStarting(false)}
         >
           <div className="autopilot-summary">
@@ -549,8 +598,10 @@ function AutopilotEditor({
                 </>
               )}
               <p className="field-help">
-                Une question, une permission MCP, un budget atteint ou un échec suspend l’autopilot.
-                Vous pouvez demander sa pause à tout moment.
+                Un choix explicitement recommandé est retenu automatiquement. Une autre question
+                attend ta réponse, puis le pilote reprend. Une permission, un budget atteint ou un
+                échec demande une intervention manuelle. Vous pouvez demander sa pause à tout
+                moment.
               </p>
             </section>
             <section className="autopilot-inputs">

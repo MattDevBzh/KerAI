@@ -1640,9 +1640,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         return;
       case 'answerQuestions':
-        current.assertTrusted();
-        current.engine.answerQuestions(message.featureId, message.stepId, message.answers);
-        await current.persist();
+        await current.answerQuestions(message.featureId, message.stepId, message.answers);
         return;
       case 'saveArtifact': {
         try {

@@ -14,7 +14,7 @@ export type AutopilotAction =
   | { kind: 'run'; stepId: string; feedback?: string; resume?: boolean }
   | { kind: 'approve'; stepId: string }
   | { kind: 'correct'; stepId: string; feedback: string }
-  | { kind: 'pause'; reason: string; optionalStepId?: string }
+  | { kind: 'pause'; reason: string; optionalStepId?: string; questionStepId?: string }
   | { kind: 'complete' };
 export function nextAutopilotAction(feature: Feature): AutopilotAction {
   const pilot = feature.autopilot;
@@ -46,14 +46,17 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
     return pause(
       `Navigation à compléter : ${navigation.name}. Choisis un parcours vérifié dans une nouvelle tentative.`,
     );
-  if (
-    scopedSteps.some(
-      (step) =>
-        step.status === 'waiting_input' &&
-        step.attempts.at(-1)?.questions.some((q) => !step.attempts.at(-1)!.answers[q.id]?.trim()),
-    )
-  )
-    return pause('Des questions humaines attendent une réponse.');
+  const waitingQuestion = scopedSteps.find(
+    (step) =>
+      step.status === 'waiting_input' &&
+      step.attempts.at(-1)?.questions.some((q) => !step.attempts.at(-1)!.answers[q.id]?.trim()),
+  );
+  if (waitingQuestion)
+    return {
+      kind: 'pause',
+      reason: 'Des questions attendent ta réponse ; l’autopilot reprendra ensuite.',
+      questionStepId: waitingQuestion.id,
+    };
   if (feature.steps.every(stepResolved)) {
     const blockers = featureCompletionBlockers(feature);
     return blockers.length
@@ -87,7 +90,11 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
   if (step.id === correction?.sourceStepId && step.status === 'awaiting_review')
     return pause('La correction est prête pour une nouvelle relecture humaine.');
   if (attempt?.questions.some((q) => !attempt.answers[q.id]?.trim()))
-    return pause('Des questions humaines attendent une réponse.');
+    return {
+      kind: 'pause',
+      reason: 'Des questions attendent ta réponse ; l’autopilot reprendra ensuite.',
+      questionStepId: step.id,
+    };
   if (['failed', 'cancelled', 'interrupted'].includes(step.status))
     return pause(`La tentative est ${step.status}. Reprise manuelle requise.`);
   const callBlocker = () =>

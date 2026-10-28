@@ -809,7 +809,7 @@ describe('bounded autopilot and local project memory', () => {
     });
     expect(f.inputs).toHaveLength(5);
   });
-  it('pauses on human questions without automatically advancing after the answer', async () => {
+  it('resumes the autopilot after a live human answer without a second activation', async () => {
     const f = await fixture();
     await f.service.checkRuntime();
     const feature = await f.service.createFeature({
@@ -832,9 +832,8 @@ describe('bounded autopilot and local project memory', () => {
     expect(feature.autopilot?.status).toBe('paused');
     f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'Only export');
     await running;
-    expect(feature.steps[0].status).toBe('awaiting_review');
+    expect(feature.steps[0].status).toBe('approved');
     expect(f.inputs).toHaveLength(1);
-    await f.service.startAutopilot(feature.id);
     expect(feature.status).toBe('awaiting_final_validation');
     await f.service.finalizeFeature(feature.id, featureStateKey(feature));
     expect(feature.status).toBe('completed');
@@ -1788,4 +1787,196 @@ it('does not spend a correction cycle when the branch preflight refuses its laun
   expect(feature.autopilot).toMatchObject({ runs: 4, correctionCycles: 1 });
   expect(feature.status).toBe('awaiting_final_validation');
   expect(feature.autopilot?.decisions?.filter((entry) => entry.kind === 'correct')).toHaveLength(1);
+});
+
+describe('autopilot question continuation and recommendations', () => {
+  async function configured(maxRuns = 3) {
+    const f = await fixture();
+    await f.service.checkRuntime();
+    const feature = await f.service.createFeature({
+      title: 'Questions du pilote',
+      description: '',
+      workflowId: 'single',
+    });
+    await f.service.saveAutopilot(feature.id, {
+      checkpoints: [],
+      maxRuns,
+      maxCorrectionCycles: 0,
+      stepInputs: {},
+    });
+    return { ...f, feature };
+  }
+
+  it('leaves recommended choices to the user during a manually launched run', async () => {
+    const f = await configured();
+    f.run(async (_input, callbacks) => {
+      expect(
+        await callbacks.onQuestion!({
+          question: 'Cadence ?',
+          choices: ['Lots (Recommandé)', 'One shot'],
+          allowFreeform: false,
+        }),
+      ).toBe('One shot');
+      return finished();
+    });
+    const running = f.service.runStep(f.feature.id, f.feature.steps[0].id);
+    await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(1), running);
+    f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'One shot');
+    await running;
+    expect(f.feature.autopilot?.automaticAnswers ?? []).toEqual([]);
+    expect(f.feature.autopilot?.status).toBe('idle');
+  });
+
+  it('answers a unique live recommendation and persists an auditable recap across reconfiguration', async () => {
+    const f = await configured();
+    f.run(async (_input, callbacks) => {
+      expect(
+        await callbacks.onQuestion!({
+          question: 'Comment avancer ?',
+          choices: ['Petits lots (Recommandé)', 'Tout à la fois'],
+          allowFreeform: true,
+        }),
+      ).toBe('Petits lots (Recommandé)');
+      return finished();
+    });
+    await f.service.startAutopilot(f.feature.id);
+    expect(f.service.state.humanRequests ?? []).toEqual([]);
+    expect(f.feature.steps[0].status).toBe('approved');
+    expect(f.feature.autopilot?.automaticAnswers).toHaveLength(1);
+    const entry = f.feature.autopilot!.automaticAnswers![0];
+    expect(entry).toMatchObject({
+      question: 'Comment avancer ?',
+      answer: 'Petits lots (Recommandé)',
+      stepId: f.feature.steps[0].id,
+      attemptId: f.feature.steps[0].attempts[0].id,
+    });
+    expect(f.feature.steps[0].attempts[0].answers[entry.questionId]).toBe(entry.answer);
+    await f.service.saveAutopilot(f.feature.id, {
+      checkpoints: [],
+      maxRuns: 4,
+      maxCorrectionCycles: 0,
+      stepInputs: {},
+    });
+    expect((await new Store(f.storage).load()).features[0].autopilot?.automaticAnswers).toEqual([
+      entry,
+    ]);
+  });
+
+  it.each([false, true])(
+    'waits for every parallel answer and respects explicit pause=%s',
+    async (explicitPause) => {
+      const f = await configured();
+      f.run(async (_input, callbacks) => {
+        await Promise.all([
+          callbacks.onQuestion!({ question: 'Périmètre ?', allowFreeform: true }),
+          callbacks.onQuestion!({
+            question: 'Priorité ?',
+            choices: ['A (Recommandé)', 'B (Recommended)'],
+            allowFreeform: true,
+          }),
+        ]);
+        return finished();
+      });
+      const running = f.service.startAutopilot(f.feature.id);
+      await waitForInteraction(
+        () => expect(f.service.state.humanRequests).toHaveLength(2),
+        running,
+      );
+      if (explicitPause) f.service.pauseAutopilot(f.feature.id);
+      const requests = [...f.service.state.humanRequests!];
+      f.service.answerHumanRequest(requests[0].id, 'Export');
+      expect(f.feature.autopilot?.status).toBe('paused');
+      f.service.answerHumanRequest(requests[1].id, 'A (Recommandé)');
+      await running;
+      expect(f.feature.steps[0].status).toBe(explicitPause ? 'awaiting_review' : 'approved');
+      expect(f.feature.autopilot?.resumeAfterInteraction).toBeUndefined();
+      expect(f.feature.autopilot?.automaticAnswers ?? []).toEqual([]);
+    },
+  );
+
+  it('answers a recommended final-result question, waits for the remainder, then resumes the same SDK session', async () => {
+    const f = await configured();
+    f.run(async (input) => {
+      if (f.inputs.length === 1)
+        return {
+          ...finished(),
+          questions: [
+            { id: 'pace', text: 'Cadence ?', choices: ['Lots courts (Recommended)', 'One shot'] },
+            { id: 'scope', text: 'Quel périmètre ?' },
+          ],
+        };
+      expect(input.preparedPrompt).toContain('Lots courts (Recommended)');
+      expect(input.preparedPrompt).toContain('Export uniquement');
+      return finished();
+    });
+    await f.service.startAutopilot(f.feature.id);
+    expect(f.feature.autopilot).toMatchObject({
+      status: 'paused',
+      resumeAfterInteraction: true,
+      runs: 1,
+    });
+    const attempt = f.feature.steps[0].attempts[0];
+    expect(attempt.answers.pace).toBe('Lots courts (Recommended)');
+    expect(f.feature.autopilot?.automaticAnswers).toHaveLength(1);
+    await f.service.answerQuestions(f.feature.id, f.feature.steps[0].id, {
+      scope: 'Export uniquement',
+    });
+    expect(f.inputs).toHaveLength(2);
+    expect(f.inputs[1].resumeSessionId).toBe('session-1');
+    expect(f.feature.steps[0].status).toBe('approved');
+    expect(f.feature.autopilot?.automaticAnswers).toHaveLength(1);
+  });
+
+  it('does not restart after a deliberate pause or a persisted interrupted interaction', async () => {
+    const f = await configured();
+    f.run(async () => ({ ...finished(), questions: [{ id: 'scope', text: 'Périmètre ?' }] }));
+    await f.service.startAutopilot(f.feature.id);
+    const restored = await new Store(f.storage).load();
+    expect(restored.features[0].autopilot?.resumeAfterInteraction).toBeUndefined();
+    expect(restored.features[0].autopilot?.status).toBe('paused');
+    f.service.pauseAutopilot(f.feature.id);
+    await f.service.answerQuestions(f.feature.id, f.feature.steps[0].id, { scope: 'Export' });
+    expect(f.inputs).toHaveLength(1);
+    expect(f.feature.autopilot?.status).toBe('paused');
+  });
+
+  it.each(['allow', 'deny'])(
+    'keeps permissions human and only resumes after approval: %s',
+    async (answer) => {
+      const f = await configured();
+      f.run(async (_input, callbacks) => {
+        expect(
+          await callbacks.onMcpPermission!({
+            serverId: 'ado',
+            toolName: 'read',
+            args: '{}',
+            readOnly: true,
+          }),
+        ).toBe(answer === 'allow');
+        return finished();
+      });
+      const running = f.service.startAutopilot(f.feature.id);
+      await waitForInteraction(
+        () => expect(f.service.state.humanRequests?.[0]?.kind).toBe('mcp-permission'),
+        running,
+      );
+      expect(f.feature.autopilot?.automaticAnswers ?? []).toEqual([]);
+      f.service.answerHumanRequest(f.service.state.humanRequests![0].id, answer);
+      await running;
+      expect(f.feature.steps[0].status).toBe(answer === 'allow' ? 'approved' : 'awaiting_review');
+    },
+  );
+
+  it('retains budget limits when answering a final-result recommendation', async () => {
+    const f = await configured(1);
+    f.run(async () => ({
+      ...finished(),
+      questions: [{ id: 'pace', text: 'Cadence ?', choices: ['Petits lots (Recommandé)'] }],
+    }));
+    await f.service.startAutopilot(f.feature.id);
+    expect(f.inputs).toHaveLength(1);
+    expect(f.feature.autopilot?.reason).toMatch(/maximal|budget/i);
+    expect(f.feature.autopilot?.resumeAfterInteraction).toBeUndefined();
+    expect(f.feature.autopilot?.automaticAnswers).toHaveLength(1);
+  });
 });

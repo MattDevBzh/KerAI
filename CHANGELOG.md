@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.31.0 — 2026-10-28
+
+- Création depuis un chat dans un worktree : délai de checkout porté de 30 secondes à dix minutes, lectures Git à deux minutes, diagnostic précis et arrêt de l’arbre de processus en cas d’expiration.
+- Autopilot : reprise après les réponses humaines, pendant l’appel ou en fin d’étape. Une pause explicite, un refus de permission et un redémarrage restent des arrêts manuels. Les limites et validations existantes continuent de s’appliquer.
+- Réponses automatiques aux questions proposant un seul choix explicitement recommandé, sans autoriser automatiquement les demandes de permission. Récapitulatif accessible par un bouton de la barre Autopilot ; questions, réponses, étapes et dates conservées.
+
 ## 1.30.0 — 2026-10-26
 
 - Pilote automatique : profils de validation, aperçu du parcours, budget restant, contexte et permissions par étape, journal borné et accès aux étapes à débloquer.

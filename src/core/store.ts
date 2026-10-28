@@ -653,8 +653,12 @@ export class Store {
         engine.refreshFeatureStatus(item.id);
         recovered = true;
       }
-      if (item.autopilot?.status === 'running') {
+      if (
+        item.autopilot &&
+        (item.autopilot.status === 'running' || item.autopilot.resumeAfterInteraction)
+      ) {
         item.autopilot.status = 'paused';
+        item.autopilot.resumeAfterInteraction = undefined;
         item.autopilot.reason =
           'Pilote interrompu : reprise humaine explicite requise après redémarrage.';
         item.autopilot.updatedAt = new Date().toISOString();

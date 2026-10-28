@@ -78,7 +78,9 @@ import { installQualityKit, resolveQualityAttachment } from './QualityRunner';
 import { Store, settingsSchema } from '../core/store';
 import { WorkflowEngine, validateWorkflow } from '../core/workflow';
 import { assertTeamOrder } from '../shared/team';
-import { boundAnswers } from '../core/questions';
+import { boundAnswers, recommendedChoice } from '../core/questions';
+import type { Attempt } from '../shared/types';
+import { isPairWork } from '../shared/pair';
 import { gitInfo, ToolHost } from './ToolHost';
 import { PersonalReviewTools } from './PersonalReviewTools';
 import { runProcess, redact } from './process';
@@ -1727,6 +1729,7 @@ export class StudioService extends EventEmitter {
             const pending = this.pendingHumans.get(id);
             if (pending) {
               pending.cleanup();
+              this.resumeAfterHumanReplies(feature, stepId);
               pending.resolve('remembered');
             }
           }
@@ -1748,6 +1751,8 @@ export class StudioService extends EventEmitter {
         this.schedule();
       },
       onQuestion: async (question) => {
+        this.assertTrusted();
+        if (controller.signal.aborted) throw new Error('Exécution annulée.');
         const id = 'q-' + randomUUID();
         attempt.questions.push({
           id,
@@ -1755,6 +1760,18 @@ export class StudioService extends EventEmitter {
           ...(question.choices ? { choices: question.choices } : {}),
         });
         if (pair) pairMessage(pair, 'system', `Question de l’agent : ${question.question}`);
+        const automatic = this.chooseRecommendedAnswer(feature, stepId, attempt, {
+          id,
+          text: question.question,
+          choices: question.choices,
+        });
+        if (automatic !== undefined) {
+          attempt.answers[id] = automatic;
+          attempt.answerBindings = boundAnswers(attempt, stepId);
+          if (pair) pairMessage(pair, 'system', `Réponse choisie par l’autopilot : ${automatic}`);
+          await this.persist();
+          return automatic;
+        }
         await this.persist();
         const answer = await this.askHuman(
           { id, featureId, stepId, kind: 'question', ...question },
@@ -2574,12 +2591,17 @@ export class StudioService extends EventEmitter {
   private async askHuman(request: HumanRequest, signal: AbortSignal): Promise<string> {
     this.assertTrusted();
     if (signal.aborted) throw new Error('Exécution annulée.');
+    const pilot = this.engine.getFeature(request.featureId).autopilot;
+    const resume =
+      this.automation?.featureId === request.featureId &&
+      Boolean(pilot && (pilot.status === 'running' || pilot.resumeAfterInteraction));
     this.pauseAutopilot(
       request.featureId,
       request.kind === 'question'
-        ? 'Une réponse humaine est nécessaire. Reprends le pilote après l’échange.'
-        : 'Une action attend une autorisation humaine.',
+        ? 'Une question attend ta réponse ; l’autopilot reprendra ensuite.'
+        : 'Une action attend ton autorisation ; le pilote reprendra si tu l’accordes.',
     );
+    if (resume && pilot) pilot.resumeAfterInteraction = true;
     return await new Promise<string>((resolve, reject) => {
       const cleanup = () => {
         signal.removeEventListener('abort', abort);
@@ -2588,6 +2610,7 @@ export class StudioService extends EventEmitter {
         this.publish();
       };
       const abort = () => {
+        this.pauseAutopilot(request.featureId, 'Échange interrompu ; reprise manuelle requise.');
         cleanup();
         reject(new Error('Demande humaine interrompue avec la tentative.'));
       };
@@ -2607,7 +2630,109 @@ export class StudioService extends EventEmitter {
     if (!pending.request.allowFreeform && !pending.request.choices?.includes(value))
       throw new Error('Choisis une des réponses proposées.');
     pending.cleanup();
+    const feature = this.engine.getFeature(pending.request.featureId);
+    if (pending.request.kind !== 'question' && value === 'deny')
+      this.pauseAutopilot(feature.id, 'Autorisation refusée ; reprise manuelle requise.');
+    else this.resumeAfterHumanReplies(feature, pending.request.stepId);
     pending.resolve(value);
+  }
+  private resumeAfterHumanReplies(feature: Feature, stepId: string): void {
+    if (
+      feature.autopilot?.resumeAfterInteraction &&
+      this.automation?.featureId === feature.id &&
+      ![...this.pendingHumans.values()].some((item) => item.request.featureId === feature.id)
+    ) {
+      feature.autopilot.status = 'running';
+      feature.autopilot.resumeAfterInteraction = undefined;
+      feature.autopilot.reason = undefined;
+      feature.autopilot.updatedAt = new Date().toISOString();
+      this.recordAutopilot(feature, 'resume', 'Réponse reçue ; poursuite du pilote.', stepId);
+      this.publish();
+    }
+  }
+  async answerQuestions(
+    featureId: string,
+    stepId: string,
+    answers: Record<string, string>,
+  ): Promise<void> {
+    this.assertTrusted();
+    this.engine.answerQuestions(featureId, stepId, answers);
+    await this.persist();
+    const feature = this.engine.getFeature(featureId);
+    const ready = () =>
+      feature.autopilot?.resumeAfterInteraction &&
+      !this.autopilotQuestionSteps(feature).some(
+        (step) =>
+          step.status === 'waiting_input' &&
+          step.attempts.at(-1)?.questions.some((q) => !step.attempts.at(-1)!.answers[q.id]?.trim()),
+      );
+    if (!ready()) return;
+    // A final-result question may be answered while the previous loop is still saving its pause.
+    if (this.automation?.featureId === featureId) await this.automation.done;
+    if (!ready() || this.disposed) return;
+    this.recordAutopilot(feature, 'resume', 'Réponses reçues ; poursuite du pilote.', stepId);
+    await this.startAutopilot(featureId);
+  }
+  private chooseRecommendedAnswer(
+    feature: Feature,
+    stepId: string,
+    attempt: Attempt,
+    question: import('../shared/types').Question,
+  ): string | undefined {
+    const pilot = feature.autopilot;
+    if (
+      !pilot ||
+      this.automation?.featureId !== feature.id ||
+      (pilot.status !== 'running' && !pilot.resumeAfterInteraction)
+    )
+      return undefined;
+    const answer = recommendedChoice(question.choices);
+    if (answer === undefined) return undefined;
+    pilot.automaticAnswers = [
+      ...(pilot.automaticAnswers ?? []),
+      {
+        at: new Date().toISOString(),
+        stepId,
+        attemptId: attempt.id,
+        questionId: question.id,
+        question: redact(question.text).slice(0, 30000),
+        answer: redact(answer),
+      },
+    ].slice(-200);
+    this.recordAutopilot(
+      feature,
+      'answer',
+      'Choix recommandé retenu automatiquement ; détail dans les réponses du pilote.',
+      stepId,
+    );
+    return answer;
+  }
+  private autopilotQuestionSteps(feature: Feature): Feature['steps'] {
+    const correction = feature.corrections?.find(
+      (cycle) => cycle.id === feature.activeCorrectionId,
+    );
+    return correction
+      ? feature.steps.filter((step) => correction.impactedStepIds.includes(step.id))
+      : feature.steps;
+  }
+  private answerRecommendedQuestions(feature: Feature): void {
+    for (const step of this.autopilotQuestionSteps(feature)) {
+      const attempt = step.attempts.at(-1);
+      if (
+        step.status !== 'waiting_input' ||
+        !attempt ||
+        attempt.navigationRequest ||
+        isPairWork(attempt.pair)
+      )
+        continue;
+      const answers: Record<string, string> = Object.create(null);
+      for (const question of attempt.questions) {
+        if (attempt.answers[question.id]?.trim()) continue;
+        const answer = this.chooseRecommendedAnswer(feature, step.id, attempt, question);
+        if (answer !== undefined) answers[question.id] = answer;
+      }
+      if (Object.keys(answers).length) this.engine.answerQuestions(feature.id, step.id, answers);
+    }
   }
   async testMcp(serverId: string): Promise<void> {
     this.assertTrusted();
@@ -2809,6 +2934,7 @@ export class StudioService extends EventEmitter {
       runs: feature.autopilot?.runs ?? 0,
       correctionCycles: feature.autopilot?.correctionCycles ?? 0,
       decisions: feature.autopilot?.decisions ?? [],
+      automaticAnswers: feature.autopilot?.automaticAnswers ?? [],
       updatedAt: new Date().toISOString(),
     };
     this.recordAutopilot(feature, 'configure', 'Configuration enregistrée ; compteurs conservés.');
@@ -2824,7 +2950,11 @@ export class StudioService extends EventEmitter {
     reason = 'Pause demandée ; la tentative en cours peut terminer.',
   ): void {
     const feature = this.engine.getFeature(featureId);
-    if (feature.autopilot?.status === 'running') {
+    if (
+      feature.autopilot &&
+      (feature.autopilot.status === 'running' || feature.autopilot.resumeAfterInteraction)
+    ) {
+      feature.autopilot.resumeAfterInteraction = undefined;
       feature.autopilot.status = 'paused';
       feature.autopilot.reason = reason.slice(0, 2000);
       this.recordAutopilot(
@@ -2894,15 +3024,18 @@ export class StudioService extends EventEmitter {
     });
     this.automation = { featureId, done };
     feature.autopilot.status = 'running';
+    feature.autopilot.resumeAfterInteraction = undefined;
     feature.autopilot.reason = undefined;
     feature.autopilot.updatedAt = new Date().toISOString();
     try {
       await this.persist();
       while (!this.disposed && feature.autopilot.status === 'running') {
         this.assertTrusted();
+        this.answerRecommendedQuestions(feature);
         const action = nextAutopilotAction(feature);
         if (action.kind === 'pause') {
           this.pauseAutopilot(featureId, action.reason);
+          if (action.questionStepId) feature.autopilot.resumeAfterInteraction = true;
           if (action.optionalStepId) {
             feature.activeStepId = action.optionalStepId;
             feature.status = 'attention';

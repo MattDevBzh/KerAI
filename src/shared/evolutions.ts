@@ -96,11 +96,19 @@ export interface AutopilotConfig {
 }
 export interface AutopilotDecision {
   at: string;
-  kind: 'run' | 'approve' | 'correct' | 'pause' | 'complete' | 'configure';
+  kind: 'run' | 'approve' | 'correct' | 'pause' | 'complete' | 'configure' | 'resume' | 'answer';
   stepId?: string;
   message: string;
   runs: number;
   correctionCycles: number;
+}
+export interface AutopilotAnswer {
+  at: string;
+  stepId: string;
+  attemptId: string;
+  questionId: string;
+  question: string;
+  answer: string;
 }
 export interface AutopilotPreview {
   featureId: string;
@@ -112,6 +120,9 @@ export interface AutopilotPreview {
 }
 export interface AutopilotState extends AutopilotConfig {
   decisions?: AutopilotDecision[];
+  automaticAnswers?: AutopilotAnswer[];
+  /** Only an interaction pause may resume after a reply; cleared on manual pause/reload. */
+  resumeAfterInteraction?: boolean;
   status: 'idle' | 'running' | 'paused' | 'completed';
   runs: number;
   correctionCycles: number;

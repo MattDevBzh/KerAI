@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { constants, type Stats } from 'node:fs';
 import {
@@ -22,6 +21,7 @@ import type {
 } from '../shared/types';
 import { isSensitivePath, sha256 } from './PolicyEngine';
 import { redact } from './process';
+import { runWorkspaceGit, type WorkspaceGitResult } from './workspaceGit';
 
 export const CHECKPOINT_LIMITS = {
   fileBytes: 4 * 1024 * 1024,
@@ -100,11 +100,7 @@ interface Snapshot {
   excludedCount: number;
   excludedPaths: string[];
 }
-interface GitResult {
-  code: number;
-  stdout: Buffer;
-  stderr: Buffer;
-}
+type GitResult = WorkspaceGitResult;
 const ignoredDirectories = new Set([
   '.github',
   '.vscode',
@@ -234,50 +230,7 @@ export class FeatureWorkspace {
 
   /** Buffers are intentional: log redaction and UTF-8 chunk decoding must never alter Git machine data. */
   private rawGit(root: string, args: string[], extraConfig: string[] = []): Promise<GitResult> {
-    const env = { ...process.env };
-    for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
-    env.GIT_OPTIONAL_LOCKS = '0';
-    env.GIT_TERMINAL_PROMPT = '0';
-    env.GIT_CONFIG_NOSYSTEM = '1';
-    const command = [
-      '--no-pager',
-      '--no-optional-locks',
-      '-c',
-      'core.fsmonitor=false',
-      '-c',
-      'submodule.recurse=false',
-      ...extraConfig.flatMap((value) => ['-c', value]),
-      ...args,
-    ];
-    return new Promise((resolve, reject) => {
-      const child = spawn('git', command, { cwd: root, shell: false, windowsHide: true, env });
-      const stdout: Buffer[] = [],
-        stderr: Buffer[] = [];
-      let bytes = 0,
-        overflow = false;
-      const timeout = setTimeout(() => {
-        child.kill('SIGKILL');
-      }, 30000);
-      const collect = (chunks: Buffer[], data: Buffer) => {
-        bytes += data.length;
-        if (bytes > CHECKPOINT_LIMITS.manifestBytes) {
-          overflow = true;
-          child.kill('SIGKILL');
-        } else chunks.push(data);
-      };
-      child.stdout.on('data', (data) => collect(stdout, data));
-      child.stderr.on('data', (data) => collect(stderr, data));
-      child.once('error', (error) => {
-        clearTimeout(timeout);
-        reject(new Error(redact(error.message)));
-      });
-      child.once('close', (code) => {
-        clearTimeout(timeout);
-        if (overflow) reject(new Error('Sortie Git trop volumineuse : opération refusée.'));
-        else if (code === null) reject(new Error('Opération Git interrompue ou expirée.'));
-        else resolve({ code, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) });
-      });
-    });
+    return runWorkspaceGit(root, args, extraConfig, CHECKPOINT_LIMITS.manifestBytes);
   }
   private async git(root: string, args: string[], extraConfig: string[] = []): Promise<GitResult> {
     // Even status may invoke clean/process filters. Neutralize all configured external filters first.
@@ -521,11 +474,19 @@ export class FeatureWorkspace {
           `${name}.process=`,
           `${name}.required=false`,
         );
-      await this.checkedGit(
-        repository.root,
-        ['worktree', 'add', '-b', branch, '--', target, baseCommit],
-        config,
-      );
+      try {
+        await this.checkedGit(
+          repository.root,
+          ['worktree', 'add', '-b', branch, '--', target, baseCommit],
+          config,
+        );
+      } catch (error) {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)} ` +
+            `Worktree demandé : ${target}. Branche demandée : ${branch}. ` +
+            'Si Git a été interrompu, vérifie ces éléments avant de réessayer.',
+        );
+      }
       const worktree: FeatureWorktree = {
         path: await realpath(target),
         branch,

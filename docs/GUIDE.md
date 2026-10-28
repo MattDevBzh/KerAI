@@ -275,7 +275,7 @@ Les équipes DevOps peuvent enregistrer leur pilote avant de connaître le résu
 
 Le stockage passe à la version 12 pour conserver ces preuves et le journal. Les formats précédents migrent à la lecture ; les anciens binaires refusent ce nouveau format.
 
-Dans une feature, le **pilote automatique** enchaîne les étapes disponibles suivant les dépendances. Configure les points de validation humaine, le contexte/MCP de chaque étape et les limites avant de le démarrer. Il s’arrête sur une question, une permission MCP, un échec, un seuil atteint ou un checkpoint. **Pause** laisse finir la tentative courante ; **Arrêter** l’annule. Après une question, il faut reprendre explicitement le pilote pour continuer le parcours. Une tentative échouée ou interrompue se relance manuellement.
+Dans une feature, le **pilote automatique** enchaîne les étapes disponibles suivant les dépendances. Configure les points de validation humaine, le contexte/MCP de chaque étape et les limites avant de le démarrer. Il s’arrête sur une question, une permission MCP, un échec, un seuil atteint ou un checkpoint. **Pause** laisse finir la tentative courante ; **Arrêter** l’annule. Après une réponse, le pilote reprend automatiquement, sauf si tu as demandé une pause. Une permission accordée permet aussi la reprise ; une permission refusée conserve la pause. Les questions possédant un unique choix explicitement marqué « Recommandé » ou « Recommended » sont traitées automatiquement. Le bouton **Réponses automatiques** ouvre les questions et réponses choisies, avec l’étape et l’heure (200 dernières réponses conservées). Sans recommandation claire, le pilote attend ta réponse. **Rester en pause** désactive la reprise automatique. Après un redémarrage, la reprise demeure manuelle. Une tentative échouée ou interrompue se relance manuellement.
 
 La boucle de correction est facultative : choisis une étape de relecture et une étape de développement en amont. Le pilote utilise le verdict structuré de la relecture ou une preuve de tests en échec ; il rejoue ensuite les étapes devenues obsolètes. Un checkpoint reste prioritaire sur cette boucle. Par défaut, **zéro cycle de correction supplémentaire** : augmente le nombre seulement si tu le souhaites. Il n’y a aucun agent chargé de décider du prochain agent ; l’orchestration est du code local.
 
@@ -488,3 +488,7 @@ L’étoile ajoute ou retire un agent des favoris. Cette préférence est enregi
 ## Dashboard et second écran
 
 La nouvelle page **Dashboard** affiche le suivi Métro et ses modules personnalisables. **Ouvrir dans une nouvelle fenêtre** ouvre la Tour de contrôle. Consulte le [guide détaillé](DASHBOARD.md) pour les filtres, les réglages persistants, le plein écran et les limites de rafraîchissement.
+
+### Création d’un worktree sur un gros dépôt
+
+Le checkout du nouveau worktree dispose de dix minutes, et les lectures Git de deux minutes par commande. La fenêtre de création indique que le checkout peut prendre plusieurs minutes. Une expiration identifie la commande concernée et son dernier message ; un échec de création indique aussi le dossier et la branche demandés. Une interruption peut laisser ces éléments sur disque : vérifie-les avant de relancer, sans supprimer de modifications existantes.
