@@ -1,5 +1,6 @@
 import { agentPolicy } from '../src/shared/agentInheritance';
 import { featureStateKey } from '../src/shared/collaboration';
+import { reviewApprovalRequest, unacceptedBlockingComments } from '../src/shared/reviewApproval';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -83,6 +84,59 @@ async function fixture() {
     },
   };
 }
+
+it('requires explicit review acknowledgement and only preserves acceptance of unchanged comments', async () => {
+  const f = await fixture();
+  await f.service.checkRuntime();
+  f.run(async () => ({
+    ...finished(),
+    review: { verdict: 'changes_requested', summary: 'Bug', findings: [] },
+  }));
+  const feature = await f.service.createFeature({
+    title: 'Review',
+    description: '',
+    workflowId: 'single',
+  });
+  await f.service.runStep(feature.id, 'session');
+  const step = feature.steps[0],
+    attempt = step.attempts.at(-1)!;
+  await f.service.addReviewComment(feature.id, {
+    stepId: step.id,
+    attemptId: attempt.id,
+    text: 'First remark',
+    blocking: true,
+  });
+  const comment = feature.reviewComments![0];
+  await expect(
+    f.service.approveStep(feature.id, step.id, attempt.id, attempt.revision ?? 0),
+  ).rejects.toThrow(/Confirme/);
+  await f.service.approveStep(
+    feature.id,
+    step.id,
+    attempt.id,
+    attempt.revision ?? 0,
+    'human',
+    reviewApprovalRequest(feature, step)!.key,
+  );
+  expect(feature.status).toBe('awaiting_final_validation');
+  expect(comment.resolved).toBe(false);
+  await f.service.saveCriteria(feature.id, []);
+  expect(unacceptedBlockingComments(feature)).toEqual([]);
+  await f.service.addReviewComment(feature.id, {
+    stepId: step.id,
+    attemptId: attempt.id,
+    text: 'New remark',
+    blocking: true,
+  });
+  expect(unacceptedBlockingComments(feature).map((c) => c.text)).toEqual(['New remark']);
+  await f.service.resolveReviewComment(feature.id, comment.id, true);
+  await f.service.resolveReviewComment(feature.id, comment.id, false);
+  expect(unacceptedBlockingComments(feature).map((c) => c.text)).toEqual([
+    'First remark',
+    'New remark',
+  ]);
+  expect(feature.status).toBe('attention');
+});
 
 it('launches with the current base profile, rejects stale previews and keeps only team model overrides', async () => {
   const f = await fixture();

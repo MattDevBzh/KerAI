@@ -173,6 +173,7 @@ export interface Attempt {
   memorySnapshot?: MemoryEntry[];
   evidence?: TestEvidence[];
   review?: ReviewReport;
+  reviewAcceptance?: import('./reviewApproval').ReviewAcceptance;
   revision?: number;
   approvedBy?: 'human' | 'autopilot';
   checkpointBeforeId?: string;
@@ -435,6 +436,7 @@ export type ClientMessage =
       stepId: string;
       expectedAttemptId?: string;
       expectedRevision?: number;
+      expectedReviewWarningsKey?: string;
     }
   | { type: 'answerQuestions'; featureId: string; stepId: string; answers: Record<string, string> }
   | ({ type: 'saveArtifact'; featureId: string; stepId: string; content: string } & Partial<
@@ -548,7 +550,7 @@ export type ClientMessage =
   | {
       type: 'addReviewComment';
       featureId: string;
-      comment: Omit<ReviewComment, 'id' | 'createdAt' | 'resolved'>;
+      comment: Omit<ReviewComment, 'id' | 'createdAt' | 'resolved' | 'revision'>;
     }
   | { type: 'resolveReviewComment'; featureId: string; commentId: string; resolved: boolean }
   | { type: 'saveMemory'; entry: MemoryEntry }

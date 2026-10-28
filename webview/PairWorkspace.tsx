@@ -22,6 +22,8 @@ import {
   type PairAction,
 } from '../src/shared/pair';
 import { approvalBlockers } from '../src/core/validation';
+import { reviewApprovalRequest, type ReviewApprovalRequest } from '../src/shared/reviewApproval';
+import { ReviewApprovalDialog } from './ReviewApprovalDialog';
 import { Avatar } from './Avatar';
 import { HumanRequests } from './ExecutionUI';
 import { PermissionPicker } from './NativeExecutionUI';
@@ -64,6 +66,7 @@ export function PairWorkspace({
   const [pending, setPending] = useState<string>();
   const sent = useRef<{ id: string; content?: string } | undefined>(undefined);
   const [approving, setApproving] = useState(false);
+  const [reviewWarning, setReviewWarning] = useState<ReviewApprovalRequest | null>(null);
   const approval = useRef(false);
   const [preferences, setPreferences] = useState(pair?.preferences ?? defaultPairPreferences);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -136,8 +139,32 @@ export function PairWorkspace({
   const accepted = Boolean(plan && pair?.approvedRevision === plan.revision && plan.acceptedAt);
   const unavailable = Boolean(locked || pending);
   const idleUnavailable = unavailable || pair?.busy || Boolean(state.workspaceOperation);
+  function approveCurrent(warning?: ReviewApprovalRequest) {
+    approval.current = true;
+    setApproving(true);
+    setError('');
+    dispatch({
+      type: 'approveStep',
+      featureId: feature.id,
+      stepId: step.id,
+      expectedAttemptId: warning?.attemptId ?? attempt?.id,
+      expectedRevision: warning?.revision ?? attempt?.revision ?? 0,
+      ...(warning ? { expectedReviewWarningsKey: warning.key } : {}),
+    });
+  }
   return (
     <div className="page pair-page">
+      {reviewWarning && (
+        <ReviewApprovalDialog
+          warning={reviewWarning}
+          disabled={Boolean(idleUnavailable || approving || blockers.length)}
+          onClose={() => setReviewWarning(null)}
+          onConfirm={() => {
+            approveCurrent(reviewWarning);
+            setReviewWarning(null);
+          }}
+        />
+      )}
       <header className="pair-header">
         {feature.execution && (
           <PermissionPicker
@@ -557,16 +584,9 @@ export function PairWorkspace({
                       className="button primary"
                       disabled={idleUnavailable || approving || blockers.length > 0}
                       onClick={() => {
-                        approval.current = true;
-                        setApproving(true);
-                        setError('');
-                        dispatch({
-                          type: 'approveStep',
-                          featureId: feature.id,
-                          stepId: step.id,
-                          expectedAttemptId: attempt.id,
-                          expectedRevision: attempt.revision ?? 0,
-                        });
+                        const warning = reviewApprovalRequest(feature, step);
+                        if (warning) setReviewWarning(warning);
+                        else approveCurrent();
                       }}
                     >
                       <Check size={15} />{' '}

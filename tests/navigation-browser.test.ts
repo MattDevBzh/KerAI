@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fork } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { BrowserSessionManager, localOrigin } from '../src/host/navigation/BrowserSessionManager';
+import {
+  BrowserSessionManager,
+  navigationOrigin,
+} from '../src/host/navigation/BrowserSessionManager';
 import { importNavigationJSON } from '../src/host/ChromeRecorderImport';
 import { navigationDefinitionHash } from '../src/host/NavigationStore';
 import { installInteractionGuard } from '../src/host/navigation/InteractionGuard';
@@ -118,6 +121,14 @@ describe.skipIf(!executablePath)(
       const network = await manager.inspect({ category: 'network' });
       expect(network.text).toContain('/api');
       expect(network.text).not.toMatch(/PRIVATE_QUERY|NEVER_READ_RESPONSE_BODY/);
+    });
+    test('opens the configured entry path and preserves its query and hash route', async () => {
+      const url = `${fixture.origin}/settings?tab=profile#details`;
+      await manager.open({ ...application, startUrl: url });
+      const result = await manager.act(
+        step('wait', 'arrival', { postconditions: [{ kind: 'url', value: url }] }),
+      );
+      expect(result.url).toBe(`${fixture.origin}/settings`);
     });
     test('replays known journey without AI and verifies arrival separately', async () => {
       const journey: NavigationJourney = {
@@ -580,14 +591,17 @@ describe.skipIf(!executablePath)('temporary recorder real DOM events', () => {
   });
 });
 
-test('local origin validation rejects remote, user info, paths and ambiguous hostnames', () => {
-  expect(localOrigin('http://localhost:3000')).toBe('http://localhost:3000');
-  for (const url of [
+test('application origin accepts remote sites and paths but rejects non-web and credential URLs', () => {
+  expect(navigationOrigin('http://localhost:3000')).toBe('http://localhost:3000');
+  expect(navigationOrigin('https://example.org/app?tenant=demo#/tasks')).toBe(
     'https://example.org',
+  );
+  expect(navigationOrigin('http://lms.intranet:8080/Dev/')).toBe('http://lms.intranet:8080');
+  for (const url of [
     'file:///tmp/test',
-    'http://localhost.evil:3000',
+    'javascript:alert(1)',
     'http://user:secret@localhost',
-    'http://127.0.0.1/private',
+    'https://example.org/?token=secret',
   ])
-    expect(() => localOrigin(url)).toThrow();
+    expect(() => navigationOrigin(url)).toThrow();
 });

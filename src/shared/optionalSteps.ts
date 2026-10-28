@@ -13,11 +13,26 @@ export function optionalChoiceAvailable(feature: Feature, step: FeatureStep): bo
   return Boolean(
     step.optional &&
       !feature.archived &&
-      !step.attempts.length &&
-      ['pending', 'stale'].includes(step.status) &&
+      !step.awaitsCorrection &&
+      !step.attempts.at(-1)?.pair?.busy &&
+      [
+        'pending',
+        'stale',
+        'cancelled',
+        'interrupted',
+        'failed',
+        'waiting_input',
+        'awaiting_review',
+      ].includes(step.status) &&
       !feature.steps.some((item) => item.status === 'running') &&
       step.dependsOn.every((id) => stepResolved(feature.steps.find((item) => item.id === id))),
   );
+}
+
+export function skippedStepLabel(step: FeatureStep): string {
+  return step.attempts.length
+    ? 'Passée après tentative — non validée'
+    : 'Passée par l’humain — non exécutée';
 }
 
 export function skippedSteps(feature: Feature): FeatureStep[] {

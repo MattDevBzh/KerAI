@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.31.1 — 2026-10-28
+
+- Applications : profils HTTP/HTTPS locaux, intranet ou distants, avec conservation de l’URL de démarrage complète (chemin, paramètres et fragment). Les URL supplémentaires sont ramenées à leur origine autorisée.
+- Navigateur : sélection automatique de son application lorsqu’elle est unique, demande explicite sinon, et contrôle du catalogue avant le prompt. L’inspection du navigateur reste disponible pendant les échanges en lecture seule ; les actions et rejeux attendent la phase de travail.
+- Skills : méthodes du Navigateur visibles et consultables depuis le profil d’application ; filtres d’origine indépendants entre les catalogues Agents et Skills.
+- Étapes facultatives : une tentative arrêtée peut être passée après confirmation. Historique, fichiers modifiés et décisions conservés, sans présenter le résultat comme validé.
+- Relecture : validation humaine possible malgré les remarques, après une popup d’avertissement dans la session, l’éditeur du compte rendu et le mode pair. La confirmation est conservée pour la clôture de la feature ; les remarques restent visibles et ne sont pas marquées comme corrigées.
+
 ## 1.31.0 — 2026-10-28
 
 - Création depuis un chat dans un worktree : délai de checkout porté de 30 secondes à dix minutes, lectures Git à deux minutes, diagnostic précis et arrêt de l’arbre de processus en cas d’expiration.

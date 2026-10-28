@@ -46,7 +46,7 @@ describe('session HQ projection', () => {
     step.status = 'skipped';
     expect(sessionHqStation(step, demoState.agents)).toMatchObject({
       status: 'skipped',
-      label: 'Passée · non exécutée',
+      label: 'Passée',
     });
     step.status = 'pending';
     expect(sessionHqStation(step, demoState.agents, false, true)).toMatchObject({

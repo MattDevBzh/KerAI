@@ -485,7 +485,9 @@ export function FinalSummary({
               {step.name} ·{' '}
               {state.agents.find((a) => a.id === step.agentId)?.nickname || step.agentId} ·{' '}
               {step.status === 'skipped'
-                ? 'Passée par l’humain — non exécutée'
+                ? step.attempts.length
+                  ? 'Passée après tentative — non validée'
+                  : 'Passée par l’humain — non exécutée'
                 : `version ${(step.attempts.at(-1)?.revision ?? 0) + 1}`}
             </li>
           ))}

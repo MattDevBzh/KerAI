@@ -1,4 +1,5 @@
 import { usageCredits } from './credits';
+import { skippedStepLabel } from './optionalSteps';
 import type { Feature } from './types';
 
 /** A local, deterministic export of the session, including the human editorial history. */
@@ -27,15 +28,19 @@ export function sessionMarkdown(feature: Feature, workspacePath: string): string
     );
   for (const step of feature.steps) {
     parts.push(
-      `## ${step.name} — ${step.status === 'skipped' ? 'Passée par l’humain — non exécutée' : step.status}`,
+      `## ${step.name} — ${step.status === 'skipped' ? skippedStepLabel(step) : step.status}`,
     );
     if (step.optional) parts.push('Intervention facultative.');
     for (const decision of step.optionalDecisionHistory ?? [])
       parts.push(
-        `Décision humaine : ${decision.action === 'skip' ? 'Passer sans exécuter' : 'Exécuter'} · ${decision.at}${decision.id === step.optionalDecision?.id ? ' · décision actuelle' : ' · historique'}`,
+        `Décision humaine : ${decision.action === 'skip' ? (step.attempts.some((attempt) => attempt.startedAt <= decision.at) ? 'Passer sans valider le résultat' : 'Passer sans exécuter') : 'Exécuter'} · ${decision.at}${decision.id === step.optionalDecision?.id ? ' · décision actuelle' : ' · historique'}`,
       );
     if (step.status === 'skipped')
-      parts.push('Aucun livrable ni preuve de tests : cette intervention n’a pas été exécutée.');
+      parts.push(
+        step.attempts.length
+          ? 'Tentatives et modifications conservées ; aucun résultat validé pour cette intervention.'
+          : 'Aucun livrable ni preuve de tests : cette intervention n’a pas été exécutée.',
+      );
     for (const [index, attempt] of step.attempts.entries()) {
       parts.push(
         `### Tentative ${index + 1}\n${attempt.startedAt} · ${attempt.model || 'modèle non communiqué'} · ${attempt.status}`,

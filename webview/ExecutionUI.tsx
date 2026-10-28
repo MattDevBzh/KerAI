@@ -1,3 +1,4 @@
+import { defaultNavigationSelection } from '../src/shared/navigationSelection';
 import { NavigationLaunchPicker } from './ApplicationsUI';
 import { defaultPairPreferences } from '../src/shared/pair';
 import { PermissionPicker } from './NativeExecutionUI';
@@ -155,12 +156,21 @@ export function LaunchDialog({
 }) {
   const agent = state.agents.find((item) => item.id === step.agentId);
   const previous = step.attempts.at(-1)?.launch;
+  const initialNavigation = previous?.omitNavigation
+    ? undefined
+    : (previous?.navigation ??
+      feature.navigation ??
+      defaultNavigationSelection(
+        agent,
+        state.navigation,
+        feature.projects?.map((project) => project.id) ??
+          state.projectCatalog?.selectedProjectIds ?? ['workspace'],
+      ));
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
     ...(feature.execution ? { permissionMode: feature.execution.permissionMode } : {}),
-    ...((previous?.navigation ?? feature.navigation)
-      ? { navigation: previous?.navigation ?? feature.navigation }
-      : {}),
+    ...(initialNavigation ? { navigation: initialNavigation } : {}),
+    ...(previous?.omitNavigation ? { omitNavigation: true } : {}),
     ...(pairMode ? { pair: previous?.pair ?? { ...defaultPairPreferences } } : {}),
     ...(previous?.devopsTest
       ? { devopsTest: { ...previous.devopsTest, isolationConfirmed: false } }

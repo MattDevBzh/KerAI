@@ -310,22 +310,38 @@ describe('navigation model-facing catalog with simulated SDK transport', () => {
     expect(names.some((name) => name.includes('*'))).toBe(false);
     expect(runtime.session.send).toHaveBeenCalledOnce();
   });
-  it('preserves the stricter planning catalog with no browser tools under nativeReadOnly', async () => {
+  it('offers browser inspection in planning while keeping interactions and publication unavailable', async () => {
     const input = runInput();
     input.nativeReadOnly = true;
     await adapter.run(input, callbacks, new AbortController().signal);
-    expect(getTools).not.toHaveBeenCalled();
-    expect(
-      (runtime.config!.availableTools as string[]).some(
-        (name) => name.startsWith('studio_navigation_') || name.startsWith('studio_browser_'),
-      ),
-    ).toBe(false);
+    expect(getTools).toHaveBeenCalledOnce();
+    expect(runtime.config!.availableTools).toEqual(
+      expect.arrayContaining([
+        'studio_navigation_search',
+        'studio_navigation_context',
+        'studio_browser_inspect',
+      ]),
+    );
+    for (const name of [
+      'studio_browser_act',
+      'studio_navigation_replay',
+      'studio_navigation_commit',
+      'studio_navigation_propose',
+    ])
+      expect(runtime.config!.availableTools).not.toContain(name);
     expect(runtime.config!.mcpServers ?? {}).toEqual({});
   });
   it('fails before any prompt if the runtime returns an unexpected editor despite the allowlist', async () => {
     runtime.injectUnexpectedTool('edit');
     await expect(adapter.run(runInput(), callbacks, new AbortController().signal)).rejects.toThrow(
       /Catalogue natif inattendu/,
+    );
+    expect(runtime.session.send).not.toHaveBeenCalled();
+  });
+  it('refuses to start a navigation prompt with a missing host catalog', async () => {
+    getTools.mockResolvedValue([]);
+    await expect(adapter.run(runInput(), callbacks, new AbortController().signal)).rejects.toThrow(
+      /outils de navigation ne sont pas chargés/,
     );
     expect(runtime.session.send).not.toHaveBeenCalled();
   });
@@ -503,6 +519,9 @@ describe('navigation intervention lifecycle through simulated SDK', () => {
         }),
     );
     getTools.mockImplementation(async (_input, wrapped) => [
+      ...['studio_navigation_search', 'studio_navigation_context', 'studio_browser_inspect'].map(
+        (name) => ({ name, handler: async () => 'fixture' }) as Tool,
+      ),
       {
         name: 'studio_browser_act',
         handler: async () =>

@@ -56,7 +56,7 @@ export function freezeNavigationContext(
       'Association déclarée. La correspondance entre le serveur déjà lancé et ces fichiers n’est pas attestée.',
   };
   const content = [
-    `Application : ${application.name} (${application.id}) · ${application.origin}`,
+    `Application : ${application.name} (${application.id}) · ${application.startUrl ?? application.origin}`,
     `Rôle déclaré : ${application.role || 'à préciser'} · Propriétaire des parcours : ${application.ownerNavigatorId || 'aucun'}`,
     `Intention : ${selection.intent}. Interactions : ${selection.allowInteractions ? 'autorisées selon le profil et les demandes humaines' : 'inspection uniquement'}.`,
     `Version servie : non vérifiée. Dépôts autorisés : ${binding.projectIds.join(', ')}.`,

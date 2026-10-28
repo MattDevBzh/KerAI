@@ -27,6 +27,7 @@ import type {
 import type { Attempt, ClientMessage, StudioState } from '../src/shared/types';
 import { subscribe } from './bridge';
 import { StudioDialog } from './ExecutionUI';
+import { applicationProfileSchema } from '../src/core/navigationSchemas';
 import './applications.css';
 
 type Dispatch = (message: ClientMessage) => void;
@@ -92,7 +93,17 @@ function freshness(journey: NavigationJourney, runs: NavigationRun[]) {
       : 'À contrôler';
 }
 
-export function ApplicationsUI({ state, dispatch }: { state: StudioState; dispatch: Dispatch }) {
+export function ApplicationsUI({
+  state,
+  dispatch,
+  onOpenSkill,
+  onOpenAgent,
+}: {
+  state: StudioState;
+  dispatch: Dispatch;
+  onOpenSkill?: (id: string) => void;
+  onOpenAgent?: (id: string) => void;
+}) {
   const data = state.navigation ?? empty;
   const [applicationId, setApplicationId] = useState(data.applications[0]?.id ?? '');
   const [journeyId, setJourneyId] = useState('');
@@ -157,6 +168,7 @@ export function ApplicationsUI({ state, dispatch }: { state: StudioState; dispat
       allowedOrigins: [],
       projectIds: state.projectCatalog?.selectedProjectIds ?? [],
       interactionPolicy: 'confirm',
+      ownerNavigatorId: state.agents.find((agent) => agent.id === 'fs-navigator')?.id,
       createdAt: stamp(),
       updatedAt: stamp(),
     });
@@ -224,7 +236,42 @@ export function ApplicationsUI({ state, dispatch }: { state: StudioState; dispat
               <section className="applications-profile" aria-label="Profil d’application">
                 <div>
                   <h2>{application.name}</h2>
-                  <p>{application.origin}</p>
+                  <p>{application.startUrl ?? application.origin}</p>
+                  <div aria-label="Navigateur et skills">
+                    <strong>Navigateur : </strong>
+                    {application.ownerNavigatorId ? (
+                      <button
+                        className="text-button"
+                        onClick={() => onOpenAgent?.(application.ownerNavigatorId!)}
+                      >
+                        {state.agents.find((agent) => agent.id === application.ownerNavigatorId)
+                          ?.name ?? application.ownerNavigatorId}
+                      </button>
+                    ) : (
+                      'À choisir dans le profil'
+                    )}
+                    <p>
+                      Skills :{' '}
+                      {(
+                        state.agents.find((agent) => agent.id === application.ownerNavigatorId)
+                          ?.skills ?? []
+                      ).map((id) => {
+                        const skill = state.skills.find((item) => item.id === id);
+                        return (
+                          <button
+                            key={id}
+                            className="text-button"
+                            disabled={!skill}
+                            onClick={() => onOpenSkill?.(id)}
+                          >
+                            {skill?.name ?? `${id} (absente)`}
+                          </button>
+                        );
+                      })}
+                      {!state.agents.find((agent) => agent.id === application.ownerNavigatorId)
+                        ?.skills.length && 'Aucune skill affectée à cet agent.'}
+                    </p>
+                  </div>
                   <p className="muted">
                     {application.projectIds.length} dépôt(s) · Rôle :{' '}
                     {application.role || 'à renseigner'} ·{' '}
@@ -440,6 +487,8 @@ function ProfileEditor({
   onSave: (profile: ApplicationProfile) => void;
 }) {
   const [value, setValue] = useState(application);
+  const [url, setUrl] = useState(application.startUrl ?? application.origin);
+  const [validationError, setValidationError] = useState('');
   const [origins, setOrigins] = useState(
     application.allowedOrigins.filter((origin) => origin !== application.origin).join('\n'),
   );
@@ -450,24 +499,34 @@ function ProfileEditor({
   return (
     <StudioDialog
       title="Profil d’application"
-      subtitle="Application locale déjà démarrée · navigateur Chromium dédié"
+      subtitle="Application locale ou distante · navigateur Chromium dédié"
       onClose={onClose}
       className="applications-dialog"
     >
-      {error && (
+      {(validationError || error) && (
         <p className="applications-error" role="alert">
-          {error}
+          {validationError || error}
         </p>
       )}
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          onSave({
+          const parsed = applicationProfileSchema.safeParse({
             ...value,
-            allowedOrigins: [...new Set([value.origin, ...lines(origins)])],
+            origin: url,
+            startUrl: undefined,
+            allowedOrigins: [...new Set([url, ...lines(origins)])],
             authenticationOrigins: lines(authenticationOrigins),
             updatedAt: stamp(),
           });
+          if (!parsed.success) {
+            setValidationError(
+              [...new Set(parsed.error.issues.map((issue) => issue.message))].join(' '),
+            );
+            return;
+          }
+          setValidationError('');
+          onSave(parsed.data);
         }}
       >
         <div className="applications-form-grid">
@@ -480,14 +539,19 @@ function ProfileEditor({
             />
           </label>
           <label className="field">
-            <span>Origine locale</span>
+            <span>URL de l’application</span>
             <input
               required
               type="url"
-              value={value.origin}
-              onChange={(event) => patch({ origin: event.target.value })}
-              placeholder="http://localhost:3000"
+              aria-label="URL de l’application"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://mon-application.fr/espace"
             />
+            <small>
+              Adresse complète HTTP ou HTTPS, locale, intranet ou distante. Le chemin saisi sera
+              ouvert au démarrage.
+            </small>
           </label>
           <label className="field">
             <span>Rôle de connexion</span>
@@ -544,8 +608,8 @@ function ProfileEditor({
           <span>Origines supplémentaires autorisées (une par ligne)</span>
           <textarea rows={2} value={origins} onChange={(event) => setOrigins(event.target.value)} />
           <small>
-            Les origines restent contrôlées par l’hôte. La connexion manuelle exige une pause de
-            l’enregistrement.
+            Ajoute les autres sites utilisés par l’application. Tu peux coller une URL complète ;
+            seul son domaine et son port seront retenus.
           </small>
         </label>
         <label className="field">
@@ -581,12 +645,14 @@ function ProfileEditor({
             value={value.ownerNavigatorId ?? ''}
             onChange={(event) => patch({ ownerNavigatorId: event.target.value || undefined })}
           >
-            <option value="">Choisir au lancement</option>
-            {state.agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.name}
-              </option>
-            ))}
+            <option value="">Choisir un Navigateur</option>
+            {state.agents
+              .filter((agent) => agent.tools.includes('navigation'))
+              .map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
           </select>
         </label>
         <p className="field-help">

@@ -1,6 +1,7 @@
 import { NavigationService } from './NavigationService';
 import { updateTaskBoard } from '../core/taskBoard';
 import { navigationTools } from './NavigationTools';
+import { defaultNavigationSelection, isNavigator } from '../shared/navigationSelection';
 import { freezeNavigationContext, sameApplicationAuthority } from './NavigationContext';
 import { proofDossier } from '../shared/proofs';
 import { proofProposalSchema } from '../core/proofSchemas';
@@ -1018,12 +1019,12 @@ export class StudioService extends EventEmitter {
       ];
     return [...codeTools, ...personal.createTools(), ...browserTools];
   }
-  private async verifyNavigationAnchors(featureId: string, launch?: RunLaunchOptions) {
+  private async verifyNavigationAnchors(
+    featureId: string,
+    stepId: string,
+    launch?: RunLaunchOptions,
+  ) {
     const feature = this.engine.getFeature(featureId);
-    const selected = launch?.omitNavigation
-      ? undefined
-      : (launch?.navigation ?? feature.navigation);
-    if (!selected) return;
     const roots = feature.projects?.map((project, index) => ({
       id: project.id,
       path: index === 0 ? this.workspaces.executionPath(feature) : project.path,
@@ -1034,6 +1035,19 @@ export class StudioService extends EventEmitter {
         path: this.workspaces.executionPath(feature),
       },
     ];
+    const agent = this.state.agents.find(
+      (item) => item.id === feature.steps.find((step) => step.id === stepId)?.agentId,
+    );
+    const selected = launch?.omitNavigation
+      ? undefined
+      : (launch?.navigation ??
+        feature.navigation ??
+        defaultNavigationSelection(
+          agent,
+          this.navigation.snapshot(),
+          roots.map((root) => root.id),
+        ));
+    if (!selected) return;
     await this.navigation.anchors.verify(roots, {
       applicationId: selected.applicationId,
       limit: 64,
@@ -1068,7 +1082,20 @@ export class StudioService extends EventEmitter {
     );
     selected.navigation = selected.omitNavigation
       ? undefined
-      : (selected.navigation ?? feature.navigation);
+      : (selected.navigation ??
+        feature.navigation ??
+        defaultNavigationSelection(
+          agent,
+          this.navigation.snapshot(),
+          feature.projects?.map((project) => project.id) ?? [
+            this.navigationProjects?.().find((project) => project.path === this.workspacePath)
+              ?.id ?? 'workspace',
+          ],
+        ));
+    if (!selected.navigation && isNavigator(agent, this.navigation.snapshot()))
+      throw new Error(
+        'Choisis une application dans « Application du parcours » avant de lancer le Navigateur. Ses outils navigateur nécessitent ce contexte.',
+      );
     if (originalFeature.parent) {
       const parent = this.engine.getStep(
         originalFeature.parent.featureId,
@@ -1277,7 +1304,7 @@ export class StudioService extends EventEmitter {
     this.assertTrusted();
     await this.featurePath(featureId);
     Object.assign(this.state, await this.registry.load());
-    await this.verifyNavigationAnchors(featureId, launch);
+    await this.verifyNavigationAnchors(featureId, stepId, launch);
     const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
     const blocked = treePath(this.engine.features, featureId)
       .map((f) => budgetBlockReason(f))
@@ -1352,7 +1379,7 @@ export class StudioService extends EventEmitter {
       );
     Object.assign(this.state, await this.registry.load());
     this.assertTrusted();
-    await this.verifyNavigationAnchors(featureId, launch);
+    await this.verifyNavigationAnchors(featureId, stepId, launch);
     const continued = pairContinuation ? step.attempts.at(-1) : undefined;
     const input = pairContinuation
       ? this.pairInput(featureId, stepId)
@@ -3113,12 +3140,21 @@ export class StudioService extends EventEmitter {
     expectedAttemptId: string,
     expectedRevision: number,
     actor: 'human' | 'autopilot' = 'human',
+    expectedReviewWarningsKey?: string,
   ): Promise<void> {
     if (actor === 'human') this.assertConfigurable(featureId);
     await this.workspaceAction(
       featureId,
       'Validation des preuves de la feature',
-      () => this.approveInWorkspace(featureId, stepId, expectedAttemptId, expectedRevision, actor),
+      () =>
+        this.approveInWorkspace(
+          featureId,
+          stepId,
+          expectedAttemptId,
+          expectedRevision,
+          actor,
+          expectedReviewWarningsKey,
+        ),
       actor === 'autopilot',
     );
     if (actor === 'human') this.scheduleSubplan(featureId);
@@ -3129,6 +3165,7 @@ export class StudioService extends EventEmitter {
     expectedAttemptId: string,
     expectedRevision: number,
     actor: 'human' | 'autopilot',
+    expectedReviewWarningsKey?: string,
   ): Promise<void> {
     this.assertTrusted();
     const step = this.engine.getStep(featureId, stepId),
@@ -3153,7 +3190,14 @@ export class StudioService extends EventEmitter {
     // Recheck revision after asynchronous reads before touching the approval.
     this.assertTrusted();
     const correctionId = feature.activeCorrectionId;
-    this.engine.approveStep(featureId, stepId, actor, expectedAttemptId, expectedRevision);
+    this.engine.approveStep(
+      featureId,
+      stepId,
+      actor,
+      expectedAttemptId,
+      expectedRevision,
+      expectedReviewWarningsKey,
+    );
     if (correctionId && !feature.activeCorrectionId && actor === 'autopilot')
       this.pauseAutopilot(
         featureId,
@@ -3695,7 +3739,14 @@ export class StudioService extends EventEmitter {
     delete feature.finalValidation;
     for (const step of feature.steps) {
       const attempt = step.attempts.at(-1);
-      if (attempt) attempt.revision = (attempt.revision ?? 0) + 1;
+      if (attempt) {
+        const revision = attempt.revision ?? 0;
+        attempt.revision = revision + 1;
+        // Criteria/comments revise the session, not the approved artifact. Preserve acceptance
+        // of unchanged remarks; changed/reopened comments carry their own revision.
+        if (attempt.reviewAcceptance?.revision === revision)
+          attempt.reviewAcceptance.revision = attempt.revision;
+      }
     }
     this.engine.refreshFeatureStatus(featureId);
   }
@@ -3710,7 +3761,7 @@ export class StudioService extends EventEmitter {
   }
   async addReviewComment(
     featureId: string,
-    comment: Omit<ReviewComment, 'id' | 'createdAt' | 'resolved'>,
+    comment: Omit<ReviewComment, 'id' | 'createdAt' | 'resolved' | 'revision'>,
   ): Promise<void> {
     this.assertConfigurable(featureId);
     const feature = this.engine.getFeature(featureId),
@@ -3738,6 +3789,7 @@ export class StudioService extends EventEmitter {
       .getFeature(featureId)
       .reviewComments?.find((item) => item.id === commentId);
     if (!comment) throw new Error('Remarque inconnue.');
+    if (comment.resolved !== resolved) comment.revision = (comment.revision ?? 0) + 1;
     comment.resolved = resolved;
     this.revise(featureId);
     await this.persist();

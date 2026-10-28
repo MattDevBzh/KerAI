@@ -18,7 +18,7 @@ import type { InspectionRequest, WorkerRequest, WorkerOpen, WorkerAct } from './
 import { installInteractionGuard } from './InteractionGuard';
 import { inspectChromium } from './ChromiumInspection';
 import { redactPng } from './redactPng';
-import { hasSensitiveNavigationUrl, isLocalNavigationUrl } from '../../core/navigationSchemas';
+import { hasSensitiveNavigationUrl, isNavigationUrl } from '../../core/navigationSchemas';
 import { installRecorder } from './recorder';
 
 let context: BrowserContext | undefined;
@@ -754,9 +754,17 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
     }
     for (const origin of origins) {
       const url = new URL(origin);
-      if (!isLocalNavigationUrl(origin) || url.origin !== origin) fail('Origine locale invalide.');
+      if (!isNavigationUrl(origin) || url.origin !== origin)
+        fail('Origine HTTP ou HTTPS invalide.');
     }
     if (!origins.includes(options.origin)) fail('Origine principale non autorisée.');
+    const startUrl = options.startUrl ?? options.origin;
+    if (
+      !isNavigationUrl(startUrl) ||
+      hasSensitiveNavigationUrl(startUrl) ||
+      new URL(startUrl).origin !== options.origin
+    )
+      fail('URL de démarrage invalide ou hors du site de l’application.');
     generation = request.generation;
     controlOwned = false;
     auth = false;
@@ -806,7 +814,7 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
     await initializeRecorder();
     const page = context.pages()[0] ?? (await context.newPage());
     try {
-      await page.goto(options.origin, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
     } catch (error) {
       if (!blockedNavigation) throw error;
     }

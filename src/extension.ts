@@ -1616,6 +1616,8 @@ export async function activate(context: vscode.ExtensionContext) {
             message.stepId,
             message.expectedAttemptId,
             message.expectedRevision,
+            'human',
+            message.expectedReviewWarningsKey,
           );
           send({
             type: 'stepApprovalResult',

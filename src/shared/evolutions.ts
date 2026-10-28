@@ -173,6 +173,8 @@ export interface AcceptanceCriterion {
   evidence: string;
 }
 export interface ReviewComment {
+  /** Incremented when resolving/reopening so an old acceptance cannot cover a reopened remark. */
+  revision?: number;
   id: string;
   stepId: string;
   attemptId: string;

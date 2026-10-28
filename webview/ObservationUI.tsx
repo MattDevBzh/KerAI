@@ -623,7 +623,11 @@ function ObservationReport({
             <div>
               <h3>
                 {phase.name}
-                {phase.status === 'skipped' ? ' — Passée, non exécutée' : ''}
+                {phase.status === 'skipped'
+                  ? phase.attempts
+                    ? ' — Passée après tentative, non validée'
+                    : ' — Passée, non exécutée'
+                  : ''}
               </h3>
               <p>
                 {phase.agent} · {phase.models.join(', ') || 'Modèles non communiqués'} ·{' '}

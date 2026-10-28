@@ -106,7 +106,7 @@ describe('optional interventions with human decisions', () => {
     expect(f.feature.status).toBe('attention');
     expect(() => f.engine.finalizeFeature(f.feature.id, featureStateKey(f.feature))).toThrow();
   });
-  it('refuses mandatory, locked, already decided, stale and already attempted choices', () => {
+  it('refuses mandatory, locked, stale and running choices but allows passing a stopped attempt', () => {
     const f = fixture();
     expect(() => f.skip('us')).toThrow('facultative');
     expect(() => f.skip('plan')).toThrow('disponible');
@@ -115,9 +115,13 @@ describe('optional interventions with human decisions', () => {
     f.feature.description += ' changed';
     expect(() => f.engine.decideOptionalStep(f.feature.id, 'plan', 'skip', key)).toThrow('changé');
     f.engine.beginRun(f.feature.id, 'plan');
+    expect(() => f.skip('plan')).toThrow('arrêtée');
     f.engine.failRun(f.feature.id, 'plan', 'Real failure');
-    expect(() => f.skip('plan')).toThrow('jamais exécutée');
-    expect(f.feature.steps[1].status).toBe('failed');
+    f.skip('plan');
+    expect(f.feature.steps[1].status).toBe('skipped');
+    expect(f.feature.steps[1].attempts[0].status).toBe('failed');
+    expect(f.feature.activeStepId).toBe('code');
+    expect(() => f.skip('plan')).toThrow();
   });
   it('invalidates skipped decisions on upstream replay and preserves their history', () => {
     const f = fixture();
@@ -131,6 +135,38 @@ describe('optional interventions with human decisions', () => {
     expect(f.feature.steps[1].optionalDecisionHistory).toHaveLength(1);
     expect(f.feature.steps[2].status).toBe('stale');
     expect(f.feature.steps[3].status).toBe('pending');
+  });
+  it('persists a skipped cancelled attempt without losing its changes and can run it again', async () => {
+    const f = fixture();
+    f.finish('us');
+    const attempt = f.engine.beginRun(f.feature.id, 'plan');
+    attempt.changedFiles = ['src/partial.ts'];
+    f.engine.cancelRun(f.feature.id, 'plan');
+    f.skip('plan');
+    const root = await mkdtemp(join(tmpdir(), 'optional-stopped-'));
+    roots.push(root);
+    const store = new Store(root);
+    await store.save([f.feature], defaultSettings);
+    const restored = (await store.load()).features[0].steps[1];
+    expect(restored.status).toBe('skipped');
+    expect(restored.attempts[0]).toMatchObject({
+      status: 'cancelled',
+      changedFiles: ['src/partial.ts'],
+    });
+    expect(restored.optionalDecisionHistory?.map((decision) => decision.action)).toEqual([
+      'run',
+      'skip',
+    ]);
+    expect(sessionMarkdown(f.feature, '/fixture')).toContain(
+      'Passée après tentative — non validée',
+    );
+    f.engine.beginRun(f.feature.id, 'plan');
+    expect(f.feature.steps[1].optionalDecisionHistory?.map((decision) => decision.action)).toEqual([
+      'run',
+      'skip',
+      'run',
+    ]);
+    expect(f.feature.steps[1].attempts).toHaveLength(2);
   });
   it('reopens a skipped root explicitly selected in a correction route', () => {
     const f = fixture();

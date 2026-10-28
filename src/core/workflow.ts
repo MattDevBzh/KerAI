@@ -1,3 +1,4 @@
+import { reviewApprovalRequest } from '../shared/reviewApproval';
 import { allFeatures } from '../shared/subplans';
 import { randomUUID } from 'node:crypto';
 import { stepResolved, optionalChoiceAvailable } from '../shared/optionalSteps';
@@ -271,12 +272,11 @@ export class WorkflowEngine {
     if (featureStateKey(feature) !== expectedStateKey)
       throw new Error('La session a changé. Relis la décision actuelle.');
     if (!optionalChoiceAvailable(feature, step))
-      throw new Error(
-        'Seule une intervention facultative disponible et jamais exécutée peut être choisie.',
-      );
+      throw new Error('Seule une intervention facultative disponible et arrêtée peut être passée.');
     if (feature.autopilot?.status === 'running')
       throw new Error('Mets le pilote en pause avant de choisir.');
-    if (step.optionalDecision) throw new Error('Cette décision est déjà enregistrée.');
+    if (step.optionalDecision && !(action === 'skip' && step.optionalDecision.action === 'run'))
+      throw new Error('Cette décision est déjà enregistrée.');
     if (action === 'skip') step.status = 'skipped';
     const at = new Date().toISOString();
     step.optionalDecision = { id: randomUUID(), action, at, author: 'human' };
@@ -313,7 +313,11 @@ export class WorkflowEngine {
       throw new Error('Répondre aux questions avant de reprendre.');
     this.invalidate(feature, step.id);
     delete feature.optionalRequest;
-    if (step.optional && !step.attempts.length && step.optionalDecision?.action !== 'run') {
+    if (
+      step.optional &&
+      (!step.attempts.length || step.optionalDecision?.action === 'skip') &&
+      step.optionalDecision?.action !== 'run'
+    ) {
       step.optionalDecision = {
         id: randomUUID(),
         action: 'run',
@@ -462,6 +466,7 @@ export class WorkflowEngine {
     actor: 'human' | 'autopilot' = 'human',
     expectedAttemptId?: string,
     expectedRevision?: number,
+    expectedReviewWarningsKey?: string,
   ) {
     const [feature, step] = this.pair(featureId, stepId),
       attempt = this.latest(step);
@@ -472,6 +477,20 @@ export class WorkflowEngine {
       throw new Error('Validation obsolète : la tentative ou le livrable a changé.');
     const blockers = approvalBlockers(feature, step, actor);
     if (blockers.length) throw new Error(blockers.join(' '));
+    const warning = actor === 'human' ? reviewApprovalRequest(feature, step) : undefined;
+    if (actor === 'human' && expectedReviewWarningsKey !== warning?.key)
+      throw new Error(
+        warning && !expectedReviewWarningsKey
+          ? 'Confirme la validation malgré les remarques de relecture.'
+          : 'Les remarques ont changé. Relis l’avertissement avant de valider.',
+      );
+    if (warning)
+      attempt.reviewAcceptance = structuredClone({
+        revision: warning.revision,
+        review: warning.review,
+        comments: warning.comments,
+      });
+    else delete attempt.reviewAcceptance;
     step.status = attempt.status = 'approved';
     attempt.approvedAt = new Date().toISOString();
     attempt.approvedBy = actor;

@@ -91,6 +91,23 @@ async function request(page: Page) {
     (Reflect.get(window, 'profileMessages') as ClientMessage[]).at(-1),
   ) as Promise<Extract<ClientMessage, { type: 'saveAgent' | 'saveSkill' }>>;
 }
+test('le filtre des agents ne masque pas les skills fournies', async ({ page }) => {
+  const data = state();
+  data.skills.push({
+    ...data.skills[0],
+    id: 'navigation-discovery',
+    name: 'navigation-discovery',
+    source: 'bundled',
+  });
+  await hosted(page, data);
+  await navigate(page, 'Agents');
+  await page.getByLabel('Origine des agents').selectOption('user');
+  await navigate(page, 'Skills');
+  await expect(page.getByLabel('Origine des skills')).toHaveValue('all');
+  await expect(
+    page.getByRole('heading', { name: 'navigation-discovery', exact: true }),
+  ).toBeVisible();
+});
 test('agent : versions réelles, brouillons par portée, erreur corrélée et fermeture après succès', async ({
   page,
 }) => {

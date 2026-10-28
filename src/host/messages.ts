@@ -188,6 +188,7 @@ export const messageSchema = z.discriminatedUnion('type', [
       ...step,
       expectedAttemptId: id.optional(),
       expectedRevision: z.number().int().nonnegative().optional(),
+      expectedReviewWarningsKey: z.string().max(16000000).optional(),
     })
     .strict(),
   z
@@ -486,7 +487,7 @@ export const messageSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('addReviewComment'),
       featureId: id,
-      comment: commentSchema.omit({ id: true, createdAt: true, resolved: true }),
+      comment: commentSchema.omit({ id: true, createdAt: true, resolved: true, revision: true }),
     })
     .strict(),
   z

@@ -1,6 +1,6 @@
 ---
 name: "Navigateur"
-description: "Apprendre, vérifier et entretenir les parcours des applications locales."
+description: "Apprendre, vérifier et entretenir les parcours des applications locales ou distantes."
 tools: ["read", "search", "navigation"]
 policy: "read-only"
 model: ""

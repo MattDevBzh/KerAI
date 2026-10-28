@@ -1,3 +1,4 @@
+import { unacceptedBlockingComments } from './reviewApproval';
 import { stepResolved } from './optionalSteps';
 import type { Artifact, Feature, ReviewComment, ReviewReport } from './types';
 
@@ -277,6 +278,6 @@ export function finalValidationReady(feature: Feature): boolean {
     !(feature.criteria ?? []).some(
       (criterion) => criterion.status !== 'passed' || !criterion.evidence.trim(),
     ) &&
-    !(feature.reviewComments ?? []).some((comment) => comment.blocking && !comment.resolved)
+    !unacceptedBlockingComments(feature).length
   );
 }

@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, defaultSettings } from '../src/core/store';
 import { WorkflowEngine } from '../src/core/workflow';
+import { reviewApprovalRequest, acceptedReviewRemarks } from '../src/shared/reviewApproval';
+import { finalValidationReady } from '../src/shared/collaboration';
 import type { MemoryEntry, FeatureCheckpoint } from '../src/shared/types';
 
 const roots: string[] = [];
@@ -42,6 +44,40 @@ function feature() {
   return { engine, item };
 }
 describe('durable versioned store', () => {
+  it('preserves human acceptance of unchanged open review remarks after reopening', async () => {
+    const { store } = await setup(),
+      { engine, item } = feature();
+    const attempt = engine.beginRun(item.id, 'run');
+    engine.finishRun(item.id, 'run', { content: 'Review', questions: [], changedFiles: [] });
+    attempt.review = {
+      verdict: 'changes_requested',
+      summary: 'Bug',
+      findings: [
+        { id: 'finding', severity: 'blocking', message: 'Review this', file: 'src/a.ts', line: 3 },
+      ],
+    };
+    item.reviewComments = [
+      {
+        id: 'comment',
+        stepId: 'run',
+        attemptId: attempt.id,
+        text: 'Open remark',
+        blocking: true,
+        resolved: false,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    const key = reviewApprovalRequest(item, item.steps[0])!.key;
+    await store.save(engine.features, defaultSettings);
+    const pending = (await store.load()).features[0];
+    expect(reviewApprovalRequest(pending, pending.steps[0])!.key).toBe(key);
+    engine.approveStep(item.id, 'run', 'human', attempt.id, attempt.revision, key);
+    await store.save(engine.features, defaultSettings);
+    const restored = (await new Store(store.rootPath).load()).features[0];
+    expect(acceptedReviewRemarks(restored.steps[0])).toEqual(attempt.reviewAcceptance);
+    expect(restored.reviewComments![0].resolved).toBe(false);
+    expect(finalValidationReady(restored)).toBe(true);
+  });
   it('retains native permissions and interrupts unfinished native activity after reopening', async () => {
     const { store } = await setup();
     const { engine, item } = feature();

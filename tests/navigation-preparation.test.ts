@@ -85,6 +85,44 @@ async function fixture() {
   return { root, workspace, service, feature, step, adapter, inputs, launch };
 }
 describe('StudioService freezes navigation before the simulated agent begins', () => {
+  it('selects the sole assigned application for the Navigator and loads its two bundled skills', async () => {
+    const f = await fixture();
+    f.step.agentId = 'fs-navigator';
+    f.step.inheritAgent = true;
+    const app = f.service.navigation.snapshot().applications[0];
+    await f.service.navigation.store.saveApplication({ ...app, ownerNavigatorId: 'fs-navigator' });
+    const verify = vi.spyOn(f.service.navigation.anchors, 'verify');
+    const preview = await f.service.previewRun(f.feature.id, f.step.id);
+    expect(verify).toHaveBeenCalled();
+    expect(preview.prompt).toContain('Synthetic application');
+    await f.service.runStep(f.feature.id, f.step.id, '', false, undefined, preview.fingerprint);
+    expect(f.inputs[0].navigation?.application.id).toBe('app');
+    expect(f.inputs[0].skills.map((skill) => skill.id)).toEqual(
+      expect.arrayContaining(['navigation-discovery', 'navigation-context']),
+    );
+  });
+  it('requires an explicit Navigator application when the choice is ambiguous or omitted', async () => {
+    const f = await fixture();
+    f.step.agentId = 'fs-navigator';
+    f.step.inheritAgent = true;
+    const app = f.service.navigation.snapshot().applications[0];
+    await f.service.navigation.store.saveApplication({ ...app, ownerNavigatorId: 'fs-navigator' });
+    await f.service.navigation.store.saveApplication({
+      ...app,
+      id: 'second',
+      ownerNavigatorId: 'fs-navigator',
+    });
+    await expect(f.service.previewRun(f.feature.id, f.step.id)).rejects.toThrow(
+      /Application du parcours/,
+    );
+    await expect(
+      f.service.previewRun(f.feature.id, f.step.id, '', false, {
+        ...f.launch,
+        omitNavigation: true,
+      }),
+    ).rejects.toThrow(/Application du parcours/);
+    expect(f.adapter.run).not.toHaveBeenCalled();
+  });
   it('forces the designated owner to code read-only and persists the exact host context', async () => {
     const f = await fixture();
     expect(f.step.policy).toBe('workspace-write');

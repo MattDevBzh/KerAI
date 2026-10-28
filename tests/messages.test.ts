@@ -3,6 +3,19 @@ import { parseMessage } from '../src/host/messages';
 import { normalizeTheme, THEME_IDS } from '../src/shared/themes';
 
 describe('webview protocol boundary', () => {
+  it('accepts an explicit review warning acknowledgement without introducing a generic force flag', () => {
+    const message = {
+      type: 'approveStep',
+      featureId: 'feature',
+      stepId: 'review',
+      expectedAttemptId: 'attempt',
+      expectedRevision: 0,
+      expectedReviewWarningsKey: 'snapshot',
+    };
+    expect(parseMessage(message)).toEqual(message);
+    expect(() => parseMessage({ ...message, force: true })).toThrow();
+    expect(() => parseMessage({ ...message, expectedReviewWarningsKey: true })).toThrow();
+  });
   it('accepts only named themes and bounded correlated requests', () => {
     for (const theme of THEME_IDS) {
       const request = { type: 'setTheme', theme, requestId: 'theme-change' };

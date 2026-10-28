@@ -1,3 +1,4 @@
+import { NAVIGATION_READ_TOOLS } from '../shared/navigation';
 import { proofTools } from './ProofTools';
 import { taskBoardTools } from './TaskBoardTools';
 import { imageAttachments, assertVision } from './Images';
@@ -529,10 +530,7 @@ export class CopilotCliAdapter implements AgentAdapter {
     );
     const skillTools = native && callableSkills.length ? ['skill'] : [];
     const navigationEnabled =
-      Boolean(input.navigation) &&
-      !input.nativeReadOnly &&
-      !input.observation &&
-      input.mode !== 'discussion';
+      Boolean(input.navigation) && !input.observation && input.mode !== 'discussion';
     const readOnlyTools =
       input.nativeReadOnly ||
       input.agent.tools.includes('documentation') ||
@@ -648,8 +646,9 @@ export class CopilotCliAdapter implements AgentAdapter {
           navigationEnabled && readOnlyTools
             ? business.filter(
                 (tool) =>
-                  tool.name.startsWith('studio_navigation_') ||
-                  tool.name.startsWith('studio_browser_'),
+                  (tool.name.startsWith('studio_navigation_') ||
+                    tool.name.startsWith('studio_browser_')) &&
+                  (!input.nativeReadOnly || NAVIGATION_READ_TOOLS.includes(tool.name)),
               )
             : business;
         tools.splice(0, tools.length, ...scoped);
@@ -720,6 +719,16 @@ export class CopilotCliAdapter implements AgentAdapter {
           ...taskBoardTools(callbacks, controller.signal, (text) => redactMcp(text, secrets)),
         );
       const allowed = new Set(tools.map((t) => t.name));
+      if (
+        navigationEnabled &&
+        input.agent.tools.includes('navigation') &&
+        ['studio_navigation_search', 'studio_navigation_context', 'studio_browser_inspect'].some(
+          (name) => !allowed.has(name),
+        )
+      )
+        throw new Error(
+          'Les outils de navigation ne sont pas chargés. Reprépare le contexte de l’application avant de lancer cet agent.',
+        );
       if (
         (!native && input.mode !== 'discussion' && !tools.length) ||
         allowed.size !== tools.length ||
@@ -941,7 +950,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             : input.mode === 'discussion'
               ? 'Tu participes à une conversation Feature Studio. Réponds naturellement à la dernière intervention humaine en tenant compte de l’historique et du profil fourni. Tu ne disposes d’aucun outil ni d’accès au projet. Pose tes questions directement dans ta réponse.'
               : input.nativeReadOnly
-                ? 'Tu échanges avec l’utilisateur sur cette étape Feature Studio. Tu peux lire le code pour comprendre et expliquer ; les outils d’écriture, le terminal et les MCP sont indisponibles. Une question ne modifie pas le livrable. Propose le travail restant pour une correction et attends sa validation.'
+                ? 'Tu échanges avec l’utilisateur sur cette étape Feature Studio. Tu peux lire le code et observer l’application sélectionnée avec les outils hôtes de lecture pour comprendre et expliquer ; les outils d’écriture, le terminal et les MCP sont indisponibles. Une question ne modifie pas le livrable. Propose le travail restant pour une correction et attends sa validation.'
                 : native
                   ? 'Tu exécutes une étape Feature Studio avec les outils natifs Copilot et les permissions décidées par l’humain. Utilise ask_user pour les questions humaines. Termine avec le livrable Markdown. Arrête les processus de travail avant de terminer ; ne détache aucun service en arrière-plan sans demande humaine explicite.'
                   : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',

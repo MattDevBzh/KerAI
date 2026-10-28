@@ -110,6 +110,9 @@ describe('agent, skill and workflow registry', () => {
       'execute',
     ]);
     expect(data.skills.some((s) => s.id === 'ai-tdd')).toBe(true);
+    const navigator = data.agents.find((agent) => agent.id === 'fs-navigator')!;
+    expect(navigator.skills).toEqual(['navigation-discovery', 'navigation-context']);
+    expect(data.skills.filter((skill) => navigator.skills.includes(skill.id))).toHaveLength(2);
   });
   it('saves user agents and reports malformed workspace workflows', async () => {
     const { root, registry } = await setup();

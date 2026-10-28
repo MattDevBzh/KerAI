@@ -51,7 +51,7 @@ const labels: Record<StepStatus, string> = {
   waiting_input: 'Attend ta réponse',
   awaiting_review: 'À valider',
   approved: 'Validée',
-  skipped: 'Passée · non exécutée',
+  skipped: 'Passée',
   failed: 'Échec',
   cancelled: 'Annulée',
   stale: 'À actualiser',

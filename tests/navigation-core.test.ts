@@ -7,6 +7,7 @@ import { importNavigationJSON, exportNavigationJourney } from '../src/host/Chrom
 import { navigationContext, searchNavigation } from '../src/host/NavigationSearch';
 import {
   applicationProfileSchema,
+  executionBindingSchema,
   navigationJourneySchema,
   navigationCommandSchema,
   parseNavigationJson,
@@ -87,14 +88,76 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 describe('navigation schemas and import', () => {
-  it('rejects remote origins, hidden script properties and missing semantic contracts', () => {
+  it.each([
+    ['https://example.com', 'https://example.com', undefined],
+    [
+      'https://EXAMPLE.com:443/app/dashboard?tab=users#details',
+      'https://example.com',
+      'https://example.com/app/dashboard?tab=users#details',
+    ],
+    ['http://lms.intranet:8080/Dev/', 'http://lms.intranet:8080', 'http://lms.intranet:8080/Dev/'],
+    ['http://192.168.1.20:3000/app', 'http://192.168.1.20:3000', 'http://192.168.1.20:3000/app'],
+    ['http://[::1]:3000/#/users', 'http://[::1]:3000', 'http://[::1]:3000/#/users'],
+    ['http://localhost:3210/', 'http://localhost:3210', 'http://localhost:3210/'],
+  ])('accepts application URL %s and preserves its entry point', (url, origin, startUrl) => {
+    const profile = applicationProfileSchema.parse({
+      ...application,
+      origin: url,
+      allowedOrigins: [url],
+    });
+    expect(profile.origin).toBe(origin);
+    expect(profile.startUrl).toBe(startUrl);
+    expect(profile.allowedOrigins).toEqual([origin]);
     expect(
-      applicationProfileSchema.safeParse({
-        ...application,
-        origin: 'https://example.com',
-        allowedOrigins: ['https://example.com'],
-      }).success,
+      navigationCommandSchema.parse({ action: 'saveApplication', application: profile }),
+    ).toMatchObject({ application: profile });
+    expect(executionBindingSchema.parse({ ...run(draft()).binding, origin }).origin).toBe(origin);
+  });
+  it('normalizes and persists a remote profile, additional sites and a remote journey', async () => {
+    const url = 'https://recette.example.com/lms?tenant=demo#/tasks';
+    await store.saveApplication({
+      ...application,
+      origin: url,
+      allowedOrigins: [url, 'https://api.example.com/v1', 'https://api.example.com/other'],
+    });
+    await store.saveDraft(draft({ steps: [{ id: 'open', action: 'navigate', url }] }), 0, {
+      kind: 'human',
+    });
+    const restored = await new NavigationStore(root).load();
+    expect(restored.applications[0]).toMatchObject({
+      origin: 'https://recette.example.com',
+      startUrl: url,
+      allowedOrigins: ['https://recette.example.com', 'https://api.example.com'],
+    });
+    expect(restored.journeys[0].steps[0].url).toBe(url);
+    expect(applicationProfileSchema.parse(application)).toEqual(application);
+  });
+  it.each([
+    'javascript:alert(1)',
+    'file:///tmp/page',
+    'data:text/html,hello',
+    '/relative',
+    'https://user:secret@example.com/app',
+    'https://example.com/callback?token=DO_NOT_REFLECT',
+  ])('rejects non-web or credential-bearing application URL %s', (url) => {
+    const result = applicationProfileSchema.safeParse({
+      ...application,
+      origin: url,
+      allowedOrigins: [url],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.message).not.toContain('DO_NOT_REFLECT');
+  });
+  it('rejects a starting URL from a different site and an undeclared main site', () => {
+    expect(
+      applicationProfileSchema.safeParse({ ...application, startUrl: 'https://other.example/app' })
+        .success,
     ).toBe(false);
+    expect(
+      applicationProfileSchema.safeParse({ ...application, origin: 'https://example.com' }).success,
+    ).toBe(false);
+  });
+  it('rejects hidden script properties and missing semantic contracts', () => {
     expect(
       navigationJourneySchema.safeParse(draft({ steps: [{ id: 'x', action: 'fill' }] })).success,
     ).toBe(false);

@@ -12,7 +12,7 @@ import type {
   ExecutionBinding,
   NavigationLocator,
 } from '../../shared/navigation';
-import { isLocalNavigationUrl } from '../../core/navigationSchemas';
+import { hasSensitiveNavigationUrl, isNavigationUrl } from '../../core/navigationSchemas';
 import { NavigationRecovery } from './NavigationRecovery';
 import { navigationDefinitionHash } from '../NavigationStore';
 import { NAVIGATION_LIMITS } from '../../shared/navigation';
@@ -255,6 +255,12 @@ export class BrowserSessionManager {
     return this.request('prepare', { executablePath: this.options.executablePath });
   }
   async open(application: ApplicationProfile): Promise<BrowserSessionState> {
+    const origin = navigationOrigin(application.origin);
+    const entryUrl = application.startUrl ?? application.origin;
+    if (navigationOrigin(entryUrl) !== origin)
+      throw new Error('L’URL de démarrage doit appartenir au site de l’application.');
+    const startUrl = new URL(entryUrl).href;
+    const origins = [...new Set([origin, ...application.allowedOrigins.map(navigationOrigin)])];
     await this.initialize();
     if (this.recordingActive)
       throw new Error(
@@ -262,9 +268,12 @@ export class BrowserSessionManager {
       );
     if (this.busy) throw new Error('Le navigateur possède déjà une commande active.');
     await this.close();
-    const origin = localOrigin(application.origin);
-    const origins = [...new Set([origin, ...application.allowedOrigins.map(localOrigin)])];
-    this.application = structuredClone(application);
+    this.application = structuredClone({
+      ...application,
+      origin,
+      startUrl,
+      allowedOrigins: origins,
+    });
     this.recordingBeforeHuman = false;
     this.recordingActive = false;
     this.capturedBytes = 0;
@@ -286,9 +295,7 @@ export class BrowserSessionManager {
         this.options.storageRoot,
         'browser-profiles',
         createHash('sha256')
-          .update(
-            JSON.stringify([application.id, application.origin, application.role ?? 'default']),
-          )
+          .update(JSON.stringify([application.id, origin, application.role ?? 'default']))
           .digest('hex'),
       );
       await mkdir(profilePath, { recursive: true, mode: 0o700 });
@@ -296,6 +303,7 @@ export class BrowserSessionManager {
         'open',
         {
           origin,
+          startUrl,
           allowedOrigins: origins,
           authenticationOrigins: application.authenticationOrigins ?? [],
           profilePath,
@@ -658,16 +666,8 @@ export class BrowserSessionManager {
     await this.close();
   }
 }
-export function localOrigin(value: string): string {
-  const parsed = new URL(value);
-  if (
-    !isLocalNavigationUrl(value) ||
-    parsed.username ||
-    parsed.password ||
-    parsed.pathname !== '/' ||
-    parsed.search ||
-    parsed.hash
-  )
-    throw new Error('Une origine HTTP locale explicite est requise.');
-  return parsed.origin;
+export function navigationOrigin(value: string): string {
+  if (!isNavigationUrl(value) || hasSensitiveNavigationUrl(value))
+    throw new Error('Une URL HTTP ou HTTPS sans identifiants est requise.');
+  return new URL(value).origin;
 }

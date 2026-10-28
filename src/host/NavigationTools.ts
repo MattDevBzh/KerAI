@@ -1,3 +1,4 @@
+import { NAVIGATION_READ_TOOLS } from '../shared/navigation';
 import type { Tool } from '@github/copilot-sdk';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -38,7 +39,6 @@ export function navigationTools(
 ): Tool[] {
   if (
     !input.navigation ||
-    input.nativeReadOnly ||
     input.observation ||
     input.mode === 'discussion' ||
     !input.agent.tools.includes('navigation')
@@ -388,7 +388,7 @@ export function navigationTools(
       }
     },
   });
-  if (input.navigation.application.ownerNavigatorId === input.agent.id)
+  if (!input.nativeReadOnly && input.navigation.application.ownerNavigatorId === input.agent.id)
     tools.push(
       tool(
         'studio_navigation_propose',
@@ -432,5 +432,7 @@ export function navigationTools(
         },
       ),
     );
-  return tools;
+  return input.nativeReadOnly
+    ? tools.filter((tool) => NAVIGATION_READ_TOOLS.includes(tool.name))
+    : tools;
 }

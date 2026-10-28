@@ -201,6 +201,28 @@ async function commands(page: Page): Promise<NavigationCommand[]> {
       .map((message) => message.command),
   );
 }
+test('saves and reopens a complete remote application URL', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: 'Modifier le profil' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Profil d’application' });
+  const url = 'https://recette.example.com/lms?tenant=demo#/tasks';
+  await dialog.getByLabel('URL de l’application', { exact: true }).fill(url);
+  await dialog
+    .getByLabel('Origines supplémentaires autorisées (une par ligne)')
+    .fill('https://api.example.com/v1');
+  await dialog.getByRole('button', { name: 'Enregistrer le profil' }).click();
+  await expect(dialog).not.toBeVisible();
+  const saved = (await commands(page)).find((command) => command.action === 'saveApplication');
+  expect(saved).toMatchObject({
+    application: {
+      origin: 'https://recette.example.com',
+      startUrl: url,
+      allowedOrigins: ['https://recette.example.com', 'https://api.example.com'],
+    },
+  });
+  await page.getByRole('button', { name: 'Modifier le profil' }).click();
+  await expect(dialog.getByLabel('URL de l’application', { exact: true })).toHaveValue(url);
+});
 
 test('bibliothèque search, independent statuses and immutable replay contract', async ({
   page,

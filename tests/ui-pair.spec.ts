@@ -5,6 +5,7 @@ import { demoState } from '../webview/demo';
 import { createPair } from '../src/core/pair';
 import { defaultPairPreferences } from '../src/shared/pair';
 import { emptyLaunch } from '../src/core/context';
+import { reviewApprovalRequest } from '../src/shared/reviewApproval';
 import type { Attempt, ClientMessage, StudioState } from '../src/shared/types';
 
 function scenario(phase: 'planning' | 'working' | 'review' = 'planning') {
@@ -397,6 +398,36 @@ test('retains the result on rejected approval and returns only after a successfu
   await expect(
     page.getByRole('heading', { name: 'Des filtres qui restent simples', exact: true }),
   ).toBeVisible();
+});
+
+test('requires confirmation of review remarks before leaving the pair workspace', async ({
+  page,
+}) => {
+  const state = scenario('review'),
+    feature = state.features[0],
+    step = feature.steps[0];
+  step.attempts[0].review = {
+    verdict: 'changes_requested',
+    summary: 'Correction requise',
+    findings: [
+      { id: 'finding', severity: 'blocking', message: 'Vérifier la synchronisation ciblée.' },
+    ],
+  };
+  const key = reviewApprovalRequest(feature, step)!.key;
+  await open(page, state);
+  const validate = page.getByRole('button', { name: 'Valider l’étape et revenir à la session' });
+  await expect(validate).toBeEnabled();
+  await validate.click();
+  const dialog = page.getByRole('dialog', { name: 'Valider malgré les remarques ?' });
+  await expect(dialog).toContainText('Vérifier la synchronisation ciblée.');
+  await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+  expect(await messages(page, 'approveStep')).toHaveLength(0);
+  await validate.click();
+  await dialog.getByRole('button', { name: 'Valider malgré les remarques', exact: true }).click();
+  await expect.poll(() => messages(page, 'approveStep')).toHaveLength(1);
+  expect((await messages(page, 'approveStep'))[0]).toMatchObject({
+    expectedReviewWarningsKey: key,
+  });
 });
 
 test('keeps earlier pair exchanges accessible read-only after a normal retry', async ({ page }) => {

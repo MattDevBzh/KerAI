@@ -47,6 +47,7 @@ export type WorkerResponse =
   | { event: 'warning' | 'interrupted'; generation: number; message: string };
 export type WorkerOpen = {
   origin: string;
+  startUrl?: string;
   allowedOrigins: string[];
   authenticationOrigins?: string[];
   profilePath: string;

@@ -3479,3 +3479,11 @@ html[data-studio-theme-effective='auto'] body.vscode-high-contrast-light .badge 
     border-color: CanvasText;
   }
 }
+.review-approval-warnings {
+  max-height: 40vh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.review-approval-warnings li {
+  margin-block: 0.6rem;
+}

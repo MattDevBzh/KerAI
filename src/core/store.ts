@@ -197,6 +197,14 @@ const attempt = z.object({
   evidence: z.array(evidenceSchema).max(1000).optional(),
   review: reviewSchema.optional(),
   revision: z.number().int().nonnegative().optional(),
+  reviewAcceptance: z
+    .object({
+      revision: z.number().int().nonnegative(),
+      review: reviewSchema.optional(),
+      comments: z.array(commentSchema).max(1000),
+    })
+    .strict()
+    .optional(),
   approvedBy: z.enum(['human', 'autopilot']).optional(),
   checkpointBeforeId: z.string().uuid().optional(),
   checkpointAfterId: z.string().uuid().optional(),
@@ -347,7 +355,9 @@ const feature: z.ZodType<Feature> = z
       steps.some(
         (step) =>
           (step.status === 'skipped' &&
-            (!step.optional || step.attempts.length || step.optionalDecision?.action !== 'skip')) ||
+            (!step.optional ||
+              step.attempts.some((attempt) => attempt.status === 'running' || attempt.pair?.busy) ||
+              step.optionalDecision?.action !== 'skip')) ||
           (step.optionalDecision &&
             (!step.optional ||
               (step.optionalDecision.action === 'skip' && step.status !== 'skipped'))) ||

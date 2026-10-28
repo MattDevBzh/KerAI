@@ -91,7 +91,7 @@ export function observationMarkdown(review: SessionObservation, feature?: Featur
   }
   for (const phase of review.phases) {
     parts.push(
-      `## ${phase.name}${phase.status === 'skipped' ? ' — Passée par l’humain, non exécutée' : ''}`,
+      `## ${phase.name}${phase.status === 'skipped' ? (phase.attempts ? ' — Passée après tentative, non validée' : ' — Passée par l’humain, non exécutée') : ''}`,
       `Agent : ${phase.agent} · Modèles : ${phase.models.join(', ') || 'Non communiqués'} · ${phase.attempts} tentative(s) · ${Math.round(phase.durationMs / 1000)} s · ${phase.usage ? usageCredits(phase.usage) : 'Crédits non communiqués'}`,
       ...modelUsageLines(phase.usage).map((line) => `- ${line}`),
     );

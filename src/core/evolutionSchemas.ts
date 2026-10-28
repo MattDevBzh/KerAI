@@ -227,6 +227,7 @@ export const criterionSchema = z
   .strict();
 export const commentSchema = z
   .object({
+    revision: z.number().int().nonnegative().optional(),
     id: boundedId,
     stepId: boundedId,
     attemptId: boundedId,

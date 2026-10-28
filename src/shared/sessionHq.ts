@@ -38,7 +38,7 @@ export const hqStatusLabels: Record<StepStatus, string> = {
   waiting_input: 'Attend ta réponse',
   awaiting_review: 'À valider',
   approved: 'Validée',
-  skipped: 'Passée · non exécutée',
+  skipped: 'Passée',
   failed: 'En échec',
   cancelled: 'Annulée',
   stale: 'À actualiser',

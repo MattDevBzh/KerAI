@@ -307,7 +307,6 @@ describe('host tool permissions', () => {
     for (const patch of [
       { mode: 'discussion' },
       { observation: true },
-      { nativeReadOnly: true },
       { agent: { id: 'fs-dev', tools: [] } },
     ]) {
       expect(

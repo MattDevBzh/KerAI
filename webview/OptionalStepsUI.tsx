@@ -4,6 +4,7 @@ import type { ClientMessage, Feature, FeatureStep, StudioState } from '../src/sh
 import { featureStateKey } from '../src/shared/collaboration';
 import { optionalChoiceAvailable, skippedSteps } from '../src/shared/optionalSteps';
 import { subscribe } from './bridge';
+import { StudioDialog } from './ExecutionUI';
 
 type Dispatch = (message: ClientMessage) => void;
 
@@ -16,7 +17,7 @@ export function SkippedInterventions({ feature }: { feature: Feature }) {
       <div>
         <strong>
           {steps.length} intervention{steps.length > 1 ? 's' : ''} passée
-          {steps.length > 1 ? 's' : ''} — non exécutée{steps.length > 1 ? 's' : ''}
+          {steps.length > 1 ? 's' : ''} — sans validation de résultat
         </strong>
         <p>{steps.map((step) => step.name).join(' · ')}</p>
         <small>
@@ -47,6 +48,7 @@ export function OptionalStepChoice({
   const [pending, setPending] = useState<{ id: string; key: string }>();
   const [error, setError] = useState('');
   const [deferred, setDeferred] = useState(false);
+  const [skipKey, setSkipKey] = useState<string>();
   useEffect(
     () =>
       subscribe((message) => {
@@ -56,7 +58,8 @@ export function OptionalStepChoice({
       }),
     [pending?.id],
   );
-  if (!optionalChoiceAvailable(feature, step) || step.optionalDecision) return null;
+  if (!optionalChoiceAvailable(feature, step) || step.optionalDecision?.action === 'skip')
+    return null;
   const blocked =
     busy ||
     pending?.key === key ||
@@ -65,7 +68,7 @@ export function OptionalStepChoice({
     state.features.some(
       (f) => f.steps.some((s) => s.status === 'running') || f.autopilot?.status === 'running',
     );
-  const choose = (choice: 'run' | 'skip') => {
+  const choose = (choice: 'run' | 'skip', expectedStateKey = key) => {
     const requestId = crypto.randomUUID();
     setPending({ id: requestId, key });
     setError('');
@@ -74,7 +77,7 @@ export function OptionalStepChoice({
       requestId,
       featureId: feature.id,
       stepId: step.id,
-      expectedStateKey: key,
+      expectedStateKey,
       choice,
       ...(automatic ? { decisionId: feature.optionalRequest?.id, continueAutopilot: true } : {}),
     });
@@ -84,6 +87,28 @@ export function OptionalStepChoice({
       className="optional-notice optional-choice"
       aria-label={automatic ? 'Décision facultative attendue' : 'Intervention facultative'}
     >
+      {skipKey && (
+        <StudioDialog title="Passer cette intervention ?" onClose={() => setSkipKey(undefined)}>
+          <p>
+            La tentative et ses échanges restent dans l’historique. Les modifications déjà faites
+            dans le projet sont conservées. Son résultat ne sera pas validé et tu pourras passer à
+            la suite.
+          </p>
+          <div className="modal-actions">
+            <button onClick={() => setSkipKey(undefined)}>Annuler</button>
+            <button
+              className="button primary"
+              disabled={blocked}
+              onClick={() => {
+                choose('skip', skipKey);
+                setSkipKey(undefined);
+              }}
+            >
+              Passer et continuer
+            </button>
+          </div>
+        </StudioDialog>
+      )}
       <Pause size={22} aria-hidden="true" />
       <div>
         <strong>
@@ -93,7 +118,9 @@ export function OptionalStepChoice({
         <p>
           {deferred
             ? 'Le pilote reste en pause. Tu peux décider ici quand tu le souhaites.'
-            : 'Exécute cette intervention ou passe-la sans produire de livrable.'}
+            : step.attempts.length
+              ? 'Tu peux reprendre cette intervention ou la passer en conservant sa tentative.'
+              : 'Exécute cette intervention ou passe-la sans produire de livrable.'}
         </p>
         <div className="optional-actions">
           {automatic && (
@@ -108,7 +135,7 @@ export function OptionalStepChoice({
           <button
             className="button secondary small"
             disabled={blocked}
-            onClick={() => choose('skip')}
+            onClick={() => (step.attempts.length ? setSkipKey(key) : choose('skip'))}
           >
             <SkipForward size={15} />{' '}
             {automatic ? 'Passer et continuer' : 'Passer cette intervention'}

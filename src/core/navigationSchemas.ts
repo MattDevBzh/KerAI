@@ -68,26 +68,25 @@ export function hasSensitiveNavigationUrl(value: string): boolean {
     return true;
   }
 }
-export function isLocalNavigationUrl(value: string): boolean {
+export function isNavigationUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return (
-      ['http:', 'https:'].includes(url.protocol) &&
-      !url.username &&
-      !url.password &&
-      (url.hostname === 'localhost' ||
-        url.hostname.endsWith('.localhost') ||
-        url.hostname === '[::1]' ||
-        /^127(?:\.\d{1,3}){3}$/.test(url.hostname))
-    );
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
   } catch {
     return false;
   }
 }
 const origin = text.refine(
-  (value) => isLocalNavigationUrl(value) && new URL(value).origin === value,
-  'Une origine locale explicite sans chemin est requise.',
+  (value) => isNavigationUrl(value) && new URL(value).origin === value,
+  'Une origine HTTP ou HTTPS explicite sans chemin est requise.',
 );
+const applicationUrl = text
+  .trim()
+  .refine(isNavigationUrl, 'Une URL HTTP ou HTTPS complète est requise.')
+  .refine(
+    (value) => !hasSensitiveNavigationUrl(value),
+    'URL sensible ou invalide : utiliser la connexion manuelle.',
+  );
 export const navigationActorSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('human') }).strict(),
   z
@@ -162,12 +161,9 @@ export const navigationStepSchema = z
     if (
       step.action === 'navigate' &&
       (!step.url ||
-        !(
-          (step.url.startsWith('/') && !step.url.startsWith('//')) ||
-          isLocalNavigationUrl(step.url)
-        ))
+        !((step.url.startsWith('/') && !step.url.startsWith('//')) || isNavigationUrl(step.url)))
     )
-      invalid('La navigation exige une URL locale ou un chemin relatif à l’origine.');
+      invalid('La navigation exige une URL HTTP ou HTTPS ou un chemin relatif à l’origine.');
     if (step.url && hasSensitiveNavigationUrl(step.url))
       invalid('URL sensible ou invalide : utiliser la connexion manuelle.');
     if (['fill', 'select'].includes(step.action) && !step.value)
@@ -193,8 +189,12 @@ export const applicationProfileSchema = z
     id,
     name: text.min(1),
     projectIds: z.array(id).max(30),
-    origin,
-    allowedOrigins: z.array(origin).min(1).max(20),
+    origin: applicationUrl,
+    startUrl: applicationUrl.optional(),
+    allowedOrigins: z
+      .array(applicationUrl.transform((value) => new URL(value).origin))
+      .min(1)
+      .max(20),
     authenticationOrigins: z
       .array(
         text.url().refine((value) => {
@@ -215,9 +215,23 @@ export const applicationProfileSchema = z
     updatedAt: timestamp,
   })
   .strict()
+  .transform((app) => {
+    const origin = new URL(app.origin).origin;
+    const startUrl = app.startUrl ?? (app.origin !== origin ? app.origin : undefined);
+    return {
+      ...app,
+      origin,
+      allowedOrigins: [...new Set(app.allowedOrigins)],
+      ...(startUrl ? { startUrl: new URL(startUrl).href } : {}),
+    };
+  })
   .refine(
     (app) => app.allowedOrigins.includes(app.origin),
     'L’origine de l’application doit être autorisée.',
+  )
+  .refine(
+    (app) => !app.startUrl || new URL(app.startUrl).origin === app.origin,
+    'L’URL de démarrage doit appartenir au site de l’application.',
   );
 export const navigationParameterSchema = z
   .object({

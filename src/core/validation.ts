@@ -5,6 +5,7 @@ import { subplanComplete } from '../shared/subplans';
 import type { QualityKind } from '../shared/quality';
 import type { Attempt, Feature, FeatureStep, TestEvidence } from '../shared/types';
 import { needsDevOpsEvidence } from '../shared/devopsKit';
+import { reviewApprovalRequest, unacceptedBlockingComments } from '../shared/reviewApproval';
 
 export function currentTestEvidence(attempt: Attempt): TestEvidence[] {
   return [
@@ -69,7 +70,10 @@ function qualityIsCurrent(
     )
   );
 }
-export function featureCompletionBlockers(feature: Feature): string[] {
+export function featureCompletionBlockers(
+  feature: Feature,
+  acknowledgedCommentIds: string[] = [],
+): string[] {
   const blockers: string[] = [];
   if (feature.pendingTeam) blockers.push('Une modification de l’équipe attend son application.');
   if (feature.steps.some((s) => s.awaitsCorrection))
@@ -82,7 +86,11 @@ export function featureCompletionBlockers(feature: Feature): string[] {
     )
   )
     blockers.push('Des critères d’acceptation restent sans validation ou preuve.');
-  if (feature.reviewComments?.some((comment) => comment.blocking && !comment.resolved))
+  if (
+    unacceptedBlockingComments(feature).some(
+      (comment) => !acknowledgedCommentIds.includes(comment.id),
+    )
+  )
     blockers.push('Des commentaires bloquants restent ouverts dans la feature.');
   return blockers;
 }
@@ -129,8 +137,9 @@ export function approvalBlockers(
   if (!step.dependsOn.every((dep) => stepResolved(feature.steps.find((s) => s.id === dep))))
     blockers.push('Une dépendance a été invalidée.');
   if (
-    attempt.review?.verdict === 'changes_requested' ||
-    attempt.review?.findings.some((f) => f.severity === 'blocking')
+    actor === 'autopilot' &&
+    (attempt.review?.verdict === 'changes_requested' ||
+      attempt.review?.findings.some((f) => f.severity === 'blocking'))
   )
     blockers.push('La relecture demande des corrections.');
   const requiresReview =
@@ -147,9 +156,8 @@ export function approvalBlockers(
   )
     blockers.push('La relecture structurée attendue est absente.');
   if (
-    feature.reviewComments?.some(
-      (comment) => comment.blocking && !comment.resolved && comment.stepId === step.id,
-    )
+    actor === 'autopilot' &&
+    unacceptedBlockingComments(feature).some((comment) => comment.stepId === step.id)
   )
     blockers.push('Des commentaires bloquants restent ouverts pour cette étape.');
   const evidence = currentTestEvidence(attempt);
@@ -205,7 +213,12 @@ export function approvalBlockers(
     blockers.push('Aucune preuve de tests réellement exécutés par le host.');
   const final = feature.steps.every((other) => other.id === step.id || stepResolved(other));
   if (final) {
-    blockers.push(...featureCompletionBlockers(feature));
+    // Human approval offers a separate explicit confirmation for these remarks.
+    const acknowledged =
+      actor === 'human'
+        ? (reviewApprovalRequest(feature, step)?.comments.map((comment) => comment.id) ?? [])
+        : [];
+    blockers.push(...featureCompletionBlockers(feature, acknowledged));
   }
   return blockers;
 }

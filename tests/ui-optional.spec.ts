@@ -63,6 +63,47 @@ async function choices(page: Page) {
     ),
   );
 }
+test('passes a cancelled optional attempt only after confirmation', async ({ page }) => {
+  const state = scenario(false),
+    feature = state.features[0],
+    step = feature.steps[0];
+  step.status = 'cancelled';
+  step.optionalDecision = {
+    id: 'run-choice',
+    action: 'run',
+    at: feature.updatedAt,
+    author: 'human',
+  };
+  step.attempts = [
+    {
+      id: 'stopped',
+      status: 'cancelled',
+      startedAt: feature.createdAt,
+      feedback: '',
+      logs: [],
+      questions: [],
+      answers: {},
+      changedFiles: ['src/partial.ts'],
+    },
+  ];
+  await open(page, state);
+  const skip = page.getByRole('button', { name: 'Passer cette intervention', exact: true });
+  await expect(skip).toBeEnabled();
+  await skip.click();
+  const dialog = page.getByRole('dialog', { name: 'Passer cette intervention ?' });
+  await expect(dialog).toContainText(
+    'Les modifications déjà faites dans le projet sont conservées',
+  );
+  await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+  expect(await choices(page)).toHaveLength(0);
+  await skip.click();
+  await dialog.getByRole('button', { name: 'Passer et continuer', exact: true }).click();
+  await expect.poll(() => choices(page)).toHaveLength(1);
+  expect((await choices(page))[0]).toMatchObject({
+    choice: 'skip',
+    expectedStateKey: featureStateKey(feature),
+  });
+});
 
 test('automatic decisions remain visible after deferral and reopening, with no inference', async ({
   page,
@@ -135,10 +176,10 @@ test('manual skip does not start the pilot and final skipped work is never displ
   feature.status = 'awaiting_final_validation';
   await page.evaluate((data) => window.postMessage({ type: 'state', state: data }, '*'), state);
   await expect(page.getByRole('region', { name: 'Interventions passées' })).toContainText(
-    '1 intervention passée — non exécutée',
+    '1 intervention passée — sans validation de résultat',
   );
   await expect(page.getByRole('navigation', { name: 'Étapes du parcours' })).toContainText(
-    'Passée · non exécutée',
+    'Passée',
   );
   await expect(page.locator('.journey-check')).toHaveCount(0);
   await expect(

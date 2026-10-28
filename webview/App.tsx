@@ -1,3 +1,9 @@
+import { ReviewApprovalDialog } from './ReviewApprovalDialog';
+import {
+  acceptedReviewRemarks,
+  reviewApprovalRequest,
+  type ReviewApprovalRequest,
+} from '../src/shared/reviewApproval';
 import { ApplicationsUI, NavigationInterventionCard } from './ApplicationsUI';
 import { ProofDossierPanel } from './ProofDossier';
 import { ImagePicker, ImageGallery, useImageDraft } from './Images';
@@ -166,7 +172,7 @@ const statuses: Record<StepStatus, { label: string; tone: string }> = {
   waiting_input: { label: 'Votre réponse', tone: 'apricot' },
   awaiting_review: { label: 'À valider', tone: 'apricot' },
   approved: { label: 'Validée', tone: 'green' },
-  skipped: { label: 'Passée · non exécutée', tone: 'apricot' },
+  skipped: { label: 'Passée', tone: 'apricot' },
   failed: { label: 'Échec', tone: 'coral' },
   cancelled: { label: 'Annulée', tone: 'neutral' },
   stale: { label: 'À actualiser', tone: 'apricot' },
@@ -281,7 +287,8 @@ export default function App() {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [navQuery, setNavQuery] = useState('');
   const [catalogQuery, setCatalogQuery] = useState({ agents: '', skills: '' });
-  const [catalogScope, setCatalogScope] = useState('all');
+  const [agentScope, setAgentScope] = useState('all');
+  const [skillScope, setSkillScope] = useState('all');
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const navigation = useRef<HTMLElement>(null);
@@ -671,13 +678,13 @@ export default function App() {
       searchText(
         `${agent.name} ${agent.nickname ?? ''} ${agent.description} ${agent.skills.join(' ')}`,
       ).includes(searchText(catalogQuery.agents)) &&
-      (catalogScope === 'all' || agent.source === catalogScope) &&
+      (agentScope === 'all' || agent.source === agentScope) &&
       (!onlyFavorites || state?.favoriteAgentIds?.includes(agent.id)),
   );
   const skills = (state?.skills ?? []).filter(
     (skill) =>
       searchText(`${skill.name} ${skill.description}`).includes(searchText(catalogQuery.skills)) &&
-      (catalogScope === 'all' || skill.source === catalogScope),
+      (skillScope === 'all' || skill.source === skillScope),
   );
   if (!state)
     return (
@@ -1133,7 +1140,20 @@ export default function App() {
               }}
             />
           </div>
-          {view === 'applications' && <ApplicationsUI state={state} dispatch={dispatch} />}
+          {view === 'applications' && (
+            <ApplicationsUI
+              state={state}
+              dispatch={dispatch}
+              onOpenSkill={(id) => {
+                const skill = state.skills.find((s) => s.id === id);
+                if (skill) setSkillEditor(skill);
+              }}
+              onOpenAgent={(id) => {
+                const agent = state.agents.find((a) => a.id === id);
+                if (agent) setAgentEditor(agent);
+              }}
+            />
+          )}
           {view === 'memory' && <ProjectMemoryView state={state} dispatch={dispatch} />}
           {view === 'workflows' && <WorkflowLibrary state={state} dispatch={dispatch} />}
           {view === 'kits' && <KitsUI state={state} dispatch={dispatch} />}
@@ -1157,8 +1177,8 @@ export default function App() {
                   Origine
                   <select
                     aria-label="Origine des agents"
-                    value={catalogScope}
-                    onChange={(event) => setCatalogScope(event.target.value)}
+                    value={agentScope}
+                    onChange={(event) => setAgentScope(event.target.value)}
                   >
                     <option value="all">Toutes les origines</option>
                     <option value="workspace">Ce projet</option>
@@ -1182,7 +1202,7 @@ export default function App() {
                     className="button secondary"
                     onClick={() => {
                       setCatalogQuery({ ...catalogQuery, agents: '' });
-                      setCatalogScope('all');
+                      setAgentScope('all');
                       setOnlyFavorites(false);
                     }}
                   >
@@ -1262,8 +1282,8 @@ export default function App() {
                   Origine
                   <select
                     aria-label="Origine des skills"
-                    value={catalogScope}
-                    onChange={(event) => setCatalogScope(event.target.value)}
+                    value={skillScope}
+                    onChange={(event) => setSkillScope(event.target.value)}
                   >
                     <option value="all">Toutes les origines</option>
                     <option value="workspace">Ce projet</option>
@@ -1279,7 +1299,7 @@ export default function App() {
                     className="button secondary"
                     onClick={() => {
                       setCatalogQuery({ ...catalogQuery, skills: '' });
-                      setCatalogScope('all');
+                      setSkillScope('all');
                       setOnlyFavorites(false);
                     }}
                   >
@@ -2468,16 +2488,7 @@ function StepPanel({
           ? feature.steps.filter((item) => item.dependsOn.length === 0).map((item) => item.id)
           : [step.id],
       );
-    else {
-      setApprovalPending(true);
-      dispatch({
-        type: 'approveStep',
-        featureId: feature.id,
-        stepId: step.id,
-        expectedAttemptId: latest.id,
-        expectedRevision: latest.revision,
-      });
-    }
+    else requestApproval(false);
   }, [saveAck, latest?.revision]);
   const saveReport = (action: 'approve' | 'review') => {
     if (!latest) return;
@@ -2504,6 +2515,30 @@ function StepPanel({
   const [launchPair, setLaunchPair] = useState(false);
   const [approvalPending, setApprovalPending] = useState(false);
   const [approvalError, setApprovalError] = useState('');
+  const [reviewWarning, setReviewWarning] = useState<ReviewApprovalRequest | null>(null);
+  function approveCurrent(warning?: ReviewApprovalRequest) {
+    setApprovalError('');
+    setApprovalPending(true);
+    dispatch({
+      type: 'approveStep',
+      featureId: feature.id,
+      stepId: step.id,
+      expectedAttemptId: warning?.attemptId ?? latest?.id,
+      expectedRevision: warning?.revision ?? latest?.revision ?? 0,
+      ...(warning ? { expectedReviewWarningsKey: warning.key } : {}),
+    });
+  }
+  function requestApproval(confirmClean = true) {
+    const warning = reviewApprovalRequest(feature, step);
+    if (warning) setReviewWarning(warning);
+    else if (confirmClean)
+      confirm(
+        'Valider cette étape ?',
+        'Cette décision approuve le livrable actuel et débloque les étapes qui en dépendent.',
+        () => approveCurrent(),
+      );
+    else approveCurrent();
+  }
   const approvalReasons =
     step.status === 'awaiting_review' ? approvalBlockers(feature, step, 'human') : [];
   useEffect(
@@ -2603,12 +2638,35 @@ function StepPanel({
           onClose={() => setLaunchResume(null)}
         />
       )}
+      {reviewWarning && (
+        <ReviewApprovalDialog
+          warning={reviewWarning}
+          disabled={
+            running ||
+            approvalPending ||
+            approvalReasons.length > 0 ||
+            Boolean(feature.archived) ||
+            !state.workspace.trusted
+          }
+          onClose={() => setReviewWarning(null)}
+          onConfirm={() => {
+            approveCurrent(reviewWarning);
+            setReviewWarning(null);
+          }}
+        />
+      )}
       <section className="workbench">
         {step.status === 'skipped' && (
           <div className="optional-notice skipped-notice" role="status">
-            <strong>Passée par décision humaine — non exécutée</strong>
+            <strong>
+              {step.attempts.length
+                ? 'Passée après tentative — non validée'
+                : 'Passée par décision humaine — non exécutée'}
+            </strong>
             <p>
-              Aucun livrable ni preuve de test.{' '}
+              {step.attempts.length
+                ? 'Tentatives et modifications conservées ; aucun résultat validé.'
+                : 'Aucun livrable ni preuve de test.'}{' '}
               {step.optionalDecision?.at ? date(step.optionalDecision.at) : ''}
             </p>
           </div>
@@ -2629,6 +2687,9 @@ function StepPanel({
             </span>
             <h2>{step.name}</h2>
             <p>{step.description}</p>
+            {acceptedReviewRemarks(step) && (
+              <p role="status">Validée avec remarques — confirmation humaine enregistrée.</p>
+            )}
           </div>
           <Badge {...statuses[step.status]} />
         </div>
@@ -3317,23 +3378,7 @@ function StepPanel({
                         !state.workspace.trusted ||
                         Boolean(state.workspaceOperation)
                       }
-                      onClick={() =>
-                        confirm(
-                          'Valider cette étape ?',
-                          'Cette décision approuve le livrable actuel et débloque les étapes qui en dépendent.',
-                          () => {
-                            setApprovalError('');
-                            setApprovalPending(true);
-                            dispatch({
-                              type: 'approveStep',
-                              featureId: feature.id,
-                              stepId: step.id,
-                              expectedAttemptId: latest?.id,
-                              expectedRevision: latest?.revision ?? 0,
-                            });
-                          },
-                        )
-                      }
+                      onClick={() => requestApproval()}
                     >
                       {approvalPending ? (
                         <LoaderCircle size={16} className="spin" />

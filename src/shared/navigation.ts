@@ -1,4 +1,12 @@
 /** Portable declarations only. Host identity and browser authority never come from imported JSON. */
+export const NAVIGATION_READ_TOOLS = [
+  'studio_navigation_search',
+  'studio_navigation_context',
+  'studio_browser_inspect',
+  'studio_browser_sources',
+  'studio_browser_capture',
+  'studio_browser_view_capture',
+];
 export type NavigationActor =
   | { kind: 'human' }
   | { kind: 'navigator'; agentId: string; attemptId: string; applicationId: string };
@@ -47,6 +55,8 @@ export interface ApplicationProfile {
   name: string;
   projectIds: string[];
   origin: string;
+  /** Exact entry point; older profiles open their origin. */
+  startUrl?: string;
   allowedOrigins: string[];
   authenticationOrigins?: string[];
   ownerNavigatorId?: string;

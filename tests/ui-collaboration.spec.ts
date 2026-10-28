@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import { featureStateKey } from '../src/shared/collaboration';
+import { reviewApprovalRequest } from '../src/shared/reviewApproval';
 import type { StudioState, ClientMessage } from '../src/shared/types';
 
 function scenario(final = false): StudioState {
@@ -94,6 +95,102 @@ async function messages(page: Page, type: string) {
 async function post(page: Page, message: object) {
   await page.evaluate((value) => window.postMessage(value, '*'), message);
 }
+
+test('review remarks show a cancellable warning and require explicit confirmation', async ({
+  page,
+}) => {
+  const state = scenario(),
+    feature = state.features[0],
+    step = feature.steps.at(-1)!;
+  step.attempts[0].review = {
+    verdict: 'changes_requested',
+    summary: 'Une correction reste à faire.',
+    findings: [
+      { id: 'finding', severity: 'blocking', message: 'Préserver les appartenances existantes.' },
+    ],
+  };
+  feature.reviewComments = [
+    {
+      id: 'comment',
+      stepId: step.id,
+      attemptId: step.attempts[0].id,
+      text: 'Vérifier le nettoyage global.',
+      blocking: true,
+      resolved: false,
+      createdAt: feature.updatedAt,
+    },
+  ];
+  await open(page, state);
+  const validate = page.getByRole('button', { name: 'Valider cette étape', exact: true });
+  await expect(validate).toBeEnabled();
+  await validate.click();
+  const dialog = page.getByRole('dialog', { name: 'Valider malgré les remarques ?' });
+  await expect(dialog).toContainText('Préserver les appartenances existantes.');
+  await expect(dialog).toContainText('Vérifier le nettoyage global.');
+  await expect(dialog).toContainText('2 remarques');
+  expect(await messages(page, 'approveStep')).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(await messages(page, 'approveStep')).toHaveLength(0);
+  await validate.click();
+  const warning = reviewApprovalRequest(feature, step)!;
+  await dialog.getByRole('button', { name: 'Valider malgré les remarques', exact: true }).click();
+  await expect.poll(() => messages(page, 'approveStep')).toHaveLength(1);
+  expect((await messages(page, 'approveStep'))[0]).toMatchObject({
+    expectedReviewWarningsKey: warning.key,
+  });
+  step.status = step.attempts[0].status = 'approved';
+  step.attempts[0].approvedBy = 'human';
+  step.attempts[0].reviewAcceptance = {
+    revision: warning.revision,
+    review: warning.review,
+    comments: warning.comments,
+  };
+  feature.status = 'awaiting_final_validation';
+  await post(page, { type: 'state', state });
+  await expect(
+    page.getByText('Validée avec remarques — confirmation humaine enregistrée.'),
+  ).toBeVisible();
+});
+
+test('save and approve also asks for acknowledgement after receiving the saved revision', async ({
+  page,
+}) => {
+  const state = scenario(),
+    feature = state.features[0],
+    step = feature.steps.at(-1)!;
+  step.attempts[0].review = {
+    verdict: 'pass',
+    summary: 'Amélioration suggérée',
+    findings: [{ id: 'finding', severity: 'warning', message: 'Clarifier ce nom.' }],
+  };
+  await open(page, state);
+  await page.getByRole('button', { name: 'Modifier le compte rendu' }).click();
+  await page
+    .getByRole('textbox', { name: 'Compte rendu modifié', exact: true })
+    .fill('Rapport ajusté');
+  await page.getByRole('button', { name: 'Enregistrer et valider' }).click();
+  await expect.poll(() => messages(page, 'saveArtifact')).toHaveLength(1);
+  await post(page, {
+    type: 'artifactSaveResult',
+    featureId: feature.id,
+    stepId: step.id,
+    attemptId: step.attempts[0].id,
+    revision: 1,
+  });
+  step.attempts[0].revision = 1;
+  step.attempts[0].artifact!.content = 'Rapport ajusté';
+  await post(page, { type: 'state', state });
+  const dialog = page.getByRole('dialog', { name: 'Valider malgré les remarques ?' });
+  await expect(dialog).toContainText('Clarifier ce nom.');
+  expect(await messages(page, 'approveStep')).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Valider malgré les remarques', exact: true }).click();
+  await expect.poll(() => messages(page, 'approveStep')).toHaveLength(1);
+  expect((await messages(page, 'approveStep'))[0]).toMatchObject({
+    expectedRevision: 1,
+    expectedReviewWarningsKey: reviewApprovalRequest(feature, step)!.key,
+  });
+});
 
 test('correction previews dependent route and adjusted reports before emitting a versioned request', async ({
   page,
