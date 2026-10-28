@@ -175,7 +175,7 @@ export function promptSections(input: RunInput): PromptSection[] {
       'skipped-interventions',
       'Interventions passées par l’humain',
       'system',
-      `Interventions explicitement passées, sans exécution ni livrable :\n${skipped.map((step) => `- ${step.name} (${step.id}), ${step.optionalDecision?.at ?? 'date inconnue'}`).join('\n')}\nNe les présente pas comme validées ou testées. Signale tout livrable manquant nécessaire à ta mission.`,
+      `Interventions explicitement passées, sans résultat validé :\n${skipped.map((step) => `- ${step.name} (${step.id}), ${step.optionalDecision?.at ?? 'date inconnue'} · ${step.attempts.length ? 'tentatives et modifications éventuelles conservées, résultat non validé' : 'non exécutée, aucun livrable'}`).join('\n')}\nNe les présente pas comme validées ou testées. Signale tout livrable manquant nécessaire à ta mission.`,
     );
   for (const step of input.feature.steps) {
     const attempt = step.attempts.at(-1);
