@@ -87,6 +87,7 @@ export interface UsageTotals {
   unknownCostRuns: number;
 }
 export interface AutopilotConfig {
+  correctionLoop?: { maxStagnantCycles: number };
   checkpoints: string[];
   maxRuns: number;
   maxCorrectionCycles: number;
@@ -119,6 +120,8 @@ export interface AutopilotPreview {
   steps: { id: string; name: string; notes: string[] }[];
 }
 export interface AutopilotState extends AutopilotConfig {
+  correctionLoopHistory?: import('./correctionLoop').CorrectionLoopState[];
+  correctionLoopState?: import('./correctionLoop').CorrectionLoopState;
   decisions?: AutopilotDecision[];
   automaticAnswers?: AutopilotAnswer[];
   /** Only an interaction pause may resume after a reply; cleared on manual pause/reload. */

@@ -35,6 +35,10 @@ def verify(vsix, root, extract=None, match_build=False):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
         assert b'autopilot-journal' in ui, 'Autopilot journal missing'
+        assert b'renewCorrectionLoop' in host and b'renewCorrectionLoop' in ui, 'Correction loop renewal missing'
+        assert b'correction-loop-panel' in ui, 'Correction loop progress panel missing'
+        loop_guide = Path('docs/BOUCLES-CORRECTION.md')
+        assert archive.read('extension/' + loop_guide.as_posix()) == (root / loop_guide).read_bytes()
         assert b'host-recheck' in host, 'Native test verification missing'
         assert b'subplanState' in host, 'Recursive execution missing from host'
         assert b'subplan-card-visual' in ui, 'Dedicated subplan card missing from webview'

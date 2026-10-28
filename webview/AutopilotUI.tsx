@@ -25,6 +25,7 @@ import { subscribe } from './bridge';
 import { HumanRequests, McpPicker, MemoryPicker, StudioDialog, type Dispatch } from './ExecutionUI';
 import { NavigationLaunchPicker } from './ApplicationsUI';
 import './autopilot-answers.css';
+import { CorrectionLoopPanel, CorrectionLoopContract } from './CorrectionLoopUI';
 
 const blankLaunch = (step: FeatureStep, feature: Feature): RunLaunchOptions => ({
   initialContext: step.initialContext ?? '',
@@ -210,6 +211,18 @@ export function AutopilotBar({
           )}
         </div>
       </section>
+      <CorrectionLoopPanel
+        feature={feature}
+        dispatch={dispatch}
+        selectStep={selectStep}
+        renewalDisabled={Boolean(
+          active ||
+            otherPilot ||
+            state.workspaceOperation ||
+            feature.archived ||
+            auto?.status === 'running',
+        )}
+      />
       {showAnswers && (
         <StudioDialog
           title="Réponses automatiques de l’autopilot"
@@ -325,6 +338,12 @@ export function AutopilotBar({
                 </ol>
               </>
             )}
+            {auto?.correctionLoop && (
+              <>
+                {!auto.correctionLoopState && <p>Les critères seront figés au démarrage.</p>}
+                <CorrectionLoopContract feature={feature} loop={auto.correctionLoopState} />
+              </>
+            )}
             <p>
               <Flag size={15} /> Points de contrôle :{' '}
               {auto?.checkpoints
@@ -387,6 +406,7 @@ function AutopilotEditor({
     maxCorrectionCycles: current?.maxCorrectionCycles ?? 0,
     reviewStepId: current?.reviewStepId,
     correctionStepId: current?.correctionStepId,
+    correctionLoop: current?.correctionLoop,
     stepInputs:
       current?.stepInputs ??
       Object.fromEntries(feature.steps.map((s) => [s.id, blankLaunch(s, feature)])),
@@ -548,7 +568,11 @@ function AutopilotEditor({
                     required
                     value={config.maxCorrectionCycles}
                     onChange={(e) =>
-                      setConfig({ ...config, maxCorrectionCycles: Number(e.target.value) })
+                      setConfig({
+                        ...config,
+                        maxCorrectionCycles: Number(e.target.value),
+                        ...(Number(e.target.value) === 0 ? { correctionLoop: undefined } : {}),
+                      })
                     }
                   />
                 </label>
@@ -595,6 +619,49 @@ function AutopilotEditor({
                         ))}
                     </select>
                   </label>
+                  <label className="inline-check">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(config.correctionLoop)}
+                      onChange={(event) =>
+                        setConfig({
+                          ...config,
+                          correctionLoop: event.target.checked
+                            ? { maxStagnantCycles: 2 }
+                            : undefined,
+                        })
+                      }
+                    />
+                    <span>
+                      Suivre les progrès de la boucle
+                      <small>
+                        Comparer les revues sur un objectif et des critères figés, avec leurs
+                        preuves.
+                      </small>
+                    </span>
+                  </label>
+                  {config.correctionLoop && (
+                    <label className="field">
+                      <span>Arrêter après ce nombre de cycles comparables sans progrès</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        required
+                        value={config.correctionLoop.maxStagnantCycles}
+                        onChange={(event) =>
+                          setConfig({
+                            ...config,
+                            correctionLoop: { maxStagnantCycles: Number(event.target.value) },
+                          })
+                        }
+                      />
+                      <small>
+                        Seules les observations comparables comptent pour cet arrêt. Les limites
+                        globales et les validations humaines restent applicables.
+                      </small>
+                    </label>
+                  )}
                 </>
               )}
               <p className="field-help">

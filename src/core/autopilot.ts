@@ -1,3 +1,4 @@
+import { correctionLoopFeedback, correctionLoopPauseReason } from './correctionLoop';
 import { stepResolved } from '../shared/optionalSteps';
 import { isPairWork } from '../shared/pair';
 import type { Feature } from '../shared/types';
@@ -57,6 +58,17 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
       reason: 'Des questions attendent ta réponse ; l’autopilot reprendra ensuite.',
       questionStepId: waitingQuestion.id,
     };
+  const loopPause = pilot.correctionLoop
+    ? correctionLoopPauseReason(pilot.correctionLoopState)
+    : undefined;
+  if (loopPause) {
+    const humanCheckpoint = scopedSteps.find(
+      (s) => s.status === 'awaiting_review' && (feature.parent || pilot.checkpoints.includes(s.id)),
+    );
+    return pause(
+      humanCheckpoint ? `Validation humaine requise : ${humanCheckpoint.name}.` : loopPause,
+    );
+  }
   if (feature.steps.every(stepResolved)) {
     const blockers = featureCompletionBlockers(feature);
     return blockers.length
@@ -170,7 +182,15 @@ export function nextAutopilotAction(feature: Feature): AutopilotAction {
             )
             .join('\n\n')
         : `${attempt!.review!.summary}\n${attempt!.review!.findings.map((f) => `[${f.severity}] ${f.message}`).join('\n')}`;
-      return { kind: 'correct', stepId: target.id, feedback: feedback.slice(0, 20000) };
+      return {
+        kind: 'correct',
+        stepId: target.id,
+        feedback:
+          `${pilot.correctionLoop ? correctionLoopFeedback(pilot.correctionLoopState) : ''}\n${feedback}`.slice(
+            0,
+            20000,
+          ),
+      };
     }
     const blockers = approvalBlockers(feature, step, 'autopilot');
     return blockers.length ? pause(blockers.join(' ')) : { kind: 'approve', stepId: step.id };

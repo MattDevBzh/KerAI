@@ -215,7 +215,7 @@ it.each(['planning', 'paused', 'working', 'review'] as const)(
     const f = await legacyFixture(phase);
     const loaded = await new Store(f.storage).load();
     const attempt = loaded.features[0].steps[0].attempts[0];
-    expect(loaded.schemaVersion).toBe(12);
+    expect(loaded.schemaVersion).toBe(13);
     expect(attempt.pair).toMatchObject({
       calls: 3,
       busy: false,

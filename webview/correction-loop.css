@@ -1,0 +1,76 @@
+.correction-loop-panel {
+  padding: 16px;
+  margin-top: 12px;
+  border: 1px solid var(--vscode-panel-border, #8885);
+  border-radius: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.correction-loop-heading,
+.correction-loop-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.correction-loop-heading {
+  justify-content: space-between;
+}
+.correction-loop-heading h4 {
+  margin: 0;
+}
+.correction-loop-panel details {
+  margin-top: 12px;
+}
+.correction-loop-panel summary {
+  cursor: pointer;
+}
+.correction-loop-panel p {
+  white-space: pre-wrap;
+}
+.correction-loop-observations {
+  display: grid;
+  gap: 12px;
+  padding-left: 24px;
+}
+.correction-loop-observations > li {
+  padding: 12px;
+  border: 1px solid var(--vscode-panel-border, #8885);
+  border-radius: 8px;
+  min-width: 0;
+}
+.correction-loop-observations time {
+  font-size: 0.9em;
+}
+.correction-loop-counts {
+  margin: 10px 0;
+}
+.correction-loop-counts span {
+  border: 1px solid var(--vscode-panel-border, #8885);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.correction-loop-panel .button {
+  white-space: normal;
+}
+.correction-loop-contract {
+  border-left: 3px solid var(--vscode-focusBorder, #729fff);
+  padding-left: 12px;
+}
+@media (max-width: 520px) {
+  .correction-loop-panel {
+    padding: 12px;
+  }
+  .correction-loop-observations {
+    padding-left: 18px;
+  }
+  .correction-loop-observations > li {
+    padding: 8px;
+  }
+}
+.correction-loop-observations pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow-y: auto;
+}

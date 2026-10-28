@@ -148,6 +148,8 @@ export interface Attempt {
   artifactVersions?: import('./collaboration').EditorialVersion[];
   descriptionRevision?: number;
   correctionId?: string;
+  /** Host-owned contract and unchanged workspace observed across this verification attempt. */
+  correctionLoop?: { contractId: string; workspaceFingerprint?: string };
   id: string;
   startedAt: string;
   finishedAt?: string;
@@ -313,7 +315,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
   workspace: {
     name: string;
     path: string;
@@ -544,6 +546,13 @@ export type ClientMessage =
   | { type: 'deleteWorkflow'; workflowId: string; requestId: string }
   | import('./discussions').DiscussionClientMessage
   | { type: 'saveAutopilot'; featureId: string; config: AutopilotConfig; requestId?: string }
+  | {
+      type: 'renewCorrectionLoop';
+      featureId: string;
+      expectedContractId: string;
+      expectedStateKey: string;
+      requestId: string;
+    }
   | { type: 'previewAutopilot'; featureId: string; requestId: string }
   | { type: 'startAutopilot' | 'pauseAutopilot'; featureId: string }
   | { type: 'saveBudget'; featureId: string; budget: FeatureBudget }
@@ -557,6 +566,7 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'correctionLoopRenewed'; requestId: string; error?: string }
   | { type: 'autopilotSaved'; requestId: string; error?: string }
   | {
       type: 'autopilotPreview';

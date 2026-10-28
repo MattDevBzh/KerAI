@@ -85,6 +85,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
     [
       'dashboardState',
       'autopilotSaved',
+      'correctionLoopRenewed',
       'autopilotPreview',
       'dashboardSaved',
       'state',

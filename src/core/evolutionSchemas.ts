@@ -133,8 +133,80 @@ export const budgetSchema = z
     modelProfile: z.enum(['current', 'economy', 'balanced', 'quality']),
   })
   .strict();
+const correctionProblemSchema = z
+  .object({ key: z.string().regex(/^[a-f0-9]{64}$/), message: z.string().max(2000) })
+  .strict();
+const problemKeys = z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(100);
+export const correctionLoopStateSchema = z
+  .object({
+    contract: z
+      .object({
+        id: boundedId,
+        createdAt: timestamp,
+        fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        workflowFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        description: z.string().max(200000),
+        criteria: z
+          .array(z.object({ id: boundedId, text: z.string().max(30000) }).strict())
+          .max(256),
+        correctionStepId: boundedId.optional(),
+        reviewStepId: boundedId.optional(),
+        commands: z
+          .array(
+            z
+              .object({
+                projectId: boundedId.optional(),
+                id: boundedId,
+                name: z.string().max(2000),
+                command: z.string().max(10000),
+                args: z.array(z.string().max(10000)).max(256),
+                quality: z
+                  .object({
+                    kind: z.enum(['visual', 'counterexample']),
+                    reportPath: z.string().max(10000),
+                  })
+                  .strict()
+                  .optional(),
+              })
+              .strict(),
+          )
+          .max(100),
+      })
+      .strict(),
+    observations: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[a-f0-9]{64}$/),
+            stepId: boundedId,
+            attemptId: boundedId,
+            evidenceIds: z.array(boundedId).max(100),
+            workspaceFingerprint: z
+              .string()
+              .regex(/^[a-f0-9]{64}$/)
+              .optional(),
+            checkKey: z.string().max(300),
+            kind: z.enum(['review', 'test']),
+            problems: z.array(correctionProblemSchema).max(100),
+            resolved: problemKeys,
+            persistent: problemKeys,
+            introduced: problemKeys,
+            stagnantCycles: z.number().int().min(0).max(1000),
+          })
+          .strict(),
+      )
+      .max(80),
+    stagnantCycles: z.number().int().min(0).max(1000),
+    pause: z.enum(['contract_changed', 'stagnation', 'oscillation', 'history_limit']).optional(),
+    readiness: z.enum(['unverified', 'issues', 'ready_for_human']),
+  })
+  .strict();
 export const autopilotConfigSchema = z
   .object({
+    correctionLoop: z
+      .object({ maxStagnantCycles: z.number().int().min(1).max(10) })
+      .strict()
+      .optional(),
     checkpoints: uniqueIds,
     maxRuns: z.number().int().min(1).max(1000),
     maxCorrectionCycles: z.number().int().min(0).max(20),
@@ -147,6 +219,8 @@ export const autopilotConfigSchema = z
   .strict();
 export const autopilotStateSchema = autopilotConfigSchema
   .extend({
+    correctionLoopState: correctionLoopStateSchema.optional(),
+    correctionLoopHistory: z.array(correctionLoopStateSchema).max(20).optional(),
     decisions: z
       .array(
         z

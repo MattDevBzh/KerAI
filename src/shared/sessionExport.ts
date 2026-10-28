@@ -1,6 +1,70 @@
 import { usageCredits } from './credits';
 import { skippedStepLabel } from './optionalSteps';
 import type { Feature } from './types';
+import type { CorrectionLoopState } from './correctionLoop';
+
+// New diagnostic fields are plain text, not user-authored Markdown documents.
+const markdownText = (value: string): string =>
+  value.replace(/([\\`*_{}\[\]()#+.!|<>~-])/g, '\\$1').replace(/\r?\n/g, ' ');
+const readinessLabels: Record<CorrectionLoopState['readiness'], string> = {
+  unverified: 'Vérification incomplète',
+  issues: 'Des problèmes restent à traiter',
+  ready_for_human: 'Prêt pour la relecture humaine',
+};
+const pauseLabels: Record<NonNullable<CorrectionLoopState['pause']>, string> = {
+  contract_changed: 'Le contrat a changé ; renouvellement humain requis',
+  stagnation: 'Absence de progrès vérifié ; décision humaine requise',
+  oscillation: 'Réapparition de problèmes résolus ; décision humaine requise',
+  history_limit: 'Limite du journal atteinte ; décision humaine requise',
+};
+function correctionLoopMarkdown(feature: Feature): string[] {
+  const pilot = feature.autopilot;
+  if (!pilot?.correctionLoopState && !pilot?.correctionLoopHistory?.length) return [];
+  const parts = [
+    '## Suivi de la boucle de correction',
+    `Suivi : ${pilot.correctionLoop ? 'activé' : 'désactivé ; historique conservé'}. Appels consommés : ${pilot.runs}/${pilot.maxRuns}. Cycles de correction consommés : ${pilot.correctionCycles}/${pilot.maxCorrectionCycles}.`,
+    'Une relecture du modèle ne constitue pas une preuve de tests exécutés. Les références ci-dessous identifient les observations conservées ; elles ne remplacent ni leur vérification ni la validation définitive humaine.',
+  ];
+  const state = pilot.correctionLoopState;
+  if (state) {
+    const contract = state.contract;
+    parts.push(
+      `### Contrat courant · ${markdownText(contract.id)}`,
+      `Figé le ${markdownText(contract.createdAt)}. Bilan : ${readinessLabels[state.readiness]}. Cycles comparables sans progrès : ${state.stagnantCycles}${pilot.correctionLoop ? `/${pilot.correctionLoop.maxStagnantCycles}` : ''}.`,
+      `Pause : ${state.pause ? pauseLabels[state.pause] : 'aucun arrêt du suivi enregistré'}.`,
+      `Objectif figé : ${markdownText(contract.description)}`,
+      `Critères figés :\n${contract.criteria.map((c) => `- ${markdownText(c.id)} : ${markdownText(c.text)}`).join('\n') || 'Aucun critère enregistré.'}`,
+      `Route : correction ${markdownText(contract.correctionStepId ?? 'non définie')} → relecture ${markdownText(contract.reviewStepId ?? 'non définie')}.`,
+      `Commandes prévues :\n${contract.commands.map((c) => `- ${markdownText(c.projectId ? `${c.projectId} / ${c.id}` : c.id)} · ${markdownText(c.name)} : ${markdownText([c.command, ...c.args].join(' '))}${c.quality ? ` · rapport ${markdownText(c.quality.kind)} : ${markdownText(c.quality.reportPath)}` : ''}`).join('\n') || 'Aucune commande ; aucun succès de tests ne peut être déduit de la seule relecture.'}`,
+    );
+    if (!state.observations.length) parts.push('Aucune observation dans ce contrat.');
+    for (const [index, observation] of state.observations.entries()) {
+      const keys = (values: string[]) => values.map(markdownText).join(', ') || 'aucun';
+      parts.push(
+        `#### Observation ${index + 1} · ${observation.kind === 'test' ? 'test exécuté' : 'constat de relecture'}`,
+        `Identifiant : ${markdownText(observation.id)}. Étape : ${markdownText(observation.stepId)}. Tentative : ${markdownText(observation.attemptId)}.`,
+        `Résolus : ${observation.resolved.length} ; persistants : ${observation.persistent.length} ; nouveaux : ${observation.introduced.length}. Cycles comparables sans progrès : ${observation.stagnantCycles}.`,
+        `Identifiants résolus : ${keys(observation.resolved)}.\nIdentifiants persistants : ${keys(observation.persistent)}.\nIdentifiants nouveaux : ${keys(observation.introduced)}.`,
+        `Références de preuves : ${observation.evidenceIds.length ? observation.evidenceIds.map(markdownText).join(', ') : 'aucune ; un constat du modèle ne prouve pas une exécution de tests'}.`,
+      );
+      if (observation.problems.length)
+        parts.push(
+          `Problèmes observés :\n${observation.problems.map((problem) => `- ${markdownText(problem.key)} : ${markdownText(problem.message)}`).join('\n')}`,
+        );
+    }
+  }
+  if (pilot.correctionLoopHistory?.length) {
+    parts.push(
+      '### Contrats précédents',
+      'Résumés des contrats archivés ; leurs bilans décrivent leur état au renouvellement, pas les preuves actuelles.',
+    );
+    for (const previous of pilot.correctionLoopHistory)
+      parts.push(
+        `- ${markdownText(previous.contract.id)} · ${markdownText(previous.contract.createdAt)} · ${readinessLabels[previous.readiness]} · ${previous.observations.length} observation(s), ${previous.contract.criteria.length} critère(s), ${previous.stagnantCycles} cycle(s) comparable(s) sans progrès.${previous.pause ? ` Arrêt : ${pauseLabels[previous.pause]}.` : ''}\n  Objectif : ${markdownText(previous.contract.description)}`,
+      );
+  }
+  return parts;
+}
 
 /** A local, deterministic export of the session, including the human editorial history. */
 export function sessionMarkdown(feature: Feature, workspacePath: string): string {
@@ -14,6 +78,7 @@ export function sessionMarkdown(feature: Feature, workspacePath: string): string
     parts.push(
       `Validation définitive humaine : ${feature.finalValidation.at} · ${feature.finalValidation.id}`,
     );
+  parts.push(...correctionLoopMarkdown(feature));
   for (const version of feature.descriptionVersions ?? [])
     parts.push(
       `## Besoin · révision ${version.revision}\n${version.at} · ${version.author}${version.reason ? `\nMotif : ${version.reason}` : ''}\n\n${version.content}`,

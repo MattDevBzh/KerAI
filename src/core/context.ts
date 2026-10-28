@@ -1,4 +1,5 @@
 import { subplanContract } from '../shared/subplans';
+import { correctionLoopFeedback } from './correctionLoop';
 import { taskBoardInstructions } from '../shared/taskBoard';
 import { createHash } from 'node:crypto';
 import { boundAnswers } from './questions';
@@ -59,6 +60,16 @@ export function promptSections(input: RunInput): PromptSection[] {
     'human',
     `Feature : ${input.feature.title}\n${input.feature.description}`,
   );
+  const loop = input.feature.autopilot?.correctionLoop
+    ? input.feature.autopilot.correctionLoopState
+    : undefined;
+  if (loop)
+    add(
+      'correction-loop',
+      'Objectif et critères figés de la boucle',
+      'system',
+      `Contrat de réussite approuvé au lancement :\n${loop.contract.description}\n\nCritères à conserver :\n${loop.contract.criteria.map((c) => `- ${c.id} : ${c.text}`).join('\n')}\n\nCommandes de vérification prévues :\n${loop.contract.commands.map((c) => `- ${c.projectId ? `${c.projectId} / ` : ''}${c.name} (${c.id}) : ${c.command} ${c.args.join(' ')}`).join('\n') || 'Aucune commande enregistrée ; une relecture ne prouve pas une exécution de tests.'}\n\nNe modifie pas les critères, les commandes ou les assertions pour faire disparaître un échec. Signale une attente erronée pour décision humaine. Respecte les validations humaines, notamment le code avant les tests. Un constat du relecteur ne remplace pas une preuve d'exécution. Réutilise les identifiants des problèmes déjà observés et explique les différences.\n${correctionLoopFeedback(loop)}`,
+    );
   if (input.feature.images?.length)
     add(
       'images',

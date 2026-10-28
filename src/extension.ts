@@ -2123,6 +2123,22 @@ export async function activate(context: vscode.ExtensionContext) {
           else report(error);
         }
         return;
+      case 'renewCorrectionLoop':
+        try {
+          await current.renewCorrectionLoop(
+            message.featureId,
+            message.expectedContractId,
+            message.expectedStateKey,
+          );
+          send({ type: 'correctionLoopRenewed', requestId: message.requestId });
+        } catch (error) {
+          send({
+            type: 'correctionLoopRenewed',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        }
+        return;
       case 'previewAutopilot':
         try {
           send({

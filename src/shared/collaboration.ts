@@ -109,6 +109,8 @@ export function featureStateKey(feature: Feature): string {
       maxCorrectionCycles: feature.autopilot.maxCorrectionCycles,
       reviewStepId: feature.autopilot.reviewStepId,
       correctionStepId: feature.autopilot.correctionStepId,
+      correctionLoop: feature.autopilot.correctionLoop,
+      correctionContractId: feature.autopilot.correctionLoopState?.contract.id,
       stepInputs: feature.autopilot.stepInputs,
     },
   });

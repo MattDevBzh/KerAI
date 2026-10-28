@@ -293,10 +293,10 @@ describe('optional interventions with human decisions', () => {
     index.schemaVersion = 5;
     await writeFile(store.path, JSON.stringify(index));
     const migrated = await store.load();
-    expect(migrated.schemaVersion).toBe(12);
+    expect(migrated.schemaVersion).toBe(13);
     expect(migrated.features[0].steps[0].optional).toBe(false);
     expect(migrated.features[0].steps[1].status).toBe('skipped');
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(12);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(13);
   });
   it('rejects corrupt passed states and validates the host action contract', async () => {
     const f = fixture();

@@ -11,6 +11,13 @@ import { open, realpath } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { nextAutopilotAction } from '../core/autopilot';
+import {
+  correctionContractMatches,
+  correctionLoopPauseReason,
+  createCorrectionLoopState,
+  observeCorrectionStep,
+} from '../core/correctionLoop';
+import type { ScopedCorrectionCommand } from '../shared/correctionLoop';
 import { budgetBlockReason, defaultBudget } from '../core/budgets';
 import { emptyLaunch, previewContext, promptSections, selectMemory } from '../core/context';
 import { discussionFeaturePlanSchema } from '../core/discussionSchemas';
@@ -200,6 +207,7 @@ export class StudioService extends EventEmitter {
       'configureStep',
       'archiveFeature',
       'saveAutopilot',
+      'renewCorrectionLoop',
       'startAutopilot',
       'pauseAutopilot',
       'saveBudget',
@@ -306,7 +314,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 12,
+      schemaVersion: 13,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -1063,6 +1071,25 @@ export class StudioService extends EventEmitter {
     const issues = subplanIssues(originalFeature.steps);
     if (issues.length) throw new Error(issues.join(' '));
     const feature = structuredClone(originalFeature);
+    if (
+      originalFeature.autopilot?.correctionLoop &&
+      originalFeature.autopilot.correctionLoopState &&
+      !correctionContractMatches(
+        originalFeature.autopilot.correctionLoopState,
+        originalFeature,
+        this.correctionCommands(originalFeature),
+      )
+    )
+      throw new Error(
+        'Le contrat de réussite a changé. Renouvelle la boucle avant une nouvelle tentative.',
+      );
+    if (feature.autopilot?.correctionLoop && !feature.autopilot.correctionLoopState)
+      feature.autopilot.correctionLoopState = createCorrectionLoopState(
+        feature,
+        this.correctionCommands(originalFeature),
+        'preview',
+        'preview',
+      );
     const step = feature.steps.find((item) => item.id === stepId)!;
     const agent = this.state.agents.find((item) => item.id === step.agentId);
     if (!agent) throw new Error('Agent introuvable.');
@@ -1369,6 +1396,7 @@ export class StudioService extends EventEmitter {
     if (this.active) throw new Error('Une exécution est déjà active dans ce workspace.');
     const feature = this.engine.getFeature(featureId),
       step = this.engine.getStep(featureId, stepId);
+    if (automated) this.assertCorrectionContract(feature);
     if (feature.branch !== info.branch)
       throw new Error(
         `Cette session est liée à la branche ${feature.branch}. Reviens sur cette branche avant de la lancer.`,
@@ -1412,6 +1440,10 @@ export class StudioService extends EventEmitter {
         'Reprends le chat de l’orchestrateur : des sous-tâches sont encore en cours.',
       );
     const attempt = continued ?? this.engine.beginRun(featureId, stepId, feedback, resume);
+    if (feature.autopilot?.correctionLoop && feature.autopilot.correctionLoopState) {
+      feature.autopilot.correctionLoopState.readiness = 'unverified';
+      attempt.correctionLoop = { contractId: feature.autopilot.correctionLoopState.contract.id };
+    }
     if (!continued && step.subplanState) {
       step.subplanState.acceptedRevisions = [];
       step.subplanState.queue = [];
@@ -1847,6 +1879,7 @@ export class StudioService extends EventEmitter {
       },
     };
     let nativeBefore: Map<string, string> | undefined;
+    let loopWorkspaceBefore: string | undefined;
     try {
       if (pair && turn) {
         if (step.subplan && isWorkTurn(turn))
@@ -1941,6 +1974,21 @@ export class StudioService extends EventEmitter {
           });
         }
       }
+      if (
+        attempt.correctionLoop &&
+        (step.policy === 'tests' || step.id === feature.autopilot?.reviewStepId)
+      ) {
+        try {
+          loopWorkspaceBefore = await this.correctionWorkspaceFingerprint(feature);
+        } catch (error) {
+          callbacks.onEvent({
+            id: randomUUID(),
+            at: new Date().toISOString(),
+            kind: 'warning',
+            message: `La boucle ne pourra pas attester cet état des fichiers : ${redact((error as Error).message)}`,
+          });
+        }
+      }
       if (pair) {
         pair.calls++;
         await this.persist();
@@ -1949,6 +1997,7 @@ export class StudioService extends EventEmitter {
       if (automated && feature.autopilot) {
         if (feature.autopilot.status !== 'running')
           throw new Error('Le pilote a été mis en pause avant l’appel.');
+        this.assertCorrectionContract(feature);
         feature.autopilot.runs++;
         feature.autopilot.updatedAt = new Date().toISOString();
         if (feedback) feature.autopilot.correctionCycles++;
@@ -1971,6 +2020,15 @@ export class StudioService extends EventEmitter {
       ];
       result.fileHashes = { ...(pair ? attempt.fileHashes : {}), ...host?.fileHashes };
       result.content = redact(result.content);
+      if (result.review)
+        result.review = {
+          ...result.review,
+          summary: redact(result.review.summary),
+          findings: result.review.findings.map((finding) => ({
+            ...finding,
+            message: redact(finding.message),
+          })),
+        };
       if (!pair || isWorkTurn(turn))
         await this.hooks('afterRun', input, controller.signal, callbacks);
       if (pair && turn && reply) {
@@ -2088,6 +2146,23 @@ export class StudioService extends EventEmitter {
       }
       const owned = this.toolHosts.get(attempt.id)?.fileHashes;
       if (owned) feature.workspaceFileHashes = { ...feature.workspaceFileHashes, ...owned };
+      if (
+        loopWorkspaceBefore &&
+        attempt.correctionLoop &&
+        ['awaiting_review', 'approved'].includes(step.status)
+      ) {
+        try {
+          const after = await this.correctionWorkspaceFingerprint(feature);
+          if (after === loopWorkspaceBefore) attempt.correctionLoop.workspaceFingerprint = after;
+        } catch (error) {
+          callbacks.onEvent({
+            id: randomUUID(),
+            at: new Date().toISOString(),
+            kind: 'warning',
+            message: `État final de la vérification non attesté : ${redact((error as Error).message)}`,
+          });
+        }
+      }
       if (feature.worktree && attempt.checkpointBeforeId && (!pair || isWorkTurn(turn))) {
         try {
           const after = await this.workspaces.capture(feature, {
@@ -2824,11 +2899,151 @@ export class StudioService extends EventEmitter {
       },
     ].slice(-200);
   }
+  private correctionCommands(feature: Feature): ScopedCorrectionCommand[] {
+    if ((feature.projects?.length ?? 0) > 1)
+      return feature.projects!.flatMap((project) => {
+        const settings = this.projectSettings
+          ? this.projectSettings(project.id)
+          : this.state.settings;
+        if (!settings) throw new Error(`Les réglages de ${project.name} sont indisponibles.`);
+        return settings.testCommands.map((command) => ({
+          ...structuredClone(command),
+          projectId: project.id,
+        }));
+      });
+    return structuredClone(this.state.settings.testCommands);
+  }
+  private async correctionWorkspaceFingerprint(feature: Feature): Promise<string> {
+    const root = await this.featurePath(feature.id);
+    return (
+      await nativeTestSnapshot(
+        root,
+        feature.projects?.map((project, index) => ({
+          id: project.id,
+          path: index === 0 ? root : project.path,
+        })),
+      )
+    ).digest;
+  }
+  private correctionLoopPrerequisites(feature: Feature): string | undefined {
+    const pilot = feature.autopilot;
+    if (!pilot?.correctionLoop) return;
+    if (!feature.criteria?.length)
+      return 'Ajoute au moins un critère d’acceptation avant de démarrer le suivi de la boucle.';
+    if (!pilot.reviewStepId || !pilot.correctionStepId || pilot.maxCorrectionCycles < 1)
+      return 'Le suivi de la boucle nécessite une relecture, une étape de correction et au moins un cycle autorisé.';
+  }
+  private correctionLoopBlocker(feature: Feature): string | undefined {
+    if (!feature.autopilot?.correctionLoop) return;
+    const prerequisite = this.correctionLoopPrerequisites(feature);
+    if (prerequisite) return prerequisite;
+    const state = feature.autopilot.correctionLoopState;
+    if (state && !correctionContractMatches(state, feature, this.correctionCommands(feature)))
+      return correctionLoopPauseReason({ ...state, pause: 'contract_changed' });
+    return correctionLoopPauseReason(state);
+  }
+  private assertCorrectionContract(feature: Feature): void {
+    if (!feature.autopilot?.correctionLoop) return;
+    const state = feature.autopilot.correctionLoopState;
+    if (state && !correctionContractMatches(state, feature, this.correctionCommands(feature))) {
+      state.pause = 'contract_changed';
+      state.readiness = 'unverified';
+    }
+    const reason = this.correctionLoopBlocker(feature);
+    if (reason) throw new Error(reason);
+  }
+  private async observeCorrectionLoop(feature: Feature): Promise<void> {
+    const pilot = feature.autopilot;
+    if (!pilot?.correctionLoop || !pilot.correctionLoopState) return;
+    this.assertCorrectionContract(feature);
+    const stateKey = featureStateKey(feature);
+    const observed = feature.steps.filter((step) => {
+      const attempt = step.attempts.at(-1);
+      return (
+        attempt?.correctionLoop?.contractId === pilot.correctionLoopState!.contract.id &&
+        ['awaiting_review', 'approved'].includes(step.status) &&
+        (step.id === pilot.reviewStepId || Boolean(attempt.evidence?.length))
+      );
+    });
+    if (!observed.length) return;
+    for (const step of observed) await verifyProofFiles(feature, new Set([step.id]), this);
+    // Read the final workspace state after verifying every candidate proof.
+    const workspaceFingerprint = await this.correctionWorkspaceFingerprint(feature).catch(
+      () => undefined,
+    );
+    this.assertTrusted();
+    if (featureStateKey(feature) !== stateKey)
+      throw new Error(
+        'La session a changé pendant la vérification de la boucle. Reprends son état actuel.',
+      );
+    this.assertCorrectionContract(feature);
+    for (const step of observed) {
+      pilot.correctionLoopState = observeCorrectionStep(
+        pilot.correctionLoopState,
+        feature,
+        step.id,
+        workspaceFingerprint,
+      );
+      // Observations never bypass a checkpoint or approve an agent result.
+      if (pilot.correctionLoopState.pause) break;
+    }
+  }
+  async renewCorrectionLoop(
+    featureId: string,
+    expectedContractId: string,
+    expectedStateKey: string,
+  ): Promise<void> {
+    this.assertTrusted();
+    this.assertConfigurable(featureId);
+    const feature = this.engine.getFeature(featureId),
+      pilot = feature.autopilot;
+    if (!pilot?.correctionLoop || !pilot.correctionLoopState)
+      throw new Error('Aucune boucle suivie à renouveler.');
+    if (
+      feature.archived ||
+      pilot.correctionLoopState.contract.id !== expectedContractId ||
+      featureStateKey(feature) !== expectedStateKey
+    )
+      throw new Error(
+        'La session ou le contrat a changé. Relis la boucle actuelle avant de confirmer.',
+      );
+    const prerequisite = this.correctionLoopPrerequisites(feature);
+    if (prerequisite) throw new Error(prerequisite);
+    if ((pilot.correctionLoopHistory?.length ?? 0) >= 20)
+      throw new Error(
+        'Cette session conserve déjà vingt boucles précédentes. Crée une nouvelle session pour poursuivre sans effacer son historique.',
+      );
+    const previous = structuredClone(pilot);
+    pilot.correctionLoopHistory = [
+      ...(pilot.correctionLoopHistory ?? []),
+      structuredClone(pilot.correctionLoopState),
+    ];
+    pilot.correctionLoopState = createCorrectionLoopState(
+      feature,
+      this.correctionCommands(feature),
+      new Date().toISOString(),
+      randomUUID(),
+    );
+    pilot.status = 'paused';
+    pilot.resumeAfterInteraction = undefined;
+    pilot.reason =
+      'Nouvelle boucle préparée. Les compteurs et l’historique sont conservés ; reprends explicitement le pilote.';
+    pilot.updatedAt = new Date().toISOString();
+    this.recordAutopilot(feature, 'configure', pilot.reason);
+    try {
+      await this.persist();
+    } catch (error) {
+      feature.autopilot = previous;
+      throw error;
+    }
+  }
   async previewAutopilot(featureId: string): Promise<AutopilotPreview> {
     const feature = this.engine.getFeature(featureId),
       pilot = feature.autopilot;
     if (!pilot) throw new Error('Configure le pilote avant de préparer son lancement.');
     const errors: string[] = [];
+    const loopBlocker = this.correctionLoopBlocker(feature);
+    if (loopBlocker) errors.push(loopBlocker);
     if (!this.isTrusted()) errors.push('Approuve le projet avant de lancer le pilote.');
     if (feature.archived) errors.push('Cette session est archivée.');
     if (this.active || this.automation || this.workspaceTask)
@@ -2958,6 +3173,8 @@ export class StudioService extends EventEmitter {
       correctionCycles: feature.autopilot?.correctionCycles ?? 0,
       decisions: feature.autopilot?.decisions ?? [],
       automaticAnswers: feature.autopilot?.automaticAnswers ?? [],
+      correctionLoopState: feature.autopilot?.correctionLoopState,
+      correctionLoopHistory: feature.autopilot?.correctionLoopHistory,
       updatedAt: new Date().toISOString(),
     };
     this.recordAutopilot(feature, 'configure', 'Configuration enregistrée ; compteurs conservés.');
@@ -3051,9 +3268,19 @@ export class StudioService extends EventEmitter {
     feature.autopilot.reason = undefined;
     feature.autopilot.updatedAt = new Date().toISOString();
     try {
+      this.assertCorrectionContract(feature);
+      if (feature.autopilot.correctionLoop && !feature.autopilot.correctionLoopState)
+        feature.autopilot.correctionLoopState = createCorrectionLoopState(
+          feature,
+          this.correctionCommands(feature),
+          new Date().toISOString(),
+          randomUUID(),
+        );
       await this.persist();
       while (!this.disposed && feature.autopilot.status === 'running') {
         this.assertTrusted();
+        await this.observeCorrectionLoop(feature);
+        if (feature.autopilot.status !== 'running') break;
         this.answerRecommendedQuestions(feature);
         const action = nextAutopilotAction(feature);
         if (action.kind === 'pause') {
