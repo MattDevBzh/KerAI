@@ -26,6 +26,7 @@ import type {
 import { Avatar } from './Avatar';
 import { isHosted, persistView, subscribe } from './bridge';
 import './discussions.css';
+import './work-focus.css';
 
 type Dispatch = (message: ClientMessage) => void;
 const nameOf = (agent: DiscussionAgent) => agent.profile.nickname || agent.profile.name;
@@ -59,10 +60,12 @@ export function DiscussionUI({
   const [newId, setNewId] = useState(() => crypto.randomUUID());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [acceptedSends, setAcceptedSends] = useState<Record<string, string>>({});
   type Pending = { discussionId: string; action: 'send' | 'delete' | 'prepare'; content?: string };
   const requests = useRef<Record<string, Pending>>({});
   const [pendingRequests, setPendingRequests] = useState<Record<string, Pending>>({});
   const [search, setSearch] = useState('');
+  const [historyPage, setHistoryPage] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const id = selectedId || newId;
   const selected = state.discussions.find((discussion) => discussion.id === id);
@@ -82,6 +85,11 @@ export function DiscussionUI({
         setPendingRequests(remaining);
         setErrors((current) => ({ ...current, [request.discussionId]: message.error ?? '' }));
         if (message.error || message.cancelled) return;
+        if (request.action === 'send')
+          setAcceptedSends((current) => ({
+            ...current,
+            [request.discussionId]: message.requestId,
+          }));
         setDrafts((current) => {
           if (request.action === 'prepare') return current;
           if (
@@ -137,11 +145,16 @@ export function DiscussionUI({
   useEffect(() => {
     persistView({ discussionId: selectedId });
   }, [selectedId]);
+  const filteredDiscussions = [...state.discussions]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .filter((discussion) => !search || searchText(discussion.title).includes(searchText(search)));
+  const historyPages = Math.max(1, Math.ceil(filteredDiscussions.length / 50));
+  const currentHistoryPage = Math.min(historyPage, historyPages - 1);
   const groups = new Map<string, Discussion[]>();
-  for (const discussion of [...state.discussions].sort((a, b) =>
-    b.updatedAt.localeCompare(a.updatedAt),
+  for (const discussion of filteredDiscussions.slice(
+    currentHistoryPage * 50,
+    (currentHistoryPage + 1) * 50,
   )) {
-    if (search && !searchText(discussion.title).includes(searchText(search))) continue;
     const group = dateGroup(discussion.updatedAt);
     groups.set(group, [...(groups.get(group) ?? []), discussion]);
   }
@@ -182,7 +195,10 @@ export function DiscussionUI({
             aria-label="Rechercher une discussion"
             placeholder="Rechercher…"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setHistoryPage(0);
+            }}
           />
           {search && (
             <button
@@ -223,6 +239,27 @@ export function DiscussionUI({
               ))}
             </section>
           ))}
+          {historyPages > 1 && (
+            <nav className="work-pagination" aria-label="Pages des discussions">
+              <button
+                className="button secondary small"
+                disabled={currentHistoryPage === 0}
+                onClick={() => setHistoryPage(currentHistoryPage - 1)}
+              >
+                Précédentes
+              </button>
+              <span>
+                {currentHistoryPage + 1}/{historyPages} · {filteredDiscussions.length} discussions
+              </span>
+              <button
+                className="button secondary small"
+                disabled={currentHistoryPage + 1 === historyPages}
+                onClick={() => setHistoryPage(currentHistoryPage + 1)}
+              >
+                Suivantes
+              </button>
+            </nav>
+          )}
           {!groups.size && (
             <p className="discussion-history-empty">
               {search
@@ -245,6 +282,7 @@ export function DiscussionUI({
         onDraft={(value) => setDrafts((current) => ({ ...current, [id]: value }))}
         pending={Object.values(pendingRequests).some((request) => request.discussionId === id)}
         error={errors[id] ?? ''}
+        acceptedSend={acceptedSends[id]}
       />
     </section>
   );
@@ -262,6 +300,7 @@ function Conversation({
   pending,
   error,
   visible,
+  acceptedSend,
 }: {
   onCreateFeature: (discussionId: string, draft: DiscussionFeatureDraft) => void;
   id: string;
@@ -274,6 +313,7 @@ function Conversation({
   pending: boolean;
   error: string;
   visible: boolean;
+  acceptedSend?: string;
 }) {
   const imageDraft = useImageDraft();
   const preferred = state.agents.filter((agent) => agent.profile.discussionAgent);
@@ -281,7 +321,22 @@ function Conversation({
   const [model, setModel] = useState(discussion?.model ?? '');
   const [reasoning, setReasoning] = useState(discussion?.reasoning ?? '');
   const [expanded, setExpanded] = useState(false);
-  const [optionsOpen, setOptionsOpen] = useState(true);
+  const [optionsOpen, setOptionsOpen] = useState(!discussion);
+  const archivedImages = discussion?.messages.flatMap((message) => message.images ?? []) ?? [];
+  const [contextImageIds, setContextImageIds] = useState<string[] | undefined>();
+  const activeImageIds =
+    contextImageIds ??
+    discussion?.activeImageIds ??
+    archivedImages.slice(-4).map((image) => image.id);
+  const [messagePage, setMessagePage] = useState(0);
+  const messagePages = Math.max(1, Math.ceil((discussion?.messages.length ?? 0) / 40));
+  const currentMessagePage = Math.min(messagePage, messagePages - 1);
+  const messageEnd = (discussion?.messages.length ?? 0) - currentMessagePage * 40;
+  const visibleMessages =
+    discussion?.messages.slice(Math.max(0, messageEnd - 40), messageEnd) ?? [];
+  const outgoingImageIds = imageDraft.images.length
+    ? imageDraft.images.map((image) => image.id)
+    : activeImageIds;
   const [showLatest, setShowLatest] = useState(false);
   const scroll = useRef<HTMLDivElement>(null),
     stick = useRef(true);
@@ -316,16 +371,19 @@ function Conversation({
   }, [agentKey, preferred[0]?.key, discussion?.id]);
   const wasPending = useRef(pending);
   useEffect(() => {
-    if (visible && wasPending.current && !pending) {
-      input.current?.focus();
-      if (!error) imageDraft.setImages([]);
-    }
+    if (visible && wasPending.current && !pending) input.current?.focus();
     wasPending.current = pending;
   }, [pending, visible]);
   useEffect(() => {
+    if (!acceptedSend) return;
+    // A successful send owns these attachments even while another page is visible.
+    imageDraft.setImages([]);
+    setContextImageIds(undefined);
+  }, [acceptedSend]);
+  useEffect(() => {
     if (visible && stick.current && scroll.current)
       scroll.current.scrollTop = discussion?.messages.length ? scroll.current.scrollHeight : 0;
-  }, [discussion?.messages, visible]);
+  }, [discussion?.messages, visible, currentMessagePage]);
   const send = (event?: FormEvent) => {
     event?.preventDefault();
     if (
@@ -340,8 +398,10 @@ function Conversation({
       return;
     const requestId = crypto.randomUUID();
     stick.current = true;
+    setMessagePage(0);
     dispatch({
       type: 'sendDiscussion',
+      contextImageIds: outgoingImageIds,
       ...(imageDraft.images.length ? { images: imageDraft.images } : {}),
       requestId,
       discussionId: id,
@@ -372,6 +432,24 @@ function Conversation({
           </button>
         )}
       </header>
+      <p className="discussion-scope">
+        Discussion : aucun accès aux fichiers ni aux outils. Pour agir sur le projet, préparez une
+        session avec « Créer une feature » puis choisissez son projet et son équipe.
+      </p>
+      {discussion?.contextWindow &&
+        (discussion.contextWindow.omittedMessages > 0 ||
+          discussion.contextWindow.truncatedMessages > 0 ||
+          discussion.contextWindow.sourceTruncated) && (
+          <p className="discussion-window-note" role="status">
+            Contexte envoyé : fenêtre récente, {discussion.contextWindow.omittedMessages} messages
+            anciens omis, {discussion.contextWindow.truncatedMessages} extraits tronqués
+            {discussion.contextWindow.sourceTruncated ? ', archive source partielle' : ''}.
+            {discussion.contextWindow.sentCharacters !== undefined &&
+              ` ${discussion.contextWindow.sentCharacters.toLocaleString('fr-FR')} caractères de consignes et texte, ${discussion.contextWindow.imageCount ?? 0} image(s).`}{' '}
+            Aucun résumé automatique. Les originaux restent consultables dans l’historique ;
+            rappelez les décisions utiles pour poursuivre.
+          </p>
+        )}
       {discussion && (!source || discussion.messages.length > 0) && (
         <div className="discussion-feature-actions">
           <button
@@ -678,7 +756,35 @@ function Conversation({
             </small>
           </div>
         )}
-        {discussion?.messages.map((message) => (
+        {messagePages > 1 && (
+          <nav className="work-pagination" aria-label="Pages des messages">
+            <button
+              className="button secondary small"
+              disabled={currentMessagePage + 1 >= messagePages}
+              onClick={() => {
+                stick.current = false;
+                setMessagePage(currentMessagePage + 1);
+              }}
+            >
+              Plus anciens
+            </button>
+            <span>
+              {Math.max(0, messageEnd - 40) + 1}–{messageEnd} / {discussion?.messages.length}{' '}
+              messages conservés
+            </span>
+            <button
+              className="button secondary small"
+              disabled={currentMessagePage === 0}
+              onClick={() => {
+                stick.current = true;
+                setMessagePage(0);
+              }}
+            >
+              Derniers messages
+            </button>
+          </nav>
+        )}
+        {visibleMessages.map((message) => (
           <article
             className={`discussion-message ${message.role}`}
             key={message.id}
@@ -754,6 +860,7 @@ function Conversation({
           onClick={() => {
             if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
             stick.current = true;
+            setMessagePage(0);
             setShowLatest(false);
           }}
         >
@@ -776,6 +883,39 @@ function Conversation({
         <label className="team-sr-only" htmlFor={`discussion-input-${id}`}>
           Votre message
         </label>
+        {archivedImages.length > 0 && (
+          <details className="discussion-context-images">
+            <summary>
+              Images du contexte · {outgoingImageIds.length}/4 pour le prochain envoi
+            </summary>
+            <p className="field-help">
+              De nouvelles images remplacent la sélection active. Les originaux restent dans
+              l’historique. Sans nouvelle image, choisissez les captures à renvoyer.
+            </p>
+            {!imageDraft.images.length &&
+              archivedImages.map((image) => (
+                <label key={image.id}>
+                  <input
+                    type="checkbox"
+                    checked={activeImageIds.includes(image.id)}
+                    disabled={
+                      pending ||
+                      running ||
+                      (!activeImageIds.includes(image.id) && activeImageIds.length >= 4)
+                    }
+                    onChange={() =>
+                      setContextImageIds(
+                        activeImageIds.includes(image.id)
+                          ? activeImageIds.filter((id) => id !== image.id)
+                          : [...activeImageIds, image.id],
+                      )
+                    }
+                  />
+                  {image.name}
+                </label>
+              ))}
+          </details>
+        )}
         <ImagePicker draft={imageDraft} disabled={pending || running} />
         <div className="discussion-input-box">
           <textarea

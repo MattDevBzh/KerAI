@@ -269,7 +269,7 @@ test('a discussion becomes an editable feature proposal and failed creation keep
   const fixture = await setup(page, 'idea');
   await page.getByLabel('Votre message', { exact: true }).fill('Une question encore en brouillon');
   await page.getByRole('button', { name: 'Créer une feature', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Une nouvelle feature' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
   await expect(page.getByLabel('Qu’allons-nous faire ?', { exact: false })).toHaveValue(
     'Recherche au clavier',
   );
@@ -285,7 +285,7 @@ test('a discussion becomes an editable feature proposal and failed creation keep
   await expect(page.getByLabel('Niveau de réflexion').first()).toHaveValue('');
   await page.getByRole('button', { name: 'Monter l’intervention 2' }).click();
   await page.screenshot({ path: testInfo.outputPath('discussion-feature-proposal.png') });
-  await page.getByRole('button', { name: 'Créer la feature', exact: true }).click();
+  await page.getByRole('button', { name: 'Créer la session', exact: true }).click();
   const request = (await messages(page)).find((message) => message.type === 'createFeature');
   expect(request).toMatchObject({
     title: 'Recherche validée par Matt',
@@ -322,7 +322,7 @@ test('a discussion becomes an editable feature proposal and failed creation keep
   await expect(page.getByLabel('Qu’allons-nous faire ?', { exact: false })).toHaveValue(
     'Recherche validée par Matt',
   );
-  await page.getByRole('button', { name: 'Créer la feature', exact: true }).click();
+  await page.getByRole('button', { name: 'Créer la session', exact: true }).click();
   const retry = (await messages(page))
     .filter((message) => message.type === 'createFeature')
     .at(-1)!;
@@ -334,7 +334,7 @@ test('a discussion becomes an editable feature proposal and failed creation keep
       ),
     retry,
   );
-  await expect(page.getByRole('dialog', { name: 'Une nouvelle feature' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Nouvelle session' })).toHaveCount(0);
 });
 
 test('linked discussions remain usable in a compact window', async ({ page }, testInfo) => {

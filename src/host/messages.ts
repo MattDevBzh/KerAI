@@ -139,6 +139,7 @@ export const messageSchema = z.discriminatedUnion('type', [
     .object({
       type: z.enum([
         'ready',
+        'resyncState',
         'refresh',
         'checkRuntime',
         'autoDetectCli',

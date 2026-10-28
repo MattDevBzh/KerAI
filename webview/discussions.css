@@ -466,6 +466,13 @@
   }
 }
 @container studio (max-width: 760px) {
+  /* This stylesheet may load lazily after global ergonomics styles. */
+  .discussion-page:not(.history-open) > .discussion-history {
+    display: none;
+  }
+  .discussion-page.history-open > .discussion-history {
+    display: flex;
+  }
   .discussion-page {
     grid-template-columns: minmax(0, 1fr);
     height: auto;

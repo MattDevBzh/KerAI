@@ -1,0 +1,72 @@
+.work-secondary {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 7px 0;
+  padding: 0 12px;
+}
+.work-secondary > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.work-secondary[open] {
+  padding-bottom: 12px;
+}
+.work-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  font-size: 12px;
+}
+.session-title-open {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-title-open:hover {
+  text-decoration: underline;
+}
+.discussion-scope {
+  margin: 0;
+  padding: 7px 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.discussion-context-images {
+  padding: 8px 0;
+}
+.discussion-context-images label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 5px 12px 5px 0;
+  font-size: 12px;
+}
+.discussion-window-note {
+  margin: 0;
+  padding: 6px 18px;
+  font-size: 12px;
+}
+@media (max-height: 760px) {
+  .feature-heading h1 {
+    margin: 5px 0;
+    font-size: 25px;
+  }
+  .feature-heading {
+    margin-bottom: 10px;
+  }
+  .feature-meta {
+    margin-top: 5px;
+  }
+  .feature-step-detail {
+    scroll-margin-top: 12px;
+  }
+}

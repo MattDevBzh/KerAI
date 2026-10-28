@@ -29,6 +29,8 @@ function journey(url: string, arrival = false): NavigationJourney {
 const sensitive = [
   'http://user:DO_NOT_REFLECT@localhost:3000/',
   'http://localhost:3000/?password=DO_NOT_REFLECT',
+  'https://app.example.com/?token=DO_NOT_REFLECT',
+  'http://intranet:8080/#access_token=DO_NOT_REFLECT',
   '/?TOKEN=DO_NOT_REFLECT',
   '/?api_key=DO_NOT_REFLECT',
   '/?access_token=DO_NOT_REFLECT',
@@ -60,6 +62,8 @@ describe('credential URLs never enter navigation definitions or exports', () => 
     '/#/orders?customerId=42',
     '/?search=token+renewal&sort=name',
     'http://localhost:3000/reports?year=2026#overview',
+    'https://app.example.com/reports?year=2026#overview',
+    'http://intranet:8080/reports?year=2026#overview',
   ])('preserves ordinary query and fragment semantics %s', (url) => {
     expect(hasSensitiveNavigationUrl(url)).toBe(false);
     expect(navigationStepSchema.parse({ id: 'navigate', action: 'navigate', url }).url).toBe(url);

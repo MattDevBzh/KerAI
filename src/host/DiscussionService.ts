@@ -1,3 +1,4 @@
+import { discussionContext, boundedDiscussionSource } from '../core/discussionContext';
 import { validateImages } from './Images';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
@@ -41,6 +42,26 @@ interface Options {
 }
 type Send = Extract<DiscussionClientMessage, { type: 'sendDiscussion' }>;
 
+/** Keep source limitations ahead of excerpts, with a bounded encoded footprint. */
+function sourceWarnings(warnings: string[]): string[] {
+  const selected: string[] = [];
+  let remaining = 5800;
+  let partial = false;
+  for (const warning of warnings) {
+    if (selected.length >= 20 || remaining < 200) break;
+    // A JSON character occupies at most six code units after escaping.
+    const excerpt = warning.slice(0, Math.min(1000, Math.floor((remaining - 2) / 6)));
+    selected.push(excerpt);
+    remaining -= JSON.stringify(excerpt).length + 1;
+    partial ||= excerpt.length < warning.length;
+  }
+  if (partial || selected.length < warnings.length)
+    selected.push(
+      'Avertissements source partiels dans cette requête ; consulter les originaux conservés dans l’archive.',
+    );
+  return selected;
+}
+
 function sourcePrompt(source: DiscussionSource): string {
   let context: unknown = source.context;
   try {
@@ -54,12 +75,12 @@ function sourcePrompt(source: DiscussionSource): string {
     `Tu es ${source.agent.nickname || source.agent.name}, l’agent ayant produit ce retour. Les instructions et skills effectivement sélectionnés figurent dans le contexte de lancement archivé.`,
     roastInstructions(source.agent.roastLevel),
     JSON.stringify({
+      limitations: source.warnings,
       session: source.featureTitle,
       step: source.stepName,
       context,
       report: source.output,
       originalAgentReport: source.originalOutput,
-      limitations: source.warnings,
     }),
     'Réponds à la question humaine en t’appuyant sur ces éléments. Distingue les faits archivés, les hypothèses et les informations manquantes. Ne rejoue pas l’étape et ne prétends pas avoir changé le rapport ou le projet.',
   ].join('\n\n');
@@ -205,22 +226,46 @@ export class DiscussionService extends EventEmitter {
         createdAt: now,
         status: 'complete',
       };
-      const conversationImages = [...discussion.messages, human].flatMap((m) => m.images ?? []);
-      if (conversationImages.length > 4)
-        throw Error(
-          'Cette discussion contient déjà trop d’images. Ouvre une nouvelle discussion pour joindre d’autres captures (4 maximum).',
-        );
-      validateImages(conversationImages);
-      const history = [...discussion.messages, human]
-        .filter((message) => message.role === 'user' || message.status === 'complete')
-        .map(({ role, content, images }) => ({
-          role,
-          content,
-          images: images?.map((i) => i.name),
-        }));
+      const allImages = [...discussion.messages, human].flatMap((m) => m.images ?? []);
+      const available = new Map(allImages.map((image) => [image.id, image]));
+      if (new Set(allImages.map((image) => image.id)).size !== allImages.length)
+        throw new Error('Chaque image doit avoir un identifiant unique.');
+      const activeImageIds =
+        input.contextImageIds ??
+        (images?.length
+          ? images.map((image) => image.id)
+          : (discussion.activeImageIds ?? allImages.slice(-4).map((image) => image.id)));
+      if (
+        activeImageIds.length > 4 ||
+        new Set(activeImageIds).size !== activeImageIds.length ||
+        activeImageIds.some((imageId) => !available.has(imageId))
+      )
+        throw new Error('Choisissez au maximum 4 images existantes pour le contexte.');
+      const conversationImages = validateImages(
+        activeImageIds.map((imageId) => available.get(imageId)!),
+      );
+      const context = discussionContext([...discussion.messages, human]);
+      const rawSource = discussion.source ? sourcePrompt(discussion.source) : '';
+      const source = boundedDiscussionSource(rawSource);
+      if (source.truncated && discussion.source) {
+        // Reserve room for the report even when the launch archive itself is very large.
+        source.text = boundedDiscussionSource(
+          sourcePrompt({
+            ...discussion.source,
+            context: discussion.source.context.slice(0, 12_000),
+            output: discussion.source.output.slice(0, 20_000),
+            originalOutput: discussion.source.originalOutput?.slice(0, 8_000),
+            warnings: [
+              ...sourceWarnings(discussion.source.warnings),
+              'Extraits de l’archive source : contexte 12 000 caractères, compte rendu 20 000, sortie originale 8 000 maximum. Les originaux sont conservés.',
+            ],
+          }),
+        ).text;
+      }
+      const history = context.history;
       const prompt = [
         ...(discussion.source
-          ? [sourcePrompt(discussion.source)]
+          ? [source.text]
           : [
               `Profil : ${selected.profile.name}\n${selected.profile.instructions}`,
               roastInstructions(selected.profile.roastLevel),
@@ -228,6 +273,7 @@ export class DiscussionService extends EventEmitter {
                 .filter((skill) => selected.profile.skills.includes(skill.id))
                 .map((skill) => `Skill : ${skill.name}\n${skill.content}`),
             ]),
+        `Périmètre : discussion sans accès aux fichiers, sans outils et sans exécution. Fenêtre récente déterministe : ${context.omittedMessages} messages anciens omis, ${context.truncatedMessages} messages tronqués. Les originaux sont conservés par l’application mais ne sont pas consultables par toi. Aucun résumé implicite : demande les décisions ou éléments manquants. Images actives jointes : ${conversationImages.map((image) => image.name).join(', ') || 'aucune'}. Les autres noms d’images dans l’historique sont des références archivées non jointes.`,
         `Historique de la conversation (JSON, dans l’ordre chronologique) :\n${JSON.stringify(history)}`,
         'Réponds à la dernière intervention humaine. Ne prétends pas avoir consulté ou modifié des fichiers.',
         ...(proposalAgents
@@ -240,8 +286,16 @@ export class DiscussionService extends EventEmitter {
       ].join('\n\n');
       if (prompt.length > 200000)
         throw new Error(
-          'Cette discussion dépasse la taille de contexte disponible. Ouvrez une nouvelle discussion pour poursuivre.',
+          'Les instructions du profil dépassent la taille de contexte disponible. Réduisez les instructions ou les skills sélectionnés.',
         );
+      discussion.activeImageIds = activeImageIds;
+      discussion.contextWindow = {
+        omittedMessages: context.omittedMessages,
+        truncatedMessages: context.truncatedMessages,
+        sourceTruncated: source.truncated,
+        sentCharacters: prompt.length,
+        imageCount: conversationImages.length,
+      };
       discussion.agentKey = input.agentKey;
       discussion.model = input.model;
       discussion.reasoning = input.reasoning;
@@ -266,6 +320,7 @@ export class DiscussionService extends EventEmitter {
         selected,
         prompt,
         controller,
+        conversationImages,
         proposalAgents ? { agents: proposalAgents, requestId: input.requestId } : undefined,
       );
     });
@@ -307,10 +362,6 @@ export class DiscussionService extends EventEmitter {
           item.source.revision === source.revision,
       );
       if (existing) return existing.id;
-      if (sourcePrompt(source).length > 150000)
-        throw new Error(
-          'Ce contexte est trop volumineux pour une discussion fidèle. Le compte rendu et la session sont conservés.',
-        );
       const discussion: Discussion = {
         id: randomUUID(),
         title: `${source.stepName} · ${source.featureTitle}`.slice(0, 140),
@@ -344,6 +395,7 @@ export class DiscussionService extends EventEmitter {
     selected: DiscussionProfile,
     prompt: string,
     controller: AbortController,
+    images: import('../shared/images').ImageAttachment[],
     proposal?: { agents: AgentProfile[]; requestId: string },
   ): Promise<void> {
     let lastPublish = 0;
@@ -385,7 +437,7 @@ export class DiscussionService extends EventEmitter {
       };
       const input: RunInput = {
         mode: 'discussion',
-        images: validateImages(discussion.messages.flatMap((m) => m.images ?? [])),
+        images,
         feature,
         step: feature.steps[0],
         attempt,

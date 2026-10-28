@@ -1,7 +1,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { DashboardWindow } from './DashboardUI';
+import { deferred } from './DeferredScreen';
+const DashboardWindow = deferred(() =>
+  import('./DashboardUI').then((module) => module.DashboardWindow),
+);
 import './styles.css';
 import './themes.css';
 import './ergonomics.css';

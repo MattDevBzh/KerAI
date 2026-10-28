@@ -61,7 +61,7 @@ test('qualité : installation explicite et configuration du rapport dans la comm
 });
 test('qualité : contre-exemple lisible, preuves sélectionnées par id et aucune validation implicite', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const state = structuredClone(demoState),
     feature = state.features[0],
@@ -130,7 +130,11 @@ test('qualité : contre-exemple lisible, preuves sélectionnées par id et aucun
   ];
   await hosted(page, state);
   await navigate(page, 'Validation');
-  await page.locator('.validation-card').filter({ hasText: 'Conception' }).click();
+  await page
+    .locator('.validation-card')
+    .filter({ hasText: 'Conception' })
+    .getByRole('button', { name: 'Examiner les blocages', exact: true })
+    .click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
   await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   const panel = page.getByRole('region', { name: 'Recette et contre-exemples' });
@@ -154,7 +158,7 @@ test('qualité : contre-exemple lisible, preuves sélectionnées par id et aucun
     ),
   ).toBe(false);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/quality-mobile.png', fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('quality-mobile.png'), fullPage: true });
 });
 
 test('qualité : les exigences enregistrées restent conservées avec les profils hérités', async ({

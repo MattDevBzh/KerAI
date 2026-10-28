@@ -28,7 +28,9 @@ def verify(vsix, root, extract=None, match_build=False):
         assert identity is not None and identity.attrib['Version'] == version
         host_path = embedded['main'].removeprefix('./')
         host = archive.read('extension/' + host_path)
-        ui = archive.read('extension/dist/webview/assets/app.js')
+        ui_members = [name for name in names if name.startswith('extension/dist/webview/assets/') and name.endswith('.js')]
+        assert 'extension/dist/webview/assets/app.js' in ui_members
+        ui = b'\n'.join(archive.read(name) for name in ui_members)
         for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction', 'setPermissionMode', 'previewAutopilot', 'autopilotSaved'):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
@@ -77,7 +79,7 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'hq-cinema' in ui and b'cinema-workshop-wall' in ui, 'Cinema or workshop missing'
         for font in ('Caveat.ttf', 'Caveat-OFL.txt'):
             assert archive.read('extension/dist/webview/fonts/' + font) == (root / 'webview/public/fonts' / font).read_bytes()
-        styles = archive.read('extension/dist/webview/assets/index.css')
+        styles = b'\n'.join(archive.read(name) for name in names if name.startswith('extension/dist/webview/assets/') and name.endswith('.css'))
         assert b'hq-cinema' in styles, 'Cinema styles missing'
         assert b'hq-paper-delivery' in styles, 'Paper plane animation missing from stylesheet'
         assert b'conversation-composer' in styles, 'Conversation layout missing from stylesheet'

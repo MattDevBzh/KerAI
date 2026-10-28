@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.32.0 — 2026-10-28
+
+- Démarrage : dernier parcours mémorisé, capacités effectives et diagnostic d’application, aperçu du contexte automatiquement actualisé avec rejet des réponses périmées.
+- Travail : étape et action au premier plan ; outils secondaires repliés ; sessions et historiques paginés avec sélection conservée.
+- Discussion : images actives sélectionnables (quatre par requête), archives conservées et fenêtre récente explicite pour les longues conversations, sans résumé IA inventé.
+- Performance : écrans secondaires chargés à la demande, transport de l’état par différences versionnées, resynchronisation après une interruption. Mesures reproductibles dans `docs/QUATRE-LOTS.md`.
+- Validation et livraison : résultat, critères, blocages et preuves regroupés ; brouillon de PR préparé à partir de la session, conservé après erreur et séparé du titre de commit ; comparaison des changements commités et continuité des tickets liés.
+- Consolidation incluse : Zod 4.6.7 dédupliqué avec le SDK, première session guidée et découpage des orchestrateurs. Préservation des correctifs 1.29.2 à 1.31.1, y compris les URL de démarrage complètes et les validations de relecture avec remarques.
+
 ## 1.31.1 — 2026-10-28
 
 - Applications : profils HTTP/HTTPS locaux, intranet ou distants, avec conservation de l’URL de démarrage complète (chemin, paramètres et fragment). Les URL supplémentaires sont ramenées à leur origine autorisée.

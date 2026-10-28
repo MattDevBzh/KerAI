@@ -1,4 +1,6 @@
-# Architecture — Feature Studio v1.14
+# Architecture — Feature Studio
+
+État de référence : v1.32.0, avec le [découpage consolidé](CONSOLIDATION.md). Le stockage des sessions est en version 12.
 
 Feature Studio est une extension locale VS Code : un webview React transmet des intentions validées à un hôte Node. Le moteur métier ne dépend ni de VS Code ni du CLI. Les contrats sont définis dans `src/shared/types.ts`, `src/shared/evolutions.ts`, `src/shared/collaboration.ts`, `src/shared/workspaces.ts`, `src/shared/profiles.ts`, `src/shared/quality.ts` et `src/shared/devops.ts` ; le host conserve l'autorité sur les exécutions, permissions et écritures.
 
@@ -7,7 +9,7 @@ flowchart LR
     UI[Webview React] -->|messages validés| VS[Extension VS Code]
     VS --> Service[StudioService]
     Service --> Core[Moteur, contexte, budgets, validation, autopilote]
-    Service --> Store[Store JSON v6]
+    Service --> Store[Store JSON v12]
     Service --> GitSpace[FeatureWorkspace]
     GitSpace --> Git[Git local / worktree frère]
     GitSpace --> Points[Objets SHA-256 et manifestes privés]
@@ -19,7 +21,8 @@ flowchart LR
     DevOps --> Secrets[SecretStorage VS Code]
     Service --> Adapter[CopilotCliAdapter]
     Adapter -->|SDK / JSON-RPC| CLI[Copilot CLI local]
-    CLI --> Tools[ToolHost]
+    CLI --> Native[Outils natifs et demandes de permission]
+    Adapter --> Tools[ToolHost et outils métier]
     Tools --> Policy[PolicyEngine]
     Policy --> Files[Source ou worktree de la feature]
     Adapter --> MCP[MCP explicitement sélectionnés]
@@ -29,7 +32,7 @@ flowchart LR
 
 | Module                          | Responsabilité                                                                                                                                     |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/extension.ts`              | Commandes VS Code, webview/CSP, confiance, secrets MCP, fichiers/diffs/export, verrou du dossier                                                   |
+| `src/extension.ts`              | Commandes VS Code, raccordement des contrôleurs, confiance, secrets MCP, fichiers/diffs/export, verrou du dossier                                  |
 | `src/host/messages.ts`          | Validation stricte et bornée des messages du webview                                                                                               |
 | `src/host/StudioService.ts`     | État, orchestration séquentielle, demandes humaines, compteurs, hooks, mutations Git réservées, points avant/après, persistance et arrêt           |
 | `src/host/FeatureWorkspace.ts`  | Création/validation des worktrees, captures bornées, comparaisons, objets privés et restauration ciblée avec récupération persistée avant écriture |
@@ -38,7 +41,7 @@ flowchart LR
 | `src/core/context.ts`           | Sélection locale de mémoire, compilation du prompt, aperçu et empreinte de lancement                                                               |
 | `src/core/budgets.ts`           | Agrégats de consommation mesurée et blocage entre tentatives                                                                                       |
 | `src/core/validation.ts`        | Critères, commentaires et preuves nécessaires à une approbation                                                                                    |
-| `src/core/store.ts`             | État v6 validé, migrations des versions antérieures, sauvegarde atomique et récupération                                                                           |
+| `src/core/store.ts`             | État v12 validé, migrations des versions antérieures, sauvegarde atomique et récupération                                                          |
 | `src/core/registry.ts`          | Catalogue embarqué/utilisateur/projet, priorités, versions, sauvegardes avec révision attendue, YAML strict, installation additive du kit          |
 | `src/core/evolutionSchemas.ts`  | Schémas des contextes, MCP, budgets, pilote, preuves, relectures et mémoire                                                                        |
 | `src/core/workspaceSchemas.ts`  | Schémas des liaisons worktree et métadonnées des points de restauration                                                                            |
@@ -48,6 +51,16 @@ flowchart LR
 | `src/host/PolicyEngine.ts`      | Chemins, profils, protection des changements humains et contrôle avant écriture                                                                    |
 | `src/host/WorkspaceLease.ts`    | Un cockpit par racine entre fenêtres/processus et réservation du worktree pendant son utilisation                                                  |
 | `webview/`                      | Présentation, édition et intentions ; aucun accès direct aux fichiers, secrets ou processus                                                        |
+
+## Composition de l’interface et des contrôleurs
+
+`App.tsx` garde la navigation et le raccordement des vues. `CreateSession.tsx` gère le formulaire et la demande de création idempotente ; `FirstSessionGuide.tsx` explique le démarrage sans lancer d’agent. Les choix de `src/shared/sessionStarters.ts` désignent des workflows du catalogue réel. Le parcours `bugfix` fournit une consigne de reproduction dans `initialContext`, conservée lors de l’héritage des profils.
+
+`FeatureDetail.tsx` compose la session ; `StepPanel.tsx` présente l’étape, ses preuves et ses actions ; `StepConfig.tsx` édite sa configuration. `ProfileEditors.tsx`, `SettingsView.tsx` et `SessionPrimitives.tsx` regroupent les éditeurs, réglages et éléments communs. Ces modules n’accèdent pas aux fichiers ou au runtime directement.
+
+`SessionReviewController.ts` traite les messages de validation, correction et édition après validation du protocole et résolution du service propriétaire. `WebviewPage.ts` construit le HTML, les racines autorisées et la CSP à nonce. `SessionProofs.ts` lit et vérifie les preuves, empreintes et sources via des dépendances explicites ; `StudioService` conserve les contrôles de confiance, de révision, les mutations et la persistance.
+
+`StudioHub` agrège les sessions de tous les projets en conservant les catalogues du projet actif. Une publication réutilise l’instantané déjà détaché du service émetteur. Les autres projets fournissent une copie de leurs seules sessions, sans recopier leurs catalogues ou leur navigation. L’agrégateur ne modifie pas l’événement reçu. Les requêtes humaines et opérations sont également détachées. Ce gain d’assemblage de la consolidation précède le lot 1.32.0 : le premier état demeure complet et proportionnel à l’historique ; les publications suivantes utilisent désormais le transport par différences décrit plus bas. La pagination du rendu est gérée séparément dans le webview. [Mesures reproductibles](CONSOLIDATION.md#mesure-de-lagrégation).
 
 ## Modules ajoutés en v0.4
 
@@ -64,13 +77,13 @@ L'empreinte SHA-256 couvre le prompt et les paramètres pertinents : modèle, ra
 
 Avant une tentative, le host vérifie confiance, disponibilité/authentification CLI, racine et branche de la feature, agent, skills, configuration MCP, limites du contexte, budget et absence d’exécution ou de mutation concurrente. Le moteur vérifie dépendances et maximum de tentatives, crée la tentative et invalide les descendants concernés. L’état est enregistré avant l’appel. Pour une feature isolée, un point avant est capturé et persisté avant les hooks `beforeRun`. Les hooks explicitement configurés s’exécutent hors profil lecture seule, dans le dossier d’exécution de cette feature. La finalisation capture un point après si le point avant existe, y compris pour un échec ou une annulation ; un échec de capture reste signalé et ne devient pas une preuve de sauvegarde.
 
-L'adaptateur vérifie le catalogue réellement présenté au modèle avant le prompt. Seuls les outils hôtes autorisés et les outils des MCP sélectionnés sont attendus. Les traces complètes sont écrites dans un journal privé par session ; les messages longs sont découpés sans perte. L’interface reçoit les 500 événements récents, avec fragments consécutifs regroupés, et consulte l’archive par pagination. L'usage cumulatif est transmis pendant la tentative, afin de conserver les mesures même si elle échoue ou est annulée. Les preuves de tests sont ajoutées directement par le host.
+L’adaptateur vérifie les capacités du runtime et les modèles avant le prompt. Les nouvelles sessions utilisent Copilot natif : le CLI possède ses outils génériques et transmet ses demandes de permission au cockpit ; les règles gérées du runtime restent prioritaires. Les outils métier de KerAI et les MCP autorisés complètent ce catalogue. Les sessions historiques peuvent conserver le mode d’outils hôtes ; leurs contrôles ne constituent pas une protection système pour les outils natifs. [Frontières du runtime natif](COPILOT-NATIF.md). Les traces complètes sont écrites dans un journal privé par session ; les messages longs sont découpés sans perte. L’interface reçoit les 500 événements récents, avec fragments consécutifs regroupés, et consulte l’archive par pagination. L'usage cumulatif est transmis pendant la tentative, afin de conserver les mesures même si elle échoue ou est annulée. Les preuves de tests sont ajoutées directement par le host.
 
-Une question peut suspendre l'agent en cours via une demande humaine. Le pilote se met en pause ; la réponse réelle permet à cette tentative de continuer, sans réactiver automatiquement le pilote. Un bloc final de questions met l'étape en `waiting_input`. Un résultat complet devient `awaiting_review` ; erreur et annulation restent distinctes. Le modèle ne dispose d'aucun outil pour approuver son étape : l'approbation vient de l'humain ou des règles déterministes du pilote.
+Une question peut suspendre l'agent en cours via une demande humaine. Le pilote se met en pause ; la réponse réelle permet à cette tentative de continuer ; le pilote reprend automatiquement si sa reprise après interaction reste autorisée. Une pause explicite, un refus de permission ou un redémarrage imposent une reprise manuelle. Un bloc final de questions met l'étape en `waiting_input`. Un résultat complet devient `awaiting_review` ; erreur et annulation restent distinctes. Le modèle ne dispose d'aucun outil pour approuver son étape : l'approbation vient de l'humain ou des règles déterministes du pilote.
 
 ## Persistance et reprise
 
-`state.json` utilise le schéma **5** comme index léger des états de session, réglages et mémoire. Chaque état est un fichier immuable sous `sessions/<empreinte-id>/state-<empreinte-contenu>.json`, vérifié avant lecture. Tous les fichiers de session sont durables avant publication atomique de l’index ; les versions devenues inutiles sont ensuite collectées. Les versions 0 à 4 migrent en conservant leurs données connues. Les historiques, contextes, preuves, relectures, worktrees, checkpoints, versions éditoriales, corrections et décision finale humaine restent conservés. Un binaire plus ancien refuse le schéma 5. Une version inconnue ou un JSON invalide est rejeté en préservant l’original.
+`state.json` utilise le schéma **12** comme index léger des états de session, réglages et mémoire. Chaque état est un fichier immuable sous `sessions/<empreinte-id>/state-<empreinte-contenu>.json`, vérifié avant lecture. Tous les fichiers de session sont durables avant publication atomique de l’index ; les versions devenues inutiles sont ensuite collectées. Les versions 0 à 11 migrent en conservant leurs données connues ; depuis la version 5, l’index référence des fichiers de session séparés. Les historiques, contextes, preuves, relectures, worktrees, checkpoints, versions éditoriales, corrections et décision finale humaine restent conservés. Un binaire ne prenant pas en charge la version 12 refuse ce stockage. Une version inconnue ou un JSON invalide est rejeté en préservant l’original.
 
 `src/shared/collaboration.ts` calcule la fermeture des corrections et une clé d’état relu, utilisables dans le webview et le host. Cette clé sert à refuser les sauvegardes et décisions obsolètes ; elle ne constitue pas une preuve d’exécution. Les anciennes versions et remarques d’un cycle sont des instantanés de diagnostic, séparés des livrables actuellement approuvés. Une modification du besoin coupe la reprise de l’ancienne conversation et des anciennes réponses. Les notes issues d’un compte rendu sont liées à sa révision.
 
@@ -130,13 +143,11 @@ L’aperçu de lancement est asynchrone et ajoute l’inventaire Git des fichier
 
 La validation manuelle partage `approvalBlockers` avec le moteur pour les motifs statiques. La réponse hôte `stepApprovalResult` est liée à la feature, l’étape et la tentative pour afficher les refus d’une validation asynchrone. Seul l’état hôte approuvé modifie le statut affiché ; l’interface ne simule jamais une validation réussie.
 
-
 ## Observateur et suppression de session
 
 `SessionArchive` écrit les contextes, événements et outils sous une limite configurable de 256 Mio par défaut. `SessionObserver` produit des parties bornées sur disque, vérifie l’aperçu et les empreintes, puis analyse toutes les phases et synthétise les résultats. Ses outils sont imposés par le host et n’accèdent pas au projet, aux hooks ou aux MCP. Le rapport structuré conserve les sources, versions, appels, modèles et usages cumulés. Les remarques doivent citer une source du contexte transmis ; l’hôte calcule les coûts. Une revue interrompue reste partielle et nécessite une relance humaine.
 
 Les suppressions enregistrent d’abord un manifeste durable sans transcript. L’index retire la session, puis le nettoyage efface son dossier et ses sauvegardes. Les manifests de checkpoints sont retirés et les objets sont collectés uniquement après validation de tous les manifests conservés. Les pièces jointes utilisées par d’autres sessions sont préservées. Le SDK reçoit uniquement les identifiants de sessions locales enregistrés. Un crash reprend le nettoyage au démarrage ; les fichiers du projet, branches et worktrees sont conservés. [Parcours, coûts, limites et stockage](OBSERVATEUR.md).
-
 
 ## Interventions facultatives et stockage v6
 
@@ -146,7 +157,7 @@ Les suppressions enregistrent d’abord un manifeste durable sans transcript. L�
 
 Le pilote produit une pause avec `optionalStepId` avant le premier lancement facultatif. Le service persiste un `optionalRequest` puis émet la notification après libération de l’exécution. `resolveOptionalStep` prend la réservation habituelle et le verrou du workspace, vérifie le jeton d’état et la demande, puis persiste le choix avant une éventuelle reprise. Un échec de sauvegarde restaure l’état précédent. Une réponse concurrente ou obsolète ne peut lancer la suite une seconde fois. Le webview et la notification utilisent le même contrat.
 
-Les invalidations effacent le choix courant concerné, conservent son historique et ramènent une intervention non tentée à `pending`. Les interventions déjà tentées restent `stale` et ne deviennent pas passables. La reprise d’une tentative conserve son historique sans fabriquer une nouvelle décision humaine.
+Les invalidations effacent le choix courant concerné, conservent son historique et ramènent une intervention non tentée à `pending`. Les interventions déjà tentées deviennent `stale`. Depuis la 1.31.1, une intervention facultative arrêtée ou en attente peut être passée explicitement lorsque ses préalables sont résolus, hors correction imposée et sans exécution active ; ses tentatives, échecs et fichiers restent conservés et son résultat n’est pas validé. La reprise d’une tentative conserve son historique sans fabriquer une nouvelle décision humaine.
 
 ## Apparence et récompenses personnelles
 
@@ -154,4 +165,10 @@ Les invalidations effacent le choix courant concerné, conservent son historique
 
 Le thème et le QG utilisent les réglages personnels de VS Code ; la découverte Dragon Ball utilise `globalState`. L’hôte valide les messages et accuse les sauvegardes. Les composants React conservent le dernier choix confirmé en cas d’erreur et ne changent ni les profils ni les décisions métier. Le QG projette les états de chaque intervention, notamment les questions et choix humains, les passages facultatifs et l’identité réellement exécutée.
 
-Le stockage des sessions reste en version 6. Les migrations, trophées existants et décisions facultatives de la v1.13 sont conservés. Le contrôle du VSIX vérifie les commandes hôte/interface et les assets publics avant publication.
+La v1.13 avait introduit le stockage v6 pour les décisions facultatives. Le stockage actuel est en version 12 ; les migrations préservent ces décisions et leur historique. Les trophées et préférences de récompense disposent de leurs registres distincts. Le contrôle du VSIX vérifie les commandes hôte/interface et les assets publics avant publication.
+
+## Transport et chargement des écrans (1.32.0)
+
+Chaque surface dispose d’un `StateEncoder` indépendant. Le premier message transmet l’état complet ; les suivants ne contiennent que les champs et sessions modifiés, les suppressions et, si nécessaire, l’ordre des sessions. Le `StateReceiver` du bridge refuse atomiquement une révision discontinue et demande `resyncState`. Les abonnés continuent de recevoir un `state` cohérent, avec références stables pour les sessions inchangées. Le stockage et les contrôles d’autorisation restent côté hôte.
+
+Les vues secondaires sont importées à l’ouverture avec un indicateur de chargement et un état d’erreur récupérable. Les scripts du webview restent limités au nonce initial et aux ressources locales autorisées du bundle. Le contrôle du VSIX vérifie tous les morceaux JavaScript et CSS. Les listes et conversations limitent le nombre d’éléments rendus, sans supprimer les archives.

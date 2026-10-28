@@ -1,4 +1,5 @@
 import { NavigationEvaluationUI } from './NavigationEvaluationUI';
+import { applicationReadiness } from './launchReadiness';
 import { useEffect, useRef, useState } from 'react';
 import {
   AppWindow,
@@ -200,8 +201,8 @@ export function ApplicationsUI({
           <AppWindow size={36} />
           <h2>Un navigateur dédié à votre application</h2>
           <p>
-            Ajoutez son adresse locale et ses dépôts. KerAI attachera une application déjà démarrée,
-            avec un profil privé.
+            Ajoutez son adresse HTTP ou HTTPS et ses dépôts. KerAI ouvrira votre application, avec
+            un profil privé.
           </p>
           <button onClick={createProfile}>Préparer ma première application</button>
           <p className="muted">
@@ -296,6 +297,48 @@ export function ApplicationsUI({
                     Préparer le navigateur
                   </button>
                 </div>
+              </section>
+              <section className="applications-profile" aria-label="Diagnostic de navigation">
+                <h3>Avant de naviguer</h3>
+                <p>Adresse : {application.startUrl ?? application.origin}</p>
+                <p>
+                  Projet actif :{' '}
+                  {state.projectCatalog?.projects.find(
+                    (project) => project.id === state.projectCatalog?.activeProjectId,
+                  )?.name ?? state.workspace.name}
+                  .
+                </p>
+                {applicationReadiness(state, application).length > 0 ? (
+                  <ul>
+                    {applicationReadiness(state, application).map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>Le profil inclut le projet actif et un agent compatible avec la navigation.</p>
+                )}
+                <p>
+                  {browser && browser.state === 'idle'
+                    ? 'Navigateur préparé ; sa version et le serveur restent à vérifier pour chaque exécution.'
+                    : 'Utilisez « Préparer le navigateur » pour vérifier Chromium et l’accès à l’adresse. Démarrez le serveur si l’application est locale.'}
+                </p>
+                <p>
+                  {application.interactionPolicy === 'inspect'
+                    ? 'Inspection seule : les interactions sont bloquées par ce profil.'
+                    : application.interactionPolicy === 'confirm'
+                      ? 'Chaque interaction demandée par l’agent exige votre confirmation. L’autorisation de la tentative reste nécessaire.'
+                      : 'Les interactions exigent aussi l’autorisation explicite de la tentative.'}
+                </p>
+                <p>
+                  Connexion :{' '}
+                  {application.authInstructions ||
+                    'aucune consigne renseignée. Utilisez la connexion manuelle dans le navigateur.'}{' '}
+                  Les identifiants ne sont pas transmis à l’agent.
+                </p>
+                <p className="field-help">
+                  Un changement de profil, de parcours ou d’autorisation requiert une nouvelle
+                  tentative avec un contexte actualisé.
+                </p>
               </section>
               <BrowserControls
                 data={data}
@@ -499,7 +542,7 @@ function ProfileEditor({
   return (
     <StudioDialog
       title="Profil d’application"
-      subtitle="Application locale ou distante · navigateur Chromium dédié"
+      subtitle="Application locale ou en ligne · navigateur Chromium dédié"
       onClose={onClose}
       className="applications-dialog"
     >
@@ -539,18 +582,19 @@ function ProfileEditor({
             />
           </label>
           <label className="field">
-            <span>URL de l’application</span>
+            <span id="application-origin-label">Adresse de l’application</span>
             <input
               required
               type="url"
-              aria-label="URL de l’application"
+              aria-labelledby="application-origin-label"
+              aria-describedby="application-origin-help"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
               placeholder="https://mon-application.fr/espace"
             />
-            <small>
-              Adresse complète HTTP ou HTTPS, locale, intranet ou distante. Le chemin saisi sera
-              ouvert au démarrage.
+            <small id="application-origin-help">
+              Tous les domaines sont acceptés en HTTP ou HTTPS, avec un port si nécessaire. Le
+              chemin saisi sera ouvert au démarrage.
             </small>
           </label>
           <label className="field">
@@ -635,7 +679,7 @@ function ProfileEditor({
             }
           >
             <option value="inspect">Inspection seule</option>
-            <option value="confirm">Confirmer les interactions avant chaque rejeu</option>
+            <option value="confirm">Confirmer chaque interaction demandée par l’agent</option>
             <option value="authorized">Interactions autorisées dans ce profil</option>
           </select>
         </label>
@@ -645,7 +689,16 @@ function ProfileEditor({
             value={value.ownerNavigatorId ?? ''}
             onChange={(event) => patch({ ownerNavigatorId: event.target.value || undefined })}
           >
-            <option value="">Choisir un Navigateur</option>
+            <option value="">Choisir un Navigateur pour les parcours</option>
+            {value.ownerNavigatorId &&
+              !state.agents.some(
+                (agent) =>
+                  agent.id === value.ownerNavigatorId && agent.tools.includes('navigation'),
+              ) && (
+                <option value={value.ownerNavigatorId}>
+                  Agent indisponible ou sans capacité navigation
+                </option>
+              )}
             {state.agents
               .filter((agent) => agent.tools.includes('navigation'))
               .map((agent) => (
@@ -656,8 +709,12 @@ function ProfileEditor({
           </select>
         </label>
         <p className="field-help">
-          Le serveur doit être lancé par vos soins. KerAI vérifie les accès sans installer de
-          dépendance ni modifier votre application.
+          Le Navigateur est requis pour décrire et entretenir les parcours. Vous pouvez enregistrer
+          le profil avant de le choisir ; la préparation manuelle du navigateur reste disponible.
+        </p>
+        <p className="field-help">
+          L’application doit être accessible depuis ce poste. Pour une application locale, démarrez
+          son serveur. KerAI n’installe aucune dépendance et ne modifie pas votre application.
         </p>
         <div className="applications-actions">
           <button type="button" onClick={onClose}>

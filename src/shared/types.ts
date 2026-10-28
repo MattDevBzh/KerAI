@@ -335,6 +335,7 @@ export interface StudioState {
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
 }
 export type ClientMessage =
+  | { type: 'resyncState' }
   | { type: 'navigationIntervention'; featureId: string; stepId: string; attemptId: string }
   | { type: 'openNavigationCapture'; featureId: string; captureId: string }
   | { type: 'navigation'; requestId: string; command: import('./navigation').NavigationCommand }
@@ -624,9 +625,9 @@ export type HostMessage =
       import('./profiles').ProfileSaveResult
     >)
   | { type: 'devopsState'; state: DevOpsState }
-  | { type: 'state'; state: StudioState }
+  | import('./stateTransfer').StateTransfer
   | { type: 'hqWindowResult'; requestId: string; error?: string }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; requestId?: string }
   | { type: 'notice'; message: string }
   | { type: 'proofDossierResult'; requestId: string; error?: string; notice?: string }
   | { type: 'agentReportExported'; requestId: string; cancelled?: boolean; error?: string }

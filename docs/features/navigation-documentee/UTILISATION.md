@@ -4,9 +4,9 @@ Le panneau **Applications** rassemble les profils d’application, les parcours,
 
 ## Préparer une application
 
-1. Démarrer l’application locale par sa procédure habituelle.
-2. Dans **Applications**, choisir **Ajouter une application**. Renseigner son nom, son origine (par exemple `http://localhost:3000`) et les dépôts associés au cockpit.
-3. Déclarer les autres origines locales utiles, le rôle fonctionnel et les consignes de connexion. Les origines HTTPS d’authentification sont des exceptions réservées à la connexion manuelle.
+1. Vérifier que l’application est accessible depuis le poste. Pour une application locale, démarrer son serveur par sa procédure habituelle.
+2. Dans **Applications**, choisir **Ajouter une application**. Renseigner son nom, son **Adresse de l’application** et les dépôts associés au cockpit. Tous les domaines HTTP ou HTTPS sont acceptés : `http://localhost:3000`, `https://mon-application.fr`, `http://intranet:8080` ou `https://preprod.mon-app.test:8443`. Une URL complète, par exemple `https://mon-application.fr/espace#tableau`, conserve sa page de départ et autorise son origine. Les identifiants et paramètres reconnus comme secrets sont refusés.
+3. Déclarer les autres origines utiles, le rôle fonctionnel et les consignes de connexion. Chaque combinaison protocole, domaine et port doit être explicitement autorisée ; aucun sous-domaine supplémentaire n’est autorisé implicitement. Les origines HTTPS d’authentification restent réservées à la connexion manuelle.
 4. Choisir la politique d’interaction : inspection, confirmation ou interactions autorisées dans le périmètre choisi. Un libellé « lecture » dans un import ou une proposition d’agent ne donne aucun droit supplémentaire.
 5. Désigner le Navigateur parmi les agents du catalogue. Cette attribution n’altère pas les profils personnels.
 6. Choisir **Préparer le navigateur**. Un Chromium autorisé doit déjà être disponible ; un chemin d’exécutable peut être fourni dans le profil. Le diagnostic ne télécharge aucun navigateur et ne démarre aucun serveur applicatif.
@@ -29,7 +29,7 @@ Décrire l’objectif, l’état initial, le rôle requis et les indices permett
 
 Coller un JSON portable KerAI ou un JSON Chrome Recorder supporté. L’import crée un **brouillon**, présente les avertissements et ne lance aucune action navigateur.
 
-Le sous-ensemble Chrome Recorder accepte la navigation locale, la taille de fenêtre standard, le clic principal, le changement de valeur, le défilement et les conditions simples de visibilité. Les touches usuelles doivent avoir une cible explicite et une paire appui/relâchement cohérente. Les cibles CSS, `aria/` et `text/` sont prises en charge dans les cas convertibles ; les chaînes de frames ou de shadow roots sont refusées.
+Le sous-ensemble Chrome Recorder accepte la navigation HTTP/HTTPS, la taille de fenêtre standard, le clic principal, le changement de valeur, le défilement et les conditions simples de visibilité. Le rejeu reste limité aux origines du profil. Les touches usuelles doivent avoir une cible explicite et une paire appui/relâchement cohérente. Les cibles CSS, `aria/` et `text/` sont prises en charge dans les cas convertibles ; les chaînes de frames ou de shadow roots sont refusées.
 
 Les expressions JavaScript, actions inconnues, téléchargements, commandes système, gestes maintenus et propriétés non prises en charge provoquent une incompatibilité explicite. Les coordonnées de clic du Recorder ne sont pas reprises : l’avertissement indique que le clic vise le centre de la cible unique. Les alternatives de sélecteurs et titres de navigation non vérifiés sont signalés.
 
@@ -105,6 +105,6 @@ Enregistrer également l’**Apprentissage** et l’**Entretien** pour A et B da
 | Windows/macOS, règles du poste et Copilot professionnel  | Recette sur le poste concerné ; aucune certification déduite d’une autre plateforme  |
 | Économie et acceptation métier                           | Recette de Matt sur corpus autorisé ; aucune économie annoncée à partir des fixtures |
 
-La V1 vise les applications web locales et les interfaces DOM usuelles. Les sessions distantes, SSH/WSL/conteneurs, composants graphiques canvas/WebGL, DOM fermé, dialogues système et gestes non représentables ne sont pas certifiés. Les limites détectées doivent rester visibles, sans ajout d’instrumentation permanente à la cible.
+Les applications web locales ou en ligne sont acceptées en HTTP/HTTPS, avec les interfaces DOM usuelles. Le navigateur s’exécute sur le poste et conserve les contrôles habituels des certificats HTTPS. Les sessions distantes SSH/WSL/conteneurs, composants graphiques canvas/WebGL, DOM fermé, dialogues système et gestes non représentables ne sont pas certifiés. Les limites détectées doivent rester visibles, sans ajout d’instrumentation permanente à la cible.
 
 Pour désactiver la navigation, fermer le navigateur depuis **Applications**, retirer la sélection de navigation des prochaines tentatives et désactiver la capacité `navigation` des profils concernés. Les données privées et anciennes preuves restent disponibles. Aucune suppression du profil, des données de l’application ou d’un dépôt cible n’est nécessaire.

@@ -64,6 +64,17 @@ describe.skipIf(!executablePath)(
         format: 'cjs',
         target: 'node22',
         external: ['playwright-core', 'playwright-core/package.json'],
+        // Resolve synthetic custom domains locally, only inside this test worker.
+        banner: {
+          js: `
+          const testChromium = require('playwright-core').chromium;
+          const testLaunch = testChromium.launchPersistentContext.bind(testChromium);
+          testChromium.launchPersistentContext = (profile, options) => testLaunch(profile, {
+            ...options,
+            args: ['--host-resolver-rules=MAP *.kerai.test 127.0.0.1', '--no-proxy-server'],
+          });
+        `,
+        },
         logLevel: 'silent',
       });
       application = {
@@ -129,6 +140,32 @@ describe.skipIf(!executablePath)(
         step('wait', 'arrival', { postconditions: [{ kind: 'url', value: url }] }),
       );
       expect(result.url).toBe(`${fixture.origin}/settings`);
+    });
+    test('opens and records a custom domain while blocking undeclared hosts, schemes and ports', async () => {
+      const port = new URL(fixture.origin).port;
+      const origin = `http://app.kerai.test:${port}`;
+      const secondOrigin = `http://second.kerai.test:${port}`;
+      await manager.open({ ...application, origin, allowedOrigins: [origin, secondOrigin] });
+      expect((await manager.inspect()).url).toBe(`${origin}/`);
+      await manager.startRecording();
+      expect(manager.status()?.recordedSteps[0].url).toBe(`${origin}/`);
+      await manager.stopRecording();
+      await manager.acknowledgeRecording();
+      await manager.act(step('navigate', 'allowed', { url: `${secondOrigin}/clients` }));
+      await manager.act(
+        step('fill', 'city', { target: target('#city'), value: { literal: 'Liffré' } }),
+      );
+      await manager.act(step('click', 'show', { target: target('#go') }));
+      expect((await manager.inspect()).text).toContain('Résultat Liffré');
+      for (const url of [
+        `http://undeclared.kerai.test:${port}`,
+        `http://app.kerai.test:${new URL(fixture.otherOrigin).port}`,
+        `https://app.kerai.test:${port}`,
+        fixture.origin,
+      ])
+        await expect(manager.act(step('navigate', 'blocked', { url }))).rejects.toThrow(
+          'non autorisée',
+        );
     });
     test('replays known journey without AI and verifies arrival separately', async () => {
       const journey: NavigationJourney = {

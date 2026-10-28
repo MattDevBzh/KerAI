@@ -3,7 +3,7 @@ import { demoState } from '../webview/demo';
 import { rewards, emptyRewardSelection, type RewardSelection } from '../src/shared/rewards';
 import { featureStateKey } from '../src/shared/collaboration';
 import type { ClientMessage } from '../src/shared/types';
-import { navigate } from './ui-navigation-helpers';
+import { navigate, openSessionSection } from './ui-navigation-helpers';
 
 async function hosted(
   page: Page,
@@ -307,6 +307,7 @@ test('le chaton marche seulement dans le QG et reste immobile avec mouvement ré
 }, testInfo) => {
   const selection: RewardSelection = { ...emptyRewardSelection(), mascot: 'kitten' };
   await hosted(page, { trophies: 200, theme: 'noob', session: true, selection });
+  await openSessionSection(page, 'Équipe et parcours');
   await page.clock.install();
   const kitten = page.getByRole('img', { name: 'Chaton, ton compagnon du QG' });
   await expect(kitten).toBeVisible();

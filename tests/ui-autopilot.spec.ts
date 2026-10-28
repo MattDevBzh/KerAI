@@ -49,6 +49,7 @@ async function hosted(page: Page, configured = false) {
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await page.getByText('Pilotage automatique et budget', { exact: true }).click();
   return state;
 }
 const messages = (page: Page) =>

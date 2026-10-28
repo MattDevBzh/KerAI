@@ -18,6 +18,7 @@ import { HumanRequests } from './ExecutionUI';
 import { PairPreferencesUI } from './PairPreferencesUI';
 import { savedPairDraft, savePairDraft, subscribe } from './bridge';
 import './conversation.css';
+import './work-focus.css';
 
 const paceLabels = {
   small: 'Pas à pas',
@@ -228,8 +229,13 @@ export function SessionConversation({
         )}
       </article>
     );
+  const [historyPage, setHistoryPage] = useState(0);
+  const historyPages = Math.max(1, Math.ceil(timeline.length / 100));
+  const currentHistoryPage = Math.min(historyPage, historyPages - 1);
+  const windowEnd = timeline.length - currentHistoryPage * 100;
+  const visibleTimeline = timeline.slice(Math.max(0, windowEnd - 100), windowEnd);
   const groups: { id: string; intermediate: boolean; entries: typeof timeline }[] = [];
-  for (const entry of timeline) {
+  for (const entry of visibleTimeline) {
     const intermediate =
       entry.kind === 'tool' ||
       entry.message.kind === 'reasoning' ||
@@ -330,6 +336,34 @@ export function SessionConversation({
           if (el) follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
         }}
       >
+        {historyPages > 1 && (
+          <nav className="work-pagination" aria-label="Pages de la conversation">
+            <button
+              className="button secondary small"
+              disabled={currentHistoryPage + 1 >= historyPages}
+              onClick={() => {
+                follow.current = false;
+                setHistoryPage(currentHistoryPage + 1);
+              }}
+            >
+              Plus anciens
+            </button>
+            <span>
+              {Math.max(0, windowEnd - 100) + 1}–{windowEnd} / {timeline.length} événements
+              conservés
+            </span>
+            <button
+              className="button secondary small"
+              disabled={currentHistoryPage === 0}
+              onClick={() => {
+                follow.current = true;
+                setHistoryPage(0);
+              }}
+            >
+              Derniers événements
+            </button>
+          </nav>
+        )}
         {groups.map((group, index) =>
           group.intermediate ? (
             <IntermediateMessages

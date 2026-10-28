@@ -71,7 +71,7 @@ export class StudioHub extends EventEmitter {
           target.service.assertTrusted();
           return target.devops.inspector(signal);
         };
-        entry.service.on('state', () => this.publish());
+        entry.service.on('state', (state: StudioState) => this.publish({ entry, state }));
         return entry;
       })
       .finally(() => this.loading.delete(key));
@@ -132,15 +132,30 @@ export class StudioHub extends EventEmitter {
     return entry;
   }
   snapshot(): StudioState | undefined {
+    return this.composeSnapshot();
+  }
+  private composeSnapshot(changed?: {
+    entry: HubEntry;
+    state: StudioState;
+  }): StudioState | undefined {
     const entry = this.entries.get(this.activeId);
     if (!entry) return undefined;
-    const state = entry.service.snapshot();
+    // A publication already carries a detached snapshot. Reuse it without changing
+    // the event delivered to other listeners. Inactive catalogues/navigation are not
+    // visible here: copy only their sessions, rather than their entire service state.
+    const active = changed?.entry === entry ? changed.state : entry.service.snapshot();
+    const state = { ...active, workspace: { ...active.workspace } };
     if (entry.project)
       state.workspace.name =
         this.catalog.state.projects.find((project) => project.id === entry.project!.id)?.name ??
         entry.project.name;
     state.features = [...this.entries.values()].flatMap((item) =>
-      item.service.snapshot().features.map((feature) => ({
+      (item === entry
+        ? active.features
+        : item === changed?.entry
+          ? changed.state.features
+          : structuredClone(item.service.state.features)
+      ).map((feature) => ({
         ...feature,
         // Older sessions retain the original project store and execution roots.
         ...(feature.projects?.length || !item.project
@@ -157,12 +172,12 @@ export class StudioHub extends EventEmitter {
             }),
       })),
     );
-    state.humanRequests = [...this.entries.values()].flatMap(
-      (item) => item.service.state.humanRequests ?? [],
+    state.humanRequests = structuredClone(
+      [...this.entries.values()].flatMap((item) => item.service.state.humanRequests ?? []),
     );
-    state.workspaceOperation = [...this.entries.values()]
-      .map((item) => item.service.state.workspaceOperation)
-      .find(Boolean);
+    state.workspaceOperation = structuredClone(
+      [...this.entries.values()].map((item) => item.service.state.workspaceOperation).find(Boolean),
+    );
     state.projectCatalog = {
       projects: this.catalog.state.projects.map(
         ({ storagePath: _storagePath, ...project }) => project,
@@ -171,12 +186,12 @@ export class StudioHub extends EventEmitter {
       dedicated: this.dedicated,
       windows: this.windows,
       activeProjectId: entry.project?.id,
-      errors: this.errors,
+      errors: [...this.errors],
     };
     return state;
   }
-  publish(): void {
-    const state = this.snapshot();
+  publish(changed?: { entry: HubEntry; state: StudioState }): void {
+    const state = this.composeSnapshot(changed);
     if (state) this.emit('state', state);
   }
   async refreshProfiles(): Promise<void> {

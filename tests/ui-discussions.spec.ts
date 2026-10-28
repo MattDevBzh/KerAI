@@ -339,6 +339,7 @@ test('workflow deletion removes only the chosen template from the catalogue', as
   await hosted(page);
   await navigate(page, 'Mes équipes');
   const cards = page.locator('.workflow-library-card');
+  await expect(cards.first()).toBeVisible();
   const count = await cards.count();
   const title = await cards.first().getByRole('heading').textContent();
   await cards
@@ -473,7 +474,132 @@ test('une image est conservée dans le chat libre après envoi et rechargement',
     .setInputFiles({ name: 'capture-chat.png', mimeType: 'image/png', buffer });
   await page.getByLabel('Votre message', { exact: true }).fill('Explique cette capture');
   await page.getByRole('button', { name: 'Envoyer le message', exact: true }).click();
-  await expect(page.getByRole('img', { name: 'capture-chat.png', exact: true })).toHaveCount(1);
+  const sentImage = page
+    .locator('.discussion-message.user')
+    .getByRole('img', { name: 'capture-chat.png', exact: true });
+  await expect(sentImage).toBeVisible();
+  await expect(page.locator('.discussion-composer .image-picker img')).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole('img', { name: 'capture-chat.png', exact: true })).toBeVisible();
+  await expect(sentImage).toBeVisible();
+});
+
+test('large discussion archives render bounded pages and keep older messages reachable', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.evaluate(() => {
+    const fixture = Reflect.get(window, 'discussionFixture') as DiscussionState;
+    const now = new Date().toISOString();
+    fixture.discussions = Array.from({ length: 1000 }, (_, i) => ({
+      id: crypto.randomUUID(),
+      title: `Archive ${String(i).padStart(4, '0')}`,
+      agentKey: fixture.agents[0].key,
+      createdAt: now,
+      updatedAt: now,
+      messages: i
+        ? []
+        : Array.from({ length: 1000 }, (_, index) => ({
+            id: crypto.randomUUID(),
+            role: 'user' as const,
+            content: `Message conservé ${index}`,
+            status: 'complete' as const,
+            createdAt: now,
+          })),
+    }));
+    window.postMessage({ type: 'discussionState', state: fixture }, '*');
+  });
+  await expect(page.locator('.discussion-history-item')).toHaveCount(50);
+  await page.getByRole('button', { name: 'Archive 0000', exact: false }).click();
+  await expect(page.locator('.discussion-message')).toHaveCount(40);
+  await expect(page.locator('.discussion-messages')).toContainText('Message conservé 999');
+  await page
+    .getByRole('navigation', { name: 'Pages des messages' })
+    .getByRole('button', { name: 'Plus anciens' })
+    .click();
+  await expect(page.locator('.discussion-message')).toHaveCount(40);
+  await expect(page.locator('.discussion-messages')).toContainText('Message conservé 959');
+  await page
+    .getByRole('navigation', { name: 'Pages des messages' })
+    .getByRole('button', { name: 'Derniers messages' })
+    .click();
+  await expect(page.locator('.discussion-messages')).toContainText('Message conservé 999');
+  await page.getByLabel('Rechercher une discussion').fill('Archive 0999');
+  await expect(page.locator('.discussion-history-item')).toHaveCount(1);
+});
+
+test('archived images can leave the active context without deleting their originals', async ({
+  page,
+}) => {
+  await hosted(page);
+  const buffer = await page.screenshot({ clip: { x: 0, y: 0, width: 64, height: 64 } });
+  await page
+    .getByLabel('Ajouter des images')
+    .setInputFiles({ name: 'premiere.png', mimeType: 'image/png', buffer });
+  await page.getByLabel('Votre message', { exact: true }).fill('Première image');
+  await page.getByRole('button', { name: 'Envoyer le message', exact: true }).click();
+  await expect(page.locator('.discussion-message.assistant')).toContainText('trois pistes');
+  await page.getByText('Images du contexte', { exact: false }).click();
+  await page.getByRole('checkbox', { name: 'premiere.png' }).uncheck();
+  await page.getByLabel('Votre message', { exact: true }).fill('Question sans image');
+  await page.getByRole('button', { name: 'Envoyer le message', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const last = (Reflect.get(window, 'discussionMessages') as ClientMessage[])
+          .filter((message) => message.type === 'sendDiscussion')
+          .at(-1);
+        return last?.type === 'sendDiscussion' ? last.contextImageIds : undefined;
+      }),
+    )
+    .toEqual([]);
+  await expect(page.getByRole('img', { name: 'premiere.png', exact: true })).toHaveCount(1);
+});
+
+test('a send acknowledged on another page clears submitted attachments without duplicating their IDs', async ({
+  page,
+}) => {
+  await hosted(page);
+  await page.evaluate(() => {
+    Reflect.set(window, 'holdDiscussion', true);
+    Reflect.set(window, 'holdAcknowledgement', true);
+  });
+  const buffer = await page.screenshot({ clip: { x: 0, y: 0, width: 64, height: 64 } });
+  await page
+    .getByLabel('Ajouter des images')
+    .setInputFiles({ name: 'capture-acquittee.png', mimeType: 'image/png', buffer });
+  await page.getByLabel('Votre message', { exact: true }).fill('Première capture à analyser');
+  await page.getByRole('button', { name: 'Envoyer le message', exact: true }).click();
+  await expect(page.locator('.discussion-message.user')).toContainText('Première capture');
+  await navigate(page, 'Sessions');
+  await page.evaluate(() => {
+    Reflect.get(window, 'acknowledgeDiscussion')();
+    Reflect.get(window, 'finishDiscussion')();
+    Reflect.set(window, 'holdAcknowledgement', false);
+  });
+  await navigate(page, 'Discussion');
+  await expect(page.locator('.discussion-composer .image-picker img')).toHaveCount(0);
+  await expect(page.getByRole('img', { name: 'capture-acquittee.png', exact: true })).toHaveCount(
+    1,
+  );
+  await page
+    .getByLabel('Votre message', { exact: true })
+    .fill('Question suivante sur cette capture');
+  await page.getByRole('button', { name: 'Envoyer le message', exact: true }).click();
+  const sent = await page.evaluate(() =>
+    (Reflect.get(window, 'discussionMessages') as ClientMessage[]).filter(
+      (message): message is Extract<ClientMessage, { type: 'sendDiscussion' }> =>
+        message.type === 'sendDiscussion',
+    ),
+  );
+  expect(sent).toHaveLength(2);
+  expect(sent[1].images).toBeUndefined();
+  expect(sent[1].contextImageIds).toEqual([sent[0].images![0].id]);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          Reflect.get(window, 'discussionFixture') as DiscussionState
+        ).discussions[0].messages.flatMap((message) => message.images ?? []).length,
+    ),
+  ).toBe(1);
 });

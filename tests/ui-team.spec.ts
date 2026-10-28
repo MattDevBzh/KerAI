@@ -1,4 +1,4 @@
-import { navigate } from './ui-navigation-helpers';
+import { navigate, openSessionSection } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
@@ -90,6 +90,7 @@ test('compose by avatar drag and inherit the profile without duplicating its set
   await expect(page.locator('.team-member')).toHaveCount(2);
   await page.getByRole('button', { name: 'Valider l’équipe' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(page.getByRole('button', { name: 'Modifier l’équipe' })).toBeVisible();
   const messages = await page.evaluate(() => Reflect.get(window, 'teamMessages'));
   const saved = messages.find((message: ClientMessage) => message.type === 'saveFeatureTeam');

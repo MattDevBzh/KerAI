@@ -110,7 +110,7 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
     await profile
       .getByLabel('Nom de l’application', { exact: true })
       .fill('Recette navigateur réelle');
-    await profile.getByLabel('URL de l’application', { exact: true }).fill(fixture.origin);
+    await profile.getByLabel('Adresse de l’application', { exact: true }).fill(fixture.origin);
     await profile.getByRole('button', { name: 'Enregistrer le profil' }).click();
     await expect(profile).not.toBeVisible();
     await page.getByRole('button', { name: 'Préparer le navigateur', exact: true }).click();

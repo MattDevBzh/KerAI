@@ -104,12 +104,83 @@ describe('persisted discussions', () => {
     expect(vi.mocked(adapter.run).mock.calls[0][0].images).toEqual([screenshot]);
     expect(vi.mocked(adapter.run).mock.calls[0][0].preparedPrompt).not.toContain(screenshot.data);
     await service.dispose();
+    const legacy = JSON.parse(await readFile(join(directory, 'discussions.json'), 'utf8'));
+    delete legacy.discussions[0].activeImageIds;
+    delete legacy.discussions[0].contextWindow;
+    await writeFile(join(directory, 'discussions.json'), JSON.stringify(legacy));
     service = create();
     await service.initialize();
     expect(service.state.discussions[0].messages[0].images).toEqual([screenshot]);
     await service.send({ ...input(request.discussionId), content: 'Et cette zone ?' });
     await vi.waitFor(() => expect(adapter.run).toHaveBeenCalledTimes(2));
     expect(vi.mocked(adapter.run).mock.calls[1][0].images).toEqual([screenshot]);
+  });
+  it('replaces and reselects active images while preserving every original across reload', async () => {
+    const first = input();
+    const images = Array.from({ length: 4 }, (_, i) => ({
+      ...screenshot,
+      id: randomUUID(),
+      name: `capture-${i}.png`,
+    }));
+    await service.send({ ...first, images });
+    await service.settled();
+    const replacement = { ...screenshot, id: randomUUID(), name: 'nouvelle.png' };
+    await service.send({ ...input(first.discussionId), images: [replacement] });
+    await service.settled();
+    expect(vi.mocked(adapter.run).mock.calls[1][0].images).toEqual([replacement]);
+    expect(service.state.discussions[0].messages.flatMap((m) => m.images ?? [])).toHaveLength(5);
+    await service.dispose();
+    service = create();
+    await service.initialize();
+    expect(service.state.discussions[0].activeImageIds).toEqual([replacement.id]);
+    await service.send({ ...input(first.discussionId), contextImageIds: [images[0].id] });
+    await service.settled();
+    expect(vi.mocked(adapter.run).mock.calls[2][0].images).toEqual([images[0]]);
+    await expect(
+      service.send({ ...input(first.discussionId), contextImageIds: [randomUUID()] }),
+    ).rejects.toThrow('images existantes');
+    await expect(
+      service.send({ ...input(first.discussionId), contextImageIds: [images[0].id, images[0].id] }),
+    ).rejects.toThrow('images existantes');
+    await expect(
+      service.send({
+        ...input(first.discussionId),
+        contextImageIds: [...images.map((image) => image.id), replacement.id],
+      }),
+    ).rejects.toThrow('images existantes');
+    expect(adapter.run).toHaveBeenCalledTimes(3);
+    await service.send({ ...input(first.discussionId), contextImageIds: [] });
+    await service.settled();
+    expect(vi.mocked(adapter.run).mock.calls[3][0].images).toEqual([]);
+  });
+  it('continues long histories with a visible recent window and keeps all original messages', async () => {
+    const first = input();
+    await service.send(first);
+    await service.settled();
+    const discussion = service.state.discussions[0];
+    for (let i = 0; i < 10; i++)
+      discussion.messages.push({
+        id: randomUUID(),
+        role: 'assistant',
+        content: `Archive ${i} ` + 'x'.repeat(40000),
+        status: 'complete',
+        createdAt: new Date().toISOString(),
+      });
+    await service.send({ ...input(first.discussionId), content: 'Nouvelle question récente' });
+    await service.settled();
+    const run = vi.mocked(adapter.run).mock.calls[1][0];
+    expect(run.preparedPrompt).toContain('Nouvelle question récente');
+    expect(run.preparedPrompt!.length).toBeLessThan(200000);
+    expect(discussion.contextWindow?.omittedMessages).toBeGreaterThan(0);
+    expect(discussion.messages).toHaveLength(14);
+    expect(discussion.messages[2].content.length).toBeGreaterThan(40000);
+    expect(discussion.contextWindow?.sentCharacters).toBe(run.preparedPrompt!.length);
+    expect(discussion.contextWindow?.imageCount).toBe(0);
+    await service.dispose();
+    service = create();
+    await service.initialize();
+    expect(service.state.discussions[0].messages).toHaveLength(14);
+    expect(service.state.discussions[0].messages[2].content).toBe(discussion.messages[2].content);
   });
   afterEach(async () => {
     await service.dispose();
@@ -431,7 +502,7 @@ describe('session discussions and feature proposals', () => {
     expect(discussion.messages).toHaveLength(2);
     expect(discussion.source?.output).toBe('Sortie originale');
   });
-  it('keeps edited report revisions separate and rejects configuration overrides and oversized context', async () => {
+  it('keeps edited report revisions separate, rejects configuration overrides and windows oversized archives', async () => {
     const f = await fixture();
     const id = await f.service.openSource(f.source);
     const other = await f.service.openSource({
@@ -451,11 +522,36 @@ describe('session discussions and feature proposals', () => {
         content: 'Question',
       }),
     ).rejects.toThrow('configuration');
-    await expect(
-      f.service.openSource({ ...f.source, revision: 2, context: 'x'.repeat(210000) }),
-    ).rejects.toThrow('volumineux');
+    await f.service.openSource({ ...f.source, revision: 2, context: 'x'.repeat(210000) });
     expect(f.run).not.toHaveBeenCalled();
-    expect(f.service.state.discussions).toHaveLength(2);
+    expect(f.service.state.discussions).toHaveLength(3);
+  });
+  it('keeps bounded historical warnings before oversized source excerpts without changing originals', async () => {
+    const f = await fixture();
+    const warnings = [
+      'SENTINELLE : tentative précédente omise, raisonnement non attesté.',
+      ...Array.from({ length: 100 }, (_, i) => `Ancienne limitation ${i} : ${'x'.repeat(5000)}`),
+    ];
+    const source = { ...f.source, context: 'CONTEXTE'.repeat(30_000), warnings };
+    const id = await f.service.openSource(source);
+    await f.service.send({
+      type: 'sendDiscussion',
+      requestId: randomUUID(),
+      discussionId: id,
+      agentKey: f.service.state.discussions[0].agentKey,
+      model: source.model,
+      reasoning: source.reasoning,
+      content: 'Pourquoi ce résultat ?',
+    });
+    await f.service.settled();
+    const prompt = f.run.mock.calls[0][0].preparedPrompt!;
+    expect(prompt).toContain(warnings[0]);
+    expect(prompt.indexOf(warnings[0])).toBeLessThan(prompt.indexOf('CONTEXTE'));
+    expect(prompt).toContain('Avertissements source partiels');
+    expect(prompt).toContain('Sortie originale');
+    expect(prompt.length).toBeLessThan(200_000);
+    expect(f.service.state.discussions[0].source?.warnings).toEqual(warnings);
+    expect(f.service.state.discussions[0].source?.context).toBe(source.context);
   });
   it('prepares a persisted editable proposal from conversation decisions without launching a feature', async () => {
     const f = await fixture();

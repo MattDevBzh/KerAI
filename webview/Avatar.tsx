@@ -30,6 +30,18 @@ export function AgentImage({
       : base;
   const [failed, setFailed] = useState<string[]>([]);
   useEffect(() => setFailed([]), [primary]);
+  useEffect(() => {
+    if (!portrait) return;
+    // SVG images inside a closed disclosure do not reliably emit resource errors.
+    // The HTML image loader shares the atlas cache and keeps fallback independent of visibility.
+    const probe = new Image();
+    probe.onerror = () =>
+      setFailed((paths) => (paths.includes(primary) ? paths : [...paths, primary]));
+    probe.src = primary;
+    return () => {
+      probe.onerror = null;
+    };
+  }, [primary, Boolean(portrait)]);
   const src = [primary, base].find((path) => !failed.includes(path));
   if (portrait && src === primary)
     return (

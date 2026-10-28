@@ -1,3 +1,6 @@
+import { attentionCount } from '../src/shared/sessionAttention';
+import { validationDecisions } from '../src/shared/validationDecisions';
+import './validation-delivery.css';
 import { TeamComposer } from './TeamComposer';
 import { executionCallCount } from '../src/core/budgets';
 import { NativeActivityPanel } from './NativeExecutionUI';
@@ -63,28 +66,7 @@ const slug = (v: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
-export function attentionCount(state: StudioState) {
-  return new Set([
-    ...state.features
-      .filter((f) => !f.archived && f.optionalRequest)
-      .map((f) => `${f.id}:${f.optionalRequest!.stepId}`),
-    ...state.features
-      .filter((f) => !f.archived && f.status === 'awaiting_final_validation')
-      .map((f) => `${f.id}:final`),
-    ...(state.humanRequests ?? []).map((r) => `${r.featureId}:${r.stepId}`),
-    ...state.features
-      .filter((f) => !f.archived)
-      .flatMap((f) =>
-        f.steps
-          .filter((s) =>
-            ['waiting_input', 'awaiting_review', 'failed', 'stale', 'interrupted'].includes(
-              s.status,
-            ),
-          )
-          .map((s) => `${f.id}:${s.id}`),
-      ),
-  ]).size;
-}
+export { attentionCount } from '../src/shared/sessionAttention';
 export { AutopilotBar } from './AutopilotUI';
 const profileLabels: Record<ModelProfile, string> = {
   current: 'Conserver les modèles des étapes',
@@ -528,31 +510,19 @@ export function ValidationCenter({
   onOpen: (featureId: string, stepId: string) => void;
 }) {
   const [filter, setFilter] = useState('all');
-  const requests = state.humanRequests ?? [];
-  const items = state.features
-    .filter((f) => !f.archived)
-    .flatMap((feature) =>
-      feature.steps
-        .filter(
-          (step) =>
-            step.id === feature.optionalRequest?.stepId ||
-            ['awaiting_review', 'waiting_input', 'failed', 'stale', 'interrupted'].includes(
-              step.status,
-            ),
-        )
-        .map((step) => ({ feature, step })),
-    )
-    .filter(
-      ({ feature, step }) =>
-        filter === 'all' ||
-        (filter === 'review'
-          ? step.status === 'awaiting_review'
-          : filter === 'optional'
-            ? step.id === feature.optionalRequest?.stepId
-            : filter === 'question'
-              ? step.status === 'waiting_input'
-              : ['failed', 'stale', 'interrupted'].includes(step.status)),
-    );
+  const requests = (state.humanRequests ?? []).filter((request) =>
+    state.features.some((feature) => feature.id === request.featureId && !feature.archived),
+  );
+  const decisions = validationDecisions(state);
+  const items = decisions.filter(
+    (item) =>
+      filter === 'all' ||
+      (filter === 'blocked'
+        ? item.priority === 0
+        : filter === 'review'
+          ? ['review', 'final'].includes(item.kind)
+          : item.kind === filter),
+  );
   return (
     <div className="page validation-page">
       <div className="page-heading library-heading">
@@ -560,8 +530,8 @@ export function ValidationCenter({
           <span className="eyebrow">LES DÉCISIONS QUI FONT AVANCER</span>
           <h1>Votre regard, au bon moment.</h1>
           <p>
-            Questions ouvertes, permissions, livrables à relire et preuves : les points d’attention
-            du projet se retrouvent ici.
+            Résultat, critères, tests et changements réunis pour décider. Les blocages apparaissent
+            en premier, puis les réponses attendues.
           </p>
         </div>
         <span className="validation-counter">
@@ -583,9 +553,10 @@ export function ValidationCenter({
           <select
             aria-label="Filtrer le centre de validation"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(event) => setFilter(event.target.value)}
           >
             <option value="all">Tous les points d’attention</option>
+            <option value="blocked">Blocages prioritaires</option>
             <option value="review">Livrables à valider</option>
             <option value="question">Questions</option>
             <option value="optional">Interventions facultatives</option>
@@ -594,93 +565,163 @@ export function ValidationCenter({
         </label>
       </div>
       <div className="validation-grid">
-        {(filter === 'all' || filter === 'review') &&
-          state.features
-            .filter(
-              (feature) => !feature.archived && feature.status === 'awaiting_final_validation',
-            )
-            .map((feature) => (
-              <button
-                className="validation-card"
-                key={`${feature.id}-final`}
-                onClick={() => onOpen(feature.id, feature.activeStepId)}
-              >
-                <span className="validation-kind">
-                  <CheckCircle2 size={17} />
-                  Dernière validation
-                  <ArrowUpRight size={15} />
-                </span>
-                <h3>Bilan final du parcours</h3>
-                <p>{feature.title}</p>
-                <span>{progressLabel(feature)} · votre décision finale est attendue</span>
-              </button>
-            ))}
-        {items.map(({ feature, step }) => {
-          const attempt = step.attempts.at(-1);
-          const blockers =
-            feature.reviewComments?.filter(
-              (c) =>
-                c.stepId === step.id && c.attemptId === attempt?.id && c.blocking && !c.resolved,
-            ).length ?? 0;
-          return (
-            <button
-              className="validation-card"
-              key={`${feature.id}-${step.id}`}
-              onClick={() => onOpen(feature.id, step.id)}
-            >
-              <span className="validation-kind">
-                <FileCheck2 size={17} />
-                {step.id === feature.optionalRequest?.stepId
-                  ? 'Intervention facultative à choisir'
-                  : step.status === 'awaiting_review'
-                    ? 'Livrable à valider'
-                    : step.status === 'waiting_input'
-                      ? 'Réponse attendue'
-                      : step.status === 'stale'
-                        ? 'Contexte à actualiser'
-                        : 'Tentative à reprendre'}
-                <ArrowUpRight size={15} />
-              </span>
-              <h3>{step.name}</h3>
-              <p>{feature.title}</p>
-              <div className="validation-evidence">
-                <span>{attempt?.artifact ? 'Livrable disponible' : 'Pas de livrable'}</span>
-                <span>
-                  {attempt?.evidence?.length ?? 0} preuve
-                  {(attempt?.evidence?.length ?? 0) > 1 ? 's' : ''} host
-                </span>
-                {blockers > 0 && (
-                  <span className="blocker-count">
-                    {blockers} commentaire{blockers > 1 ? 's' : ''} bloquant
-                    {blockers > 1 ? 's' : ''}
-                  </span>
-                )}
+        {items.map((item) => (
+          <article
+            className="validation-card validation-decision"
+            key={item.id}
+            aria-label={`${item.feature.title} · ${item.step?.name ?? 'Bilan final'}`}
+          >
+            <span className="validation-kind">
+              <FileCheck2 size={17} />
+              {item.label}
+              {item.priority === 0 && <strong>Prioritaire</strong>}
+            </span>
+            <h3>{item.step?.name ?? 'Bilan final du parcours'}</h3>
+            <p>{item.feature.title}</p>
+            <small>
+              {stamp(item.feature.updatedAt)} · {progressLabel(item.feature)}
+            </small>
+            {item.blockers.length > 0 && (
+              <div className="validation-decision-blockers">
+                <strong>À résoudre avant validation</strong>
+                <ul>
+                  {item.blockers.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
               </div>
-              <span className="validation-card-footer">
-                <GitBranch size={12} />
-                {feature.branch}
-                <ArrowRight size={15} />
-              </span>
+            )}
+            <section className="validation-result">
+              <h4>Résultat à relire</h4>
+              <p>
+                {item.result
+                  ? item.result.replace(/[#*_`]/g, '').slice(0, 420) +
+                    (item.result.length > 420 ? '…' : '')
+                  : 'Aucun compte rendu disponible pour cette tentative.'}
+              </p>
+            </section>
+            <details>
+              <summary>
+                Critères d’acceptation ·{' '}
+                {item.feature.criteria?.filter(
+                  (criterion) => criterion.status === 'passed' && criterion.evidence.trim(),
+                ).length ?? 0}
+                /{item.feature.criteria?.length ?? 0} renseignés comme validés
+              </summary>
+              {item.feature.criteria?.length ? (
+                <ul>
+                  {item.feature.criteria.map((criterion) => (
+                    <li key={criterion.id}>
+                      <strong>
+                        {criterion.status === 'passed'
+                          ? 'Déclaré validé'
+                          : criterion.status === 'failed'
+                            ? 'En échec'
+                            : 'À vérifier'}{' '}
+                        · {criterion.text}
+                      </strong>
+                      <p>{criterion.evidence || 'Aucune justification renseignée.'}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Aucun critère renseigné.</p>
+              )}
+              <small>
+                Une déclaration de validation ne constitue pas une preuve de test exécuté.
+              </small>
+            </details>
+            <details>
+              <summary>
+                Tests exécutés par le host · {item.tests.length} preuve
+                {item.tests.length > 1 ? 's' : ''}
+              </summary>
+              {item.tests.length ? (
+                <ul>
+                  {item.tests.map((proof) => (
+                    <li key={proof.id}>
+                      <strong>
+                        {proof.title} ·{' '}
+                        {proof.state === 'observed'
+                          ? 'Réussite enregistrée'
+                          : proof.state === 'failed'
+                            ? 'Échec ou résultat incomplet'
+                            : proof.state === 'pending'
+                              ? 'En attente'
+                              : 'À revérifier'}
+                      </strong>
+                      <p>
+                        {stamp(proof.at)} · {proof.reason}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>
+                  Aucun test exécuté attesté. Les tests décrits dans un compte rendu restent des
+                  déclarations.
+                </p>
+              )}
+            </details>
+            <details>
+              <summary>
+                Changements de la tentative · {item.files.length} fichier
+                {item.files.length > 1 ? 's' : ''}
+              </summary>
+              {item.files.length ? (
+                <ul>
+                  {item.files.map((file) => (
+                    <li key={file}>
+                      <button
+                        className="text-button"
+                        onClick={() =>
+                          dispatch({ type: 'openFile', featureId: item.feature.id, path: file })
+                        }
+                      >
+                        <FileCode2 size={13} />
+                        {file}
+                      </button>
+                      <button
+                        className="text-button"
+                        aria-label={`Voir le diff de ${file}`}
+                        onClick={() =>
+                          dispatch({ type: 'openDiff', featureId: item.feature.id, path: file })
+                        }
+                      >
+                        Voir le diff
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Aucun fichier signalé pour cette tentative.</p>
+              )}
+              <small>Les changements signalés sont à confronter au diff Git avant livraison.</small>
+            </details>
+            <div className="validation-card-footer">
+              <GitBranch size={12} />
+              {item.feature.branch}
+            </div>
+            <button
+              className="button secondary"
+              onClick={() => onOpen(item.feature.id, item.stepId)}
+            >
+              {item.action}
+              <ArrowRight size={15} />
             </button>
-          );
-        })}
+          </article>
+        ))}
       </div>
-      {!items.length &&
-        !(
-          (filter === 'all' || filter === 'review') &&
-          state.features.some(
-            (feature) => !feature.archived && feature.status === 'awaiting_final_validation',
-          )
-        ) && (
-          <div className="evidence-empty">
-            <CheckCircle2 size={29} />
-            <h3>Le prochain mouvement est ailleurs.</h3>
-            <p>
-              Aucun livrable ne correspond à ce filtre. Les questions en direct restent accessibles
-              au-dessus.
-            </p>
-          </div>
-        )}
+      {!items.length && (
+        <div className="evidence-empty">
+          <CheckCircle2 size={29} />
+          <h3>Le prochain mouvement est ailleurs.</h3>
+          <p>
+            Aucun point d’attention ne correspond à ce filtre. Les questions en direct restent
+            accessibles au-dessus.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

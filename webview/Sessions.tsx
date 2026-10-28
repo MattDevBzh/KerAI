@@ -24,6 +24,8 @@ import { progressLabel, stepResolved } from '../src/shared/optionalSteps';
 import { searchText } from './Ergonomics';
 import { isHosted, persistView, savedSessionList, subscribe } from './bridge';
 import './sessions.css';
+import './work-focus.css';
+import { FirstSessionGuide } from './FirstSessionGuide';
 
 const statuses = {
   draft: { label: 'À démarrer', tone: 'neutral' },
@@ -60,7 +62,7 @@ function SelectAll({
     <input
       ref={ref}
       type="checkbox"
-      aria-label={`Sélectionner les ${total} sessions affichées`}
+      aria-label={`Sélectionner les ${total} sessions trouvées`}
       checked={total > 0 && selected === total}
       disabled={disabled || !total}
       onChange={onChange}
@@ -83,6 +85,7 @@ export function Sessions({
     ...defaultSessionFilters,
     ...savedSessionList(),
   }));
+  const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const anchor = useRef<string | undefined>(undefined);
   const request = useRef<string | undefined>(undefined);
@@ -131,6 +134,11 @@ export function Sessions({
           ? a.feature.updatedAt.localeCompare(b.feature.updatedAt)
           : b.feature.updatedAt.localeCompare(a.feature.updatedAt),
     );
+  const pageCount = Math.max(1, Math.ceil(rows.length / 50));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageRows = rows.slice(currentPage * 50, (currentPage + 1) * 50);
+  const pageIds = pageRows.map(({ feature }) => feature.id);
+  const selectedOnPage = pageIds.filter((id) => selected.includes(id));
   const visibleIds = rows.map(({ feature }) => feature.id);
   const visibleKey = JSON.stringify(visibleIds);
   useEffect(() => {
@@ -157,6 +165,7 @@ export function Sessions({
     [],
   );
   const change = (patch: Partial<SessionListFilters>) => {
+    setPage(0);
     setFilters((value) => ({ ...value, ...patch }));
     setSelected([]);
     anchor.current = undefined;
@@ -202,7 +211,10 @@ export function Sessions({
           <Plus size={16} /> Nouvelle session
         </button>
       </header>
-      <section aria-label="Liste des sessions">
+      {!state.features.length && (
+        <FirstSessionGuide state={state} dispatch={dispatch} onCreate={onCreate} />
+      )}
+      <section aria-label="Liste des sessions" hidden={!state.features.length}>
         <div className="sessions-controls">
           <div className="sessions-tabs">
             <button
@@ -330,7 +342,7 @@ export function Sessions({
           <strong>
             {selected.length
               ? `${selected.length} sélectionnée${selected.length > 1 ? 's' : ''}`
-              : `${rows.length} session${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''}`}
+              : `${rows.length} session${rows.length > 1 ? 's' : ''} trouvée${rows.length > 1 ? 's' : ''}`}
           </strong>
           {selected.length > 0 ? (
             <>
@@ -364,7 +376,7 @@ export function Sessions({
             </>
           ) : (
             <span className="muted sessions-selection-hint">
-              Clic : sélectionner · Maj+clic : sélectionner une plage · Ouvrir : consulter
+              Titre : ouvrir · Cases : sélectionner · Maj+clic sur une case : sélectionner une plage
             </span>
           )}
           {filtered && (
@@ -432,11 +444,15 @@ export function Sessions({
             <tr>
               <th>
                 <SelectAll
-                  total={rows.length}
-                  selected={selected.length}
+                  total={pageRows.length}
+                  selected={selectedOnPage.length}
                   disabled={Boolean(pending)}
                   onChange={() => {
-                    setSelected(selected.length === rows.length ? [] : visibleIds);
+                    setSelected((ids) =>
+                      selectedOnPage.length === pageIds.length
+                        ? ids.filter((id) => !pageIds.includes(id))
+                        : [...new Set([...ids, ...pageIds])],
+                    );
                     anchor.current = undefined;
                   }}
                 />
@@ -451,7 +467,7 @@ export function Sessions({
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ feature, projects }) => {
+            {pageRows.map(({ feature, projects }) => {
               const status = statuses[feature.status];
               const resolved = feature.steps.filter(stepResolved).length;
               const running =
@@ -461,14 +477,6 @@ export function Sessions({
                 <tr
                   key={feature.id}
                   className={`session-row ${selected.includes(feature.id) ? 'is-selected' : ''}`}
-                  onClick={(event) => {
-                    if (!(event.target as HTMLElement).closest('button,input,a,label,select'))
-                      select(feature.id, event.shiftKey);
-                  }}
-                  onMouseDown={(event) => {
-                    if (event.shiftKey && !(event.target as HTMLElement).closest('button,input'))
-                      event.preventDefault();
-                  }}
                 >
                   <td className="session-select">
                     <input
@@ -487,7 +495,16 @@ export function Sessions({
                     />
                   </td>
                   <td className="session-name">
-                    <h3 title={feature.title}>{feature.title}</h3>
+                    <h3>
+                      <button
+                        className="session-title-open"
+                        title={feature.title}
+                        disabled={Boolean(pending)}
+                        onClick={() => onOpen(feature.id)}
+                      >
+                        {feature.title}
+                      </button>
+                    </h3>
                     <div
                       title={`${feature.workflowName} · ${feature.branch || 'Branche courante'}`}
                     >
@@ -587,6 +604,28 @@ export function Sessions({
             })}
           </tbody>
         </table>
+        {pageCount > 1 && (
+          <nav className="work-pagination" aria-label="Pages des sessions">
+            <button
+              className="button secondary small"
+              disabled={pending !== undefined || currentPage === 0}
+              onClick={() => setPage(currentPage - 1)}
+            >
+              Précédentes
+            </button>
+            <span>
+              Page {currentPage + 1}/{pageCount} · {rows.length} sessions · {selected.length}{' '}
+              sélectionnées sur toutes les pages
+            </span>
+            <button
+              className="button secondary small"
+              disabled={pending !== undefined || currentPage + 1 === pageCount}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              Suivantes
+            </button>
+          </nav>
+        )}
         {!rows.length && (
           <div className="sessions-empty">
             <Search size={24} />

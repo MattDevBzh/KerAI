@@ -130,13 +130,14 @@ test('creates a native session with an explicit permission choice and shows unav
 }) => {
   await open(page, fixture(), false);
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).first().click();
-  const dialog = page.getByRole('dialog', { name: 'Une nouvelle feature' });
+  const dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
+  await dialog.locator('.creation-options > summary').click();
   const picker = dialog.getByRole('combobox', { name: 'Permissions Copilot' });
   await expect(picker).toHaveValue('manual');
   await expect(picker.locator('option[value="assisted"]')).toHaveAttribute('disabled', '');
   await picker.selectOption('allow-all');
   await dialog.getByPlaceholder('Ex. Une recherche plus agréable au clavier').fill('Native task');
-  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  await dialog.getByRole('button', { name: 'Créer la session' }).click();
   await expect
     .poll(() => sent(page, 'createFeature'))
     .toMatchObject([{ permissionMode: 'allow-all', title: 'Native task' }]);

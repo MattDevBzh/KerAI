@@ -1,3 +1,4 @@
+import { openSessionSection } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage, StudioState } from '../src/shared/types';
@@ -90,6 +91,7 @@ async function host(page: Page, state = fixture()) {
     });
   }, state);
   await page.goto('/');
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(page.getByRole('button', { name: 'Agrandir le QG' })).toBeVisible();
   await page.getByRole('button', { name: 'Agrandir le QG' }).click();
   await expect(page.getByRole('dialog', { name: 'QG grand écran' })).toBeVisible();

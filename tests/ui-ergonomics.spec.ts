@@ -121,7 +121,7 @@ test('dialogs retain drafts on backdrop click, keep keyboard inside and restore 
   await page.goto('/?demo=1');
   const create = page.getByRole('button', { name: 'Nouvelle session', exact: true });
   await create.click();
-  const dialog = page.getByRole('dialog', { name: 'Une nouvelle feature' });
+  const dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
   await expect(dialog).toBeVisible();
   expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
   await page.mouse.click(5, 5);

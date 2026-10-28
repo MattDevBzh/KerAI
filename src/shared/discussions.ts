@@ -68,6 +68,15 @@ export interface Discussion {
   messages: DiscussionMessage[];
   source?: DiscussionSource;
   featureDraft?: DiscussionFeatureDraft;
+  /** Images included in the next stateless model request; originals remain on messages. */
+  activeImageIds?: string[];
+  contextWindow?: {
+    omittedMessages: number;
+    truncatedMessages: number;
+    sourceTruncated: boolean;
+    sentCharacters?: number;
+    imageCount?: number;
+  };
 }
 export interface DiscussionState {
   discussions: Discussion[];
@@ -96,6 +105,7 @@ export type DiscussionClientMessage =
   | { type: 'returnToDiscussionReport'; discussionId: string; edit: boolean }
   | {
       type: 'sendDiscussion';
+      contextImageIds?: string[];
       images?: import('./images').ImageAttachment[];
       requestId: string;
       discussionId: string;

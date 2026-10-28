@@ -1,46 +1,49 @@
-import { proofDossierMarkdown } from './shared/proofs';
-import { exportDocument } from './host/DocumentExport';
-import { documentFormatLabels } from './shared/documentation';
-import { allFeatures, configurationSteps } from './shared/subplans';
-import { inheritTeamProfiles } from './shared/agentInheritance';
-import { resolvePersonalReviewReport } from './host/PersonalReviewTools';
-import { observationHtml, observationMarkdown } from './shared/observationReport';
-import { DashboardController } from './host/DashboardController';
-import { StudioHub } from './host/StudioHub';
-import { DiscussionService, type DiscussionProfile } from './host/DiscussionService';
-import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
-import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
-import { sessionMarkdown } from './shared/sessionExport';
-import { agentReport } from './shared/agentReport';
-import { applySessionBatch } from './host/SessionBatch';
-import { DevOpsController } from './host/DevOpsController';
-import { devOpsMessageSchema } from './core/devopsSchemas';
-import { type TicketTarget } from './shared/devopsTickets';
-import * as vscode from 'vscode';
-import path from 'node:path';
-import { homedir } from 'node:os';
+import { StateEncoder } from './shared/stateTransfer';
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
+import * as vscode from 'vscode';
 import { stringify } from 'yaml';
-import { Store } from './core/store';
-import { CopilotCliAdapter } from './host/CopilotCliAdapter';
-import { CockpitLauncher } from './host/CockpitLauncher';
-import { AccountCreditsMonitor } from './host/AccountCreditsMonitor';
+import { devOpsMessageSchema } from './core/devopsSchemas';
 import { RegistryMigration } from './core/registryMigration';
-import { StudioService } from './host/StudioService';
-import { WorkspaceLease } from './host/WorkspaceLease';
-import { PolicyEngine, sha256 } from './host/PolicyEngine';
-import { parseMessage } from './host/messages';
+import { Store } from './core/store';
+import { AccountCreditsMonitor } from './host/AccountCreditsMonitor';
+import { CockpitLauncher } from './host/CockpitLauncher';
+import { CopilotCliAdapter } from './host/CopilotCliAdapter';
+import { DashboardController } from './host/DashboardController';
+import { DedicatedWindow, type WindowRequest } from './host/DedicatedWindow';
+import { DevOpsController } from './host/DevOpsController';
+import { DiscussionService, type DiscussionProfile } from './host/DiscussionService';
+import { exportDocument } from './host/DocumentExport';
 import { readHeadFile } from './host/GitFileContent';
-import { redact } from './host/process';
-import type { ClientMessage, HostMessage, CheckpointComparison } from './shared/types';
-import { normalizeTheme } from './shared/themes';
-import { normalizeZoom } from './shared/zoom';
+import { resolvePersonalReviewReport } from './host/PersonalReviewTools';
+import { PolicyEngine, sha256 } from './host/PolicyEngine';
+import { ProjectCatalog, type StoredProject } from './host/ProjectCatalog';
 import { QuestService, type QuestFact } from './host/QuestService';
 import { RewardService } from './host/RewardService';
+import { applySessionBatch } from './host/SessionBatch';
+import { handleSessionReview } from './host/SessionReviewController';
+import { StudioHub } from './host/StudioHub';
+import { StudioService } from './host/StudioService';
+import { setWebviewPage } from './host/WebviewPage';
+import { WorkspaceLease } from './host/WorkspaceLease';
+import { parseMessage } from './host/messages';
+import { redact } from './host/process';
+import { discussionQuestFacts, studioQuestFacts } from './host/questFacts';
+import { inheritTeamProfiles } from './shared/agentInheritance';
+import { agentReport } from './shared/agentReport';
+import { type TicketTarget } from './shared/devopsTickets';
+import { documentFormatLabels } from './shared/documentation';
 import { DRAGON_BALL_UNLOCK_KEY } from './shared/dragonBall';
+import { observationHtml, observationMarkdown } from './shared/observationReport';
+import { proofDossierMarkdown } from './shared/proofs';
 import { rewardById, themeReward, unlockedRewards } from './shared/rewards';
-import { studioQuestFacts, discussionQuestFacts } from './host/questFacts';
+import { sessionMarkdown } from './shared/sessionExport';
+import { allFeatures, configurationSteps } from './shared/subplans';
+import { normalizeTheme } from './shared/themes';
+import type { CheckpointComparison, ClientMessage, HostMessage } from './shared/types';
+import { normalizeZoom } from './shared/zoom';
 
 let panel: vscode.WebviewPanel | undefined;
 let dashboardPanel: vscode.WebviewPanel | undefined;
@@ -83,8 +86,23 @@ export async function activate(context: vscode.ExtensionContext) {
     },
     (state) => send({ type: 'accountCredits', state }),
   );
+  const stateEncoders = new WeakMap<vscode.WebviewPanel, StateEncoder>();
+  const post = (target: vscode.WebviewPanel, message: HostMessage) => {
+    let encoder = stateEncoders.get(target);
+    if (!encoder) {
+      encoder = new StateEncoder();
+      stateEncoders.set(target, encoder);
+    }
+    const outgoing = message.type === 'state' ? encoder.encode(message.state) : message;
+    void Promise.resolve(target.webview.postMessage(outgoing)).then(
+      (delivered) => {
+        if (!delivered) stateEncoders.delete(target);
+      },
+      () => stateEncoders.delete(target),
+    );
+  };
   const send = (message: HostMessage) => {
-    if (panel) void panel.webview.postMessage(message);
+    if (panel) post(panel, message);
     if (
       dashboardPanel &&
       [
@@ -99,7 +117,7 @@ export async function activate(context: vscode.ExtensionContext) {
         'error',
       ].includes(message.type)
     )
-      void dashboardPanel.webview.postMessage(message);
+      post(dashboardPanel, message);
   };
   const dragonBallUnlocked = () => context.globalState.get(DRAGON_BALL_UNLOCK_KEY) === true;
   const sendSecrets = (requestId?: string, error?: string) =>
@@ -1305,6 +1323,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (await handleSessionReview(message, current, send, notice)) return;
     switch (message.type) {
       case 'openNavigationCapture': {
         const feature = current.engine.getFeature(message.featureId);
@@ -1358,7 +1377,12 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         return;
       }
+      case 'resyncState':
+        if (panel) stateEncoders.delete(panel);
+        hub.publish();
+        return;
       case 'ready':
+        if (panel) stateEncoders.delete(panel);
         sendSecrets();
         quests.publish();
         discussions.publish();
@@ -1569,17 +1593,25 @@ export async function activate(context: vscode.ExtensionContext) {
           .catch(report);
         return;
       case 'previewRun':
-        send({
-          type: 'runPreview',
-          requestId: message.requestId,
-          preview: await current.previewRun(
-            message.featureId,
-            message.stepId,
-            message.feedback,
-            message.resume,
-            message.launch,
-          ),
-        });
+        try {
+          send({
+            type: 'runPreview',
+            requestId: message.requestId,
+            preview: await current.previewRun(
+              message.featureId,
+              message.stepId,
+              message.feedback,
+              message.resume,
+              message.launch,
+            ),
+          });
+        } catch (error) {
+          send({
+            type: 'error',
+            requestId: message.requestId,
+            message: redact((error as Error).message),
+          });
+        }
         return;
       case 'answerHumanRequest':
         current.answerHumanRequest(message.requestId, message.answer);
@@ -1607,141 +1639,6 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'cancelRun':
         current.cancel(message.featureId);
         return;
-      case 'approveStep':
-        try {
-          if (!message.expectedAttemptId || message.expectedRevision === undefined)
-            throw new Error('Recharge le livrable avant de le valider.');
-          await current.approveStep(
-            message.featureId,
-            message.stepId,
-            message.expectedAttemptId,
-            message.expectedRevision,
-            'human',
-            message.expectedReviewWarningsKey,
-          );
-          send({
-            type: 'stepApprovalResult',
-            featureId: message.featureId,
-            stepId: message.stepId,
-            attemptId: message.expectedAttemptId,
-          });
-          notice(
-            current.engine.getFeature(message.featureId).status === 'awaiting_final_validation'
-              ? 'Parcours relu : la validation définitive reste à confirmer.'
-              : 'Étape validée.',
-          );
-        } catch (error) {
-          send({
-            type: 'stepApprovalResult',
-            featureId: message.featureId,
-            stepId: message.stepId,
-            attemptId: message.expectedAttemptId,
-            error: redact((error as Error).message),
-          });
-          throw error;
-        }
-        return;
-      case 'answerQuestions':
-        await current.answerQuestions(message.featureId, message.stepId, message.answers);
-        return;
-      case 'saveArtifact': {
-        try {
-          if (
-            !message.expectedAttemptId ||
-            message.expectedRevision === undefined ||
-            !message.expectedStateKey
-          )
-            throw new Error('Recharge le compte rendu avant de l’enregistrer.');
-          await current.saveArtifact(message.featureId, message.stepId, message.content, {
-            expectedAttemptId: message.expectedAttemptId,
-            expectedRevision: message.expectedRevision,
-            expectedStateKey: message.expectedStateKey,
-            description: message.description,
-            reason: message.reason,
-          });
-          const attempt = current.engine
-            .getStep(message.featureId, message.stepId)
-            .attempts.at(-1)!;
-          send({
-            type: 'artifactSaveResult',
-            featureId: message.featureId,
-            stepId: message.stepId,
-            attemptId: attempt.id,
-            revision: attempt.revision ?? 0,
-          });
-          notice('Révision du compte rendu enregistrée.');
-        } catch (error) {
-          send({
-            type: 'artifactSaveResult',
-            featureId: message.featureId,
-            stepId: message.stepId,
-            error: redact((error as Error).message),
-          });
-          throw error;
-        }
-        return;
-      }
-      case 'requestCorrection': {
-        try {
-          const correctionId = await current.requestCorrection(message.featureId, message);
-          send({
-            type: 'correctionResult',
-            featureId: message.featureId,
-            correctionId,
-          });
-          notice('Correction enregistrée. Le pilote reprend avec les validations habituelles.');
-        } catch (error) {
-          send({
-            type: 'correctionResult',
-            featureId: message.featureId,
-            error: redact((error as Error).message),
-          });
-          throw error;
-        }
-        return;
-      }
-      case 'finalizeFeature': {
-        try {
-          const finalizationId = await current.finalizeFeature(
-            message.featureId,
-            message.expectedStateKey,
-          );
-          send({
-            type: 'featureFinalizationResult',
-            featureId: message.featureId,
-            finalizationId,
-          });
-          notice('Validation définitive enregistrée : session terminée.');
-        } catch (error) {
-          send({
-            type: 'featureFinalizationResult',
-            featureId: message.featureId,
-            error: redact((error as Error).message),
-          });
-          throw error;
-        }
-        return;
-      }
-      case 'configureStep': {
-        current.assertConfigurable(message.featureId);
-        if (
-          !current.state.agents.some((agent) => agent.id === message.agentId) ||
-          message.skills.some((id) => !current.state.skills.some((skill) => skill.id === id))
-        )
-          throw new Error('Agent ou skill inconnu.');
-        current.engine.configureStep(message.featureId, message.stepId, {
-          agentId: message.agentId,
-          model: message.model,
-          reasoning: message.reasoning,
-          skills: message.skills,
-          maxAttempts: message.maxAttempts,
-          initialContext: message.initialContext,
-          mcpServerIds: message.mcpServerIds,
-          askBeforeRun: message.askBeforeRun,
-        });
-        await current.persist();
-        return;
-      }
       case 'previewObservation':
         try {
           send({
@@ -2322,29 +2219,12 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   };
 
-  const setWebviewHtml = async (target: vscode.WebviewPanel, surface: 'cockpit' | 'control') => {
-    target.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
-    target.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')],
-    };
-    const webviewRoot = vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview');
-    const base = target.webview.asWebviewUri(webviewRoot).toString() + '/';
-    const nonce = randomBytes(20).toString('hex');
-    let html = await readFile(path.join(context.extensionPath, 'dist/webview/index.html'), 'utf8');
-    const csp = `default-src 'none'; img-src ${target.webview.cspSource} data:; style-src ${target.webview.cspSource} 'unsafe-inline'; font-src ${target.webview.cspSource}; script-src 'nonce-${nonce}'; connect-src 'none'; base-uri ${target.webview.cspSource}; form-action 'none';`;
-    html = html
-      .replace(
-        /<html\b/,
-        `<html data-studio-surface="${surface}" data-studio-theme="${getTheme()}" data-studio-zoom="${getZoom()}" data-studio-living-hq="${getLivingHq()}"`,
-      )
-      .replace(
-        '<head>',
-        `<head><base href="${base}"><meta http-equiv="Content-Security-Policy" content="${csp}">`,
-      )
-      .replace(/<script\b/g, `<script nonce="${nonce}"`);
-    target.webview.html = html;
-  };
+  const setWebviewHtml = (target: vscode.WebviewPanel, surface: 'cockpit' | 'control') =>
+    setWebviewPage(target, context, surface, {
+      theme: getTheme(),
+      zoom: getZoom(),
+      livingHq: getLivingHq(),
+    });
   const shutdownIfUnused = () => {
     updateDashboardVisibility();
     if (panel || dashboardPanel) return;
@@ -2377,7 +2257,13 @@ export async function activate(context: vscode.ExtensionContext) {
     target.onDidChangeViewState(updateDashboardVisibility, undefined, context.subscriptions);
     target.webview.onDidReceiveMessage(
       (raw) => {
+        if (raw?.type === 'resyncState') {
+          stateEncoders.delete(target);
+          hub.publish();
+          return;
+        }
         if (raw?.type === 'ready') {
+          stateEncoders.delete(target);
           dashboardReady = true;
           hub.publish();
           sendTheme();

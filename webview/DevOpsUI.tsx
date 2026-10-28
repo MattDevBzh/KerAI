@@ -1,4 +1,14 @@
 import { useEffect, useState } from 'react';
+import { savedDeliveryDraft, saveDeliveryDraft } from './bridge';
+import {
+  deliveryScope,
+  deliveryTicket,
+  prepareSessionPullRequest,
+  suggestedDeliveryFeature,
+  type DeliveryFeature,
+  type DeliveryDraft,
+} from '../src/shared/deliveryDraft';
+import './validation-delivery.css';
 import type {
   DevOpsClientMessage,
   DevOpsConfig,
@@ -11,7 +21,8 @@ import './devops.css';
 import { devOpsPlainText } from '../src/shared/devopsText';
 export interface DevOpsUIProps {
   state?: DevOpsState;
-  features: Array<{ id: string; title: string }>;
+  features: DeliveryFeature[];
+  draftScope?: string;
   dispatch: (message: DevOpsClientMessage) => void;
   onOpenFeature: (id: string) => void;
   mode: 'dashboard' | 'delivery';
@@ -401,33 +412,56 @@ export function TicketCard({
   );
 }
 
-export function DevOpsUI({
+export function DevOpsUI(props: DevOpsUIProps) {
+  const draftKey = `${props.draftScope ?? props.state?.snapshot?.remoteUrl ?? 'workspace'}:${deliveryScope(props.state)}`;
+  return <DevOpsContent key={draftKey} {...props} draftKey={draftKey} />;
+}
+function DevOpsContent({
   state,
   features,
   dispatch,
   onOpenFeature,
   mode,
   visible = true,
-}: DevOpsUIProps) {
+  draftKey,
+}: DevOpsUIProps & { draftKey: string }) {
+  const [initialDraft] = useState<DeliveryDraft>(() => {
+    const saved = savedDeliveryDraft(draftKey);
+    if (saved) return saved;
+    const suggested = suggestedDeliveryFeature(features, state);
+    const feature = features.find((item) => item.id === suggested);
+    return {
+      selected: [],
+      intent: '',
+      commitTitle: '',
+      prTitle: '',
+      description: '',
+      target: 'main',
+      ticketId: '',
+      featureId: '',
+      remote: state?.config?.remote ?? 'origin',
+      ...(feature && state ? prepareSessionPullRequest(feature, state) : {}),
+    };
+  });
   const [config, setConfig] = useState<DevOpsConfig>({
       organization: '',
       project: '',
       repository: '',
       remote: 'origin',
     }),
-    [selected, setSelected] = useState<string[]>([]),
-    [intent, setIntent] = useState(''),
-    [title, setTitle] = useState(''),
+    [selected, setSelected] = useState<string[]>(initialDraft.selected),
+    [intent, setIntent] = useState(initialDraft.intent),
+    [title, setTitle] = useState(initialDraft.commitTitle),
+    [prTitle, setPrTitle] = useState(initialDraft.prTitle),
     [chat, setChat] = useState(''),
-    [target, setTarget] = useState('main'),
-    [description, setDescription] = useState(''),
-    [ticketId, setTicketId] = useState(''),
-    [featureId, setFeatureId] = useState(''),
-    [remote, setRemote] = useState('origin');
+    [target, setTarget] = useState(initialDraft.target),
+    [description, setDescription] = useState(initialDraft.description),
+    [ticketId, setTicketId] = useState(initialDraft.ticketId),
+    [featureId, setFeatureId] = useState(initialDraft.featureId),
+    [remote, setRemote] = useState(initialDraft.remote);
   useEffect(() => {
     if (state?.config) {
       setConfig(state.config);
-      setRemote(state.config.remote);
     }
   }, [
     state?.config?.organization,
@@ -436,6 +470,7 @@ export function DevOpsUI({
     state?.config?.remote,
   ]);
   useEffect(() => {
+    if (!state?.snapshot) return;
     setSelected((current) =>
       current.filter((p) => state?.snapshot?.files.some((f) => f.path === p && !f.blocked)),
     );
@@ -443,6 +478,30 @@ export function DevOpsUI({
   useEffect(() => {
     if (state?.preview?.kind === 'commit') setTitle(state.preview.title);
   }, [state?.preview]);
+  useEffect(() => {
+    saveDeliveryDraft(draftKey, {
+      selected,
+      intent,
+      commitTitle: title,
+      prTitle,
+      description,
+      target,
+      ticketId,
+      featureId,
+      remote,
+    });
+  }, [
+    draftKey,
+    selected,
+    intent,
+    title,
+    prTitle,
+    description,
+    target,
+    ticketId,
+    featureId,
+    remote,
+  ]);
   if (!visible) return null;
   if (!state)
     return (
@@ -463,11 +522,37 @@ export function DevOpsUI({
         [...selected].sort().join('\0') !== [...state.preview.paths].sort().join('\0')
       : state.preview.kind === 'push'
         ? remote !== state.preview.remote
-        : title !== state.preview.title ||
+        : prTitle !== state.preview.title ||
           description !== state.preview.description ||
           target !== state.preview.target ||
           (ticketId ? Number(ticketId) : undefined) !== state.preview.ticketId ||
           (featureId || undefined) !== state.preview.featureId);
+  const chosenFeature = features.find((feature) => feature.id === featureId);
+  const chooseFeature = (id: string) => {
+    setFeatureId(id);
+    setTicketId(deliveryTicket(id, state));
+    const feature = features.find((item) => item.id === id);
+    const previous = chosenFeature ? prepareSessionPullRequest(chosenFeature, state) : undefined;
+    const unchanged =
+      (!prTitle.trim() && !description.trim()) ||
+      (previous && prTitle === previous.prTitle && description === previous.description);
+    if (feature && unchanged) {
+      const generated = prepareSessionPullRequest(feature, state);
+      setPrTitle(generated.prTitle);
+      setDescription(generated.description);
+    }
+  };
+  const relatedTickets = state.links
+    .filter((link) => link.projectKey === scopeKey && link.featureId === featureId && link.ticketId)
+    .map((link) => link.ticketId!);
+  const previousDraftFeature = features.find(
+    (item) => item.id !== featureId && description.includes(`(${item.id})`),
+  );
+  const branchMismatch = Boolean(
+    chosenFeature?.branch &&
+      state.snapshot?.branch &&
+      chosenFeature.branch !== state.snapshot.branch,
+  );
   const inputConfig = (key: keyof DevOpsConfig, label: string) => (
     <label>
       {label}
@@ -506,7 +591,10 @@ export function DevOpsUI({
       {state.error && (
         <div className="devops-error" role="alert">
           {state.error}
-          <p>Consulte le détail ci-dessus, puis réessaie l’opération.</p>
+          <p>
+            Le brouillon est conservé. Corrige la cause indiquée, puis prépare à nouveau l’aperçu de
+            cette étape.
+          </p>
         </div>
       )}
       {state.notices.map((n, i) => (
@@ -655,6 +743,40 @@ export function DevOpsUI({
         </>
       ) : (
         <>
+          <section className="devops-card delivery-session-context">
+            <h2>Votre livraison, étape par étape</h2>
+            <ol className="delivery-stages">
+              <li>Commit local</li>
+              <li>Publication de la branche</li>
+              <li>PR brouillon après relecture</li>
+            </ol>
+            <p>
+              Le brouillon et vos choix sont conservés dans ce projet. Après un échec, préparez un
+              nouvel aperçu pour reprendre à l’étape concernée.
+            </p>
+            <dl className="devops-metadata">
+              <div>
+                <dt>Dépôt configuré</dt>
+                <dd>
+                  {state.config
+                    ? `${state.config.organization} / ${state.config.project} / ${state.config.repository}`
+                    : 'Aucun dépôt Azure DevOps configuré'}
+                </dd>
+              </div>
+              <div>
+                <dt>Branche à livrer</dt>
+                <dd>
+                  {state.snapshot
+                    ? `${state.snapshot.branch} · ${state.snapshot.head.slice(0, 12)}`
+                    : 'Actualiser pour inspecter le dépôt'}
+                </dd>
+              </div>
+              <div>
+                <dt>Commit courant</dt>
+                <dd>{state.snapshot?.head.slice(0, 12) ?? 'À inspecter'}</dd>
+              </div>
+            </dl>
+          </section>
           <section className="devops-card">
             <h2>Conversation</h2>
             <div className="delivery-conversation" aria-live="polite">
@@ -820,12 +942,61 @@ export function DevOpsUI({
                   : 'Configure Azure DevOps dans son menu dédié.'}
               </p>
               <label>
+                Session associée
+                <select value={featureId} onChange={(e) => chooseFeature(e.target.value)}>
+                  <option value="">Aucune</option>
+                  {features.map((f) => (
+                    <option value={f.id} key={f.id}>
+                      {f.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="devops-actions">
+                <button
+                  disabled={busy || !chosenFeature}
+                  onClick={() => {
+                    if (!chosenFeature) return;
+                    const generated = prepareSessionPullRequest(chosenFeature, state);
+                    setPrTitle(generated.prTitle);
+                    setDescription(generated.description);
+                    setTicketId(generated.ticketId);
+                  }}
+                >
+                  Préremplir depuis cette session
+                </button>
+                {chosenFeature && (
+                  <button onClick={() => onOpenFeature(chosenFeature.id)}>Relire la session</button>
+                )}
+              </div>
+              {previousDraftFeature && chosenFeature && (
+                <p className="delivery-scope-warning" role="status">
+                  Le texte conservé référence encore la session {previousDraftFeature.title}.
+                  Relisez vos modifications ou préremplissez depuis la session {chosenFeature.title}
+                  .
+                </p>
+              )}
+              {branchMismatch && (
+                <p className="delivery-scope-warning" role="status">
+                  Cette session indique la branche {chosenFeature?.branch}. La PR portera sur la
+                  branche courante {state.snapshot?.branch}. Vérifiez le dépôt et le diff avant de
+                  continuer.
+                </p>
+              )}
+              {relatedTickets.length > 1 && (
+                <p>Plusieurs tickets sont liés à cette session. Choisissez celui de cette PR.</p>
+              )}
+              <label>
                 Branche cible
                 <input value={target} onChange={(e) => setTarget(e.target.value)} />
               </label>
               <label>
                 Titre de la PR
-                <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+                <input
+                  value={prTitle}
+                  onChange={(e) => setPrTitle(e.target.value)}
+                  maxLength={200}
+                />
               </label>
               <label>
                 Description
@@ -839,6 +1010,9 @@ export function DevOpsUI({
                 Ticket associé
                 <select value={ticketId} onChange={(e) => setTicketId(e.target.value)}>
                   <option value="">Aucun</option>
+                  {ticketId && !state.tickets.some((ticket) => String(ticket.id) === ticketId) && (
+                    <option value={ticketId}>#{ticketId} · lié à la session</option>
+                  )}
                   {state.tickets.map((t) => (
                     <option value={t.id} key={t.id}>
                       #{t.id} · {t.title}
@@ -846,23 +1020,24 @@ export function DevOpsUI({
                   ))}
                 </select>
               </label>
-              <label>
-                Feature associée
-                <select value={featureId} onChange={(e) => setFeatureId(e.target.value)}>
-                  <option value="">Aucune</option>
-                  {features.map((f) => (
-                    <option value={f.id} key={f.id}>
-                      {f.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+
+              <details>
+                <summary>Relire le brouillon avant publication</summary>
+                <strong>{prTitle || 'Titre à renseigner'}</strong>
+                <p>
+                  {state.snapshot?.branch ?? 'Branche à inspecter'} → {target} ·{' '}
+                  {ticketId ? `Ticket #${ticketId}` : 'Sans ticket'}
+                </p>
+                <pre className="devops-text delivery-draft-preview">
+                  {description || 'Description à préparer'}
+                </pre>
+              </details>
               <button
-                disabled={busy || !state.authenticated || !title.trim() || !target}
+                disabled={busy || !state.authenticated || !prTitle.trim() || !target}
                 onClick={() =>
                   send({
                     type: 'deliveryPreviewPr',
-                    title,
+                    title: prTitle,
                     description,
                     target,
                     ...(ticketId ? { ticketId: Number(ticketId) } : {}),
@@ -876,7 +1051,14 @@ export function DevOpsUI({
           </div>
           {state.preview && (
             <section className="devops-card delivery-preview">
-              <h2>Aperçu à confirmer · {state.preview.kind}</h2>
+              <h2>
+                Aperçu à confirmer ·{' '}
+                {state.preview.kind === 'commit'
+                  ? 'Commit local'
+                  : state.preview.kind === 'push'
+                    ? 'Publication de branche'
+                    : 'PR brouillon'}
+              </h2>
               <strong>{state.preview.title}</strong>
               <p>
                 {state.preview.branch}
@@ -890,6 +1072,33 @@ export function DevOpsUI({
               )}
               {state.preview.description && (
                 <pre className="devops-text">{state.preview.description}</pre>
+              )}
+              {state.preview.kind === 'pr' && (
+                <details open>
+                  <summary>
+                    Diff de la PR · point commun avec {state.preview.target} →{' '}
+                    {state.preview.branch}
+                  </summary>
+                  {state.preview.targetHead && (
+                    <p>Commit cible relu : {state.preview.targetHead.slice(0, 12)}</p>
+                  )}
+                  <pre className="delivery-diff">
+                    {state.preview.diff ?? 'Comparaison à vérifier dans Azure DevOps.'}
+                  </pre>
+                  {state.preview.diffTruncated && (
+                    <p>
+                      Diff tronqué à 100 000 caractères. Relisez la comparaison complète avant
+                      publication.
+                    </p>
+                  )}
+                  {!!state.snapshot?.files.length && (
+                    <p>
+                      Les {state.snapshot.files.length} fichiers encore modifiés dans le dossier de
+                      travail ne sont pas inclus dans cette PR tant qu’ils ne sont pas commités et
+                      publiés.
+                    </p>
+                  )}
+                </details>
               )}
               {state.preview.paths.length > 0 && (
                 <ul>

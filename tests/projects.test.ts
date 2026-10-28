@@ -528,5 +528,29 @@ describe('explicit multi-project execution', () => {
     expect(hub.snapshot()!.projectCatalog?.selectedProjectIds).toEqual(
       projects.map((project) => project.id),
     );
+    const activeSnapshots = vi.spyOn(a.service, 'snapshot');
+    const inactiveSnapshots = vi.spyOn(b.service, 'snapshot');
+    const inactiveNavigation = vi.spyOn(b.service.navigation, 'snapshot');
+    const states: import('../src/shared/types').StudioState[] = [];
+    hub.on('state', (state) => states.push(state));
+    a.service.publish();
+    expect(activeSnapshots).toHaveBeenCalledOnce();
+    expect(inactiveSnapshots).not.toHaveBeenCalled();
+    expect(inactiveNavigation).not.toHaveBeenCalled();
+    expect(states.at(-1)!.features.map((feature) => feature.id)).toEqual([first.id, second.id]);
+    states.at(-1)!.features[1].title = 'Changed snapshot';
+    expect(second.title).toBe('Web');
+    activeSnapshots.mockClear();
+    let originalState: import('../src/shared/types').StudioState | undefined;
+    b.service.on('state', (state) => {
+      originalState = state;
+    });
+    second.title = 'Latest web title';
+    b.service.publish();
+    expect(activeSnapshots).toHaveBeenCalledOnce();
+    expect(inactiveSnapshots).toHaveBeenCalledOnce();
+    expect(states.at(-1)!.features[1].title).toBe('Latest web title');
+    expect(originalState!.features).toHaveLength(1);
+    expect(originalState!.features[0].id).toBe(second.id);
   });
 });

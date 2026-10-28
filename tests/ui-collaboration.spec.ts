@@ -1,3 +1,4 @@
+import { openSessionSection } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import { featureStateKey } from '../src/shared/collaboration';
@@ -271,6 +272,7 @@ test('report edits keep drafts on rejection and approve only the saved acknowled
   await page.getByRole('button', { name: 'Éditeur', exact: true }).click();
   await page.getByText('Original produit par l’agent', { exact: true }).click();
   await expect(page.getByRole('heading', { name: `Original ${step.name}` })).toBeVisible();
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(
     page.getByRole('navigation', { name: 'Étapes du parcours' }).getByRole('button').first(),
   ).toBeDisabled();

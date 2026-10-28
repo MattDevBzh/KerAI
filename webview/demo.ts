@@ -58,6 +58,15 @@ const steps = [
 ];
 const workflows: Workflow[] = [
   {
+    id: 'bugfix',
+    name: 'Correction de bug',
+    description: 'Diagnostiquer, corriger, tester et relire.',
+    icon: 'wrench',
+    steps: steps
+      .slice(1)
+      .map((step, index) => ({ ...step, dependsOn: index ? step.dependsOn : [] })),
+  },
+  {
     id: 'feature',
     name: 'Feature complète',
     description: 'Du besoin à une implémentation vérifiée, avec votre validation à chaque étape.',

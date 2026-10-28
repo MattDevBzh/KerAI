@@ -1,6 +1,4 @@
 import { test, expect, type Page } from '@playwright/test';
-import { mkdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { demoState } from '../webview/demo';
 import { newSubplanStep } from '../src/shared/subplans';
 import { WorkflowEngine } from '../src/core/workflow';
@@ -10,7 +8,7 @@ import { defaultPairPreferences } from '../src/shared/pair';
 import { emptyLaunch } from '../src/core/context';
 import { agentStep } from '../src/shared/team';
 import type { ClientMessage, Feature, StudioState } from '../src/shared/types';
-import { navigate } from './ui-navigation-helpers';
+import { navigate, openSessionSection } from './ui-navigation-helpers';
 
 function scenario(nested = false) {
   const state = structuredClone(demoState);
@@ -162,6 +160,7 @@ async function open(page: Page, state: StudioState, theme = 'papier-sombre') {
     { initial: state, theme },
   );
   await page.goto('/');
+  await openSessionSection(page, 'Équipe et parcours');
 }
 test('configures nested cards in the same composer and saves incomplete cards with a launch warning', async ({
   page,
@@ -215,6 +214,7 @@ test('navigates arbitrary levels and historical iterations without changing exec
   await expect(page.locator('.subplan-mission')).toHaveText(
     'Composer les filtres sans perdre le contexte.',
   );
+  await page.locator('.feature-brief-disclosure > summary').click();
   await expect(page.locator('.subplan-context > p')).not.toBeVisible();
   await page.getByText('Contexte transmis à la sous-équipe', { exact: true }).click();
   await expect(page.locator('.subplan-context > p')).toContainText('Contexte de la feature');
@@ -224,6 +224,7 @@ test('navigates arbitrary levels and historical iterations without changing exec
   await expect(page.getByLabel('Itération de la sous-équipe')).toContainText(
     '1 · Navigation au clavier · Validée',
   );
+  await openSessionSection(page, 'Équipe et parcours');
   await page.locator('.journey-step').filter({ hasText: 'Détailler chaque filtre' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Filtres combinés' })).toBeVisible();
   await page
@@ -284,8 +285,7 @@ test('keeps narrow nested navigation usable with high contrast and reduced motio
     true,
   );
   await navigation.scrollIntoViewIfNeeded();
-  await mkdir(resolve('test-results/subplans'), { recursive: true });
-  await page.screenshot({ path: resolve('test-results/subplans/contraste-mobile.png') });
+  await page.screenshot({ path: test.info().outputPath('subplans-contraste-mobile.png') });
 });
 test('adds and configures a subplan in a saved team template', async ({ page }) => {
   await open(page, scenario());
@@ -334,19 +334,17 @@ for (const theme of [
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
     if (theme === 'papier-sombre') {
-      await mkdir(resolve('test-results/subplans'), { recursive: true });
       await page.screenshot({
-        path: resolve('test-results/subplans/sous-equipe.png'),
+        path: test.info().outputPath('subplans-sous-equipe.png'),
         fullPage: true,
       });
       await page.locator('.subplan-navigation').screenshot({
-        path: resolve('test-results/subplans/navigation.png'),
+        path: test.info().outputPath('subplans-navigation.png'),
       });
     }
     if (theme === 'papier-clair') {
-      await mkdir(resolve('test-results/subplans'), { recursive: true });
       await page.locator('.subplan-overview').screenshot({
-        path: resolve('test-results/subplans/sous-plan-clair.png'),
+        path: test.info().outputPath('subplans-sous-plan-clair.png'),
       });
     }
   });
@@ -364,8 +362,7 @@ test('shows a dedicated team card in the living HQ and keeps nested settings usa
   await expect(card.locator('.subplan-card-visual')).toBeVisible();
   await expect(card.locator('.hq-avatar img')).toHaveCount(0);
   await expect(card).not.toContainText('Orchestrateur');
-  await mkdir(resolve('test-results/subplans'), { recursive: true });
-  await card.screenshot({ path: resolve('test-results/subplans/carte-sous-plan.png') });
+  await card.screenshot({ path: test.info().outputPath('subplans-carte-sous-plan.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Modifier l’équipe', exact: true }).click();
   await page
@@ -464,8 +461,7 @@ test('finds revisions in a long history and excludes outdated validations from p
   await expect(overview.locator('.is-current')).toContainText('Filtres combinés');
   await expect(overview.locator('.is-current')).toContainText('ITÉRATION ACTIVE');
   await expect(overview.locator('.needs-review')).toContainText('À revérifier');
-  await mkdir(resolve('test-results/subplans'), { recursive: true });
-  await overview.screenshot({ path: resolve('test-results/subplans/historique.png') });
+  await overview.screenshot({ path: test.info().outputPath('subplans-historique.png') });
   await page.getByLabel('Rechercher une itération').fill('revision');
   await expect(overview.locator('.subplan-iteration')).toHaveCount(1);
   await expect(overview.locator('.subplan-iteration')).toContainText('Révision de l’itération 1');
@@ -523,9 +519,8 @@ for (const layout of [
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await mkdir(resolve('test-results/subplans'), { recursive: true });
     await page.screenshot({
-      path: resolve(`test-results/subplans/composition-${layout.width}.png`),
+      path: test.info().outputPath(`subplans-composition-${layout.width}.png`),
     });
     await close.click();
     await expect(panel).toHaveCount(0);

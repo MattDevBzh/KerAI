@@ -1,5 +1,8 @@
+import { StateReceiver } from '../src/shared/stateTransfer';
 import type { ClientMessage, HostMessage } from '../src/shared/types';
 interface PersistedView {
+  sessionStarter?: import('../src/shared/sessionStarters').SessionStarterId;
+  deliveryDrafts?: Record<string, import('../src/shared/deliveryDraft').DeliveryDraft>;
   hqFeatureId?: string;
   statistics?: import('../src/shared/statistics').StatsFilters;
   sessionList?: import('../src/shared/sessionList').SessionListFilters;
@@ -60,63 +63,81 @@ export function persistView(state: PersistedView) {
 export function send(message: ClientMessage) {
   vscode?.postMessage(message);
 }
+const listeners = new Set<(message: HostMessage) => void>();
+const receiver = new StateReceiver();
+let resyncPending = false;
+window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
+  let message = event.data;
+  if (!message) return;
+  if (message.type === 'state' || message.type === 'stateDelta') {
+    const state = receiver.receive(message);
+    if (!state) {
+      if (!resyncPending) {
+        resyncPending = true;
+        send({ type: 'resyncState' });
+      }
+      return;
+    }
+    resyncPending = false;
+    message = { type: 'state', state };
+  }
+  if (
+    [
+      'dashboardState',
+      'autopilotSaved',
+      'autopilotPreview',
+      'dashboardSaved',
+      'state',
+      'hqWindowResult',
+      'navigationState',
+      'accountCredits',
+      'questState',
+      'rewardState',
+      'secretThemeState',
+      'discussionState',
+      'discussionResult',
+      'reportDiscussionOpened',
+      'discussionReportOpened',
+      'featureCreateResult',
+      'workflowDeleteResult',
+      'projectResult',
+      'featureTeamResult',
+      'optionalStepResult',
+      'agentFavoriteResult',
+      'devopsState',
+      'error',
+      'notice',
+      'navigate',
+      'runPreview',
+      'pairActionResult',
+      'checkpointComparison',
+      'stepApprovalResult',
+      'artifactSaveResult',
+      'agentReportExported',
+      'sessionBatchResult',
+      'sessionBatchProgress',
+      'statsStorageResult',
+      'correctionResult',
+      'featureFinalizationResult',
+      'profileSaveResult',
+      'kitResult',
+      'themeState',
+      'zoomState',
+      'livingHqState',
+      'observationPreview',
+      'observationSource',
+      'sessionStorage',
+      'sessionJournal',
+      'deleteFeatureResult',
+    ].includes(message.type)
+  )
+    for (const listener of listeners) listener(message);
+});
 export function subscribe(callback: (message: HostMessage) => void) {
-  const handler = (event: MessageEvent<HostMessage>) => {
-    if (
-      event.data &&
-      [
-        'dashboardState',
-        'autopilotSaved',
-        'autopilotPreview',
-        'dashboardSaved',
-        'state',
-        'hqWindowResult',
-        'navigationState',
-        'accountCredits',
-        'questState',
-        'rewardState',
-        'secretThemeState',
-        'discussionState',
-        'discussionResult',
-        'reportDiscussionOpened',
-        'discussionReportOpened',
-        'featureCreateResult',
-        'workflowDeleteResult',
-        'projectResult',
-        'featureTeamResult',
-        'optionalStepResult',
-        'agentFavoriteResult',
-        'devopsState',
-        'error',
-        'notice',
-        'navigate',
-        'runPreview',
-        'pairActionResult',
-        'checkpointComparison',
-        'stepApprovalResult',
-        'artifactSaveResult',
-        'agentReportExported',
-        'sessionBatchResult',
-        'sessionBatchProgress',
-        'statsStorageResult',
-        'correctionResult',
-        'featureFinalizationResult',
-        'profileSaveResult',
-        'kitResult',
-        'themeState',
-        'zoomState',
-        'livingHqState',
-        'observationPreview',
-        'observationSource',
-        'sessionStorage',
-        'sessionJournal',
-        'deleteFeatureResult',
-      ].includes(event.data.type)
-    )
-      callback(event.data);
+  listeners.add(callback);
+  return () => {
+    listeners.delete(callback);
   };
-  window.addEventListener('message', handler);
-  return () => window.removeEventListener('message', handler);
 }
 
 export function savedPairDraft(attemptId: string) {
@@ -129,4 +150,17 @@ export function savePairDraft(attemptId: string, content: string) {
   else delete drafts[attemptId];
   persistedView = { ...persistedView, pairDrafts: drafts };
   vscode?.setState(persistedView);
+}
+
+export function savedSessionStarter() {
+  return persistedView.sessionStarter;
+}
+export function savedDeliveryDraft(key: string) {
+  return persistedView.deliveryDrafts?.[key];
+}
+export function saveDeliveryDraft(
+  key: string,
+  draft: import('../src/shared/deliveryDraft').DeliveryDraft,
+) {
+  persistView({ deliveryDrafts: { ...persistedView.deliveryDrafts, [key]: draft } });
 }

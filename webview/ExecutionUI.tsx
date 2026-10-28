@@ -1,7 +1,8 @@
 import { defaultNavigationSelection } from '../src/shared/navigationSelection';
 import { NavigationLaunchPicker } from './ApplicationsUI';
 import { defaultPairPreferences } from '../src/shared/pair';
-import { PermissionPicker } from './NativeExecutionUI';
+import { PermissionPicker, EffectiveLaunchCapabilities } from './NativeExecutionUI';
+import { launchReadiness } from './launchReadiness';
 import { PairPreferencesUI } from './PairPreferencesUI';
 import { useDialogAccessibility } from './Ergonomics';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
@@ -191,7 +192,9 @@ export function LaunchDialog({
   const [previewFresh, setPreviewFresh] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const request = useRef('');
+  const request = useRef({ id: '', key: '' });
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [previewKey, setPreviewKey] = useState('');
   const submitted = useRef(false);
   const revision = JSON.stringify({
     feature,
@@ -200,11 +203,17 @@ export function LaunchDialog({
     settings: state.settings,
     memory: state.memory,
     runtime: state.runtime,
+    workspace: state.workspace,
+    projectCatalog: state.projectCatalog,
     navigation: state.navigation,
   });
+  const inputKey = JSON.stringify({ revision, launch, feedback, resume });
+  const currentKey = useRef(inputKey);
+  currentKey.current = inputKey;
   const priorRevision = useRef(revision);
   const invalidate = () => {
-    request.current = '';
+    request.current = { id: '', key: '' };
+    clearTimeout(timer.current);
     setPreviewFresh(false);
     setPending(false);
     setError('');
@@ -219,12 +228,22 @@ export function LaunchDialog({
   useEffect(
     () =>
       subscribe((message) => {
-        if (message.type === 'runPreview' && message.requestId === request.current) {
+        if (
+          message.type === 'runPreview' &&
+          message.requestId === request.current.id &&
+          request.current.key === currentKey.current
+        ) {
           setPreview(message.preview);
+          setPreviewKey(request.current.key);
           setPreviewFresh(true);
           setPending(false);
         }
-        if (message.type === 'error' && request.current) {
+        if (
+          message.type === 'error' &&
+          message.requestId === request.current.id &&
+          request.current.id &&
+          request.current.key === currentKey.current
+        ) {
           setError(message.message);
           setPending(false);
           setPreviewFresh(false);
@@ -238,7 +257,8 @@ export function LaunchDialog({
   };
   const prepare = () => {
     const id = crypto.randomUUID();
-    request.current = id;
+    clearTimeout(timer.current);
+    request.current = { id, key: currentKey.current };
     setPending(!isDemo);
     setError(
       isDemo
@@ -275,18 +295,13 @@ export function LaunchDialog({
     const block = launch.contextBlocks?.[id];
     changeBlock(id, { content: undefined, enabled: block?.enabled ?? contextMode === 'all' });
   };
-  const eligible =
-    (!feature.execution || state.runtime.native?.available !== false) &&
-    state.workspace.trusted &&
-    state.runtime.state === 'ready' &&
-    !feature.archived &&
-    !state.features.some((f) => f.steps.some((s) => s.status === 'running')) &&
-    !state.workspaceOperation &&
-    (step.maxAttempts === 0 || step.attempts.length < step.maxAttempts);
+  const blockers = launchReadiness(state, feature, step, launch);
+  const eligible = blockers.length === 0;
   const canStart =
     eligible &&
     preview !== null &&
     previewFresh &&
+    previewKey === inputKey &&
     preview.errors.length === 0 &&
     preview.featureId === feature.id &&
     preview.stepId === step.id &&
@@ -296,6 +311,12 @@ export function LaunchDialog({
     !needsDevOpsEvidence(step) ||
     (devOpsTestTargetSchema.safeParse(launch.devopsTest).success &&
       launch.devopsTest?.isolationConfirmed === true);
+  useEffect(() => {
+    invalidate();
+    if (devopsReady && state.workspace.trusted && agent && !isDemo)
+      timer.current = setTimeout(prepare, 450);
+    return () => clearTimeout(timer.current);
+  }, [inputKey, devopsReady]);
 
   return (
     <StudioDialog
@@ -316,7 +337,8 @@ export function LaunchDialog({
           {feature.execution && (
             <>
               <p>
-                <strong>Copilot natif</strong> · Fichiers, recherche, terminal et questions.
+                <strong>Copilot natif</strong> · Les capacités disponibles sont détaillées
+                ci-dessous.
               </p>
               <PermissionPicker
                 state={state}
@@ -328,6 +350,37 @@ export function LaunchDialog({
                 worktree ne sont pas une sandbox.
               </p>
             </>
+          )}
+          <EffectiveLaunchCapabilities
+            state={state}
+            feature={feature}
+            step={step}
+            launch={launch}
+          />
+          {blockers.length > 0 && (
+            <section className="inline-error" aria-label="À corriger avant lancement">
+              <h3>À corriger avant lancement</h3>
+              <ul>
+                {blockers.map((issue, index) => (
+                  <li key={index}>
+                    {issue.message}
+                    {issue.action && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => dispatch({ type: issue.action! })}
+                      >
+                        {issue.action === 'manageWorkspaceTrust'
+                          ? 'Approuver le projet'
+                          : issue.action === 'checkRuntime'
+                            ? 'Vérifier Copilot'
+                            : 'Ouvrir les réglages'}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
           {launch.pair && !step.subplan && (
             <PairPreferencesUI value={launch.pair} onChange={(pair) => update({ pair })} />
@@ -598,7 +651,8 @@ export function LaunchDialog({
               </details>
               <p className="field-help">
                 L’estimation n’est pas une consommation mesurée. Toute modification du contexte
-                exige un nouvel aperçu.
+                actualise automatiquement l’aperçu. L’hôte contrôle encore sa fraîcheur au
+                lancement.
               </p>
             </>
           ) : (
@@ -612,8 +666,8 @@ export function LaunchDialog({
                 avant d’être une exécution.
               </h3>
               <p>
-                Préparez l’aperçu pour relire exactement le contexte composé par le host : votre
-                demande, l’agent, les skills, les livrables et la mémoire sélectionnée.
+                L’aperçu se prépare automatiquement pour relire le contexte composé par l’hôte :
+                votre demande, l’agent, les skills, les livrables et la mémoire sélectionnée.
               </p>
               <span className="preview-note">
                 <ShieldCheck size={13} /> L’aperçu n’appelle aucun modèle IA.
@@ -636,11 +690,11 @@ export function LaunchDialog({
         <span className="muted">
           <ShieldCheck size={14} />
           {resume
-            ? agent?.emptyContextByDefault ||
-              launch.contextMode !== undefined ||
-              Object.keys(launch.contextBlocks ?? {}).length
-              ? 'Nouvelle session : le contexte choisi remplace l’historique précédent.'
-              : 'Reprise de la session existante.'
+            ? preview && previewFresh && previewKey === inputKey
+              ? preview.resumesSession
+                ? 'Reprise de la session existante.'
+                : 'Nouvelle tentative avec une nouvelle conversation : le contexte choisi remplace l’historique précédent.'
+              : 'L’aperçu vérifiera si la conversation existante peut être reprise.'
             : 'Une tentative consommera votre quota Copilot.'}
         </span>
         <button className="button secondary" onClick={onClose}>

@@ -1,3 +1,4 @@
+import { openSessionSection } from './ui-navigation-helpers';
 import { createPair } from '../src/core/pair';
 import { defaultPairPreferences } from '../src/shared/pair';
 import { emptyLaunch } from '../src/core/context';
@@ -125,6 +126,7 @@ async function hosted(
     { state, enabled, theme },
   );
   await page.goto('/');
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(toggle(page)).toBeVisible();
   if (enabled) await expect(qg(page)).toBeVisible();
 }
@@ -209,12 +211,14 @@ test('la case remplace uniquement la bande, conserve le détail et persiste entr
   await toggle(page).check();
   await expect(toggle(page)).toBeEnabled();
   await page.reload();
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(qg(page)).toBeVisible();
   await expect(detail(page)).toHaveText('Développement');
   await page.getByRole('button', { name: 'Vos sessions', exact: true }).click();
   await page
     .getByRole('button', { name: 'Ouvrir Un premier pas plus accueillant', exact: true })
     .click();
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(qg(page)).toBeVisible();
   expect(
     (await messages(page)).some((m) =>
@@ -478,6 +482,7 @@ test('la première étape, une ouverture tardive et une reprise du même tour ne
   await startStep(page);
   await expect(qg(page).locator('.hq-paper-plane')).toHaveCount(4);
   await page.reload();
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(qg(page)).toBeVisible();
   await expect(qg(page).locator('.hq-context-transfer')).toHaveCount(0);
 });

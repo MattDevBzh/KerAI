@@ -1,3 +1,4 @@
+import { openSessionSection } from './ui-navigation-helpers';
 import { expect, test, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage, StudioState } from '../src/shared/types';
@@ -104,6 +105,7 @@ test('closing and reopening a stale editorial draft keeps its original concurren
     page.getByRole('textbox', { name: 'Compte rendu modifié', exact: true }),
   ).toHaveValue('MY_STALE_DRAFT');
   await page.getByRole('button', { name: 'Fermer l’éditeur' }).click();
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(
     page.getByRole('navigation', { name: 'Étapes du parcours' }).getByRole('button').first(),
   ).toBeDisabled();

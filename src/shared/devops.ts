@@ -94,6 +94,10 @@ export interface DeliverySnapshot {
   diffTruncated: boolean;
 }
 export interface DeliveryPreview {
+  /** Remote target commit used for the displayed PR comparison. */
+  targetHead?: string;
+  diff?: string;
+  diffTruncated?: boolean;
   kind: 'commit' | 'push' | 'pr';
   fingerprint: string;
   branch: string;

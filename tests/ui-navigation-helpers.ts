@@ -21,3 +21,10 @@ export async function navigate(page: Page, name: string) {
     await nav.getByRole('button', { name: group, exact: true }).click();
   await nav.getByRole('button', { name, exact: true }).click();
 }
+
+/** Open a secondary session section explicitly, preserving the default focused layout. */
+export async function openSessionSection(page: Page, name: string) {
+  const summary = page.locator('details.work-secondary > summary').filter({ hasText: name });
+  await summary.waitFor({ state: 'visible' });
+  if ((await summary.locator('..').getAttribute('open')) === null) await summary.click();
+}

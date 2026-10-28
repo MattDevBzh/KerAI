@@ -1,4 +1,4 @@
-import { navigate } from './ui-navigation-helpers';
+import { navigate, openSessionSection } from './ui-navigation-helpers';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage, StudioState } from '../src/shared/types';
@@ -14,6 +14,18 @@ const fresh = (): StudioState => ({
     ],
   },
 });
+async function expandSessionTools(page: Page) {
+  for (const section of [
+    'Projet, Git et outils',
+    'Pilotage automatique et budget',
+    'Équipe et parcours',
+  ])
+    await openSessionSection(page, section);
+}
+async function openCreationOptions(page: Page) {
+  const options = page.locator('.creation-options');
+  if ((await options.getAttribute('open')) === null) await options.locator('summary').click();
+}
 async function hosted(page: Page, state = fresh()) {
   await page.addInitScript((data) => {
     let saved = {};
@@ -211,7 +223,7 @@ test('le navigateur affiche un accès VS Code, la démo nécessite un choix expl
   await expect(page.getByText('Démonstration — aucune exécution Copilot')).toBeVisible();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Une feature de démo');
-  await page.getByRole('button', { name: 'Créer la feature' }).click();
+  await page.getByRole('button', { name: 'Créer la session' }).click();
   await expect(page.locator('.toast[role=status]')).toContainText(
     'aucune commande, écriture ou exécution',
   );
@@ -227,11 +239,12 @@ test('recherche, filtres et création transmettent le contrat exact sans lancer 
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Analyser un composant');
   await page.getByLabel('Le contexte et le résultat souhaité').fill('Comprendre les contraintes.');
-  await page.getByRole('button', { name: 'Créer la feature' }).click();
+  await page.getByRole('button', { name: 'Créer la session' }).click();
   expect((await messages(page)).at(-1)).toEqual({
     type: 'createFeature',
     requestId: expect.any(String),
     title: 'Analyser un composant',
+    workflowId: 'feature',
     description: 'Comprendre les contraintes.',
     isolated: false,
     permissionMode: 'manual',
@@ -244,6 +257,7 @@ test('le compte rendu modifié est enregistré avant validation de sa révision 
   const state = fresh();
   await hosted(page, state);
   await page.getByRole('button', { name: /^Ouvrir Une palette de commandes/ }).click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Modifier le compte rendu' }).click();
   await page
     .getByRole('textbox', { name: 'Compte rendu modifié', exact: true })
@@ -294,6 +308,7 @@ test('le rapport personnel distant ouvre son identifiant via le bridge', async (
   state.features[0].steps[1].attempts[0].artifact!.content = `# Relecture distante\n\n[Ouvrir le rapport personnel](feature-studio-review:${id})`;
   await hosted(page, state);
   await page.getByRole('button', { name: /^Ouvrir Une palette de commandes/ }).click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Ouvrir le rapport personnel' }).click();
   expect((await messages(page)).at(-1)).toEqual({
     type: 'openPersonalReviewReport',
@@ -314,6 +329,7 @@ test('les questions structurées sont répondues et les diffs utilisent le bridg
   step.attempts[0].changedFiles = ['src/palette.ts'];
   await hosted(page, state);
   await page.getByRole('button', { name: /^Ouvrir Une palette de commandes/ }).click();
+  await expandSessionTools(page);
   await page.getByLabel('Quelle portée ?').selectOption('Locale');
   await page.getByLabel('Quel détail ?').fill('Navigation clavier');
   await page.getByRole('button', { name: 'Transmettre les réponses' }).click();
@@ -492,6 +508,7 @@ test('aucun run en espace non approuvé, runtime indisponible ou dépendance non
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await expect(
     page.getByRole('button', { name: 'Nouvelle tentative', exact: true }),
   ).toBeDisabled();
@@ -525,6 +542,7 @@ test('relance et annulation passent par une confirmation, le statut reste celui 
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByLabel('Votre retour').fill('Préciser les critères clavier.');
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Relancer cette étape ?' })).toBeVisible();
@@ -566,6 +584,7 @@ test('avatars reflètent les états et la réduction du mouvement, reprise de se
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Reprendre la session' }).click();
   await finishLaunch(page, true);
   expect((await messages(page)).at(-1)).toMatchObject({ type: 'runStep', resume: true });
@@ -591,6 +610,7 @@ test('thèmes VS Code et détail mobile restent lisibles et dans le viewport', a
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   for (const theme of ['vscode-light', 'vscode-high-contrast']) {
     await page.evaluate((t) => {
       document.body.className = t;
@@ -622,6 +642,7 @@ test('rejouer une étape validée annonce l’invalidation et ne simule aucun é
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: '01 Cadrage Validée' }).click();
   await page.getByLabel('Votre retour').fill('Intégrer les remarques de relecture.');
   await page.getByRole('button', { name: 'Rejouer cette étape' }).click();
@@ -668,6 +689,7 @@ test('augmenter le budget de tentatives exige une sauvegarde explicite et permet
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await expect(page.getByRole('button', { name: 'Reprendre la session' })).toBeDisabled();
   await expect(page.getByText('La limite de 1 tentative est atteinte.')).toBeVisible();
   await page.getByRole('button', { name: 'Modifier la limite' }).click();
@@ -723,6 +745,7 @@ test('lancement manuel : US, MCP explicite et mémoire opt-in passent par un ape
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
@@ -915,6 +938,7 @@ test('mémoire locale désactivée par défaut, opt-in sans sélection n’injec
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Inclure la mémoire du projet' }).check();
@@ -950,6 +974,7 @@ test('autopilot : cadre explicite, contextes par étape et pause fournie par le 
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.locator('.autopilot-bar').getByRole('button', { name: 'Configurer' }).click();
   await expect(page.getByLabel('Nombre maximal d’exécutions')).toHaveValue('5');
   await expect(page.getByLabel('Cycles de correction maximum')).toHaveValue('0');
@@ -1034,7 +1059,11 @@ test('validation : preuves host, critères et remarques ; approbation liée à l
   ];
   await hosted(page, state);
   await navigate(page, 'Validation');
-  await page.locator('.validation-card').filter({ hasText: 'Conception' }).click();
+  await page
+    .locator('.validation-card')
+    .filter({ hasText: 'Conception' })
+    .getByRole('button', { name: /Relire et décider|Examiner les blocages/ })
+    .click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
   await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   await expect(page.getByText('Exécuté par le host', { exact: false })).toBeVisible();
@@ -1090,6 +1119,7 @@ test('budgets : conversion des crédits vers le stockage nano-AIU et valeurs abs
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await expect(page.locator('.budget-meter')).toContainText('120');
   await expect(page.locator('.budget-meter')).toContainText('< 0,000001');
   await expect(page.locator('.budget-meter')).toContainText('mesure absente ou partielle');
@@ -1211,6 +1241,7 @@ test('captures documentées : lancement avec US/MCP et éditeur de parcours', as
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page
@@ -1269,6 +1300,7 @@ test('nouvelles vues et panneaux ne débordent pas en mobile', async ({ page }) 
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByLabel('US, demande ou contexte initial').fill('US mobile');
@@ -1330,6 +1362,7 @@ async function openCheckpoints(page: Page) {
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Points de restauration', exact: false }).click();
   await expect(
     page.getByRole('dialog', { name: 'Le code garde des points de repère.' }),
@@ -1341,22 +1374,25 @@ test('création Git sans équipe : worktree par défaut et choix explicite du do
   const state = checkpointState();
   await hosted(page, state);
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  await openCreationOptions(page);
   await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeChecked();
   await expect(
     page.getByText('Les changements non commités restent dans le dossier source', { exact: false }),
   ).toBeVisible();
+  await openCreationOptions(page);
   await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeChecked();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Une session isolée');
-  await page.getByRole('button', { name: 'Créer la feature' }).click();
+  await page.getByRole('button', { name: 'Créer la session' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'createFeature',
     isolated: true,
   });
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  await openCreationOptions(page);
   await page.getByRole('radio', { name: 'Dossier courant' }).click();
   await expect(page.getByRole('radio', { name: 'Dossier courant' })).toBeChecked();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Relire les changements existants');
-  await page.getByRole('button', { name: 'Créer la feature' }).click();
+  await page.getByRole('button', { name: 'Créer la session' }).click();
   expect((await messages(page)).at(-1)).toMatchObject({
     type: 'createFeature',
     isolated: false,
@@ -1371,12 +1407,14 @@ test('création : activité et erreur visibles dans la fenêtre, saisie conserv�
   await hosted(page, state);
   await page.evaluate(() => Reflect.set(window, 'autoCreate', false));
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Une nouvelle feature' });
+  const dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
   await dialog.getByLabel('Qu’allons-nous faire ?').fill('Une session à conserver');
   await dialog.getByLabel('Le contexte et le résultat souhaité').fill('Mon contexte reste ici.');
-  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  await dialog.getByRole('button', { name: 'Créer la session' }).click();
   const request = (await messages(page)).filter((m) => m.type === 'createFeature').at(-1)!;
-  await expect(dialog.getByRole('status')).toContainText('Création de la session');
+  await expect(dialog.getByRole('status', { name: 'Création de la session' })).toContainText(
+    'Création de la session',
+  );
   await expect(dialog.getByRole('button', { name: 'Création en cours' })).toBeDisabled();
   await page.evaluate((requestId) => {
     window.postMessage(
@@ -1394,9 +1432,9 @@ test('création : activité et erreur visibles dans la fenêtre, saisie conserv�
     'Mon contexte reste ici.',
   );
   await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeEnabled();
-  await expect(dialog.getByRole('button', { name: 'Créer la feature' })).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: 'Créer la session' })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('creation-error.png') });
-  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  await dialog.getByRole('button', { name: 'Créer la session' }).click();
   const retry = (await messages(page)).filter((m) => m.type === 'createFeature').at(-1)!;
   expect(retry.requestId).toBe(request.requestId);
   await page.evaluate((requestId) => {
@@ -1405,10 +1443,11 @@ test('création : activité et erreur visibles dans la fenêtre, saisie conserv�
       '*',
     );
   }, retry.requestId);
-  await expect(dialog.getByRole('button', { name: 'Créer la feature' })).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: 'Créer la session' })).toBeEnabled();
   await page.evaluate(() => Reflect.set(window, 'autoCreate', true));
+  await openCreationOptions(page);
   await dialog.getByRole('radio', { name: 'Dossier courant' }).check();
-  await dialog.getByRole('button', { name: 'Créer la feature' }).click();
+  await dialog.getByRole('button', { name: 'Créer la session' }).click();
   await expect(dialog).not.toBeVisible();
   expect((await messages(page)).filter((m) => m.type === 'createFeature')).toHaveLength(3);
   expect(
@@ -1424,6 +1463,7 @@ test('espace courant legacy, isolation indisponible et opérations Git bloquent 
   state.workspace.isolationReason = 'Ce dossier ne contient pas encore de commit Git.';
   await hosted(page, state);
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  await openCreationOptions(page);
   await expect(page.getByRole('radio', { name: 'Worktree isolé' })).toBeDisabled();
   await expect(page.getByRole('radio', { name: 'Dossier courant' })).toBeChecked();
   await expect(page.getByText(state.workspace.isolationReason)).toBeVisible();
@@ -1433,6 +1473,7 @@ test('espace courant legacy, isolation indisponible et opérations Git bloquent 
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await expect(page.locator('.git-workspace-band')).toContainText('Dossier courant');
   await expect(page.locator('.git-workspace-band')).toContainText(state.workspace.path);
   await page.getByRole('button', { name: 'Ouvrir le dossier' }).click();
@@ -1571,6 +1612,7 @@ test('restauration et nouveaux lancements restent indisponibles pendant une tent
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await expect(
     page.getByRole('button', { name: 'Nouvelle tentative', exact: true }),
   ).toBeDisabled();
@@ -1626,6 +1668,7 @@ test('une tentative ouvre directement la comparaison de ses points avant et apr�
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page
     .locator('.attempt-checkpoint-links')
     .getByRole('button', { name: 'Comparer', exact: true })
@@ -1798,6 +1841,7 @@ test('contexte : décocher la spec, modifier le plan et actualiser avant lanceme
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1848,6 +1892,7 @@ test('contexte : skill absente visible et décochable avant de lancer', async ({
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1883,6 +1928,7 @@ test('contexte vide par défaut : sélectionner seulement la spec, tout cocher e
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1924,6 +1970,7 @@ test('autoriser un fichier existant exige une sélection explicite et un nouvel 
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await page.getByRole('button', { name: 'Nouvelle tentative', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmer', exact: true }).click();
   await page.getByRole('button', { name: 'Préparer l’aperçu' }).click();
@@ -1958,6 +2005,7 @@ test('dernière étape : afficher les blocages, un refus hôte et la confirmatio
     .first()
     .getByRole('button', { name: /^Ouvrir / })
     .click();
+  await expandSessionTools(page);
   await expect(page.getByRole('button', { name: 'Valider cette étape' })).toBeDisabled();
   await expect(page.getByText('Validation bloquée', { exact: true })).toBeVisible();
   await expect(page.locator('.approval-blockers')).toContainText('critères d’acceptation');
@@ -2032,11 +2080,11 @@ test('le besoin accepte une capture sans lancer un agent', async ({ page }) => {
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   await page.getByLabel('Qu’allons-nous faire ?').fill('Corriger ce bug visuel');
   await page
-    .getByRole('dialog', { name: 'Une nouvelle feature' })
+    .getByRole('dialog', { name: 'Nouvelle session' })
     .getByLabel('Ajouter des images')
     .setInputFiles({ name: 'navigateur.png', mimeType: 'image/png', buffer });
   await expect(page.getByRole('img', { name: 'navigateur.png', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Créer la feature', exact: true }).click();
+  await page.getByRole('button', { name: 'Créer la session', exact: true }).click();
   const sent = await messages(page);
   const created = [...sent].reverse().find((m) => m.type === 'createFeature');
   expect(created?.type === 'createFeature' && created.images?.[0].name).toBe('navigateur.png');

@@ -164,6 +164,7 @@ async function hosted(page: Page, state = scenario()) {
     });
   }, state);
   await page.goto('/');
+  await page.locator('summary').filter({ hasText: 'outils de la session' }).click();
   await page.getByRole('button', { name: 'Analyser cette session', exact: true }).click();
 }
 test('observateur : rapport par phase, modèles et coûts, sources et exports', async ({

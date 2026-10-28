@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import type { ClientMessage } from '../src/shared/types';
 
-async function sessions(page: Page) {
+async function sessions(page: Page, count = 25) {
   const state = structuredClone(demoState);
   const projects = [
     { id: 'lms', name: 'LMS', path: '/dev/lms' },
@@ -15,7 +15,7 @@ async function sessions(page: Page) {
     dedicated: true,
     windows: false,
   };
-  state.features = Array.from({ length: 25 }, (_, i) => ({
+  state.features = Array.from({ length: count }, (_, i) => ({
     ...structuredClone(demoState.features[0]),
     id: `session-${i}`,
     title: `Session ${String(i + 1).padStart(2, '0')}`,
@@ -52,7 +52,7 @@ async function sessions(page: Page) {
     });
   }, state);
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Sessions 25', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `Sessions ${count}`, exact: true })).toBeVisible();
   await page.getByLabel('Trier les sessions').selectOption('title');
 }
 async function lastBatch(page: Page) {
@@ -76,15 +76,15 @@ test('compact list shows many sessions and range selection follows the visible o
       (items) => items.filter((row) => row.getBoundingClientRect().bottom <= innerHeight).length,
     ),
   ).toBeGreaterThanOrEqual(8);
-  await rows.nth(1).locator('h3').click();
+  await rows.nth(1).getByRole('checkbox').click();
   await rows
     .nth(5)
-    .locator('h3')
+    .getByRole('checkbox')
     .click({ modifiers: ['Shift'] });
   await expect(page.locator('.session-row.is-selected')).toHaveCount(5);
   await expect(page.getByRole('button', { name: 'Supprimer (5)', exact: true })).toBeVisible();
   await expect(
-    page.getByRole('checkbox', { name: 'Sélectionner les 24 sessions affichées' }),
+    page.getByRole('checkbox', { name: 'Sélectionner les 24 sessions trouvées' }),
   ).toHaveJSProperty('indeterminate', true);
   await rows
     .nth(0)
@@ -101,7 +101,7 @@ test('multi-project filter, search and sort clear hidden selection and persist o
   await page.getByLabel('Filtrer par projet').selectOption('lxp');
   await expect(page.locator('.session-row')).toHaveCount(13);
   await expect(page.locator('.session-row').filter({ hasText: 'Session 03' })).toContainText('LMS');
-  await page.getByRole('checkbox', { name: 'Sélectionner les 13 sessions affichées' }).check();
+  await page.getByRole('checkbox', { name: 'Sélectionner les 13 sessions trouvées' }).check();
   await expect(page.locator('.session-row.is-selected')).toHaveCount(13);
   await page.getByLabel('Rechercher une session').fill('Session 03');
   await expect(page.locator('.session-row.is-selected')).toHaveCount(0);
@@ -115,11 +115,11 @@ test('multi-project filter, search and sort clear hidden selection and persist o
 
 test('bulk deletion sends one frozen request, cancellation retains selection', async ({ page }) => {
   await sessions(page);
-  await page.locator('.session-row').nth(1).locator('h3').click();
+  await page.locator('.session-row').nth(1).getByRole('checkbox').click();
   await page
     .locator('.session-row')
     .nth(3)
-    .locator('h3')
+    .getByRole('checkbox')
     .click({ modifiers: ['Shift'] });
   await page.getByRole('button', { name: 'Supprimer (3)', exact: true }).click();
   const batch = await lastBatch(page);
@@ -152,8 +152,8 @@ test('archive and restore are directly available and partial results retain fail
   page,
 }) => {
   await sessions(page);
-  await page.locator('.session-row').nth(0).locator('h3').click();
-  await page.locator('.session-row').nth(1).locator('h3').click();
+  await page.locator('.session-row').nth(0).getByRole('checkbox').click();
+  await page.locator('.session-row').nth(1).getByRole('checkbox').click();
   await page.getByRole('button', { name: 'Archiver (2)', exact: true }).click();
   const batch = await lastBatch(page);
   await page.evaluate(
@@ -198,4 +198,53 @@ test('390px keeps selection, project badges and actions within the window', asyn
   await expect(page.locator('.session-row.is-selected')).toHaveCount(3);
   await page.screenshot({ path: test.info().outputPath('sessions-mobile.png') });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('session titles open directly while selection survives bounded pages', async ({ page }) => {
+  await sessions(page, 1000);
+  await expect(page.locator('.session-row')).toHaveCount(50);
+  await page.locator('.session-row').first().getByRole('checkbox').check();
+  await page
+    .getByRole('navigation', { name: 'Pages des sessions' })
+    .getByRole('button', { name: 'Suivantes', exact: true })
+    .click();
+  await expect(page.locator('.session-row')).toHaveCount(50);
+  await page.locator('.session-row').first().getByRole('checkbox').check();
+  await expect(page.getByRole('button', { name: 'Supprimer (2)', exact: true })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Pages des sessions' })
+    .getByRole('button', { name: 'Précédentes', exact: true })
+    .click();
+  await expect(page.locator('.session-row').first().getByRole('checkbox')).toBeChecked();
+  const title = await page.locator('.session-title-open').first().innerText();
+  await page.locator('.session-title-open').first().click();
+  await expect(page.getByRole('heading', { name: title, exact: true }).first()).toBeVisible();
+});
+
+test('the active work stays in view at 1280 by 720 before secondary session controls', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await sessions(page);
+  await page.evaluate(() => {
+    const state = Reflect.get(window, 'sessionState') as typeof demoState;
+    const feature = state.features[0];
+    feature.status = 'draft';
+    feature.steps.forEach((step) => {
+      step.status = 'pending';
+      step.attempts = [];
+    });
+    window.postMessage({ type: 'state', state }, '*');
+  });
+  await page.locator('.session-title-open').first().click();
+  await expect(page.locator('.feature-step-detail')).toBeVisible();
+  expect(
+    await page
+      .locator('.feature-step-detail')
+      .evaluate((element) => element.getBoundingClientRect().top),
+  ).toBeLessThan(500);
+  await expect(
+    page.getByRole('button', { name: 'Aller à l’étape en cours', exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('active-work-1280x720.png') });
 });

@@ -88,6 +88,7 @@ export const discussionMessageVariants = [
   z
     .object({
       type: z.literal('sendDiscussion'),
+      contextImageIds: z.array(id).max(4).optional(),
       images: imagesSchema.optional(),
       requestId: id,
       discussionId: id,
@@ -152,6 +153,17 @@ export const discussionStoreSchema = z
           ),
           source: discussionSourceSchema.optional(),
           featureDraft: featureDraftSchema.optional(),
+          activeImageIds: z.array(id).max(4).optional(),
+          contextWindow: z
+            .object({
+              omittedMessages: z.number().int().nonnegative(),
+              truncatedMessages: z.number().int().nonnegative(),
+              sourceTruncated: z.boolean(),
+              sentCharacters: z.number().int().nonnegative().optional(),
+              imageCount: z.number().int().min(0).max(4).optional(),
+            })
+            .strict()
+            .optional(),
         })
         .strict(),
     ),

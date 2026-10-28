@@ -206,7 +206,7 @@ test('saves and reopens a complete remote application URL', async ({ page }) => 
   await page.getByRole('button', { name: 'Modifier le profil' }).click();
   const dialog = page.getByRole('dialog', { name: 'Profil d’application' });
   const url = 'https://recette.example.com/lms?tenant=demo#/tasks';
-  await dialog.getByLabel('URL de l’application', { exact: true }).fill(url);
+  await dialog.getByLabel('Adresse de l’application', { exact: true }).fill(url);
   await dialog
     .getByLabel('Origines supplémentaires autorisées (une par ligne)')
     .fill('https://api.example.com/v1');
@@ -221,7 +221,7 @@ test('saves and reopens a complete remote application URL', async ({ page }) => 
     },
   });
   await page.getByRole('button', { name: 'Modifier le profil' }).click();
-  await expect(dialog.getByLabel('URL de l’application', { exact: true })).toHaveValue(url);
+  await expect(dialog.getByLabel('Adresse de l’application', { exact: true })).toHaveValue(url);
 });
 
 test('bibliothèque search, independent statuses and immutable replay contract', async ({
@@ -252,6 +252,34 @@ test('bibliothèque search, independent statuses and immutable replay contract',
   await page.screenshot({ path: testInfo.outputPath('applications-dark.png'), fullPage: true });
   // Sending a command never turns the draft into a successful replay.
   await expect(detail.getByText('Décrit', { exact: true })).toBeVisible();
+});
+
+test('application profiles accept HTTPS and custom domains from the form', async ({ page }) => {
+  await hosted(page);
+  for (const origin of [
+    'https://mon-application.fr',
+    'http://intranet:8080',
+    'https://preprod.mon-app.test:8443/',
+    'https://mon-application.fr/espace',
+  ]) {
+    await page.getByRole('button', { name: 'Modifier le profil', exact: true }).click();
+    const profile = page.getByRole('dialog', { name: 'Profil d’application' });
+    await profile.getByLabel('Adresse de l’application', { exact: true }).fill(origin);
+    await profile.getByRole('button', { name: 'Enregistrer le profil' }).click();
+    await expect(profile).not.toBeVisible();
+    await expect
+      .poll(async () =>
+        (await commands(page)).filter((command) => command.action === 'saveApplication').at(-1),
+      )
+      .toMatchObject({
+        action: 'saveApplication',
+        application: {
+          origin: new URL(origin).origin,
+          ...(origin !== new URL(origin).origin ? { startUrl: new URL(origin).href } : {}),
+          allowedOrigins: expect.arrayContaining([new URL(origin).origin]),
+        },
+      });
+  }
 });
 
 test('editable draft preserves revision and records explicit steps and arrival', async ({

@@ -102,7 +102,7 @@ test('multi-selection is remembered, can reorder the primary and creates a multi
   await page
     .getByPlaceholder('Ex. Une recherche plus agréable au clavier')
     .fill('API et interface');
-  await page.getByRole('button', { name: 'Créer la feature' }).click();
+  await page.getByRole('button', { name: 'Créer la session' }).click();
   const messages = await page.evaluate(() => Reflect.get(window, 'projectMessages'));
   expect(messages.find((message: ClientMessage) => message.type === 'createFeature')).toMatchObject(
     { projectIds: ['web', 'api'], isolated: false, title: 'API et interface' },
@@ -115,11 +115,11 @@ test('empty catalog blocks creation and lets the native folder picker register a
   await hosted(page, true);
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).first().click();
   await page.getByPlaceholder('Ex. Une recherche plus agréable au clavier').fill('Premier projet');
-  await expect(page.getByRole('button', { name: 'Créer la feature' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Créer la session' })).toBeDisabled();
   await page.locator('.project-picker summary').click();
   await page.getByRole('button', { name: 'Ajouter un espace de travail' }).click();
   await expect(page.locator('.project-picker summary')).toContainText('API');
-  await expect(page.getByRole('button', { name: 'Créer la feature' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Créer la session' })).toBeEnabled();
 });
 
 test('settings expose folders and the Windows shortcut; switching updates the scoped project', async ({

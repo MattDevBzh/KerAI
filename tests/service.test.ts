@@ -2034,3 +2034,29 @@ describe('autopilot question continuation and recommendations', () => {
     expect(f.feature.autopilot?.automaticAnswers).toHaveLength(1);
   });
 });
+
+it('creates ready starter teams durably without starting an agent or granting broad permissions', async () => {
+  const f = await fixture();
+  for (const [workflowId, count] of [
+    ['bugfix', 4],
+    ['feature', 5],
+    ['code-review', 1],
+  ] as const) {
+    const feature = await f.service.createFeature({
+      title: 'Premier besoin',
+      description: 'Critères à préciser',
+      workflowId,
+    });
+    expect(feature.steps).toHaveLength(count);
+    expect(feature.steps.every((step) => step.status === 'pending' && !step.attempts.length)).toBe(
+      true,
+    );
+    expect(feature.execution).toEqual({ mode: 'copilot-native', permissionMode: 'manual' });
+    if (workflowId === 'bugfix')
+      expect(feature.steps[0].initialContext).toContain('étapes de reproduction');
+    expect(
+      (await f.service.store.load()).features.find((item) => item.id === feature.id)?.workflowId,
+    ).toBe(workflowId);
+  }
+  expect(f.adapter.run).not.toHaveBeenCalled();
+});

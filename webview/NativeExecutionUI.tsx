@@ -1,6 +1,7 @@
 import type { NativeActivity, NativePermissionMode } from '../src/shared/native';
 import { NATIVE_PERMISSION_MODES, permissionLabels } from '../src/shared/native';
-import type { StudioState } from '../src/shared/types';
+import type { Feature, FeatureStep, RunLaunchOptions, StudioState } from '../src/shared/types';
+import { restrictedNativeTools } from './launchReadiness';
 
 export function PermissionPicker({
   value,
@@ -47,6 +48,109 @@ export function PermissionPicker({
         <span className="inline-error">{state.runtime.native.error}</span>
       )}
     </label>
+  );
+}
+
+export function EffectiveLaunchCapabilities({
+  state,
+  feature,
+  step,
+  launch,
+}: {
+  state: StudioState;
+  feature: Feature;
+  step: FeatureStep;
+  launch: RunLaunchOptions;
+}) {
+  const scope = restrictedNativeTools(state, feature, step, launch);
+  const application = state.navigation?.applications.find(
+    (item) => item.id === launch.navigation?.applicationId,
+  );
+  const connections = launch.mcpServerIds.map((id) =>
+    state.settings.mcpServers?.find((server) => server.id === id),
+  );
+  return (
+    <section
+      className="native-capabilities"
+      aria-label="Capacités et autorisations de cette tentative"
+    >
+      <h3>Ce que cette tentative peut utiliser</h3>
+      <p>
+        Projet :{' '}
+        {feature.projects?.map((project) => project.name).join(', ') || state.workspace.name}.
+      </p>
+      {launch.pair && (
+        <p>
+          Le travail en pair commence par un cadrage : aucun travail d’édition ni commande avant
+          votre accord sur le plan.
+        </p>
+      )}
+      {feature.execution ? (
+        <>
+          <p>
+            {scope.readOnly
+              ? 'Lecture et recherche dans les fichiers, questions à l’humain. Édition et terminal exclus pour ce profil ou contexte.'
+              : 'Le catalogue natif autorise lecture, recherche, édition, terminal et questions, sous réserve des permissions Copilot.'}
+          </p>
+          <p>
+            Permissions sélectionnées : {permissionLabels[launch.permissionMode ?? 'manual']}.{' '}
+            {launch.permissionMode === 'allow-all'
+              ? 'Les outils, chemins et adresses peuvent être autorisés sans demande, selon la politique de votre organisation.'
+              : 'Le runtime et la politique de votre organisation décident des actions qui nécessitent un accord.'}
+          </p>
+          <p>
+            Catalogue natif vérifié :{' '}
+            {state.runtime.native?.available
+              ? scope.tools.join(', ') || 'aucun outil communiqué'
+              : 'diagnostic Copilot nécessaire'}
+            .
+          </p>
+        </>
+      ) : launch.pair ? (
+        <p>
+          Aucun outil ni accès au dépôt pendant ce cadrage. Les capacités de réalisation seront
+          activées après votre accord.
+        </p>
+      ) : (
+        <p>
+          Politique de l’étape :{' '}
+          {step.policy === 'read-only'
+            ? 'lecture seule ; aucune édition ni commande de test'
+            : step.policy === 'tests'
+              ? 'écriture dans le périmètre de tests et commandes de tests configurées'
+              : 'écriture dans le projet ; les fichiers existants restent protégés sauf accord explicite'}
+          . Les capacités déclarées de l’agent limitent aussi ses outils.
+        </p>
+      )}
+      <p>
+        Navigation :{' '}
+        {application
+          ? launch.pair
+            ? `${application.name} · ${application.startUrl ?? application.origin}. ${feature.execution ? 'Lecture des parcours et inspection possibles ; interactions, rejeu et entretien indisponibles avant votre accord.' : 'Outils de navigation indisponibles pendant le cadrage.'}`
+            : `${application.name} · ${application.startUrl ?? application.origin}. ${scope.owner ? 'Navigateur propriétaire ; entretien des parcours autorisé.' : 'Consommateur du parcours sélectionné.'} ${!launch.navigation?.allowInteractions || application.interactionPolicy === 'inspect' ? 'Inspection seule.' : application.interactionPolicy === 'confirm' ? 'Chaque interaction demandée par l’agent reste à confirmer.' : 'Interactions autorisées dans les limites du profil.'}`
+          : 'aucune application sélectionnée'}
+        .
+      </p>
+      <p>
+        Connexions MCP :{' '}
+        {scope.readOnly
+          ? 'exclues du catalogue dans ce contexte de lecture restreinte, même si cochées ci-dessous'
+          : connections.length
+            ? connections
+                .map((server) =>
+                  server
+                    ? `${server.name} (${server.tools.filter(Boolean).join(', ') || 'aucun outil autorisé'} ; ${state.mcpCatalogs?.[server.id]?.state === 'ready' ? 'catalogue vérifié' : 'connexion à vérifier'})`
+                    : 'connexion supprimée ou indisponible',
+                )
+                .join(' · ')
+            : 'aucune sélectionnée'}
+        .
+      </p>
+      <small>
+        Le lancement vérifie à nouveau les capacités et les permissions. Changer le contexte ou ses
+        droits prépare une nouvelle tentative ; cela n’étend pas une exécution déjà commencée.
+      </small>
+    </section>
   );
 }
 

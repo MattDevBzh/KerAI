@@ -1,144 +1,140 @@
-import { NavigationService } from './NavigationService';
-import { updateTaskBoard } from '../core/taskBoard';
-import { navigationTools } from './NavigationTools';
 import { defaultNavigationSelection, isNavigator } from '../shared/navigationSelection';
-import { freezeNavigationContext, sameApplicationAuthority } from './NavigationContext';
-import { proofDossier } from '../shared/proofs';
-import { proofProposalSchema } from '../core/proofSchemas';
-import type { ProofClaim } from '../shared/proofs';
-import { ImageInputError, validateImages } from './Images';
+import { NativeTestEvidence, nativeTestSnapshot, nativeTestCommand } from './NativeTestEvidence';
+import type { AutopilotDecision, AutopilotPreview } from '../shared/evolutions';
+import type { Attempt } from '../shared/types';
+import { isPairWork } from '../shared/pair';
+import { stepResolved } from '../shared/optionalSteps';
+import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { constants } from 'node:fs';
+import { open, realpath } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { nextAutopilotAction } from '../core/autopilot';
+import { budgetBlockReason, defaultBudget } from '../core/budgets';
+import { emptyLaunch, previewContext, promptSections, selectMemory } from '../core/context';
+import { discussionFeaturePlanSchema } from '../core/discussionSchemas';
 import {
-  allFeatures,
-  featurePath as treePath,
-  configurationSteps,
-  currentIteration,
-  subplanIssues,
-  subplanContract,
-} from '../shared/subplans';
+  autopilotConfigSchema,
+  budgetSchema,
+  commentSchema,
+  criterionSchema,
+  launchSchema,
+  memorySchema,
+} from '../core/evolutionSchemas';
+import { nativePermissionModeSchema } from '../core/nativeSchemas';
+import {
+  addPairUsage,
+  completePairTurn,
+  createPair,
+  pairMessage,
+  pairReport,
+  pairTurnPrompt,
+} from '../core/pair';
+import { pairActionSchema } from '../core/pairSchemas';
+import { pairSourceKey } from '../core/pairSource';
+import { boundAnswers, recommendedChoice } from '../core/questions';
+import { AgentRegistry } from '../core/registry';
+import { settingsSchema, Store } from '../core/store';
 import {
   acceptSubplan,
   assertSubplanExecution,
+  iterationReport,
+  refreshFutureIteration,
   syncSubplans,
   validateSubplanProposal,
-  refreshFutureIteration,
-  iterationReport,
 } from '../core/subplans';
+import { updateTaskBoard } from '../core/taskBoard';
 import { reconcileTeam } from '../core/teamComposition';
-import { pairSourceKey } from '../core/pairSource';
-import {
-  createPair,
-  pairMessage,
-  pairTurnPrompt,
-  completePairTurn,
-  pairReport,
-  addPairUsage,
-} from '../core/pair';
-import {
-  pairPlan,
-  nextPairBlock,
-  isWorkTurn,
-  type PairAction,
-  type PairTurn,
-} from '../shared/pair';
-import { pairActionSchema } from '../core/pairSchemas';
+import { approvalBlockers } from '../core/validation';
+import { validateWorkflow, WorkflowEngine } from '../core/workflow';
+import { inheritTeamProfiles, resolveAgentProfile } from '../shared/agentInheritance';
+import type { CorrectionRequest, EditorialSaveOptions } from '../shared/collaboration';
+import { featureStateKey, finalValidationReady } from '../shared/collaboration';
+import { needsDevOpsEvidence } from '../shared/devopsKit';
 import {
   usesNativeTools,
   type NativePermissionMode,
   type NativePermissionPrompt,
 } from '../shared/native';
-import { nativePermissionModeSchema } from '../core/nativeSchemas';
-import { nativeChangesSnapshot, observedNativeChanges } from './NativeChanges';
-import { inheritTeamProfiles, resolveAgentProfile } from '../shared/agentInheritance';
-import { EventEmitter } from 'node:events';
-import { basename, join } from 'node:path';
-import { open, readFile, realpath } from 'node:fs/promises';
-import { constants } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { isDeepStrictEqual } from 'node:util';
-import type {
-  AgentAdapter,
-  Feature,
-  RunCallbacks,
-  RunInput,
-  StudioSettings,
-  StudioState,
-  RunLaunchOptions,
-  RunPreview,
-  AutopilotConfig,
-  FeatureBudget,
-  MemoryEntry,
-  HumanRequest,
-  ReviewComment,
-  AcceptanceCriterion,
-  FeatureCheckpoint,
-  CheckpointComparison,
-  WorkflowStep,
-} from '../shared/types';
-import { AgentRegistry } from '../core/registry';
-import { installQualityKit, resolveQualityAttachment } from './QualityRunner';
-import { Store, settingsSchema } from '../core/store';
-import { WorkflowEngine, validateWorkflow } from '../core/workflow';
-import { assertTeamOrder } from '../shared/team';
-import { boundAnswers, recommendedChoice } from '../core/questions';
-import type { Attempt } from '../shared/types';
-import { isPairWork } from '../shared/pair';
-import { gitInfo, ToolHost } from './ToolHost';
-import { PersonalReviewTools } from './PersonalReviewTools';
-import { runProcess, redact } from './process';
-import { emptyLaunch, previewContext, selectMemory, promptSections } from '../core/context';
-import { defaultBudget, budgetBlockReason } from '../core/budgets';
-import { stepResolved } from '../shared/optionalSteps';
-import { nextAutopilotAction } from '../core/autopilot';
-import { NativeTestEvidence, nativeTestSnapshot, nativeTestCommand } from './NativeTestEvidence';
-import type { AutopilotDecision, AutopilotPreview } from '../shared/evolutions';
-import { currentTestEvidence, approvalBlockers } from '../core/validation';
-import { currentOwnedFileHashes } from '../core/ownership';
-import { featureStateKey, finalValidationReady } from '../shared/collaboration';
-import type { CorrectionRequest, EditorialSaveOptions } from '../shared/collaboration';
-import { normalizeRoastLevel } from '../shared/roast';
-import {
-  launchSchema,
-  autopilotConfigSchema,
-  budgetSchema,
-  memorySchema,
-  criterionSchema,
-  commentSchema,
-} from '../core/evolutionSchemas';
-import { PolicyEngine, sha256 } from './PolicyEngine';
-import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
-import { WorkspaceLease } from './WorkspaceLease';
-import {
-  inspectProjectChanges,
-  backupProjectChanges,
-  MultiProjectTools,
-  projectInput,
-} from './MultiProjectTools';
-import type { StudioProject } from '../shared/projects';
-import { splitProjectFile, projectFile } from '../shared/projects';
-import type { DevOpsInspector } from './DevOpsInspector';
-import { needsDevOpsEvidence } from '../shared/devopsKit';
-import { gitRead } from './gitRead';
-import { KitService } from './KitService';
-import { SessionArchive } from './SessionArchive';
-import { reportDiscussionSource } from './DiscussionContext';
-import { discussionFeaturePlanSchema } from '../core/discussionSchemas';
 import {
   DEFAULT_TRACE_BYTES,
   type ObservationOptions,
   type SessionObservation,
   type SessionStorageInfo,
 } from '../shared/observation';
-import { prepareObservation, runObservation, observationSource } from './SessionObserver';
-import { sessionDirectory } from './SessionFiles';
 import {
-  pendingDeletions,
-  markDeletion,
-  cleanSessionFiles,
-  finishDeletion,
-  privateSize,
-  deletionRecord,
-} from './SessionCleanup';
+  isWorkTurn,
+  nextPairBlock,
+  pairPlan,
+  type PairAction,
+  type PairTurn,
+} from '../shared/pair';
+import type { StudioProject } from '../shared/projects';
+import { projectFile, splitProjectFile } from '../shared/projects';
+import { proofDossier } from '../shared/proofs';
+import { normalizeRoastLevel } from '../shared/roast';
+import {
+  allFeatures,
+  currentIteration,
+  subplanContract,
+  subplanIssues,
+  featurePath as treePath,
+} from '../shared/subplans';
+import { assertTeamOrder } from '../shared/team';
+import type {
+  AcceptanceCriterion,
+  AgentAdapter,
+  AutopilotConfig,
+  CheckpointComparison,
+  Feature,
+  FeatureBudget,
+  FeatureCheckpoint,
+  HumanRequest,
+  MemoryEntry,
+  ReviewComment,
+  RunCallbacks,
+  RunInput,
+  RunLaunchOptions,
+  RunPreview,
+  StudioSettings,
+  StudioState,
+  WorkflowStep,
+} from '../shared/types';
+import type { DevOpsInspector } from './DevOpsInspector';
+import { reportDiscussionSource } from './DiscussionContext';
+import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
+import { ImageInputError, validateImages } from './Images';
+import { KitService } from './KitService';
+import {
+  backupProjectChanges,
+  inspectProjectChanges,
+  MultiProjectTools,
+  projectInput,
+} from './MultiProjectTools';
+import { nativeChangesSnapshot, observedNativeChanges } from './NativeChanges';
+import { freezeNavigationContext, sameApplicationAuthority } from './NavigationContext';
+import { NavigationService } from './NavigationService';
+import { navigationTools } from './NavigationTools';
+import { PersonalReviewTools } from './PersonalReviewTools';
+import { PolicyEngine, sha256 } from './PolicyEngine';
+import { redact, runProcess } from './process';
 import { assertDistinctProjects } from './ProjectCatalog';
+import { installQualityKit, resolveQualityAttachment } from './QualityRunner';
+import { SessionArchive } from './SessionArchive';
+import {
+  cleanSessionFiles,
+  deletionRecord,
+  finishDeletion,
+  markDeletion,
+  pendingDeletions,
+  privateSize,
+} from './SessionCleanup';
+import { sessionDirectory } from './SessionFiles';
+import { observationSource, prepareObservation, runObservation } from './SessionObserver';
+import { checkedProofClaim, inspectProofDossier, verifyProofFiles } from './SessionProofs';
+import { gitInfo, ToolHost } from './ToolHost';
+import { WorkspaceLease } from './WorkspaceLease';
 
 export class StudioService extends EventEmitter {
   async discussionSource(featureId: string, stepId: string, attemptId: string, revision: number) {
@@ -1623,7 +1619,7 @@ export class StudioService extends EventEmitter {
         if ((attempt.proofClaims?.length ?? 0) >= 300)
           throw Error('Limite de conclusions atteinte.');
         const { id, ...value } = proposal;
-        const claim = this.checkedProofClaim(feature, value, id, 'agent', attempt.revision ?? 0);
+        const claim = checkedProofClaim(feature, value, id, 'agent', attempt.revision ?? 0);
         (attempt.proofClaims ??= []).push(claim);
         newProofClaims.add(id);
         try {
@@ -3186,7 +3182,7 @@ export class StudioService extends EventEmitter {
         }
     };
     ancestors(step.id);
-    await this.verifyProofFiles(feature, related);
+    await verifyProofFiles(feature, related, this);
     // Recheck revision after asynchronous reads before touching the approval.
     this.assertTrusted();
     const correctionId = feature.activeCorrectionId;
@@ -3205,88 +3201,6 @@ export class StudioService extends EventEmitter {
       );
     await this.persist();
   }
-  private async verifyProofFiles(feature: Feature, related: Set<string>): Promise<void> {
-    const root = await this.featurePath(feature.id);
-    const policies = new Map<string, PolicyEngine>();
-    const resolveFile = async (file: string): Promise<string> => {
-      const target = await this.fileLocation(feature.id, file);
-      let policy = policies.get(target.root);
-      if (!policy) {
-        policy = new PolicyEngine(target.root, 'read-only', []);
-        policies.set(target.root, policy);
-      }
-      return policy.resolve(target.path);
-    };
-    const ownedPaths = new Set<string>();
-    for (const step of feature.steps.filter((item) => related.has(item.id))) {
-      for (const historical of step.attempts)
-        for (const file of Object.keys(historical.fileHashes ?? {})) ownedPaths.add(file);
-      const attempt = step.attempts.at(-1);
-      if (!attempt) continue;
-      const proofs = currentTestEvidence(attempt);
-      for (const evidence of proofs) {
-        if (evidence.native) {
-          const snapshot = await nativeTestSnapshot(
-            root,
-            feature.projects?.map((project, index) => ({
-              id: project.id,
-              path: index === 0 ? root : project.path,
-            })),
-          );
-          if (snapshot.digest !== evidence.native.snapshot)
-            throw new Error(
-              'La preuve native est obsolète : les fichiers ou le commit ont changé. Relance les tests.',
-            );
-        }
-        if (evidence.devops) {
-          const proofRoot = evidence.projectId
-            ? feature.projects?.find((project) => project.id === evidence.projectId)?.path
-            : root;
-          if (!proofRoot) throw new Error('Projet de preuve inconnu.');
-          const head = await gitRead(proofRoot, ['rev-parse', '--verify', 'HEAD^{commit}'], {
-            rawOutput: true,
-          });
-          if (
-            head.code !== 0 ||
-            head.truncated ||
-            head.stdout.trim() !== evidence.devops.target.commit
-          )
-            throw new Error(
-              'Le commit local a changé depuis la vérification du test DevOps. Relance la validation.',
-            );
-        }
-      }
-      const snapshots = proofs.filter((proof) => !proof.native).map((proof) => proof.fileHashes);
-      for (const hashes of snapshots)
-        for (const [file, hash] of Object.entries(hashes)) {
-          let current = '<missing>';
-          try {
-            current = sha256(await readFile(await resolveFile(file)));
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          }
-          if (current !== hash)
-            throw new Error(
-              `La preuve de test est obsolète : ${file} a changé. Relance les tests avant validation.`,
-            );
-        }
-    }
-    if (feature.steps.every((step) => related.has(step.id)))
-      for (const file of Object.keys(feature.workspaceFileHashes ?? {})) ownedPaths.add(file);
-    const owned = currentOwnedFileHashes(feature, ownedPaths);
-    for (const file of ownedPaths) {
-      let current = '<missing>';
-      try {
-        current = sha256(await readFile(await resolveFile(file)));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
-      if (current !== owned[file])
-        throw new Error(
-          `La preuve de test est obsolète : ${file} a changé hors de la dernière écriture autorisée de la feature. Relance son étape avant validation.`,
-        );
-    }
-  }
   async saveProofClaim(
     command: Extract<import('../shared/types').ClientMessage, { type: 'saveProofClaim' }>,
   ): Promise<void> {
@@ -3304,7 +3218,7 @@ export class StudioService extends EventEmitter {
     if (attempt.proofClaims?.some((c) => c.id === command.requestId)) return;
     if (command.claimId && !attempt.proofClaims?.some((c) => c.id === command.claimId))
       throw Error('Conclusion d’origine introuvable.');
-    const claim = this.checkedProofClaim(
+    const claim = checkedProofClaim(
       feature,
       command.claim,
       command.requestId,
@@ -3321,38 +3235,9 @@ export class StudioService extends EventEmitter {
       throw error;
     }
   }
-  private checkedProofClaim(
-    feature: Feature,
-    value: Pick<ProofClaim, 'text' | 'proofIds' | 'verdict'>,
-    id: string,
-    author: ProofClaim['author'],
-    reportRevision: number,
-  ): ProofClaim {
-    const proposal = proofProposalSchema.parse(value),
-      sources = proofDossier(feature).sources;
-    if (proposal.verdict !== 'unverified' && !proposal.proofIds.length)
-      throw Error('Associe au moins une preuve ou indique « Non vérifié ».');
-    if (proposal.proofIds.some((id) => !sources.some((s) => s.id === id)))
-      throw Error('Une preuve référencée est absente du dossier.');
-    if (
-      proposal.verdict === 'supported' &&
-      proposal.proofIds.some((id) => sources.some((s) => s.id === id && s.state !== 'observed'))
-    )
-      throw Error('Une preuve est en attente, en échec ou à revérifier.');
-    return {
-      ...proposal,
-      text: redact(proposal.text),
-      proofIds: [...new Set(proposal.proofIds)],
-      id,
-      author,
-      at: new Date().toISOString(),
-      reportRevision,
-    };
-  }
   async checkProofDossier(featureId: string): Promise<void> {
     this.assertConfigurable(featureId);
-    const feature = this.engine.getFeature(featureId),
-      checks: NonNullable<Feature['proofChecks']> = {};
+    const feature = this.engine.getFeature(featureId);
     const snapshot = JSON.stringify(
       feature.steps.map((s) => [
         s.id,
@@ -3361,57 +3246,9 @@ export class StudioService extends EventEmitter {
         s.attempts.at(-1)?.revision,
       ]),
     );
-    for (const step of feature.steps)
-      for (const attempt of step.attempts)
-        for (const proof of attempt.evidence ?? []) {
-          const id = `test:${attempt.id}:${proof.id}`;
-          const changed: string[] = [];
-          let unavailable = '';
-          for (const [file, expected] of Object.entries(proof.fileHashes))
-            try {
-              const target = await this.fileLocation(featureId, file);
-              const policy = new PolicyEngine(target.root, 'read-only', []);
-              const actual = sha256(await readFile(await policy.resolve(target.path)));
-              if (actual !== expected) changed.push(file);
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException).code === 'ENOENT') changed.push(file);
-              else unavailable = (error as Error).message;
-            }
-          checks[id] = {
-            at: new Date().toISOString(),
-            state: changed.length
-              ? 'changed'
-              : unavailable || !Object.keys(proof.fileHashes).length
-                ? 'unavailable'
-                : 'unchanged',
-            reason: changed.length
-              ? `Fichiers modifiés depuis le test : ${changed.join(', ')}`
-              : unavailable ||
-                (!Object.keys(proof.fileHashes).length
-                  ? 'Aucune empreinte de fichier dans cette preuve.'
-                  : 'Les fichiers dont une empreinte a été enregistrée sont inchangés à cette date. Le test n’a pas été relancé.'),
-          };
-        }
-    for (const step of feature.steps)
-      for (const attempt of step.attempts)
-        for (const capture of attempt.navigationCaptures ?? []) {
-          const id = `navigation-capture:${attempt.id}:${capture.id}`;
-          try {
-            await this.navigation.verifiedCapture(capture);
-            checks[id] = {
-              at: new Date().toISOString(),
-              state: 'unchanged',
-              reason:
-                'Capture privée et empreinte intactes ; le parcours et les critères métier n’ont pas été rejoués.',
-            };
-          } catch (error) {
-            checks[id] = {
-              at: new Date().toISOString(),
-              state: 'unavailable',
-              reason: (error as Error).message,
-            };
-          }
-        }
+    const checks = await inspectProofDossier(feature, this, (capture) =>
+      this.navigation.verifiedCapture(capture),
+    );
     if (
       snapshot !==
       JSON.stringify(
@@ -3491,7 +3328,7 @@ export class StudioService extends EventEmitter {
           );
           if (blockers.length) throw new Error(`${step.name} : ${blockers.join(' ')}`);
         }
-        await this.verifyProofFiles(feature, new Set(feature.steps.map((step) => step.id)));
+        await verifyProofFiles(feature, new Set(feature.steps.map((step) => step.id)), this);
         this.assertTrusted();
         const id = this.engine.finalizeFeature(featureId, expectedStateKey);
         this.recordAutopilot(feature, 'complete', 'Validation définitive humaine enregistrée.');

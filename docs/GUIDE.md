@@ -4,6 +4,22 @@
 
 [Retour au README](../README.md) · [Kits](KITS.md) · [Kit DevOps](DEVOPS-KIT.md)
 
+## Préparer sa première session
+
+Ce parcours fait partie de la [consolidation intégrée](CONSOLIDATION.md). Sans session enregistrée, la page **Sessions** explique les trois étapes du travail et affiche l’état de la connexion Copilot. Si le projet n’est pas approuvé, **Approuver le projet dans VS Code** ouvre la gestion native de la confiance. Tu peux préparer une session avant de connecter Copilot ; le premier lancement exigera un runtime compatible, un compte connecté et un modèle disponible.
+
+1. Clique **Préparer ma première session** ou **Nouvelle session**. Choisis le projet, donne un titre puis décris le résultat attendu et les contraintes.
+2. Choisis une équipe : **Corriger un problème** prépare plan, développement, tests et relecture ; **Développer une évolution** ajoute le cadrage ; **Relire des changements** prépare une relecture seule. **Composer mon équipe** crée une session à composer ensuite. La liste affiche les membres du parcours effectivement disponible dans le projet ; si un membre manque, choisis un autre parcours ou une composition libre.
+3. **Options de travail** permet d’ajuster les permissions et le dossier. Le mode **Manuel** est sélectionné au départ. Pour un projet Git compatible, correction et évolution proposent un worktree séparé. La relecture propose le dossier courant pour examiner les changements qui s’y trouvent. Plusieurs projets utilisent leurs dossiers d’origine. Le résumé reste visible quand les options sont repliées.
+4. Clique **Créer la session**. Le dernier parcours choisi est mémorisé, y compris la composition libre. Sans préférence disponible, l’évolution est proposée si son équipe existe au catalogue ; sinon, la composition libre est sélectionnée. Une proposition issue de Discussion conserve son équipe. Aucun agent ne démarre à la création.
+5. Dans la session, prépare le contexte du premier agent, vérifie-le puis lance le travail. Relis et valide chaque résultat avant de poursuivre.
+
+Si l’enregistrement échoue, l’erreur apparaît dans la fenêtre et la saisie est conservée. Réessayer un formulaire inchangé réutilise la même demande. Les boutons restent accessibles en bas de la fenêtre pendant le défilement.
+
+![Création d’une première session avec choix d’équipe](images/first-session-desktop.png)
+
+Capture de démonstration, avec données fictives. [Vue en fenêtre étroite](images/first-session-390.png).
+
 ## Sous-plans et sous-équipes
 
 Ajoute une carte **Sous-plan** dans une équipe enregistrée ou dans **Modifier l’équipe** d’une feature. Sa carte possède un visuel dédié. Choisis son orchestrateur, son mode de découpage et sa sous-équipe ; celle-ci peut contenir d’autres sous-plans. Le chat sert à discuter le découpage et à ajouter des tâches. Clique sur la carte pour afficher son chat et ses tâches au même niveau. Clique ensuite sur une tâche dans le panneau des sous-tâches pour ouvrir sa sous-équipe, avec retour au niveau précédent ou à l’équipe de base. [Guide détaillé](SOUS-PLANS.md).
@@ -14,13 +30,13 @@ Depuis la v1.23.0, l’onglet **Conversation** remplace l’attente opaque penda
 
 ## Outils natifs et permissions
 
-Les nouvelles sessions démarrent en **Copilot natif**, avec le mode **Manuel** par défaut. Le choix est visible lors de la création, de la préparation d’un lancement et dans la session. Réponds aux demandes de Copilot par **Autoriser une fois** ou **Refuser**. Le mode **Tout autoriser** accepte les actions natives, sous réserve des règles imposées par Copilot ; **Assisté** n’est sélectionnable que si le runtime le confirme. Ces choix ne changent ni le solo/pair ni les validations du parcours.
+Les nouvelles sessions démarrent en **Copilot natif**, avec le mode **Manuel** par défaut. Le choix est disponible dans **Options de travail** à la création, dans la préparation d’un lancement et dans la session. Réponds aux demandes de Copilot par **Autoriser une fois** ou **Refuser**. Le mode **Tout autoriser** accepte les actions natives, sous réserve des règles imposées par Copilot ; **Assisté** n’est sélectionnable que si le runtime le confirme. Ces choix ne changent ni le solo/pair ni les validations du parcours.
 
 Le CLI 1.0.102 avec le SDK embarqué 1.0.20 constitue le couple vérifié. Un ancien CLI peut se connecter tout en étant incompatible avec l’exécution native : le lancement est alors bloqué et le diagnostic explique la mise à jour nécessaire. [Guide des permissions et des résultats natifs](COPILOT-NATIF.md).
 
 ## Installation
 
-1. Télécharge [feature-studio-1.25.0.vsix](https://github.com/MattDevBzh/KerAI/releases/download/v1.25.0/feature-studio-1.25.0.vsix) depuis GitHub. Son empreinte est disponible dans le [SHA256SUMS de la release](https://github.com/MattDevBzh/KerAI/releases/download/v1.25.0/SHA256SUMS).
+1. Télécharge le VSIX et son fichier `SHA256SUMS` depuis la [release indiquée dans le README](../README.md). Le guide peut décrire des changements en préparation : consulte les notes de la version installée.
 2. Dans VS Code ou VS Code Insiders : **Extensions → … → Installer à partir du VSIX…**.
 3. Ouvre le dossier du projet que tu souhaites développer, puis approuve ce workspace.
 4. Clique sur l’icône **L’équipe** de Feature Studio dans la barre latérale de VS Code : le cockpit s’ouvre directement dans la fenêtre courante. La commande **Feature Studio : ouvrir le cockpit** et le bouton de la barre d’état restent disponibles.
@@ -50,7 +66,7 @@ Le thème secret **Dragon Ball** se découvre sur **Dashboard** ou sa Tour de co
 
 ## Afficher le QG vivant
 
-Dans une session, coche **Afficher le QG vivant**, à côté de **LE PARCOURS**. Chaque poste ouvre le détail de son intervention ; le décor suit le thème. Les questions humaines, choix facultatifs et interventions passées restent visibles avec leur état réel. La case conserve ton choix entre projets et permet de revenir à la bande classique, sans perdre la sélection ni un brouillon. Elle est désactivée par défaut. [Utilisation du QG](WORKFLOWS.md#bande-des-agents-ou-qg-vivant).
+Dans une session, déplie **Équipe et parcours**, puis coche **Afficher le QG vivant**. Chaque poste ouvre le détail de son intervention ; le décor suit le thème. Les questions humaines, choix facultatifs et interventions passées restent visibles avec leur état réel. La case conserve ton choix entre projets et permet de revenir à la bande classique, sans perdre la sélection ni un brouillon. Elle est désactivée par défaut. [Utilisation du QG](WORKFLOWS.md#bande-des-agents-ou-qg-vivant).
 
 Quand une nouvelle tentative démarre à partir de la deuxième étape, **quatre avions en papier** volent du personnage de l’étape immédiatement précédente vers celui qui prend le relais. Le passage dure **cinq secondes** et accompagne le lancement réel, classique ou en pair, sans le retarder. Il ne se rejoue pas à chaque réponse, lors de la reprise d’un lot en pair ou en rouvrant la session. Les trajectoires s’adaptent aux postes sur plusieurs lignes et au zoom. En mouvement réduit, seul le libellé du passage de contexte s’affiche.
 
@@ -100,7 +116,7 @@ Dans une session, clique **Discuter avec l’agent** à côté du livrable termi
 
 Le bandeau rappelle la session et l’étape. Déplie **Compte rendu au début de cette discussion** ou **Contexte transmis à l’agent** pour vérifier les sources. **Revenir au compte rendu** retrouve la tentative ; **Modifier le compte rendu actuel** ouvre l’éditeur de la dernière tentative. Si la sortie a évolué, un message le précise et la copie discutée reste intacte. Un brouillon de rapport non enregistré doit être terminé ou annulé avant de changer de vue.
 
-Les anciens lancements sans archives ne permettent pas de recréer leur contexte d’origine. Les données manquantes, un raisonnement non archivé ou des traces écartées pour rester dans la capacité du chat sont signalés ; le prompt et la sortie ne sont pas résumés silencieusement. Un contexte essentiel trop volumineux est refusé. La discussion conserve une copie distincte : supprimer la session empêche le retour au rapport mais conserve ce fil, supprimable séparément.
+Les anciens lancements sans archives ne permettent pas de recréer leur contexte d’origine. Les données manquantes, un raisonnement non archivé ou des traces écartées pour rester dans la capacité du chat sont signalés ; le prompt et la sortie ne sont pas résumés silencieusement. Les grandes archives sont transmises par extraits bornés, avec leurs avertissements historiques et une indication de troncature ; les originaux restent conservés. Des instructions de profil ou des skills qui dépassent encore le budget total peuvent faire refuser l’envoi. La discussion conserve une copie distincte : supprimer la session empêche le retour au rapport mais conserve ce fil, supprimable séparément.
 
 ### Passer d’une idée à une feature
 
@@ -134,19 +150,20 @@ Dans **Mes équipes**, ouvre ou duplique une équipe et règle la **Participatio
 
 Les confirmations propres à l’intervention, checkpoints, budgets et limites de tentatives restent applicables après ton choix. La décision en attente est enregistrée ; fermer puis rouvrir le cockpit ne lance rien. Une notification devenue ancienne après une modification est refusée : utilise le bandeau actuel de la session.
 
-**Passée · non exécutée** signifie qu’aucune tentative et aucun livrable n’ont été produits. Le bilan liste ces interventions séparément des validations ; les exports conservent la date et l’historique des décisions. Les agents suivants reçoivent la liste des interventions passées pour éviter de supposer qu’elles ont produit un résultat. Les critères de réussite, les remarques bloquantes et les preuves exigées pour les interventions réellement exécutées restent nécessaires.
+**Passée par l’humain — non exécutée** désigne une intervention jamais tentée. **Passée après tentative — non validée** conserve les exécutions précédentes, leurs résultats, échecs et éventuels fichiers modifiés ; ce passage ne les transforme pas en résultats approuvés. Le bilan liste ces interventions séparément des validations ; les exports conservent la date et l’historique des décisions. Les agents suivants reçoivent la liste des interventions passées pour éviter de supposer qu’elles ont produit un résultat. Les critères de réussite, les remarques bloquantes et les preuves exigées pour les interventions réellement exécutées restent nécessaires.
 
-On ne peut passer une intervention déjà tentée pour effacer un échec. Pour exécuter finalement une intervention passée, sélectionne-la et utilise **Exécuter finalement cette étape** : les interventions qui en dépendent devront être revues. Modifier le contexte, rejouer un préalable, inclure une intervention passée dans une correction ou restaurer des fichiers remet les choix concernés en attente tout en gardant leur historique.
+Depuis la 1.31.1, une intervention facultative arrêtée ou en attente peut être passée après confirmation, si ses préalables sont résolus et qu’aucune exécution ou correction imposée ne l’empêche. Ce choix n’efface pas un échec ni les changements déjà réalisés. Pour exécuter finalement une intervention passée, sélectionne-la et utilise **Exécuter finalement cette étape** : les interventions qui en dépendent devront être revues. Modifier le contexte, rejouer un préalable, inclure une intervention passée dans une correction ou restaurer des fichiers remet les choix concernés en attente tout en gardant leur historique.
 
 Pour ton parcours quotidien, tu peux par exemple garder **US → plan → code → tests → relecture** obligatoires, ajouter la **documentation** facultative avant la **PR**, puis alléger la composition avant le départ selon la tâche. Le choix facultatif ne déclenche aucune publication à lui seul.
 
 ## Choisir un parcours
 
-| Parcours         | Pour quoi ?                                                    | Étapes                                                    |
-| ---------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
-| Feature complète | Développer un besoin avec des décisions intermédiaires         | Spécifications → plan → développement → tests → relecture |
-| Relecture seule  | Examiner les changements sans écrire, compiler ou tester       | Relecture                                                 |
-| Session libre    | Confier une tâche à un seul agent, dans une vraie conversation | Une étape de développement configurable                   |
+| Parcours          | Pour quoi ?                                                    | Étapes                                                    |
+| ----------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
+| Feature complète  | Développer un besoin avec des décisions intermédiaires         | Spécifications → plan → développement → tests → relecture |
+| Correction de bug | Reproduire un problème et vérifier sa correction               | Plan → développement → tests → relecture                  |
+| Relecture seule   | Examiner les changements sans écrire, compiler ou tester       | Relecture                                                 |
+| Session libre     | Confier une tâche à un seul agent, dans une vraie conversation | Une étape de développement configurable                   |
 
 La page **Sessions** affiche une liste compacte sur toute la largeur : nom, branche, projets, état, progression et dernière activité. **Ouvrir** consulte une session ; un clic sur la ligne ou sa case la sélectionne. Aucune session d’exemple n’est ajoutée à ton projet.
 
@@ -176,7 +193,7 @@ Le classement mesure la fréquence d’utilisation, pas la qualité. Les durées
 
 1. Clique **Nouvelle session**, choisis le parcours, donne un titre et décris le résultat attendu. **L’espace de cette session** propose un **Worktree isolé** pour une feature ou une session libre, et le **Dossier courant** pour une relecture. Tu peux changer ce choix avant la création.
 2. Ouvre une étape. **Configurer** permet de régler le modèle réellement proposé par le CLI, la réflexion et la limite de tentatives. Pour les équipes liées aux profils, les skills et les autres paramètres proviennent du menu Agents ; les anciennes sessions conservent leurs réglages historiques.
-3. Clique **Exécuter cette étape** : colle ta **US, demande ou contexte initial**, choisis les MCP utiles, puis **Préparer l’aperçu**. Relis les sources et le prompt assemblé ; **Lancer cette étape** démarre ensuite la vraie session. Le même dialogue apparaît pour une reprise ou une nouvelle tentative. Tout changement invalide l’aperçu précédent.
+3. Clique **Exécuter cette étape** : colle ta **US, demande ou contexte initial**, choisis les MCP utiles, puis attends l’aperçu actualisé automatiquement après la saisie ; **Préparer l’aperçu** permet aussi de le demander immédiatement. Relis les sources et le prompt assemblé ; **Lancer cette étape** démarre ensuite la vraie session. Le même dialogue apparaît pour une reprise ou une nouvelle tentative. Tout changement invalide l’aperçu précédent.
 4. Si l’agent utilise `studio_ask_human`, sa question apparaît pendant l’exécution : réponds et clique **Transmettre la réponse**. L’appel attend réellement ta réponse. Si le modèle termine plutôt avec un bloc de questions, réponds au formulaire puis **Reprendre la session**. Les échanges sont conservés.
 5. Relis le **Livrable**. Tu peux éditer son Markdown et l’enregistrer, ou donner un feedback pour une nouvelle tentative.
 6. Clique **Valider cette étape**, puis **Continuer**. La validation débloque l’étape suivante ; elle ne lance pas de requête IA toute seule.
@@ -193,7 +210,7 @@ Le classement mesure la fréquence d’utilisation, pas la qualité. Les durées
 
 **À la fin du parcours**, choisis **Valider définitivement** ou **Faire une correction**. Seule la validation finale réussie termine la session et affiche la célébration d’équipe. Les fichiers liés aux preuves sont revérifiés avant ce choix. Tu peux rejouer la célébration ou désactiver ses effets ; la réduction des animations est respectée. [Historique, corrections et décision finale](WORKFLOWS.md).
 
-**Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** réutilise son identifiant Copilot ; **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Dans la conversation native intégrée, la reprise conserve la tentative et compte un nouvel appel dans le budget. Dans le parcours historique, elle consomme une nouvelle tentative. Par défaut, les appels et relances manuels ne sont pas plafonnés. **Configurer → Limite de tentatives** et **Budget → Nombre maximal d’exécutions** permettent de fixer une limite ; laisse le champ vide pour la retirer. Les limites déjà enregistrées restent appliquées. L’autopilot conserve son propre plafond.
+**Arrêter** annule le processus ; les fichiers déjà écrits restent présents pour inspection. Après fermeture ou interruption, la tentative devient annulée ou interrompue. **Reprendre** peut réutiliser son identifiant Copilot si le contexte reste compatible ; une sélection explicite de contexte ou un profil à contexte vide peut exiger une nouvelle conversation, annoncée dans l’aperçu. **Nouvelle tentative** ouvre une nouvelle conversation avec les livrables approuvés et le contexte précédent. Dans la conversation native intégrée, la reprise conserve la tentative et compte un nouvel appel dans le budget. Dans le parcours historique, elle consomme une nouvelle tentative. Par défaut, les appels et relances manuels ne sont pas plafonnés. **Configurer → Limite de tentatives** et **Budget → Nombre maximal d’exécutions** permettent de fixer une limite ; laisse le champ vide pour la retirer. Les limites déjà enregistrées restent appliquées. L’autopilot conserve son propre plafond.
 
 Les sessions restent liées à leur branche et à leur dossier d’exécution. À la création d’une session isolée, Feature Studio crée une branche et un worktree local depuis le dernier commit **HEAD**. Il ne crée aucun commit, push, PR ni déploiement automatiquement.
 
@@ -237,7 +254,7 @@ Ces points conservent le contenu et les permissions des fichiers inclus ; ils ne
 
 La création, la comparaison et la restauration Git n’ajoutent aucune requête IA. Elles ne publient rien. Les opérations sont verrouillées pendant une tentative ou une autre mutation ; le host recontrôle racine, branche et fichiers. Les buffers non enregistrés sont protégés dans la fenêtre VS Code courante seulement : les autres fenêtres et processus restent hors sandbox. [Périmètre, exclusions et limites détaillés](../docs/WORKSPACES.md).
 
-**Stockage v6 :** les formats v0 à v5 migrent en conservant leurs données connues. Les anciennes interventions restent obligatoires ; les choix facultatifs et demandes en attente sont conservés. Les anciens binaires refusent le nouveau format. Il n’existe pas de migration inverse automatique. Les sessions possèdent leurs propres archives et états, avec un index léger.
+**Stockage v12 :** les formats v0 à v11 migrent en conservant leurs données connues. Les anciennes interventions restent obligatoires ; les choix facultatifs et demandes en attente sont conservés. Les anciens binaires refusent le nouveau format. Il n’existe pas de migration inverse automatique. Les sessions possèdent leurs propres archives et états, avec un index léger.
 
 ![Préparer une US et ses MCP — données de démonstration](../docs/images/launch-context.png)
 
@@ -253,7 +270,7 @@ Dans **Réglages → Connexions MCP**, le preset **Azure DevOps** demande ton or
 
 Tu peux ajouter tes propres serveurs **stdio, HTTP ou SSE**. La liste d’outils est explicite : aucun joker pendant les sessions. Les clés d’environnement et les en-têtes référencent le **coffre VS Code** ou des variables du processus ; les valeurs secrètes ne sont pas enregistrées dans la configuration du cockpit. N’inscris pas de token dans les arguments ou l’URL. Les lectures automatiques sont facultatives et exigent une annotation de lecture seule du runtime. Une écriture MCP demande une autorisation pour chaque appel ; en profil lecture seule, écriture et opération sans garantie de lecture sont refusées.
 
-**Compatibilité MCP : le CLI 1.0.63 installé sur la machine de recette est trop ancien pour ce parcours.** Il permet la découverte, mais l’exécution MCP est refusée avant tout prompt car sa politique de permissions ne peut pas être vérifiée. Mets le CLI à jour vers une version compatible avec le SDK 1.0.20 avant d’utiliser les MCP ; les sessions sans MCP restent compatibles avec 1.0.63. Le contrôle porte sur les capacités effectives, sans supposer qu’un numéro de version suffit.
+**Recette MCP historique : le CLI 1.0.63 était trop ancien pour ce parcours.** Il permettait la découverte, mais l’exécution MCP était refusée avant tout prompt car sa politique de permissions ne pouvait pas être vérifiée. La compatibilité alors observée sans MCP concernait les sessions historiques d’outils hôtes. Les nouvelles sessions natives demandent leurs propres capacités vérifiées ; le couple de référence actuel est CLI 1.0.102 / SDK 1.0.20. Le contrôle porte sur les capacités effectives, sans supposer qu’un numéro de version suffit.
 
 Les sept scénarios de permissions ont été vérifiés avec une fixture locale et le **runtime 1.0.96 fourni avec le SDK**, sans appel modèle. Ce runtime de test n’est pas installé par le VSIX et ne remplace pas ton CLI. L’accès à **ton organisation Azure DevOps** reste à valider avec ton authentification. [Configuration et preuves MCP](../docs/MCP.md).
 
@@ -279,7 +296,7 @@ Dans une feature, le **pilote automatique** enchaîne les étapes disponibles su
 
 La boucle de correction est facultative : choisis une étape de relecture et une étape de développement en amont. Le pilote utilise le verdict structuré de la relecture ou une preuve de tests en échec ; il rejoue ensuite les étapes devenues obsolètes. Un checkpoint reste prioritaire sur cette boucle. Par défaut, **zéro cycle de correction supplémentaire** : augmente le nombre seulement si tu le souhaites. Il n’y a aucun agent chargé de décider du prochain agent ; l’orchestration est du code local.
 
-Le **centre de validation** rassemble le livrable, les fichiers/diffs, les commandes de test et leurs sorties réelles, les critères d’acceptation et tes commentaires, éventuellement associés à un fichier/une ligne. Un constat du modèle est distingué d’une preuve issue du runner. Les remarques bloquantes et les critères sans preuve empêchent de déclarer le parcours terminé. Le pilote ne valide pas une étape Tests sans résultat hôte réussi. Une édition du livrable invalide l’ancienne validation ; les preuves sont revérifiées par empreinte des fichiers observés. Le diff de **Fichiers → Voir le diff** compare HEAD aux fichiers de l’espace de la feature. **Points de restauration** propose en plus les comparaisons propres à ses points avant/après ou manuels.
+Le **centre de validation** rassemble le livrable, les fichiers/diffs, les commandes de test et leurs sorties réelles, les critères d’acceptation et tes commentaires, éventuellement associés à un fichier/une ligne. Un constat du modèle est distingué d’une preuve issue du runner. Les critères sans preuve et les contrôles de tests restent bloquants. Depuis la 1.31.1, une validation humaine peut accepter les remarques de relecture après un avertissement explicite : la confirmation est conservée pour la clôture, mais les remarques restent visibles et ne sont pas marquées corrigées. Le pilote conserve ses propres règles de validation. Le pilote ne valide pas une étape Tests sans résultat hôte réussi. Une édition du livrable invalide l’ancienne validation ; les preuves sont revérifiées par empreinte des fichiers observés. Le diff de **Fichiers → Voir le diff** compare HEAD aux fichiers de l’espace de la feature. **Points de restauration** propose en plus les comparaisons propres à ses points avant/après ou manuels.
 
 Le panneau **consommation** cumule les mesures reçues et indique les tentatives dont l’usage est inconnu. Tu peux fixer un nombre total de runs, des seuils de tokens/crédits et une taille maximale de contexte. Les validations, aperçus et éditions locales n’appellent pas de modèle. Les profils **économie / équilibré / qualité** utilisent les modèles que tu leur attribues dans les réglages parmi ceux réellement disponibles ; leur nom ne promet aucun tarif. Si le CLI n’annonce que `auto`, aucun modèle moins cher n’est inventé.
 
@@ -318,7 +335,7 @@ Chaque avatar utilise son portrait transparent. Un GIF à quatre images montre l
 
 Tu peux modifier les instructions, le modèle et les skills, ou créer un nouvel agent. L’éditeur propose **PERSONNEL**, dans `~/.copilot/agents/` et `~/.copilot/skills/` (ou `COPILOT_HOME`), ou **PROJET**, dans `.github/agents/` et `.github/skills/`. Un profil du kit fourni commence en portée personnelle ; un profil personnalisé commence dans sa portée active. Le chemin et la révision attendue sont affichés avant sauvegarde. Les agents déjà présents dans le projet sont découverts, et leurs fichiers restent utilisables directement avec Copilot.
 
-Les capacités reconnues sont `read`, `search`, `edit`/`write` et `execute`, ainsi que les noms précis des outils `studio_*`. `execute` donne accès uniquement aux commandes de tests déjà autorisées, et seulement dans une étape de profil Tests. Il n’ouvre aucun terminal libre. La permission effective est toujours l’intersection du profil d’étape et des outils de l’agent.
+Dans le mode historique d’outils hôtes, les capacités reconnues sont `read`, `search`, `edit`/`write` et `execute`, ainsi que les noms précis des outils `studio_*`. `execute` y donne accès uniquement aux commandes de tests déjà autorisées, dans une étape de profil Tests ; il n’ouvre aucun terminal libre. Ces outils appliquent l’intersection du profil d’étape et des capacités de l’agent. Les nouvelles sessions natives disposent du catalogue Copilot, qui peut inclure un terminal : le mode de permissions et les règles gérées de Copilot en contrôlent les accords. Les restrictions de cadrage, de documentation et de navigation peuvent réduire ce catalogue ; relis les capacités indiquées avant le lancement. Les profils des outils hôtes ne constituent pas une restriction système du terminal natif.
 
 ## Skills et kit Copilot
 
@@ -326,14 +343,14 @@ Le **kit Copilot 2.0.0 fourni par Matt** est embarqué avec ses quatre agents, s
 
 Ouvre **Kits → Atelier Copilot → Voir le kit → Installer ce kit** pour rendre ce kit disponible dans tous tes projets. Le kit DevOps se sélectionne séparément. [Composer, importer et exporter des kits](../docs/KITS.md). La destination est `~/.copilot` (`%USERPROFILE%\.copilot` sous Windows), ou le répertoire `COPILOT_HOME` s’il est configuré dans l’environnement de VS Code.
 
-| Ressource                                  | Destination relative à ce dossier utilisateur |
-| ------------------------------------------ | --------------------------------------------- |
-| Agents                                     | `agents/*.agent.md`                           |
-| Skills                                     | `skills/*/SKILL.md`                           |
+| Ressource | Destination relative à ce dossier utilisateur |
+| --------- | --------------------------------------------- |
+| Agents    | `agents/*.agent.md`                           |
+| Skills    | `skills/*/SKILL.md`                           |
 
-| Workflows Feature Studio                   | `feature-studio/workflows/*.yaml`             |
-| Templates, scripts et documentation du kit | `feature-studio/kit/`                         |
-| Exemples propres aux projets               | `feature-studio/kit/examples/`                |
+| Workflows Feature Studio | `feature-studio/workflows/*.yaml` |
+| Templates, scripts et documentation du kit | `feature-studio/kit/` |
+| Exemples propres aux projets | `feature-studio/kit/examples/` |
 
 L’installation ne crée aucun fichier dans le projet. Les fichiers identiques sont conservés et les fichiers personnalisés ne sont jamais écrasés ; la sortie **Feature Studio** donne le détail des conflits. Les anciennes copies du projet sont conservées tant que tu ne demandes pas leur migration. Dans le cockpit, les définitions du projet ont priorité sur celles de l’utilisateur, puis sur celles fournies par l’extension. L’éditeur montre les versions existantes et leur priorité. Changer de portée charge la version correspondante et conserve un brouillon par portée ; si cette portée est absente, il annonce la copie des instructions affichées. Modifier la version personnelle pendant qu’une version projet existe affiche qu’elle restera masquée dans ce projet. La migration reste une action distincte et facultative.
 
@@ -460,10 +477,9 @@ Dans l’en-tête du cockpit, le compteur **Copilot** affiche les crédits conso
 
 Les coûts et les seuils sont présentés en crédits. Les mesures historiques sont conservées dans leur précision d’origine (1 crédit = 1 milliard de nano-AIU) ; les valeurs partielles ou inconnues restent signalées.
 
-
 ## Analyser et supprimer une session
 
-**Analyser cette session** ouvre l’Observateur : aperçu local, modèle et budget, analyse de toutes les phases, améliorations sourcées, coûts et modèles rappelés par phase, commentaires globaux et bilan de l’Observateur. Les rapports se conservent par version et s’exportent en HTML ou Markdown. Une revue interrompue garde ses résultats et sa consommation mesurée.
+Dans **Paramètres et outils de la session**, **Analyser cette session** ouvre l’Observateur : aperçu local, modèle et budget, analyse de toutes les phases, améliorations sourcées, coûts et modèles rappelés par phase, commentaires globaux et bilan de l’Observateur. Les rapports se conservent par version et s’exportent en HTML ou Markdown. Une revue interrompue garde ses résultats et sa consommation mesurée.
 
 Les archives complètes ont une limite initiale de 256 Mio, configurable dans **Réglages → Archives de session**. Le journal s’affiche par pages. **Supprimer définitivement la session** demande une confirmation native, nettoie journaux, rapports, sauvegardes et objets non partagés, puis affiche l’espace libéré. Archiver conserve les données. [Guide complet de l’Observateur et du stockage](OBSERVATEUR.md).
 
@@ -471,10 +487,9 @@ Les archives complètes ont une limite initiale de 256 Mio, configurable dans **
 
 L’aperçu reste accessible si une skill configurée ne figure pas dans le catalogue. Le bloc « Skill introuvable » indique son identifiant et l’agent ou l’étape qui la référence. Restaure son fichier `SKILL.md`, corrige la référence, ou décoche le bloc pour cette tentative puis actualise l’aperçu. Le lancement reste bloqué tant qu’un bloc indisponible est inclus. Le catalogue est relu lors de l’aperçu et du lancement pour prendre en compte les installations manuelles.
 
-
 ## Composer une équipe pour une feature
 
-Créer une feature depuis le Sessions ouvre sa fiche sans équipe. Depuis une discussion, elle reçoit l’équipe proposée et ajustée dans le formulaire. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
+Créer une session depuis Sessions utilise l’équipe choisie dans le formulaire ; seule la composition libre démarre sans équipe. Depuis une discussion, elle reçoit l’équipe proposée et ajustée dans le formulaire. Le bouton **Composer mon équipe** affiche votre composition en haut, les équipes existantes et les agents en dessous. Glissez une photo pour ajouter un agent ou une carte d’équipe pour copier toutes ses interventions. Les boutons **Ajouter**, **Monter** et **Descendre** permettent aussi de travailler au clavier.
 
 Chaque intervention affiche le rôle, le modèle et le niveau de réflexion effectifs. Le bouton de réglages permet de modifier sa mission, ses permissions et ses choix de modèle. Un agent ajouté seul commence en lecture seule : choisissez explicitement l’écriture ou les tests si nécessaire. Les équipes copiées conservent leurs réglages, skills et dépendances. Un profil de budget peut avoir priorité sur le modèle choisi.
 
@@ -484,7 +499,6 @@ Un même agent peut intervenir plusieurs fois. Les nouveaux identifiants et noms
 
 L’étoile ajoute ou retire un agent des favoris. Cette préférence est enregistrée dans les réglages utilisateur de VS Code, commune aux projets, sans modifier les profils ni les fichiers du dépôt. Les favoris remontent dans les catalogues et sélecteurs, jamais dans l’ordre d’une équipe déjà composée.
 
-
 ## Dashboard et second écran
 
 La nouvelle page **Dashboard** affiche le suivi Métro et ses modules personnalisables. **Ouvrir dans une nouvelle fenêtre** ouvre la Tour de contrôle. Consulte le [guide détaillé](DASHBOARD.md) pour les filtres, les réglages persistants, le plein écran et les limites de rafraîchissement.
@@ -492,3 +506,11 @@ La nouvelle page **Dashboard** affiche le suivi Métro et ses modules personnali
 ### Création d’un worktree sur un gros dépôt
 
 Le checkout du nouveau worktree dispose de dix minutes, et les lectures Git de deux minutes par commande. La fenêtre de création indique que le checkout peut prendre plusieurs minutes. Une expiration identifie la commande concernée et son dernier message ; un échec de création indique aussi le dossier et la branche demandés. Une interruption peut laisser ces éléments sur disque : vérifie-les avant de relancer, sans supprimer de modifications existantes.
+
+## Parcours simplifié de la version 1.32.0
+
+- **Démarrer** : le dernier parcours choisi est conservé. Le formulaire de lancement expose les capacités réellement disponibles et les conditions à remplir. L’aperçu s’actualise après une modification ; le lancement attend une réponse correspondant au contexte courant.
+- **Naviguer** : le diagnostic distingue les éléments configurés des contrôles encore à effectuer. Le propriétaire doit disposer de la capacité navigation. Une permission demandée par interaction reste une décision humaine ; un changement de contexte gelé nécessite une nouvelle tentative.
+- **Travailler** : l’étape sélectionnée précède les outils de session repliés. Les titres de la liste ouvrent la session ; les cases servent à la sélection multiple. Les pages conservent cette sélection.
+- **Discuter** : cette vue n’a pas accès aux fichiers ni aux outils. Le bouton de préparation de session transmet le besoin pour travailler dans le projet. Quatre images au maximum participent à une requête ; on peut en retirer ou sélectionner d’anciennes captures sans effacer les messages. Les longues conversations utilisent une fenêtre récente dont les omissions sont signalées ; les originaux restent dans l’archive, sans résumé automatique.
+- **Valider et livrer** : le centre de validation rapproche résultat, critères déclarés, tests attestés, blocages et fichiers. Livraison prépare une description à relire depuis la session sélectionnée. Le brouillon survit à une erreur ou un rechargement ; le titre de PR reste indépendant du message de commit. L’aperçu de PR compare les commits avec la cible et exclut les modifications locales non commitées. Les confirmations de publication restent nécessaires.

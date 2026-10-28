@@ -1,0 +1,72 @@
+{
+  "id": "bugfix",
+  "name": "Correction de bug",
+  "description": "Diagnostic, correction, tests de non-régression et relecture avec validation de chaque étape.",
+  "icon": "layers",
+  "steps": [
+    {
+      "id": "plan",
+      "name": "Plan technique",
+      "description": "Diagnostiquer le problème, préciser sa reproduction et préparer une correction vérifiable.",
+      "initialContext": "Pour cette correction de bug, commence par établir les étapes de reproduction, le comportement observé et le résultat attendu. Distingue les causes confirmées des hypothèses et propose une correction ciblée avec un test de non-régression. Signale les informations manquantes avant de proposer une modification.",
+      "agentId": "fs-plan",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "ai-plan"
+      ],
+      "maxAttempts": 0,
+      "artifact": "plan.md",
+      "dependsOn": []
+    },
+    {
+      "id": "dev",
+      "name": "Développement",
+      "description": "Implémenter la tranche définie dans le plan validé.",
+      "agentId": "fs-dev",
+      "policy": "workspace-write",
+      "model": "",
+      "skills": [
+        "ai-implement"
+      ],
+      "maxAttempts": 0,
+      "artifact": "dev.md",
+      "dependsOn": [
+        "plan"
+      ]
+    },
+    {
+      "id": "tests",
+      "name": "Tests",
+      "description": "Écrire les tests de comportement et interpréter les preuves.",
+      "agentId": "fs-tests",
+      "policy": "tests",
+      "model": "",
+      "skills": [
+        "ai-tdd",
+        "ai-verifier"
+      ],
+      "maxAttempts": 0,
+      "artifact": "tests.md",
+      "dependsOn": [
+        "dev"
+      ]
+    },
+    {
+      "id": "review",
+      "name": "Relecture",
+      "description": "Relire indépendamment les changements et les preuves.",
+      "agentId": "fs-review",
+      "policy": "read-only",
+      "model": "",
+      "skills": [
+        "ai-relecture"
+      ],
+      "maxAttempts": 0,
+      "artifact": "review.md",
+      "dependsOn": [
+        "tests"
+      ]
+    }
+  ]
+}

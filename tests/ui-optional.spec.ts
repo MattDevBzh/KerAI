@@ -178,6 +178,10 @@ test('manual skip does not start the pilot and final skipped work is never displ
   await expect(page.getByRole('region', { name: 'Interventions passées' })).toContainText(
     '1 intervention passée — sans validation de résultat',
   );
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Équipe et parcours/ })
+    .click();
   await expect(page.getByRole('navigation', { name: 'Étapes du parcours' })).toContainText(
     'Passée',
   );
@@ -199,7 +203,7 @@ test('the validation centre exposes optional choices and counts passed work hone
   const card = page.locator('.validation-card');
   await expect(card).toHaveCount(1);
   await expect(card).toContainText('Intervention facultative à choisir');
-  await card.click();
+  await card.getByRole('button', { name: 'Choisir cette intervention', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Décision facultative attendue' })).toBeVisible();
   const feature = state.features[0];
   delete feature.optionalRequest;

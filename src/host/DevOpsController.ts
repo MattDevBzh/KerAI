@@ -1,3 +1,4 @@
+import { pullRequestDiff } from './DevOpsDelivery';
 import { ticketFiltersSchema, ticketSourceSnapshotSchema } from '../core/devopsTicketSchemas';
 import {
   defaultTicketFilters,
@@ -674,18 +675,41 @@ export class DevOpsController {
           const snapshot = await this.delivery.inspect(this.state.config?.remote ?? 'origin');
           if (snapshot.branch === message.target)
             throw new Error('Les branches source et cible doivent être différentes.');
-          if (message.ticketId) this.ticket(message.ticketId);
+          if (message.ticketId) {
+            // Durable session links remain usable after a restart, even outside assigned tickets.
+            const known =
+              this.state.ticketDetail?.id === message.ticketId ||
+              this.state.ticketSearch?.tickets.some((ticket) => ticket.id === message.ticketId) ||
+              this.state.tickets.some((ticket) => ticket.id === message.ticketId);
+            if (!known) {
+              const linked = this.state.links.some(
+                (link) =>
+                  link.featureId === message.featureId &&
+                  link.ticketId === message.ticketId &&
+                  link.projectKey === projectKey(this.state.config!),
+              );
+              if (!linked) throw new Error('Actualise les tickets avant cette action.');
+              this.state.ticketDetail = await this.api().ticketDetail(
+                message.ticketId,
+                this.state.ticketMetadata,
+              );
+            }
+            this.ticket(message.ticketId);
+          }
           if (message.featureId && !this.options.features().some((f) => f.id === message.featureId))
             throw new Error('Feature inconnue.');
           if ((await this.api().branchHead(snapshot.branch)) !== snapshot.head)
             throw new Error(
               'Pousse le commit courant vers le dépôt Azure DevOps configuré avant de créer la PR.',
             );
-          if (!(await this.api().branchHead(message.target)))
-            throw new Error('Branche cible absente du dépôt configuré.');
+          const targetHead = await this.api().branchHead(message.target);
+          if (!targetHead) throw new Error('Branche cible absente du dépôt configuré.');
+          const comparison = await pullRequestDiff(this.delivery, targetHead, snapshot.head);
           this.state.snapshot = snapshot;
           this.state.preview = {
             kind: 'pr',
+            targetHead,
+            ...comparison,
             fingerprint: snapshot.fingerprint,
             branch: snapshot.branch,
             head: snapshot.head,
@@ -734,7 +758,9 @@ export class DevOpsController {
                 preview.remote
                   ? `Remote : ${preview.remote} (${this.state.snapshot?.remoteUrl})`
                   : '',
-                preview.target ? `Cible : ${preview.target}` : '',
+                preview.target
+                  ? `Cible : ${preview.target}${preview.targetHead ? ` · ${preview.targetHead}` : ''}`
+                  : '',
                 preview.kind === 'pr' ? `Azure DevOps : ${projectKey(this.state.config!)}` : '',
                 preview.description ?? '',
                 preview.paths.length
@@ -772,6 +798,13 @@ export class DevOpsController {
                   throw new Error('Le dépôt a changé. Prépare un nouvel aperçu.');
                 if ((await this.api().branchHead(preview.branch)) !== preview.head)
                   throw new Error('La branche distante a changé. Prépare un nouvel aperçu.');
+                if (
+                  !preview.targetHead ||
+                  (await this.api().branchHead(preview.target!)) !== preview.targetHead
+                )
+                  throw new Error(
+                    'La branche cible a changé depuis la comparaison. Prépare un nouvel aperçu et relis le diff avant de créer la PR.',
+                  );
                 const pr = await this.api().createPullRequest({
                   branch: preview.branch,
                   target: preview.target!,

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { DRAGON_BALL_CODE } from '../src/shared/dragonBall';
 import { avatarIds } from '../src/shared/avatars';
 import { installDashboardHost } from './fixtures/dashboard';
-import { navigate } from './ui-navigation-helpers';
+import { navigate, openSessionSection } from './ui-navigation-helpers';
 import type { ClientMessage } from '../src/shared/types';
 
 const requests = (page: Page) =>
@@ -158,6 +158,7 @@ test('les vingt costumes, le dojo et le QG restent visibles sous un thème VS Co
     .getByRole('button', { name: / : / })
     .first()
     .click();
+  await openSessionSection(page, 'Équipe et parcours');
   await expect(page.locator('.session-hq')).toBeVisible();
   await expect(page.locator('.hq-scenery')).toBeVisible();
   await page.evaluate(() => {
@@ -175,9 +176,20 @@ test('les vingt costumes, le dojo et le QG restent visibles sous un thème VS Co
   await expect(page.locator('svg[data-agent-art="dragonball"]')).toHaveCount(0);
   await page.emulateMedia({ forcedColors: 'none' });
   await expect(page.locator('.session-hq svg[data-agent-art="dragonball"]').first()).toBeVisible();
-  await page.route('**/avatar-events/dragonball/*.png', (route) => route.abort());
+  await page.route('**/avatar-events/dragonball/*.png', (route) =>
+    route.fulfill({ status: 404, body: '' }),
+  );
   await page.reload();
-  await expect(page.locator('.pixel-avatar img').first()).toHaveAttribute('src', /\/avatars\//);
+  await page
+    .getByRole('article', { name: 'Une palette de commandes, enfin fluide' })
+    .getByRole('button', { name: / : / })
+    .first()
+    .click();
+  await openSessionSection(page, 'Équipe et parcours');
+  await expect(page.locator('.session-hq .pixel-avatar img').first()).toHaveAttribute(
+    'src',
+    /\/avatars\//,
+  );
   await noBusinessWrites(page);
 });
 

@@ -1,0 +1,87 @@
+.validation-decision {
+  text-align: left;
+  min-width: 0;
+}
+.validation-decision h4 {
+  margin: 0 0 6px;
+}
+.validation-decision small {
+  opacity: 0.75;
+}
+.validation-decision details {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.validation-decision summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.validation-decision li {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.validation-decision li p,
+.validation-result p {
+  font-size: 13px;
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+.validation-decision-blockers {
+  border-left: 3px solid var(--warning, #ba8128);
+  padding: 10px 12px;
+  background: var(--surface-alt, transparent);
+}
+.validation-decision-blockers ul {
+  margin-bottom: 0;
+  padding-left: 18px;
+}
+.validation-decision .validation-kind {
+  flex-wrap: wrap;
+}
+.validation-decision .validation-kind strong {
+  margin-left: auto;
+  font-size: 11px;
+}
+.validation-decision .button {
+  align-self: flex-start;
+}
+.delivery-session-context {
+  display: grid;
+  gap: 12px;
+}
+.delivery-session-context .devops-metadata {
+  margin: 0;
+}
+.delivery-session-context p {
+  margin: 0;
+}
+.delivery-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  list-style-position: inside;
+  padding-left: 0;
+}
+.delivery-stages li {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.delivery-scope-warning {
+  border-left: 3px solid var(--warning, #ba8128);
+  padding: 8px 12px;
+}
+.delivery-draft-preview {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .validation-decision {
+    padding: 16px;
+  }
+  .delivery-stages {
+    display: grid;
+  }
+}

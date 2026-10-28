@@ -71,11 +71,25 @@ export function hasSensitiveNavigationUrl(value: string): boolean {
 export function isNavigationUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+    return (
+      ['http:', 'https:'].includes(url.protocol) &&
+      !url.username &&
+      !url.password &&
+      Boolean(url.hostname) &&
+      !url.hostname.includes('*')
+    );
   } catch {
     return false;
   }
 }
+export const navigationOriginSchema = text
+  .trim()
+  .refine((value) => {
+    if (!isNavigationUrl(value)) return false;
+    const url = new URL(value);
+    return url.pathname === '/' && !url.search && !url.hash;
+  }, 'Une adresse HTTP ou HTTPS sans chemin, paramètres ni identifiants est requise (ex. https://mon-application.fr).')
+  .transform((value) => new URL(value).origin);
 const origin = text.refine(
   (value) => isNavigationUrl(value) && new URL(value).origin === value,
   'Une origine HTTP ou HTTPS explicite sans chemin est requise.',
