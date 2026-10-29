@@ -1711,7 +1711,7 @@ it('keeps pilot counters and the decision journal when configuration is saved ag
     'configure',
   ]);
   const restored = await new Store(f.storage).load();
-  expect(restored.schemaVersion).toBe(13);
+  expect(restored.schemaVersion).toBe(14);
   expect(restored.features[0].autopilot).toEqual(feature.autopilot);
   expect((await f.service.previewAutopilot(feature.id)).remainingRuns).toBe(1);
   expect(f.inputs).toHaveLength(1);

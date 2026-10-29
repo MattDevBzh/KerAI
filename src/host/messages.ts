@@ -223,6 +223,17 @@ export const messageSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('compactRunContext'),
+      requestId: id,
+      ...step,
+      feedback: text.optional(),
+      resume: z.boolean().optional(),
+      launch: launchSchema,
+      fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('answerHumanRequest'),
       requestId: id,
       answer: z.string().min(1).max(30000),

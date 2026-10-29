@@ -28,6 +28,28 @@ const path = z
 import { nativePermissionModeSchema } from './nativeSchemas';
 export const launchSchema = z
   .object({
+    contextSummary: z
+      .object({
+        content: z.string().trim().min(1).max(12000),
+        sources: z
+          .array(
+            z
+              .object({
+                id: z.string().min(1).max(160),
+                digest: z.string().regex(/^[a-f0-9]{64}$/),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(256)
+          .refine(
+            (sources) => new Set(sources.map((s) => s.id)).size === sources.length,
+            'Sources dupliquées.',
+          ),
+        discussionId: boundedId,
+      })
+      .strict()
+      .optional(),
     navigation: navigationSelectionSchema.optional(),
     omitNavigation: z.boolean().optional(),
     permissionMode: nativePermissionModeSchema.optional(),

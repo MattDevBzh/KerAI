@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.35.0 — 2026-10-30
+
+- Contexte : synthèse IA à la demande des anciens livrables et échanges pair, traitement par parties des historiques volumineux, édition et application humaines avant lancement. Le besoin, les critères, instructions et remarques actuelles restent distincts.
+- Reprises : remplacement du contexte historique uniquement, originaux conservés, nouvelle conversation native après compaction, vérification des empreintes des sources et retour à l’historique complet.
+- Consommation : nombre d’appels annoncé avant la synthèse, arrêt possible, appels et crédits conservés dans Discussion, sans outil de projet ni exécution pendant la compaction.
+- MCP : sélection par défaut dans les paramètres de chaque agent de la session, synchronisée avec la configuration existante de l’autopilote. Les serveurs désactivés ou absents restent visibles pour correction.
+- Stockage v14 : migration des sessions v0 à v13 avec conservation des données ; les versions antérieures refusent le nouveau format.
+
 ## 1.34.1 — 2026-10-29
 
 - Connexion native : les permissions ne sont modifiables qu’après vérification de la session active, y compris à la reprise d’une conversation existante ; un ancien identifiant de session ne suffit plus.

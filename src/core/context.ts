@@ -1,4 +1,10 @@
 import { subplanContract } from '../shared/subplans';
+import {
+  applyContextSummary,
+  compactionSource,
+  compactionChunks,
+  COMPACTION_MAX_SOURCE,
+} from './contextCompaction';
 import { correctionLoopFeedback } from './correctionLoop';
 import { taskBoardInstructions } from '../shared/taskBoard';
 import { createHash } from 'node:crypto';
@@ -355,19 +361,22 @@ export function promptSections(input: RunInput): PromptSection[] {
       'Après tes observations, utilise studio_list_proofs pour obtenir les identifiants des sources réellement conservées, puis studio_propose_claim pour relier tes conclusions importantes à ces preuves. Distingue supported (ton appréciation), contradicted et unverified. Un résultat d’outil ou une citation ne prouve pas automatiquement une conclusion ; justifie le lien. Aucun de ces outils ne valide une étape à la place de l’humain. Ne fabrique jamais un identifiant de preuve.',
     );
   const mode = launch?.contextMode ?? (input.agent.emptyContextByDefault ? 'empty' : 'all');
-  return sections.map((section) => {
-    const editable = section.source !== 'system';
-    const override = editable ? launch?.contextBlocks?.[section.id] : undefined;
-    return {
-      ...section,
-      originalContent: section.content,
-      content: override?.content ?? section.content,
-      enabled:
-        !editable ||
-        (override?.enabled ?? (section.id.startsWith('correction-artifact:') || mode === 'all')),
-      editable,
-    };
-  });
+  return applyContextSummary(
+    sections.map((section) => {
+      const editable = section.source !== 'system';
+      const override = editable ? launch?.contextBlocks?.[section.id] : undefined;
+      return {
+        ...section,
+        originalContent: section.content,
+        content: override?.content ?? section.content,
+        enabled:
+          !editable ||
+          (override?.enabled ?? (section.id.startsWith('correction-artifact:') || mode === 'all')),
+        editable,
+      };
+    }),
+    launch?.contextSummary,
+  );
 }
 
 export function buildPrompt(input: RunInput): string {
@@ -402,7 +411,7 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
     );
   if (prompt.length > maxCharacters)
     errors.push(
-      `Le contexte atteint ${prompt.length} caractères pour une limite de ${maxCharacters}. Raccourcis les sources ou ajuste explicitement la limite.`,
+      `Le contexte atteint ${prompt.length} caractères pour une limite de ${maxCharacters}. Compacte l’historique, raccourcis les sources ou ajuste explicitement la limite dans Budget.`,
     );
   const imageDigests = input.feature.images?.map(({ data, ...metadata }) => ({
     ...metadata,
@@ -444,7 +453,17 @@ export function previewContext(input: RunInput, errors: string[] = []): RunPrevi
       }),
     )
     .digest('hex');
+  const compactionText = compactionSource(sections);
+  const compactable = compactionText.length;
+  const chunks =
+    compactable > 0 && compactable <= COMPACTION_MAX_SOURCE
+      ? compactionChunks(compactionText).length
+      : 0;
   return {
+    compaction:
+      !input.launch?.contextSummary && compactable > 0 && compactable <= COMPACTION_MAX_SOURCE
+        ? { characters: compactable, calls: chunks + (chunks > 1 ? 1 : 0) }
+        : undefined,
     featureId: input.feature.id,
     stepId: input.step.id,
     fingerprint,

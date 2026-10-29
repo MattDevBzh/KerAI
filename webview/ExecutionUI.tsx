@@ -1,4 +1,5 @@
 import { defaultNavigationSelection } from '../src/shared/navigationSelection';
+import { ContextCompactionPanel } from './ContextCompactionPanel';
 import { NavigationLaunchPicker } from './ApplicationsUI';
 import { defaultPairPreferences } from '../src/shared/pair';
 import { PermissionPicker, EffectiveLaunchCapabilities } from './NativeExecutionUI';
@@ -40,16 +41,18 @@ export function McpPicker({
   state,
   selected,
   onChange,
+  label = 'Connexions MCP autorisées pour ce lancement',
 }: {
   state: StudioState;
   selected: string[];
   onChange: (ids: string[]) => void;
+  label?: string;
 }) {
   const servers = state.settings.mcpServers?.filter((s) => s.enabled) ?? [];
   return (
     <fieldset className="mcp-picker">
       <legend>
-        <Plug size={14} /> Connexions MCP autorisées pour ce lancement
+        <Plug size={14} /> {label}
       </legend>
       {servers.length ? (
         servers.map((server) => (
@@ -87,6 +90,25 @@ export function McpPicker({
           Aucun serveur MCP activé. Vous pouvez en configurer dans les réglages.
         </p>
       )}
+      {selected
+        .filter((id) => !servers.some((server) => server.id === id))
+        .map((id) => (
+          <label key={id} className="mcp-choice selected">
+            <input
+              type="checkbox"
+              checked
+              onChange={() => onChange(selected.filter((value) => value !== id))}
+            />
+            <span>
+              <strong>
+                {state.settings.mcpServers?.find((server) => server.id === id)?.name ?? id}
+              </strong>
+              <small>
+                Indisponible ou désactivé : réactive-le dans Réglages ou décoche-le avant lancement.
+              </small>
+            </span>
+          </label>
+        ))}
       <p className="field-help">
         Chaque outil reste soumis à sa liste d’autorisation et aux permissions de l’étape. Aucun
         accès générique n’est accordé.
@@ -138,12 +160,7 @@ export function LaunchDialog({
       : {}),
     initialContext:
       previous?.initialContext ?? configured?.initialContext ?? step.initialContext ?? '',
-    mcpServerIds: (
-      previous?.mcpServerIds ??
-      configured?.mcpServerIds ??
-      step.mcpServerIds ??
-      []
-    ).filter((id) => state.settings.mcpServers?.some((s) => s.id === id && s.enabled)),
+    mcpServerIds: step.mcpServerIds ?? configured?.mcpServerIds ?? previous?.mcpServerIds ?? [],
     memoryIds: [],
     useProjectMemory: false,
   });
@@ -151,6 +168,7 @@ export function LaunchDialog({
   const [preview, setPreview] = useState<RunPreview | null>(null);
   const [previewFresh, setPreviewFresh] = useState(false);
   const [pending, setPending] = useState(false);
+  const [compacting, setCompacting] = useState(false);
   const [error, setError] = useState('');
   const request = useRef({ id: '', key: '' });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -266,6 +284,7 @@ export function LaunchDialog({
     preview.featureId === feature.id &&
     preview.stepId === step.id &&
     !pending &&
+    !compacting &&
     !submitted.current;
   const devopsReady =
     !needsDevOpsEvidence(step) ||
@@ -517,6 +536,17 @@ export function LaunchDialog({
                   Tout décocher
                 </button>
               </div>
+              <ContextCompactionPanel
+                preview={preview}
+                fresh={previewFresh && previewKey === inputKey}
+                contextKey={inputKey}
+                launch={launch}
+                feedback={feedback}
+                resume={resume}
+                dispatch={dispatch}
+                update={update}
+                onBusy={setCompacting}
+              />
               <p className="field-help">
                 {agent?.emptyContextByDefault
                   ? 'Cet agent commence avec un contexte optionnel vide. '
@@ -534,7 +564,9 @@ export function LaunchDialog({
                   .filter((s) => s.source !== 'system')
                   .map((s) => {
                     const block = launch.contextBlocks?.[s.id];
-                    const enabled = block?.enabled ?? contextMode === 'all';
+                    const enabled = s.compacted
+                      ? false
+                      : (block?.enabled ?? s.enabled ?? contextMode === 'all');
                     const original = s.originalContent ?? s.content;
                     const content = block?.content ?? original;
                     return (
@@ -546,10 +578,17 @@ export function LaunchDialog({
                           <input
                             type="checkbox"
                             checked={enabled}
+                            disabled={s.compacted}
                             onChange={(e) => changeBlock(s.id, { enabled: e.target.checked })}
                           />
                           <span>{s.label}</span>
-                          <small>{enabled ? 'Inclus' : 'Exclu'}</small>
+                          <small>
+                            {s.compacted
+                              ? 'Remplacé par la synthèse'
+                              : enabled
+                                ? 'Inclus'
+                                : 'Exclu'}
+                          </small>
                         </label>
                         {s.unavailable && (
                           <p className="field-help">
@@ -572,7 +611,7 @@ export function LaunchDialog({
                               rows={8}
                               maxLength={60000}
                               value={content}
-                              readOnly={s.unavailable}
+                              readOnly={s.unavailable || s.compacted}
                               onChange={(e) => changeBlock(s.id, { content: e.target.value })}
                             />
                           </label>

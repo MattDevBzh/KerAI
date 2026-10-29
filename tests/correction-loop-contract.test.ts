@@ -88,24 +88,24 @@ function fixture() {
 }
 
 describe('correction contract durability and mandatory context', () => {
-  it('migrates a version 12 index to 13 without losing criteria, budgets or previous observations', async () => {
+  it('migrates a version 12 index to 14 without losing criteria, budgets or previous observations', async () => {
     const root = await mkdtemp(join(tmpdir(), 'correction-contract-'));
     roots.push(root);
     const store = new Store(root),
       { engine, feature } = fixture();
     await store.save(engine.features, defaultSettings);
     const index = JSON.parse(await readFile(store.path, 'utf8'));
-    expect(index.schemaVersion).toBe(13);
+    expect(index.schemaVersion).toBe(14);
     expect(index.entries).toHaveLength(1);
     index.schemaVersion = 12;
     await writeFile(store.path, JSON.stringify(index));
     const migrated = await new Store(root).load();
-    expect(migrated.schemaVersion).toBe(13);
+    expect(migrated.schemaVersion).toBe(14);
     expect(migrated.features[0].criteria).toEqual(feature.criteria);
     expect(migrated.features[0].autopilot).toEqual(feature.autopilot);
     expect(migrated.features[0].autopilot?.correctionLoopHistory?.[0].observations).toHaveLength(1);
     const durableIndex = JSON.parse(await readFile(store.path, 'utf8'));
-    expect(durableIndex.schemaVersion).toBe(13);
+    expect(durableIndex.schemaVersion).toBe(14);
     expect(durableIndex.entries).toEqual(index.entries);
     expect((await new Store(root).load()).features).toEqual(migrated.features);
   });

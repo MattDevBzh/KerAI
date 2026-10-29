@@ -246,3 +246,182 @@ test('application diagnostics explain the missing Navigator and the profile only
     dialog.getByLabel('Politique d’interaction').locator('option[value="confirm"]'),
   ).toHaveText('Confirmer chaque interaction demandée par l’agent');
 });
+
+async function replyCompactable(
+  page: Page,
+  request: Extract<ClientMessage, { type: 'previewRun' }>,
+) {
+  await page.evaluate((request) => {
+    const applied = request.launch.contextSummary;
+    window.postMessage(
+      {
+        type: 'runPreview',
+        requestId: request.requestId,
+        preview: {
+          featureId: request.featureId,
+          stepId: request.stepId,
+          fingerprint: 'a'.repeat(64),
+          prompt: applied ? applied.content : 'Ancien rapport complet',
+          sections: [
+            {
+              id: 'previous',
+              label: 'Livrable précédent',
+              source: 'artifact',
+              content: 'Ancien rapport complet',
+              originalContent: 'Ancien rapport complet',
+              enabled: !applied,
+              compacted: Boolean(applied),
+              editable: true,
+            },
+          ],
+          characters: applied ? 4000 : 80000,
+          estimatedTokens: applied ? 1000 : 20000,
+          maxCharacters: 60000,
+          errors: applied ? [] : ['Le contexte dépasse 60 000 caractères.'],
+          compaction: applied ? undefined : { characters: 78000, calls: 5 },
+          resumesSession: false,
+        },
+      },
+      '*',
+    );
+  }, request);
+}
+async function compactionRequests(page: Page) {
+  return page.evaluate(() =>
+    (Reflect.get(window, 'startupMessages') as ClientMessage[]).filter(
+      (m): m is Extract<ClientMessage, { type: 'compactRunContext' }> =>
+        m.type === 'compactRunContext',
+    ),
+  );
+}
+test('compaction requires a reviewed summary and a new host preview, and restores the original context', async ({
+  page,
+}) => {
+  await open(page);
+  const dialog = await launchDialog(page);
+  await expect.poll(async () => (await previews(page)).length).toBe(1);
+  await replyCompactable(page, (await previews(page))[0]);
+  await expect(dialog.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Générer une synthèse IA' }).click();
+  await expect.poll(async () => (await compactionRequests(page)).length).toBe(1);
+  const request = (await compactionRequests(page))[0];
+  await page.evaluate(
+    (request) =>
+      window.postMessage(
+        {
+          type: 'contextCompactionResult',
+          requestId: request.requestId,
+          summary: {
+            content: 'Préserver les utilisateurs non ciblés.',
+            sources: [{ id: 'previous', digest: 'a'.repeat(64) }],
+            discussionId: request.requestId,
+          },
+        },
+        '*',
+      ),
+    request,
+  );
+  await dialog
+    .getByLabel('Synthèse à relire avant application')
+    .fill('Préserver les utilisateurs non ciblés. Corriger le nettoyage.');
+  expect((await previews(page)).at(-1)!.launch.contextSummary).toBeUndefined();
+  await dialog.getByRole('button', { name: 'Appliquer cette synthèse' }).click();
+  await expect.poll(async () => (await previews(page)).length).toBe(2);
+  const compacted = (await previews(page))[1];
+  expect(compacted.launch.contextSummary?.content).toContain('Corriger le nettoyage');
+  await expect(dialog.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+  await replyCompactable(page, compacted);
+  await expect(dialog.getByRole('button', { name: 'Lancer cette étape' })).toBeEnabled();
+  await expect(dialog.getByText('Remplacé par la synthèse')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Rétablir l’historique complet' }).click();
+  await expect.poll(async () => (await previews(page)).length).toBe(3);
+  expect((await previews(page))[2].launch.contextSummary).toBeUndefined();
+  await replyCompactable(page, (await previews(page))[2]);
+  await expect(dialog.getByRole('button', { name: 'Lancer cette étape' })).toBeDisabled();
+});
+test('discards a summary when context changed during generation and can cancel a new request', async ({
+  page,
+}) => {
+  await open(page);
+  const dialog = await launchDialog(page);
+  await expect.poll(async () => (await previews(page)).length).toBe(1);
+  await replyCompactable(page, (await previews(page))[0]);
+  await dialog.getByRole('button', { name: 'Générer une synthèse IA' }).click();
+  const request = (await compactionRequests(page))[0];
+  await dialog.getByLabel('US, demande ou contexte initial').fill('Une nouvelle contrainte');
+  await page.evaluate(
+    (request) =>
+      window.postMessage(
+        {
+          type: 'contextCompactionResult',
+          requestId: request.requestId,
+          summary: {
+            content: 'Synthèse devenue périmée',
+            sources: [{ id: 'previous', digest: 'a'.repeat(64) }],
+            discussionId: request.requestId,
+          },
+        },
+        '*',
+      ),
+    request,
+  );
+  await expect(dialog.getByText(/Le contexte a changé pendant la synthèse/)).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Appliquer cette synthèse' })).toHaveCount(0);
+  await expect.poll(async () => (await previews(page)).length).toBe(2);
+  await replyCompactable(page, (await previews(page))[1]);
+  await dialog.getByRole('button', { name: 'Générer une synthèse IA' }).click();
+  await dialog.getByRole('button', { name: 'Arrêter la compaction' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (Reflect.get(window, 'startupMessages') as ClientMessage[]).filter(
+            (m) => m.type === 'cancelDiscussion',
+          ).length,
+      ),
+    )
+    .toBe(1);
+});
+
+test('session agent MCP defaults are visible, editable and used by manual launch', async ({
+  page,
+}) => {
+  const state = fixture();
+  state.settings.mcpServers = [
+    {
+      id: 'docs',
+      name: 'Microsoft Learn',
+      enabled: true,
+      transport: 'http',
+      url: 'https://learn.microsoft.com/api/mcp',
+      envKeys: [],
+      headers: {},
+      args: [],
+      tools: ['microsoft_docs_search'],
+      autoApproveReadOnly: true,
+    },
+  ];
+  state.features[0].steps[0].mcpServerIds = ['docs'];
+  await open(page, state);
+  await page.getByRole('button', { name: 'Configurer', exact: true }).click();
+  const defaults = page.getByRole('group', { name: 'MCP par défaut de cet agent dans la session' });
+  await expect(defaults.getByRole('checkbox')).toBeChecked();
+  await expect(
+    page.getByText(/actualise aussi les MCP de cette étape dans l’autopilote/),
+  ).toBeVisible();
+  await defaults.getByRole('checkbox').uncheck();
+  await page.getByRole('button', { name: 'Enregistrer la configuration' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (Reflect.get(window, 'startupMessages') as ClientMessage[]).filter(
+          (m) => m.type === 'configureStep',
+        ),
+      ),
+    )
+    .toMatchObject([{ mcpServerIds: [] }]);
+  // No host state acknowledgement: the persisted defaults remain 'docs' in this fixture.
+  await launchDialog(page);
+  await expect.poll(async () => (await previews(page)).length).toBe(1);
+  expect((await previews(page))[0].launch.mcpServerIds).toEqual(['docs']);
+});

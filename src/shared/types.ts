@@ -316,7 +316,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
   workspace: {
     name: string;
     path: string;
@@ -442,6 +442,16 @@ export type ClientMessage =
       launch: RunLaunchOptions;
     }
   | { type: 'answerHumanRequest'; requestId: string; answer: string }
+  | {
+      type: 'compactRunContext';
+      requestId: string;
+      featureId: string;
+      stepId: string;
+      feedback?: string;
+      resume?: boolean;
+      launch: RunLaunchOptions;
+      fingerprint: string;
+    }
   | { type: 'setPermissionMode'; featureId: string; mode: import('./native').NativePermissionMode }
   | { type: 'testMcp'; serverId: string }
   | { type: 'setMcpSecret'; serverId: string; key: string; value: string }
@@ -664,6 +674,13 @@ export type HostMessage =
   | ({ type: 'sessionBatchResult' } & import('./sessionList').SessionBatchResult)
   | { type: 'sessionBatchProgress'; requestId: string; completed: number; total: number }
   | { type: 'runPreview'; requestId: string; preview: RunPreview }
+  | { type: 'contextCompactionProgress'; requestId: string; completed: number; total: number }
+  | {
+      type: 'contextCompactionResult';
+      requestId: string;
+      summary?: import('./evolutions').ContextSummary;
+      error?: string;
+    }
   | {
       type: 'stepApprovalResult';
       featureId: string;

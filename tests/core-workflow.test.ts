@@ -266,6 +266,47 @@ describe('workflow transitions', () => {
   });
 });
 describe('strict workflow DAG validation', () => {
+  it('updates saved autopilot MCP selections from session agent settings without losing other launch inputs', () => {
+    const { engine, feature, id } = setup();
+    feature.autopilot = {
+      status: 'paused',
+      runs: 0,
+      correctionCycles: 0,
+      updatedAt: 'now',
+      checkpoints: [],
+      maxRuns: 5,
+      maxCorrectionCycles: 1,
+      stepInputs: {
+        specs: {
+          initialContext: 'Keep this US',
+          mcpServerIds: ['old'],
+          memoryIds: ['memory'],
+          useProjectMemory: true,
+        },
+        plan: {
+          initialContext: '',
+          mcpServerIds: ['other-step'],
+          memoryIds: [],
+          useProjectMemory: false,
+        },
+      },
+    };
+    engine.configureStep(id, 'specs', {
+      agentId: 'agent',
+      skills: [],
+      mcpServerIds: ['azure', 'docs'],
+    });
+    expect(feature.autopilot.stepInputs.specs).toEqual({
+      initialContext: 'Keep this US',
+      mcpServerIds: ['azure', 'docs'],
+      memoryIds: ['memory'],
+      useProjectMemory: true,
+    });
+    expect(feature.autopilot.stepInputs.plan.mcpServerIds).toEqual(['other-step']);
+    expect(feature.steps[0].mcpServerIds).toEqual(['azure', 'docs']);
+    engine.configureStep(id, 'specs', { agentId: 'agent', skills: [], mcpServerIds: [] });
+    expect(feature.autopilot.stepInputs.specs.mcpServerIds).toEqual([]);
+  });
   it('preserves output when only run confirmation changes, and invalidates context/MCP changes', () => {
     const { engine, id } = setup();
     complete(engine, id, 'specs');

@@ -562,7 +562,7 @@ describe('durable archives and deletion', () => {
       }),
     );
     const restored = await f.service.store.load();
-    expect(restored.schemaVersion).toBe(13);
+    expect(restored.schemaVersion).toBe(14);
     expect(restored.features[0].steps[0].attempts[0].logs[0].message).toBe('valuable transcript');
     const index = JSON.parse(await readFile(f.service.store.path, 'utf8'));
     expect(index.features).toBeUndefined();

@@ -530,7 +530,7 @@ export const settingsSchema = z
 const pairStateSchema = createPairStateSchema(settingsSchema);
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(13),
+    schemaVersion: z.literal(14),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -543,14 +543,14 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 13;
+  schemaVersion: 14;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
 }
 const indexSchema = z
   .object({
-    schemaVersion: z.literal(13),
+    schemaVersion: z.literal(14),
     entries: z
       .array(z.object({ id: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }))
       .refine(
@@ -577,7 +577,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 13,
+          schemaVersion: 14,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -601,7 +601,8 @@ export class Store {
       version !== 10 &&
       version !== 11 &&
       version !== 12 &&
-      version !== 13
+      version !== 13 &&
+      version !== 14
     )
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
     if (
@@ -613,9 +614,10 @@ export class Store {
       version === 10 ||
       version === 11 ||
       version === 12 ||
-      version === 13
+      version === 13 ||
+      version === 14
     ) {
-      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 13 });
+      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 14 });
       const deleted = new Set((await pendingDeletions(this.rootPath)).map((d) => d.featureId));
       const features: Feature[] = [];
       for (const entry of index.entries) {
@@ -634,13 +636,13 @@ export class Store {
         features.push(item);
       }
       raw = {
-        schemaVersion: 13,
+        schemaVersion: 14,
         features,
         settings: index.settings,
         memory: index.memory.filter((m) => !m.source || !deleted.has(m.source.featureId)),
       };
     }
-    const migration = version !== 13;
+    const migration = version !== 14;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -648,7 +650,7 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 13,
+        schemaVersion: 14,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
@@ -723,7 +725,7 @@ export class Store {
   save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
     validateFeatureTree(features);
     const snapshot = persistedSchema.parse({
-      schemaVersion: 13,
+      schemaVersion: 14,
       features: structuredClone(features),
       settings: structuredClone(settings),
       memory: structuredClone(memory),
@@ -751,7 +753,7 @@ export class Store {
           this.rootPath,
           'state.json',
           JSON.stringify({
-            schemaVersion: 13,
+            schemaVersion: 14,
             entries,
             settings: snapshot.settings,
             memory: snapshot.memory,

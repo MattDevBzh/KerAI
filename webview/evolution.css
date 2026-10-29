@@ -1724,6 +1724,20 @@
   border-radius: 6px;
   margin-bottom: 10px;
 }
+.context-compaction {
+  margin-block: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.context-compaction .button {
+  margin: 6px 8px 6px 0;
+}
+.context-compaction textarea {
+  width: 100%;
+  resize: vertical;
+}
 .context-block-toggle span {
   flex: 1;
   font-size: 12px;

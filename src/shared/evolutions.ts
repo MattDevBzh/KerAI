@@ -20,6 +20,7 @@ export interface McpCatalog {
   checkedAt?: string;
 }
 export interface RunLaunchOptions {
+  contextSummary?: ContextSummary;
   navigation?: import('./navigation').NavigationSelection;
   /** Explicitly omit the session navigation for this launch. */
   omitNavigation?: boolean;
@@ -36,6 +37,7 @@ export interface RunLaunchOptions {
   editableExistingFiles?: string[];
 }
 export interface PromptSection {
+  compacted?: boolean;
   id: string;
   label: string;
   source: 'human' | 'agent' | 'skill' | 'artifact' | 'memory' | 'system';
@@ -46,6 +48,7 @@ export interface PromptSection {
   unavailable?: boolean;
 }
 export interface RunPreview {
+  compaction?: { characters: number; calls: number };
   featureId: string;
   stepId: string;
   fingerprint: string;
@@ -57,6 +60,11 @@ export interface RunPreview {
   errors: string[];
   resumesSession?: boolean;
   existingChanges?: { files: { path: string; reason?: string }[]; omittedCount: number };
+}
+export interface ContextSummary {
+  content: string;
+  sources: { id: string; digest: string }[];
+  discussionId: string;
 }
 export interface HumanRequest {
   id: string;

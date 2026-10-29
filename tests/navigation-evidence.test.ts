@@ -78,10 +78,10 @@ describe('navigation evidence and migration', () => {
     index.schemaVersion = 10;
     await writeFile(store.path, JSON.stringify(index));
     const migrated = await store.load();
-    expect(migrated.schemaVersion).toBe(13);
+    expect(migrated.schemaVersion).toBe(14);
     expect(migrated.features[0]).toEqual(feature);
     expect(migrated.features[0].steps[0].attempts[0].navigation).toBeUndefined();
-    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(13);
+    expect(JSON.parse(await readFile(store.path, 'utf8')).schemaVersion).toBe(14);
   });
   it('preserves frozen context and capture metadata while interrupting unfinished attempts after restart', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'navigation-persist-'));

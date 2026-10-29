@@ -712,7 +712,11 @@ export class WorkflowEngine {
     Object.assign(step, selection, step.inheritAgent ? { skills: [] } : {});
     if (maxAttempts !== undefined) step.maxAttempts = maxAttempts;
     if (initialContext !== undefined) step.initialContext = initialContext;
-    if (mcpServerIds !== undefined) step.mcpServerIds = [...mcpServerIds];
+    if (mcpServerIds !== undefined) {
+      step.mcpServerIds = [...mcpServerIds];
+      const saved = feature.autopilot?.stepInputs[stepId];
+      if (saved) saved.mcpServerIds = [...mcpServerIds];
+    }
     if (askBeforeRun !== undefined) step.askBeforeRun = askBeforeRun;
     if (changed && (step.attempts.length || step.optionalDecision)) {
       this.invalidate(feature, step.id);

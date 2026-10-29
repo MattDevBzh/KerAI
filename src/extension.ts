@@ -1623,6 +1623,39 @@ export async function activate(context: vscode.ExtensionContext) {
           )
           .catch(report);
         return;
+      case 'compactRunContext':
+        void (async () => {
+          const plan = await current.prepareContextCompaction(
+            message.featureId,
+            message.stepId,
+            message.feedback,
+            message.resume,
+            message.launch,
+            message.fingerprint,
+          );
+          const content = await discussions.compactContext(
+            { ...plan, id: message.requestId },
+            (completed, total) =>
+              send({
+                type: 'contextCompactionProgress',
+                requestId: message.requestId,
+                completed,
+                total,
+              }),
+          );
+          send({
+            type: 'contextCompactionResult',
+            requestId: message.requestId,
+            summary: { content, sources: plan.sources, discussionId: message.requestId },
+          });
+        })().catch((error) =>
+          send({
+            type: 'contextCompactionResult',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          }),
+        );
+        return;
       case 'previewRun':
         try {
           send({

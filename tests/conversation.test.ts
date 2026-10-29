@@ -11,6 +11,7 @@ import { emptyLaunch } from '../src/core/context';
 import { defaultPairPreferences, nextPairBlock, type PairAction } from '../src/shared/pair';
 import { approvalBlockers } from '../src/core/validation';
 import { usageTotals } from '../src/core/budgets';
+import { compactableSections, contextSourceDigest } from '../src/core/contextCompaction';
 import type { AgentAdapter, RunCallbacks, RunInput, RunResult } from '../src/shared/types';
 
 vi.setConfig({ testTimeout: 60_000 });
@@ -143,6 +144,69 @@ async function fixture(pairMode = false) {
     },
   };
 }
+
+it('starts a fresh native conversation when applying a context summary and refuses a stale compaction request', async () => {
+  const f = await fixture();
+  await f.start();
+  const preview = await f.service.previewRun(
+    f.feature.id,
+    f.step.id,
+    'Corrige le résultat',
+    true,
+    f.launch,
+  );
+  const plan = await f.service.prepareContextCompaction(
+    f.feature.id,
+    f.step.id,
+    'Corrige le résultat',
+    true,
+    f.launch,
+    preview.fingerprint,
+  );
+  expect(plan.sources.length).toBeGreaterThan(0);
+  await expect(
+    f.service.prepareContextCompaction(
+      f.feature.id,
+      f.step.id,
+      'Autre consigne',
+      true,
+      f.launch,
+      preview.fingerprint,
+    ),
+  ).rejects.toThrow('contexte a changé');
+  const launch = {
+    ...f.launch,
+    contextSummary: {
+      content: 'Travail réalisé ; corriger le résultat.',
+      sources: compactableSections(preview.sections).map((s) => ({
+        id: s.id,
+        digest: contextSourceDigest(s),
+      })),
+      discussionId: 'summary-1',
+    },
+  };
+  const compacted = await f.service.previewRun(
+    f.feature.id,
+    f.step.id,
+    'Corrige le résultat',
+    true,
+    launch,
+  );
+  expect(compacted.resumesSession).toBe(false);
+  await f.service.runStep(
+    f.feature.id,
+    f.step.id,
+    'Corrige le résultat',
+    true,
+    launch,
+    compacted.fingerprint,
+  );
+  expect(f.inputs.at(-1)?.resumeSessionId).toBeUndefined();
+  expect(f.inputs.at(-1)?.preparedPrompt).toContain('Travail réalisé ; corriger le résultat.');
+  expect(
+    (await f.store.load()).features[0].steps[0].attempts.at(-1)?.launch?.contextSummary,
+  ).toEqual(launch.contextSummary);
+});
 
 it('requires a verified live connection to change permissions, including when resuming a saved session', async () => {
   const f = await fixture();

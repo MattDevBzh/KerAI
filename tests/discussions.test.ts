@@ -95,6 +95,75 @@ describe('persisted discussions', () => {
     service = create();
     await service.initialize();
   });
+  it('compacts a large context without project tools and persists every paid call, including the merge', async () => {
+    const id = randomUUID(),
+      progress = vi.fn();
+    const source = 'a'.repeat(24000) + 'DERNIERE_PARTIE';
+    const result = await service.compactContext(
+      { id, title: 'Dev après relecture', source, model: 'model-a', reasoning: 'high' },
+      progress,
+    );
+    expect(result).toBe('Une réponse complète.');
+    expect(adapter.run).toHaveBeenCalledTimes(3);
+    for (const [input] of vi.mocked(adapter.run).mock.calls) {
+      expect(input.mode).toBe('discussion');
+      expect(input.agent.tools).toEqual([]);
+      expect(input.skills).toEqual([]);
+      expect(input.resumeSessionId).toBeUndefined();
+      expect(input.step.model).toBe('model-a');
+      expect(input.settings.hooks).toEqual([]);
+    }
+    expect(vi.mocked(adapter.run).mock.calls[1][0].preparedPrompt).toContain('DERNIERE_PARTIE');
+    expect(vi.mocked(adapter.run).mock.calls[2][0].preparedPrompt).toContain('Fusionne');
+    expect(progress).toHaveBeenLastCalledWith(3, 3);
+    const saved = JSON.parse(await readFile(join(directory, 'discussions.json'), 'utf8'));
+    const replies = saved.discussions[0].messages.filter(
+      (m: { role: string }) => m.role === 'assistant',
+    );
+    expect(replies).toHaveLength(3);
+    expect(
+      replies.every(
+        (m: { usage: { cost: number }; status: string }) =>
+          m.usage.cost === 24 && m.status === 'complete',
+      ),
+    ).toBe(true);
+    await expect(service.compactContext({ id, title: 'Retry', source }, progress)).rejects.toThrow(
+      'déjà',
+    );
+    expect(adapter.run).toHaveBeenCalledTimes(3);
+  });
+  it('cancels compaction before initialization or between chunks without another model request', async () => {
+    const cancelled = randomUUID();
+    service.cancel(cancelled);
+    await expect(
+      service.compactContext({ id: cancelled, title: 'Cancelled', source: 'data' }, () => {}),
+    ).rejects.toThrow('annulée');
+    expect(adapter.run).not.toHaveBeenCalled();
+    const id = randomUUID();
+    await expect(
+      service.compactContext(
+        { id, title: 'Cancelled midway', source: 'x'.repeat(50000) },
+        (completed) => {
+          if (completed === 1) service.cancel(id);
+        },
+      ),
+    ).rejects.toThrow();
+    expect(adapter.run).toHaveBeenCalledTimes(1);
+    expect(service.snapshot().discussions[0].messages.some((m) => m.status === 'streaming')).toBe(
+      false,
+    );
+  });
+  it('keeps an oversized model answer in the discussion but refuses to apply it as a summary', async () => {
+    vi.mocked(adapter.run).mockResolvedValueOnce({
+      content: 'x'.repeat(6001),
+      changedFiles: [],
+      questions: [],
+    });
+    await expect(
+      service.compactContext({ id: randomUUID(), title: 'Too long', source: 'Source' }, () => {}),
+    ).rejects.toThrow('dépasse');
+    expect(service.snapshot().discussions[0].messages.at(-1)?.content).toHaveLength(6001);
+  });
   it('persists an attached image and forwards it separately again on the next stateless turn', async () => {
     const request = { ...input(), images: [screenshot] };
     await service.send(request);

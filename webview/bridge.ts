@@ -110,6 +110,8 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       'notice',
       'navigate',
       'runPreview',
+      'contextCompactionProgress',
+      'contextCompactionResult',
       'pairActionResult',
       'checkpointComparison',
       'stepApprovalResult',

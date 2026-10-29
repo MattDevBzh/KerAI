@@ -260,9 +260,19 @@ Ces points conservent le contenu et les permissions des fichiers inclus ; ils ne
 
 La création, la comparaison et la restauration Git n’ajoutent aucune requête IA. Elles ne publient rien. Les opérations sont verrouillées pendant une tentative ou une autre mutation ; le host recontrôle racine, branche et fichiers. Les buffers non enregistrés sont protégés dans la fenêtre VS Code courante seulement : les autres fenêtres et processus restent hors sandbox. [Périmètre, exclusions et limites détaillés](../docs/WORKSPACES.md).
 
-**Stockage v12 :** les formats v0 à v11 migrent en conservant leurs données connues. Les anciennes interventions restent obligatoires ; les choix facultatifs et demandes en attente sont conservés. Les anciens binaires refusent le nouveau format. Il n’existe pas de migration inverse automatique. Les sessions possèdent leurs propres archives et états, avec un index léger.
+**Stockage v14 :** les formats v0 à v13 migrent en conservant leurs données connues. Les anciennes interventions restent obligatoires ; les choix facultatifs et demandes en attente sont conservés. Les anciens binaires refusent le nouveau format. Il n’existe pas de migration inverse automatique. Les sessions possèdent leurs propres archives et états, avec un index léger.
 
 ![Préparer une US et ses MCP — données de démonstration](../docs/images/launch-context.png)
+
+## Compacter un historique avant reprise
+
+Dans le formulaire de lancement, **Compacter l’historique → Générer une synthèse IA** traite les anciens livrables et échanges pair sélectionnés. Le nombre maximal d’appels payants est annoncé ; leur consommation et les réponses sont conservées dans Discussion. L’agent de synthèse ne reçoit aucun outil de projet.
+
+Relis et modifie le résultat, puis **Appliquer cette synthèse** et vérifie le nouvel aperçu. Le besoin, les critères et les remarques actuelles restent séparés. Les originaux sont conservés ; **Rétablir l’historique complet** annule le remplacement. Les sources sont vérifiées avant lancement et la reprise démarre une nouvelle conversation native, sans l’ancien transcript. La synthèse n’est jamais appliquée automatiquement par l’autopilote. Une synthèse peut omettre des détails : sa relecture reste nécessaire.
+
+La préparation accepte jusqu’à 480 000 caractères de sources et produit au maximum 12 000 caractères de synthèse. Dans **Budget**, le plafond de prompt de 60 000 caractères reste réglable jusqu’à 500 000 ; augmenter ce plafond ne change pas la fenêtre du modèle.
+
+Dans **Configurer**, sous l’agent de la session, les **MCP par défaut** sont proposés aux lancements manuels et reportés dans la configuration existante de l’autopilote pour cette étape. Active d’abord le serveur dans **Réglages → Connexions MCP**. Les autres sessions et l’agent de base ne sont pas modifiés.
 
 ## MCP et Azure DevOps : apporter les bonnes US
 

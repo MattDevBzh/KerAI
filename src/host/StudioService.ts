@@ -1,4 +1,9 @@
 import { defaultNavigationSelection, isNavigator } from '../shared/navigationSelection';
+import {
+  compactableSections,
+  compactionSource,
+  contextSourceDigest,
+} from '../core/contextCompaction';
 import { NativeTestEvidence, nativeTestSnapshot, nativeTestCommand } from './NativeTestEvidence';
 import type { AutopilotDecision, AutopilotPreview } from '../shared/evolutions';
 import type { Attempt } from '../shared/types';
@@ -317,7 +322,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 13,
+      schemaVersion: 14,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -1301,6 +1306,7 @@ export class StudioService extends EventEmitter {
       // A resumed transcript could reintroduce blocks removed from the new prompt.
       resumeSessionId:
         resume &&
+        !selected.contextSummary &&
         previous?.navigation?.digest === navigation?.digest &&
         (previous?.descriptionRevision ?? 0) === (feature.descriptionRevision ?? 0) &&
         normalizeRoastLevel(previous?.roastLevel) === normalizeRoastLevel(agent.roastLevel) &&
@@ -1345,6 +1351,39 @@ export class StudioService extends EventEmitter {
         errors.push('Le mode de permission choisi est indisponible dans ce runtime.');
     }
     return { ...previewContext(input, errors), existingChanges };
+  }
+  async prepareContextCompaction(
+    featureId: string,
+    stepId: string,
+    feedback: string | undefined,
+    resume: boolean | undefined,
+    launch: RunLaunchOptions,
+    fingerprint: string,
+  ) {
+    if (this.active || this.automation)
+      throw new Error(
+        'Arrête la tentative et mets le pilote en pause avant de préparer une synthèse.',
+      );
+    if (this.state.runtime.state !== 'ready' || !this.state.runtime.authenticated)
+      throw new Error('Connecte le CLI Copilot avant de générer une synthèse.');
+    const preview = await this.previewRun(featureId, stepId, feedback, resume, launch);
+    if (preview.fingerprint !== fingerprint)
+      throw new Error('Le contexte a changé. Actualise l’aperçu avant de compacter.');
+    if (!preview.compaction)
+      throw new Error(
+        'Aucun historique sélectionné à compacter, ou historique supérieur à 480 000 caractères. Retire une synthèse déjà appliquée ou réduis les sources.',
+      );
+    const input = this.prepareInput(featureId, stepId, feedback, resume, launch);
+    return {
+      title: `${input.feature.title} · ${input.step.name}`,
+      source: compactionSource(preview.sections),
+      sources: compactableSections(preview.sections).map((s) => ({
+        id: s.id,
+        digest: contextSourceDigest(s),
+      })),
+      model: (input.step.model ?? input.agent.model) || input.settings.defaultModel || undefined,
+      reasoning: input.step.reasoning ?? input.agent.reasoning,
+    };
   }
   async runStep(
     featureId: string,

@@ -1,4 +1,9 @@
 import { discussionContext, boundedDiscussionSource } from '../core/discussionContext';
+import {
+  compactionChunks,
+  compactionInstructions,
+  COMPACTION_MAX_SUMMARY,
+} from '../core/contextCompaction';
 import { validateImages } from './Images';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
@@ -94,6 +99,7 @@ export class DiscussionService extends EventEmitter {
   private mutations: Promise<unknown> = Promise.resolve();
   private writes: Promise<void> = Promise.resolve();
   private active = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  private cancelledRequests = new Set<string>();
   constructor(private readonly options: Options) {
     super();
   }
@@ -325,6 +331,132 @@ export class DiscussionService extends EventEmitter {
       );
     });
   }
+  /** Explicit paid summarization, isolated from project tools; each call keeps its usage receipt. */
+  async compactContext(
+    input: { id: string; title: string; source: string; model?: string; reasoning?: string },
+    onProgress: (completed: number, total: number) => void,
+  ): Promise<string> {
+    const chunks = compactionChunks(input.source);
+    const total = chunks.length + (chunks.length > 1 ? 1 : 0);
+    const started = await this.enqueue(async () => {
+      this.options.assertTrusted();
+      if (!this.loaded || this.closed || this.state.error)
+        throw new Error(this.state.error || 'Discussion indisponible.');
+      if (this.cancelledRequests.has(input.id)) throw new Error('Compaction annulée.');
+      if (this.state.discussions.some((d) => d.id === input.id))
+        throw new Error(
+          'Cette demande de compaction a déjà été enregistrée. Consulte sa discussion.',
+        );
+      const now = new Date().toISOString();
+      const selected: DiscussionProfile = {
+        key: 'internal:context-summary',
+        skills: [],
+        profile: {
+          id: 'context-summary',
+          name: 'Synthèse du contexte',
+          description: '',
+          instructions: compactionInstructions,
+          tools: [],
+          skills: [],
+          source: 'bundled',
+          path: '',
+        },
+      };
+      const discussion: Discussion = {
+        id: input.id,
+        title: `Compaction · ${input.title}`.slice(0, 140),
+        agentKey: selected.key,
+        model: input.model,
+        reasoning: input.reasoning,
+        createdAt: now,
+        updatedAt: now,
+        messages: [],
+      };
+      this.state.discussions.push(discussion);
+      try {
+        await this.persist();
+      } catch (error) {
+        this.state.discussions = this.state.discussions.filter((d) => d !== discussion);
+        throw error;
+      }
+      const controller = new AbortController();
+      const running = { controller, done: Promise.resolve() };
+      this.active.set(discussion.id, running);
+      if (this.cancelledRequests.has(input.id)) controller.abort();
+      const outcome = (async () => {
+        const partials: string[] = [];
+        const summarize = async (text: string, merge: boolean, index: number) => {
+          controller.signal.throwIfAborted();
+          this.options.assertTrusted();
+          onProgress(index, total);
+          const prompt = `${compactionInstructions}\n\nMission : ${input.title}\n${merge ? 'Fusionne les synthèses partielles en conservant les informations distinctes. Maximum 12 000 caractères.' : `Partie ${index + 1}/${chunks.length}. Maximum 4 000 caractères. Cette partie peut commencer ou finir au milieu d’un document ; signale ce qui manque.`}\n\nDonnées historiques à synthétiser (JSON) :\n${JSON.stringify(text)}`;
+          const at = new Date().toISOString();
+          if (prompt.length > 160000)
+            throw new Error(
+              'Synthèse intermédiaire trop volumineuse. Réduis les sources ; aucun contenu n’a été supprimé.',
+            );
+          const reply: DiscussionMessage = {
+            id: randomUUID(),
+            role: 'assistant',
+            content: '',
+            createdAt: at,
+            status: 'streaming',
+            agent: { id: selected.profile.id, name: selected.profile.name },
+            model: input.model,
+            reasoning: input.reasoning,
+          };
+          discussion.messages.push(
+            { id: randomUUID(), role: 'user', content: prompt, createdAt: at, status: 'complete' },
+            reply,
+          );
+          await this.persist();
+          controller.signal.throwIfAborted();
+          await this.respond(discussion, reply, selected, prompt, controller, [], undefined, true);
+          controller.signal.throwIfAborted();
+          if (this.state.error) throw new Error(this.state.error);
+          if (reply.status !== 'complete')
+            throw new Error(reply.error || 'Synthèse interrompue. Les sources sont conservées.');
+          const limit = merge ? COMPACTION_MAX_SUMMARY : 6000;
+          if (!reply.content.trim() || reply.content.length > limit)
+            throw new Error(
+              `La synthèse reçue dépasse ${limit} caractères ou est vide. Elle reste dans Discussion ; aucun contexte n’a été remplacé.`,
+            );
+          return reply.content;
+        };
+        try {
+          for (const [index, chunk] of chunks.entries())
+            partials.push(await summarize(chunk, false, index));
+          const result =
+            partials.length === 1
+              ? partials[0]
+              : await summarize(
+                  partials.map((p, i) => `Partie ${i + 1}\n${p}`).join('\n\n'),
+                  true,
+                  chunks.length,
+                );
+          onProgress(total, total);
+          return result;
+        } finally {
+          for (const message of discussion.messages) {
+            if (message.status !== 'streaming') continue;
+            message.status = controller.signal.aborted ? 'interrupted' : 'error';
+            message.error = 'Compaction interrompue avant la fin de cet appel.';
+          }
+          await this.persist().catch((error) => {
+            this.state.error = `Enregistrement de la compaction impossible : ${redact((error as Error).message)}`;
+          });
+          this.active.delete(discussion.id);
+          this.publish();
+        }
+      })();
+      running.done = outcome.then(
+        () => undefined,
+        () => undefined,
+      );
+      return { outcome };
+    });
+    return started.outcome;
+  }
   async prepareFeature(
     input: Omit<Send, 'type' | 'content'>,
     agents: AgentProfile[],
@@ -397,6 +529,7 @@ export class DiscussionService extends EventEmitter {
     controller: AbortController,
     images: import('../shared/images').ImageAttachment[],
     proposal?: { agents: AgentProfile[]; requestId: string },
+    retainActive = false,
   ): Promise<void> {
     let lastPublish = 0;
     try {
@@ -522,11 +655,14 @@ export class DiscussionService extends EventEmitter {
       } catch (error) {
         this.state.error = `Enregistrement de l’historique impossible : ${redact((error as Error).message)}`;
       }
-      this.active.delete(discussion.id);
+      if (!retainActive) this.active.delete(discussion.id);
       this.publish();
     }
   }
   cancel(id: string): void {
+    this.cancelledRequests.add(id);
+    if (this.cancelledRequests.size > 256)
+      this.cancelledRequests.delete(this.cancelledRequests.values().next().value!);
     this.active.get(id)?.controller.abort();
   }
   async delete(id: string): Promise<void> {

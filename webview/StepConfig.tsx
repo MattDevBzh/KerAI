@@ -121,7 +121,17 @@ export function StepConfig({
           placeholder="Le contexte proposé à chaque lancement de cette étape."
         />
       </label>
-      <McpPicker state={state} selected={mcpServerIds} onChange={setMcpServerIds} />
+      <McpPicker
+        label="MCP par défaut de cet agent dans la session"
+        state={state}
+        selected={mcpServerIds}
+        onChange={setMcpServerIds}
+      />
+      <p className="field-help">
+        Ces choix sont proposés à chaque lancement. Enregistrer actualise aussi les MCP de cette
+        étape dans l’autopilote, y compris s’il était déjà configuré. Ils ne modifient pas l’agent
+        de base ni les autres sessions. Active d’abord les serveurs dans Réglages → Connexions MCP.
+      </p>
       <label className="inline-check">
         <input
           type="checkbox"
