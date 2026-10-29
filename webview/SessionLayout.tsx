@@ -16,7 +16,7 @@ import {
   type SessionModuleId,
 } from '../src/shared/sessionLayout';
 import { isDemo, isHosted, send, subscribe } from './bridge';
-import { StudioDialog } from './ExecutionUI';
+import { StudioDialog } from './StudioDialog';
 import './session-layout.css';
 
 const demoKey = 'featureStudio.demo.sessionLayout';
