@@ -19,6 +19,9 @@ export interface FeatureCheckpoint {
   attemptId?: string;
   fileCount: number;
   totalBytes: number;
+  /** Bytes already in the pinned Git commit are referenced, not copied. Absent on legacy points. */
+  storedFileCount?: number;
+  storedBytes?: number;
   excludedCount: number;
   excludedPaths: string[];
 }

@@ -87,6 +87,8 @@ export interface UsageTotals {
   unknownCostRuns: number;
 }
 export interface AutopilotConfig {
+  /** Existing configurations retain automatic recommendations unless explicitly disabled. */
+  autoAnswerRecommended?: boolean;
   correctionLoop?: { maxStagnantCycles: number };
   checkpoints: string[];
   maxRuns: number;

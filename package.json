@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.33.0",
+  "version": "1.34.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -195,6 +195,63 @@
           "default": "auto",
           "scope": "application",
           "description": "Taille de toute l’interface Feature Studio. Auto adapte le zoom à la taille disponible dans la fenêtre ; un pourcentage fixe est conservé dans tous vos projets."
+        },
+        "featureStudio.appearance.sessionLayout": {
+          "type": "object",
+          "scope": "application",
+          "default": {
+            "order": [
+              "summary",
+              "work",
+              "devops",
+              "ticket",
+              "workspace",
+              "skipped",
+              "autopilot",
+              "team"
+            ],
+            "hidden": []
+          },
+          "additionalProperties": false,
+          "properties": {
+            "order": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "summary",
+                  "work",
+                  "devops",
+                  "ticket",
+                  "workspace",
+                  "skipped",
+                  "autopilot",
+                  "team"
+                ]
+              },
+              "uniqueItems": true,
+              "maxItems": 8
+            },
+            "hidden": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "summary",
+                  "work",
+                  "devops",
+                  "ticket",
+                  "workspace",
+                  "skipped",
+                  "autopilot",
+                  "team"
+                ]
+              },
+              "uniqueItems": true,
+              "maxItems": 8
+            }
+          },
+          "description": "Ordre et visibilité des modules de l’écran de session. Préférence personnelle commune à tous les projets, modifiable depuis Personnaliser l’affichage."
         }
       }
     }
@@ -208,7 +265,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.33.0.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.34.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",

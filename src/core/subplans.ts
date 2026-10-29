@@ -138,6 +138,7 @@ export function acceptSubplan(feature: Feature, step: FeatureStep, agents: Agent
     child.budget = structuredClone(feature.budget);
     // Every child step is a human checkpoint, including development before the test agent.
     child.autopilot = {
+      autoAnswerRecommended: feature.autopilot?.autoAnswerRecommended,
       checkpoints: child.steps.map((s) => s.id),
       maxRuns: child.budget?.maxRuns || 10,
       maxCorrectionCycles: 3,

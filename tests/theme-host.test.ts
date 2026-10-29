@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostMessage, StudioState } from '../src/shared/types';
 import { DRAGON_BALL_CODE, DRAGON_BALL_UNLOCK_KEY } from '../src/shared/dragonBall';
+import { normalizeSessionLayout } from '../src/shared/sessionLayout';
 
 const host = vi.hoisted(() => {
   const messages: HostMessage[] = [];
@@ -36,6 +37,7 @@ const host = vi.hoisted(() => {
     failSecretWrite: false,
     zoom: undefined as unknown,
     livingHq: undefined as unknown,
+    sessionLayout: undefined as unknown,
     cliPath: undefined as unknown,
     failWrite: false,
     writes: [] as unknown[][],
@@ -108,14 +110,17 @@ vi.mock('vscode', () => ({
             ? host.zoom
             : key === 'appearance.livingHq'
               ? host.livingHq
-              : key === 'cliPath'
-                ? host.cliPath
-                : fallback,
+              : key === 'appearance.sessionLayout'
+                ? host.sessionLayout
+                : key === 'cliPath'
+                  ? host.cliPath
+                  : fallback,
       update: async (...args: unknown[]) => {
         host.writes.push(args);
         if (host.failWrite) throw new Error('Le profil est en lecture seule.');
         if (args[0] === 'appearance.zoom') host.zoom = args[1];
         else if (args[0] === 'appearance.livingHq') host.livingHq = args[1];
+        else if (args[0] === 'appearance.sessionLayout') host.sessionLayout = args[1];
         else if (args[0] === 'cliPath') host.cliPath = args[1];
         else host.theme = args[1];
         host.configurationChanged?.({
@@ -261,6 +266,7 @@ describe('personal theme host boundary', () => {
     host.failSecretWrite = false;
     host.zoom = undefined;
     host.livingHq = undefined;
+    host.sessionLayout = undefined;
     host.cliPath = undefined;
     host.dedicated = false;
     host.mode = 3;
@@ -605,6 +611,33 @@ describe('personal theme host boundary', () => {
     await host.commands.get('featureStudio.open')!();
     expect(host.createPanel).toHaveBeenCalledTimes(1);
     expect(host.executeCommand).toHaveBeenCalledWith('workbench.action.closeSidebar');
+  });
+  it('stores the session layout globally while busy, restores it on ready and reports write failures', async () => {
+    const api = await activate();
+    const before = api.getState();
+    const layout = normalizeSessionLayout({ order: ['team', 'work'], hidden: ['autopilot'] });
+    await api.dispatch({ type: 'setSessionLayout', layout, requestId: 'layout-save' });
+    expect(host.writes).toEqual([['appearance.sessionLayout', layout, 1]]);
+    expect(api.getState()).toEqual(before);
+    expect(host.initialize).not.toHaveBeenCalled();
+    await host.commands.get('featureStudio.open')!();
+    await api.dispatch({ type: 'ready' });
+    expect(host.messages).toContainEqual(
+      expect.objectContaining({ type: 'sessionLayoutState', layout }),
+    );
+    host.failWrite = true;
+    await api.dispatch({
+      type: 'setSessionLayout',
+      layout: normalizeSessionLayout(undefined),
+      requestId: 'layout-failure',
+    });
+    expect(host.messages.at(-1)).toMatchObject({
+      type: 'sessionLayoutState',
+      requestId: 'layout-failure',
+      layout,
+      error: 'Le profil est en lecture seule.',
+    });
+    expect(host.sessionLayout).toEqual(layout);
   });
   it('persists the session HQ globally, serializes choices and recovers after failed writes without running agents', async () => {
     const api = await activate();

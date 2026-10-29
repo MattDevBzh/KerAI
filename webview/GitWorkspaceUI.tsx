@@ -466,7 +466,9 @@ function CheckpointPanel({
                   {snapshot.branch} · {snapshot.head.slice(0, 8)}
                 </small>
                 <small>
-                  {snapshot.fileCount} fichiers · {size(snapshot.totalBytes)}
+                  {snapshot.storedFileCount === undefined
+                    ? `${snapshot.fileCount} fichiers · ${size(snapshot.totalBytes)}`
+                    : `${snapshot.fileCount} fichiers référencés · ${snapshot.storedFileCount} sauvegardés hors de Git · ${size(snapshot.storedBytes ?? 0)}`}
                   {snapshot.excludedCount > 0 ? ` · ${snapshot.excludedCount} exclus` : ''}
                 </small>
                 {snapshot.stepId && (

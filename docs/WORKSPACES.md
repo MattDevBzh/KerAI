@@ -35,7 +35,7 @@ Deux cockpits de projets sources distincts peuvent travailler en parallèle. Un 
 
 L’historique d’une tentative donne les raccourcis **Avant**, **Après** et **Comparer** vers les points qui lui sont réellement rattachés. Une capture avant indisponible empêche d’aller jusqu’aux hooks et à l’appel IA de cette tentative. Une capture après impossible produit un avertissement ; un point absent n’est pas présenté comme enregistré.
 
-Les contenus sont stockés dans des objets privés immuables indexés par SHA-256, avec un manifeste propre au point. Le stockage est situé hors du checkout. La capture conserve les octets, les bits de mode des fichiers réguliers et les métadonnées de branche/HEAD ; ces métadonnées ne sont pas une copie de l’index ou de toute la base Git. Elle ne conserve pas les dates, ACL ou autres attributs étendus de fichiers.
+Les contenus identiques à la version Git sont référencés dans le manifeste v2 ; une référence privée conserve le commit nécessaire même après un reset et une collecte Git. Les contenus supplémentaires sont stockés dans des objets privés immuables indexés par SHA-256. La reconstruction des fins de ligne Windows est vérifiée à l’identique, et les anciennes captures v1 restent utilisables. Les fichiers sont toujours inventoriés et vérifiés ; seul leur contenu déjà disponible dans Git cesse d’être dupliqué. Le stockage est situé hors du checkout. La capture conserve les octets, les bits de mode des fichiers réguliers et les métadonnées de branche/HEAD ; ces métadonnées ne sont pas une copie de l’index ou de toute la base Git. Elle ne conserve pas les dates, ACL ou autres attributs étendus de fichiers.
 
 ## Comparer sans modifier
 
@@ -75,12 +75,12 @@ Les points ne sont **pas une sauvegarde exhaustive**. Les limites portent sur le
 | Limite                               | Comportement                                                                         |
 | ------------------------------------ | ------------------------------------------------------------------------------------ |
 | **4 MiB par fichier**                | Un fichier plus gros est exclu et signalé                                            |
-| **64 MiB de contenus par point**     | Dépasser le total refuse la capture                                                  |
-| **10 000 fichiers candidats**        | Dépasser ce nombre refuse la capture                                                 |
+| **64 MiB de contenus copiés hors de Git**     | Dépasser le total refuse la capture                                                  |
+| **10 000 fichiers copiés hors de Git**        | Dépasser ce nombre refuse la capture                                                 |
 | **200 chemins d’exclusion affichés** | Le compteur peut être plus grand ; le manifeste conserve l’inventaire des exclusions |
-| **8 MiB de manifeste / sortie Git**  | Une donnée trop volumineuse refuse l’opération                                       |
+| **64 MiB de manifeste / sortie Git**  | Une donnée trop volumineuse refuse l’opération                                       |
 
-Dans un dépôt Git, les candidats sont les fichiers suivis et les fichiers non suivis non ignorés. Les fichiers non suivis exclus par les règles Git ne sont pas capturés : un inventaire compact de leurs chemins ou dossiers permet aussi de les protéger si les règles changent entre deux points. Les candidats et entrées ignorées sont limités ensemble à 10 000. Un fichier déjà suivi demeure candidat même s’il correspond ensuite à un motif de `.gitignore` ; les autres exclusions ci-dessous continuent de s’appliquer.
+Dans un dépôt Git, les candidats sont les fichiers suivis et les fichiers non suivis non ignorés. Les fichiers non suivis exclus par les règles Git ne sont pas capturés : un inventaire compact de leurs chemins ou dossiers permet aussi de les protéger si les règles changent entre deux points. Les candidats et entrées ignorées sont bornés ensemble à 250 000 pour limiter l’inventaire ; les fichiers déjà présents dans Git ne comptent pas dans le plafond des 10 000 contenus copiés. Un fichier déjà suivi demeure candidat même s’il correspond ensuite à un motif de `.gitignore` ; les autres exclusions ci-dessous continuent de s’appliquer.
 
 Sont exclus :
 

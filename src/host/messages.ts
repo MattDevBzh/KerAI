@@ -8,6 +8,7 @@ import { dashboardMessageVariants } from '../core/dashboardSchemas';
 import { devOpsMessageVariants } from '../core/devopsSchemas';
 import { discussionMessageVariants, discussionFeaturePlanSchema } from '../core/discussionSchemas';
 import { z } from 'zod';
+import { SESSION_MODULE_IDS } from '../shared/sessionLayout';
 import { observationOptionsSchema } from '../core/observationSchemas';
 import { settingsSchema } from '../core/store';
 import { avatarSchema } from '../core/registry';
@@ -119,6 +120,24 @@ export const messageSchema = z.discriminatedUnion('type', [
     .strict(),
   z.object({ type: z.literal('setTheme'), theme: z.enum(THEME_IDS), requestId: id }).strict(),
   z.object({ type: z.literal('setLivingHq'), enabled: z.boolean(), requestId: id }).strict(),
+  z
+    .object({
+      type: z.literal('setSessionLayout'),
+      requestId: id,
+      layout: z
+        .object({
+          order: z
+            .array(z.enum(SESSION_MODULE_IDS))
+            .length(SESSION_MODULE_IDS.length)
+            .refine((ids) => new Set(ids).size === ids.length),
+          hidden: z
+            .array(z.enum(SESSION_MODULE_IDS))
+            .max(SESSION_MODULE_IDS.length)
+            .refine((ids) => new Set(ids).size === ids.length),
+        })
+        .strict(),
+    })
+    .strict(),
   z
     .object({
       type: z.literal('hqWindow'),
@@ -463,6 +482,14 @@ export const messageSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.enum(['startAutopilot', 'pauseAutopilot']), featureId: id }).strict(),
+  z
+    .object({
+      type: z.literal('setAutopilotAnswers'),
+      featureId: id,
+      enabled: z.boolean(),
+      requestId: id,
+    })
+    .strict(),
   z.object({ type: z.literal('previewAutopilot'), featureId: id, requestId: id }).strict(),
   z
     .object({

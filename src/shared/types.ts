@@ -1,4 +1,5 @@
 import type { ZoomPreference } from './zoom';
+import type { SessionLayoutPreference } from './sessionLayout';
 import type { DevOpsClientMessage, DevOpsState } from './devops';
 import type { ThemeId } from './themes';
 export * from './themes';
@@ -368,6 +369,7 @@ export type ClientMessage =
     }
   | { type: 'setAgentFavorite'; agentId: string; favorite: boolean; requestId: string }
   | { type: 'setLivingHq'; enabled: boolean; requestId: string }
+  | { type: 'setSessionLayout'; layout: SessionLayoutPreference; requestId: string }
   | { type: 'hqWindow'; action: 'detach' | 'fullscreen'; requestId: string }
   | { type: 'setZoom'; zoom: ZoomPreference; requestId: string }
   | { type: 'setTheme'; theme: ThemeId; requestId: string }
@@ -546,6 +548,7 @@ export type ClientMessage =
   | { type: 'deleteWorkflow'; workflowId: string; requestId: string }
   | import('./discussions').DiscussionClientMessage
   | { type: 'saveAutopilot'; featureId: string; config: AutopilotConfig; requestId?: string }
+  | { type: 'setAutopilotAnswers'; featureId: string; enabled: boolean; requestId: string }
   | {
       type: 'renewCorrectionLoop';
       featureId: string;
@@ -629,6 +632,12 @@ export type HostMessage =
     }
   | import('./kits').KitHostMessage
   | { type: 'livingHqState'; enabled: boolean; requestId?: string; error?: string }
+  | {
+      type: 'sessionLayoutState';
+      layout: SessionLayoutPreference;
+      requestId?: string;
+      error?: string;
+    }
   | { type: 'zoomState'; zoom: ZoomPreference; requestId?: string; error?: string }
   | { type: 'themeState'; theme: ThemeId; requestId?: string; error?: string }
   | ({ type: 'profileSaveResult'; requestId: string; error?: string } & Partial<

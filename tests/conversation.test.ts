@@ -155,10 +155,8 @@ it('keeps a solo artifact and native session while explaining it, then negotiate
     phase: 'review',
   });
   expect(approvalBlockers(f.feature, f.step, 'human')).toEqual([]);
-  await expect(f.action('message', { content: 'Pourquoi ?' })).rejects.toThrow('Passe en pair');
   const artifact = structuredClone(attempt.artifact),
     revision = attempt.revision;
-  await f.action('pair');
   f.run(async (input) => {
     expect(input.nativeReadOnly).toBe(true);
     expect(input.resumeSessionId).toBe('same-native-session');
@@ -170,7 +168,10 @@ it('keeps a solo artifact and native session while explaining it, then negotiate
   await f.idle();
   expect(attempt.artifact).toEqual(artifact);
   expect(attempt.revision).toBe(revision);
-  expect(pair.phase).toBe('review');
+  expect(pair).toMatchObject({ mode: 'pair', engaged: true, phase: 'review' });
+  expect(f.feature.execution?.permissionMode).toBe('manual');
+  expect(f.step.status).toBe('awaiting_review');
+  expect(approvalBlockers(f.feature, f.step, 'human')).toEqual([]);
   expect(pair.pendingMessages).toEqual([]);
   await f.service.pairAction(command);
   expect(f.inputs).toHaveLength(2);
@@ -259,6 +260,9 @@ it('steers a running solo conversation exactly once, keeps mode changes separate
   );
   const { completed: running } = await f.startRunning();
   const pair = f.step.attempts[0].pair!;
+  await expect(f.action('message', { content: 'Pendant le travail solo' })).rejects.toThrow(
+    'Passe en pair',
+  );
   await f.action('pair');
   expect(pair.mode).toBe('solo');
   expect(pair.requestedMode).toBe('pair');
@@ -354,10 +358,9 @@ it('never automatically retries an uncertain message, keeps it across reopening,
   expect(f.inputs).toHaveLength(2);
 });
 
-it('conserves the draft decision and pending delivery when saving an action fails', async () => {
+it('keeps the solo result and draft when saving a direct follow-up fails', async () => {
   const f = await fixture();
   await f.start();
-  await f.action('pair');
   const pair = f.step.attempts[0].pair!,
     before = structuredClone(pair);
   vi.spyOn(f.store, 'save').mockRejectedValueOnce(new Error('Storage unavailable'));

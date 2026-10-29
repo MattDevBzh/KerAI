@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants, type Stats } from 'node:fs';
 import {
   chmod,
@@ -27,8 +27,9 @@ export const CHECKPOINT_LIMITS = {
   fileBytes: 4 * 1024 * 1024,
   totalBytes: 64 * 1024 * 1024,
   files: 10000,
+  inventoryFiles: 250000,
   excludedPaths: 200,
-  manifestBytes: 8 * 1024 * 1024,
+  manifestBytes: 64 * 1024 * 1024,
 } as const;
 const featureId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,119}$/);
 const checkpointId = z.string().uuid();
@@ -38,6 +39,13 @@ const privateFileSchema = z
     size: z.number().int().min(0).max(CHECKPOINT_LIMITS.fileBytes),
     mode: z.number().int().min(0).max(0o777),
     binary: z.boolean(),
+    git: z
+      .object({
+        oid: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+        crlf: z.literal(true).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 const checkpointSchema = z
@@ -47,11 +55,13 @@ const checkpointSchema = z
     kind: z.enum(['before-run', 'after-run', 'manual', 'recovery']),
     createdAt: z.string(),
     branch: z.string().max(1000),
-    head: z.string().max(128),
+    head: z.union([z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/), z.literal('')]),
     stepId: z.string().min(1).max(500).optional(),
     attemptId: featureId.optional(),
-    fileCount: z.number().int().min(0).max(CHECKPOINT_LIMITS.files),
-    totalBytes: z.number().int().min(0).max(CHECKPOINT_LIMITS.totalBytes),
+    fileCount: z.number().int().min(0).max(CHECKPOINT_LIMITS.inventoryFiles),
+    totalBytes: z.number().int().nonnegative(),
+    storedFileCount: z.number().int().min(0).max(CHECKPOINT_LIMITS.files).optional(),
+    storedBytes: z.number().int().min(0).max(CHECKPOINT_LIMITS.totalBytes).optional(),
     excludedCount: z.number().int().nonnegative(),
     excludedPaths: z.array(z.string().max(2000)).max(CHECKPOINT_LIMITS.excludedPaths),
   })
@@ -80,7 +90,7 @@ function privateDictionary<T>(valueSchema: z.ZodType<T>): z.ZodType<Record<strin
 }
 const manifestSchema = z
   .object({
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
     featureId,
     root: z.string().min(1),
     checkpoint: checkpointSchema,
@@ -163,7 +173,7 @@ export class FeatureWorkspace {
     const requested = new Set(ids.map((id) => checkpointId.parse(id)));
     return this.serial(async () => {
       const root = await this.privateRoot();
-      const owned: string[] = [];
+      const owned: Manifest[] = [];
       const reachable = new Set<string>();
       for (const name of await readdir(path.join(root, 'manifests')).catch((error) => {
         if (absent(error)) return [];
@@ -183,15 +193,23 @@ export class FeatureWorkspace {
         );
         if (`${manifest.checkpoint.id}.json` !== name)
           throw new Error('Identifiant de manifeste privé incohérent ; collecte suspendue.');
-        if (manifest.featureId === ownerId) owned.push(name);
+        if (manifest.featureId === ownerId) owned.push(manifest);
         else {
           if (requested.has(manifest.checkpoint.id))
             throw new Error('Point de restauration appartenant à une autre session.');
-          for (const file of Object.values(manifest.files)) reachable.add(file.hash);
+          for (const file of Object.values(manifest.files)) if (!file.git) reachable.add(file.hash);
         }
       }
       // Capture may have committed a manifest before its reference reached the session index.
-      for (const name of owned) await unlink(await this.privatePath(`manifests/${name}`));
+      for (const manifest of owned) {
+        await unlink(await this.privatePath(`manifests/${manifest.checkpoint.id}.json`));
+        if (manifest.version === 2 && manifest.checkpoint.head)
+          await this.updateCheckpointRef(await this.source(), [
+            '-d',
+            this.checkpointRef(ownerId, manifest.checkpoint.id),
+            manifest.checkpoint.head,
+          ]);
+      }
       for (const name of await readdir(path.join(root, 'objects')).catch((error) => {
         if (absent(error)) return [];
         throw error;
@@ -649,6 +667,15 @@ export class FeatureWorkspace {
         excludedPaths.push(`${name} : ${reason}`.slice(0, 2000));
     };
     const candidates = await this.candidates(root, git);
+    const committed = new Map<string, string>();
+    if (identity.head) {
+      const tree = machineText(await this.checkedGit(root, ['ls-tree', '-r', '-z', identity.head]));
+      for (const record of tree.split('\0')) {
+        if (!record) continue;
+        const match = /^(100644|100755) blob ([a-f0-9]{40}|[a-f0-9]{64})\t([\s\S]+)$/.exec(record);
+        if (match) committed.set(match[3], match[2]);
+      }
+    }
     const ignored = git
       ? [
           ...new Set(
@@ -668,8 +695,10 @@ export class FeatureWorkspace {
           ),
         ].sort()
       : [];
-    if (candidates.length + ignored.length > CHECKPOINT_LIMITS.files)
-      throw new Error(`Plus de ${CHECKPOINT_LIMITS.files} fichiers : checkpoint refusé.`);
+    if (candidates.length + ignored.length > CHECKPOINT_LIMITS.inventoryFiles)
+      throw new Error(
+        `Inventaire du point de restauration trop volumineux : plus de ${CHECKPOINT_LIMITS.inventoryFiles} entrées.`,
+      );
     // Ignored directories are compact prefixes; their contents are never traversed or read.
     for (const name of ignored) exclude(name, 'Ignoré par Git (fichier ou préfixe de dossier).');
     for (const name of candidates) {
@@ -705,18 +734,57 @@ export class FeatureWorkspace {
         current.mode !== before.mode
       )
         throw new Error(`Le fichier ${name} a été remplacé pendant le checkpoint.`);
-      totalBytes += content.length;
-      if (totalBytes > CHECKPOINT_LIMITS.totalBytes)
-        throw new Error(`Plus de ${CHECKPOINT_LIMITS.totalBytes} octets : checkpoint refusé.`);
+      const base = committed.get(name);
+      const gitContent = base ? this.reusableGitContent(content, base) : undefined;
+      if (!gitContent) {
+        totalBytes += content.length;
+        if (totalBytes > CHECKPOINT_LIMITS.totalBytes)
+          throw new Error(
+            'Point de restauration refusé : plus de 64 Mio de contenus nouveaux ou modifiés à sauvegarder hors de Git. Aucun checkpoint incomplet n’a été créé.',
+          );
+        if (contents.size >= CHECKPOINT_LIMITS.files)
+          throw new Error(
+            `Point de restauration refusé : plus de ${CHECKPOINT_LIMITS.files} fichiers à sauvegarder hors de Git. Les fichiers réutilisés depuis le commit ne comptent pas dans cette limite.`,
+          );
+        contents.set(name, content);
+      }
       files[name] = {
         hash: sha256(content),
         size: content.length,
         mode: before.mode & 0o777,
         binary: binary(content),
+        ...(gitContent ? { git: gitContent } : {}),
       };
-      contents.set(name, content);
     }
     return { root, ...identity, files, contents, exclusions, excludedCount, excludedPaths };
+  }
+  private checkpointRef(ownerId: string, id: string): string {
+    return `refs/feature-studio/checkpoints/${featureId.parse(ownerId)}/${checkpointId.parse(id)}`;
+  }
+  private async updateCheckpointRef(root: string, args: string[]): Promise<void> {
+    const hooks = await this.privatePath('empty-hooks', root);
+    await mkdir(hooks, { recursive: true, mode: 0o700 });
+    if ((await readdir(hooks)).length)
+      throw new Error('Le dossier de hooks neutralisés doit rester vide.');
+    await this.checkedGit(root, ['update-ref', ...args], [`core.hooksPath=${hooks}`]);
+  }
+  /** Reuse immutable Git bytes only after proving that they reconstruct the exact checkout bytes. */
+  private reusableGitContent(content: Buffer, oid: string): StoredFile['git'] {
+    const objectId = (bytes: Buffer) =>
+      createHash(oid.length === 64 ? 'sha256' : 'sha1')
+        .update(`blob ${bytes.length}\0`)
+        .update(bytes)
+        .digest('hex');
+    if (objectId(content) === oid) return { oid };
+    if (!binary(content)) {
+      const lf = Buffer.from(content.toString('utf8').replace(/\r\n/g, '\n'));
+      if (objectId(lf) === oid && this.withCrlf(lf).equals(content)) return { oid, crlf: true };
+    }
+    // Custom filters/encodings and mixed line endings remain byte-exact private objects.
+    return undefined;
+  }
+  private withCrlf(content: Buffer): Buffer {
+    return Buffer.from(content.toString('utf8').replace(/\n/g, '\r\n'));
   }
   private async immutableWrite(destination: string, content: Buffer): Promise<void> {
     await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
@@ -753,7 +821,12 @@ export class FeatureWorkspace {
       ...(input.stepId ? { stepId: input.stepId } : {}),
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
       fileCount: Object.keys(snapshot.files).length,
-      totalBytes: [...snapshot.contents.values()].reduce((sum, content) => sum + content.length, 0),
+      totalBytes: Object.values(snapshot.files).reduce((sum, file) => sum + file.size, 0),
+      storedFileCount: snapshot.contents.size,
+      storedBytes: [...snapshot.contents.values()].reduce(
+        (sum, content) => sum + content.length,
+        0,
+      ),
       excludedCount: snapshot.excludedCount,
       excludedPaths: snapshot.excludedPaths,
     });
@@ -763,7 +836,7 @@ export class FeatureWorkspace {
         content,
       );
     const manifest: Manifest = {
-      version: 1,
+      version: 2,
       featureId: feature.id,
       root: snapshot.root,
       checkpoint,
@@ -773,10 +846,24 @@ export class FeatureWorkspace {
     const encoded = Buffer.from(JSON.stringify(manifest));
     if (encoded.length > CHECKPOINT_LIMITS.manifestBytes)
       throw new Error('Manifeste trop volumineux.');
-    await this.immutableWrite(
-      await this.privatePath(`manifests/${checkpoint.id}.json`, snapshot.root),
-      encoded,
-    );
+    const destination = await this.privatePath(`manifests/${checkpoint.id}.json`, snapshot.root);
+    const ref = this.checkpointRef(feature.id, checkpoint.id);
+    // A private ref keeps the original commit reachable even after commits, resets and Git GC.
+    if (snapshot.head)
+      await this.updateCheckpointRef(snapshot.root, [
+        ref,
+        snapshot.head,
+        '0'.repeat(snapshot.head.length),
+      ]);
+    try {
+      await this.immutableWrite(destination, encoded);
+    } catch (error) {
+      if (snapshot.head)
+        await this.updateCheckpointRef(snapshot.root, ['-d', ref, snapshot.head]).catch(
+          () => undefined,
+        );
+      throw error;
+    }
     return checkpoint;
   }
   capture(
@@ -814,9 +901,20 @@ export class FeatureWorkspace {
       throw new Error('Manifeste incohérent.');
     if (
       Object.keys(manifest.exclusions).length !== manifest.checkpoint.excludedCount ||
-      Object.keys(manifest.exclusions).length > CHECKPOINT_LIMITS.files
+      Object.keys(manifest.exclusions).length > CHECKPOINT_LIMITS.inventoryFiles
     )
       throw new Error('Inventaire des exclusions incohérent.');
+    const stored = values.filter((file) => !file.git);
+    if (
+      (manifest.version === 1 && values.some((file) => file.git)) ||
+      (values.some((file) => file.git) && !manifest.checkpoint.head) ||
+      stored.length > CHECKPOINT_LIMITS.files ||
+      stored.reduce((sum, file) => sum + file.size, 0) > CHECKPOINT_LIMITS.totalBytes ||
+      (manifest.version === 2 &&
+        (manifest.checkpoint.storedFileCount !== stored.length ||
+          manifest.checkpoint.storedBytes !== stored.reduce((sum, file) => sum + file.size, 0)))
+    )
+      throw new Error('Inventaire des contenus sauvegardés incohérent.');
     for (const name of Object.keys(manifest.files)) {
       filePath(name);
       if (blocked(name)) throw new Error('Un manifeste référence un fichier protégé.');
@@ -915,6 +1013,18 @@ export class FeatureWorkspace {
     return this.serial(() => this.comparison(feature, id, targetId));
   }
   private async blob(file: StoredFile, root: string): Promise<Buffer> {
+    if (file.git) {
+      const size = Number(
+        machineText(await this.checkedGit(root, ['cat-file', '-s', file.git.oid])).trim(),
+      );
+      if (!Number.isSafeInteger(size) || size < 0 || size > CHECKPOINT_LIMITS.fileBytes)
+        throw new Error('Objet Git du point de restauration invalide ou trop volumineux.');
+      const raw = await this.checkedGit(root, ['cat-file', 'blob', file.git.oid]);
+      const content = file.git.crlf ? this.withCrlf(raw) : raw;
+      if (content.length !== file.size || sha256(content) !== file.hash)
+        throw new Error('Empreinte de l’objet Git du point de restauration invalide.');
+      return content;
+    }
     const target = await this.privatePath(`objects/${file.hash}`, root),
       stat = await lstat(target);
     if (!stat.isFile() || stat.size !== file.size || stat.size > CHECKPOINT_LIMITS.fileBytes)
@@ -952,7 +1062,12 @@ export class FeatureWorkspace {
     } catch (error) {
       if (!absent(error)) throw error;
     }
-    if (JSON.stringify(actual) !== JSON.stringify(expected))
+    if (
+      actual?.hash !== expected?.hash ||
+      actual?.size !== expected?.size ||
+      actual?.mode !== expected?.mode ||
+      actual?.binary !== expected?.binary
+    )
       throw new Error(`Modification concurrente détectée : ${name}.`);
     return destination;
   }

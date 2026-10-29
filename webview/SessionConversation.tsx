@@ -10,7 +10,7 @@ import type {
   FeatureStep,
   StudioState,
 } from '../src/shared/types';
-import { nextPairBlock, pairPlan, type PairAction } from '../src/shared/pair';
+import { canDiscussResult, nextPairBlock, pairPlan, type PairAction } from '../src/shared/pair';
 import { permissionLabels } from '../src/shared/native';
 import { Avatar } from './Avatar';
 import { NativeContextPanel } from './NativeContextPanel';
@@ -512,7 +512,7 @@ export function SessionConversation({
         </details>
       )}
       {!locked &&
-        (mode === 'pair' ? (
+        (mode === 'pair' || canDiscussResult(step.status, pair) ? (
           <form
             className="conversation-composer"
             onSubmit={(event) => {

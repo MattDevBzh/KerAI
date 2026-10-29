@@ -160,7 +160,11 @@ async function open(page: Page, state: StudioState) {
                 if (message.action === 'pause') pair.pauseRequested = true;
                 if (message.action === 'preferences' && message.preferences)
                   pair.preferences = message.preferences;
-                if (message.action === 'message')
+                if (message.action === 'message') {
+                  if (!pair.busy && data.features[0].steps[0].status === 'awaiting_review') {
+                    pair.mode = 'pair';
+                    pair.engaged = true;
+                  }
                   pair.messages.push({
                     id: message.requestId,
                     requestId: message.requestId,
@@ -171,6 +175,7 @@ async function open(page: Page, state: StudioState) {
                     status: 'complete',
                     delivery: pair.busy ? 'pending' : 'received',
                   });
+                }
                 pair.version++;
               }
               publish();
@@ -288,26 +293,68 @@ test('shows the same native timeline in solo, joins pair without changing permis
   expect((await sent(page)).filter((m) => m.type === 'setPermissionMode')).toHaveLength(0);
 });
 
-test('keeps the chat open for final questions, routes the artifact link back, and locks only after step validation', async ({
+for (const mode of ['solo', 'pair'] as const) {
+  test(`keeps the ${mode} chat open for final questions and locks only after step validation`, async ({
+    page,
+  }) => {
+    await open(page, scenario(mode));
+    await expect(page.locator('.conversation-state')).toContainText('Résultat prêt');
+    await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Filtres simples' })).toBeVisible();
+    await page.getByRole('button', { name: 'Revenir à la conversation' }).click();
+    await page.getByLabel('Ton message à l’agent').fill('Pourquoi ces contrôles ?');
+    await page.evaluate(() => Reflect.set(window, 'conversationError', 'Stockage indisponible'));
+    await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Stockage indisponible');
+    await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('Pourquoi ces contrôles ?');
+    await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
+    await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
+    await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('Pourquoi ces contrôles ?');
+    await page.evaluate(() => Reflect.set(window, 'conversationError', ''));
+    await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
+    await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('');
+    expect((await sent(page)).filter((m) => m.type === 'pairAction').map((m) => m.action)).toEqual([
+      'message',
+      'message',
+    ]);
+    expect(
+      (await sent(page)).filter(
+        (m) => m.type === 'approveStep' || m.type === 'runStep' || m.type === 'setPermissionMode',
+      ),
+    ).toHaveLength(0);
+    await update(page, 'approved');
+    await expect(page.locator('.conversation-state')).toContainText('Étape validée');
+    await expect(page.getByLabel('Ton message à l’agent')).toHaveCount(0);
+    expect((await sent(page)).filter((m) => m.type === 'openReportDiscussion')).toHaveLength(0);
+  });
+}
+
+test('opens the composer when a running solo task finishes without requiring a mode switch', async ({
   page,
 }) => {
-  await open(page, scenario());
-  await expect(page.locator('.conversation-state')).toContainText('Résultat prêt');
-  await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Filtres simples' })).toBeVisible();
-  await page.getByRole('button', { name: 'Revenir à la conversation' }).click();
-  await page.getByLabel('Ton message à l’agent').fill('Pourquoi ces contrôles ?');
-  await page.evaluate(() => Reflect.set(window, 'conversationError', 'Stockage indisponible'));
-  await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Stockage indisponible');
-  await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('Pourquoi ces contrôles ?');
-  await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
-  await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
-  await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('Pourquoi ces contrôles ?');
-  await update(page, 'approved');
-  await expect(page.locator('.conversation-state')).toContainText('Étape validée');
+  await open(page, scenario('solo', true));
   await expect(page.getByLabel('Ton message à l’agent')).toHaveCount(0);
-  expect((await sent(page)).filter((m) => m.type === 'openReportDiscussion')).toHaveLength(0);
+  await page.evaluate(() => {
+    const state = Reflect.get(window, 'conversationState') as StudioState;
+    const step = state.features[0].steps[0],
+      attempt = step.attempts[0];
+    step.status = attempt.status = 'awaiting_review';
+    attempt.pair!.busy = false;
+    attempt.pair!.phase = 'review';
+    state.features[0].status = 'attention';
+    Reflect.get(window, 'conversationPublish')();
+  });
+  await expect(page.getByLabel('Ton message à l’agent')).toBeEnabled();
+  await page.getByLabel('Ton message à l’agent').fill('Peux-tu expliquer ce résultat ?');
+  await page.getByLabel('Ton message à l’agent').press('Control+Enter');
+  await expect
+    .poll(async () => (await sent(page)).filter((m) => m.type === 'pairAction').length)
+    .toBe(1);
+  expect((await sent(page)).filter((m) => m.type === 'pairAction')[0]).toMatchObject({
+    action: 'message',
+    attemptId: 'conversation-attempt',
+    content: 'Peux-tu expliquer ce résultat ?',
+  });
 });
 
 test('keeps rhythm, explanations, permissions and takeover as independent explicit choices', async ({

@@ -24,8 +24,15 @@ export const checkpointSchema = z
     head: z.union([commit, z.literal('')]),
     stepId: short.optional(),
     attemptId: short.optional(),
-    fileCount: z.number().int().nonnegative().max(100000),
+    fileCount: z.number().int().nonnegative().max(250000),
     totalBytes: z.number().int().nonnegative(),
+    storedFileCount: z.number().int().nonnegative().max(10000).optional(),
+    storedBytes: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(64 * 1024 * 1024)
+      .optional(),
     excludedCount: z.number().int().nonnegative(),
     excludedPaths: z.array(z.string().max(4000)).max(1000),
   })

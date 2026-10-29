@@ -1916,6 +1916,75 @@ describe('autopilot question continuation and recommendations', () => {
     ]);
   });
 
+  it('can disable recommendations during a run, wait for the user, and continue the pilot', async () => {
+    const f = await configured();
+    let ready!: () => void, ask!: () => void;
+    const started = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const nextQuestion = new Promise<void>((resolve) => {
+      ask = resolve;
+    });
+    f.run(async (_input, callbacks) => {
+      ready();
+      await nextQuestion;
+      expect(
+        await callbacks.onQuestion!({
+          question: 'Cadence ?',
+          choices: ['Lots (Recommandé)', 'One shot'],
+          allowFreeform: false,
+        }),
+      ).toBe('One shot');
+      return finished();
+    });
+    const running = f.service.startAutopilot(f.feature.id);
+    await started;
+    await f.service.setAutopilotAnswers(f.feature.id, false);
+    expect(f.feature.autopilot?.status).toBe('running');
+    expect((await new Store(f.storage).load()).features[0].autopilot?.autoAnswerRecommended).toBe(
+      false,
+    );
+    ask();
+    await waitForInteraction(() => expect(f.service.state.humanRequests).toHaveLength(1), running);
+    expect(f.feature.autopilot?.automaticAnswers ?? []).toEqual([]);
+    f.service.answerHumanRequest(f.service.state.humanRequests![0].id, 'One shot');
+    await running;
+    expect(f.feature.steps[0].status).toBe('approved');
+    expect(f.feature.autopilot?.autoAnswerRecommended).toBe(false);
+    await f.service.setAutopilotAnswers(f.feature.id, true);
+    expect(f.feature.autopilot?.autoAnswerRecommended).toBe(true);
+    expect(f.feature.autopilot?.runs).toBe(1);
+  });
+
+  it('keeps final-result recommendations unanswered when disabled and resumes after the human answer', async () => {
+    const f = await configured();
+    await f.service.saveAutopilot(f.feature.id, {
+      checkpoints: [],
+      maxRuns: 3,
+      maxCorrectionCycles: 0,
+      stepInputs: {},
+      autoAnswerRecommended: false,
+    });
+    f.run(async () =>
+      f.inputs.length === 1
+        ? {
+            ...finished(),
+            questions: [
+              { id: 'pace', text: 'Cadence ?', choices: ['Lots (Recommandé)', 'One shot'] },
+            ],
+          }
+        : finished(),
+    );
+    await f.service.startAutopilot(f.feature.id);
+    expect(f.feature.autopilot).toMatchObject({ status: 'paused', resumeAfterInteraction: true });
+    expect(f.feature.steps[0].attempts[0].answers.pace).toBeUndefined();
+    expect(f.feature.autopilot?.automaticAnswers ?? []).toEqual([]);
+    await f.service.answerQuestions(f.feature.id, f.feature.steps[0].id, { pace: 'One shot' });
+    expect(f.inputs).toHaveLength(2);
+    expect(f.feature.steps[0].status).toBe('approved');
+    expect(f.feature.autopilot?.autoAnswerRecommended).toBe(false);
+  });
+
   it.each([false, true])(
     'waits for every parallel answer and respects explicit pause=%s',
     async (explicitPause) => {

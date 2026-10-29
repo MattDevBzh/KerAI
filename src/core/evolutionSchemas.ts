@@ -203,6 +203,7 @@ export const correctionLoopStateSchema = z
   .strict();
 export const autopilotConfigSchema = z
   .object({
+    autoAnswerRecommended: z.boolean().optional(),
     correctionLoop: z
       .object({ maxStagnantCycles: z.number().int().min(1).max(10) })
       .strict()

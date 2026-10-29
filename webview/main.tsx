@@ -11,6 +11,7 @@ import './ergonomics.css';
 import { ZoomProvider } from './ZoomControls';
 import { ThemeProvider } from './ThemePicker';
 import { SessionViewProvider } from './SessionViewPreference';
+import { SessionLayoutProvider } from './SessionLayout';
 import { RewardProvider } from './RewardProvider';
 import { SecretThemeProvider } from './SecretThemes';
 createRoot(document.getElementById('root')!).render(
@@ -20,12 +21,14 @@ createRoot(document.getElementById('root')!).render(
         <SecretThemeProvider>
           <ThemeProvider>
             <SessionViewProvider>
-              {document.documentElement.dataset.studioSurface === 'control' ||
-              new URLSearchParams(location.search).get('surface') === 'control' ? (
-                <DashboardWindow />
-              ) : (
-                <App />
-              )}
+              <SessionLayoutProvider>
+                {document.documentElement.dataset.studioSurface === 'control' ||
+                new URLSearchParams(location.search).get('surface') === 'control' ? (
+                  <DashboardWindow />
+                ) : (
+                  <App />
+                )}
+              </SessionLayoutProvider>
             </SessionViewProvider>
           </ThemeProvider>
         </SecretThemeProvider>

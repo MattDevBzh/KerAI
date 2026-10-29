@@ -59,6 +59,21 @@ export function AutopilotBar({
     [starting, setStarting] = useState(false),
     [showAnswers, setShowAnswers] = useState(false);
   const auto = feature.autopilot;
+  const [answerSaving, setAnswerSaving] = useState(false);
+  const [requestedAnswerValue, setRequestedAnswerValue] = useState(true);
+  const [answerError, setAnswerError] = useState('');
+  const answerRequest = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    answerRequest.current = undefined;
+    setAnswerSaving(false);
+    setAnswerError('');
+    return subscribe((message) => {
+      if (message.type !== 'autopilotSaved' || message.requestId !== answerRequest.current) return;
+      answerRequest.current = undefined;
+      setAnswerSaving(false);
+      setAnswerError(message.error ?? '');
+    });
+  }, [feature.id]);
   const [preview, setPreview] = useState<AutopilotPreview>();
   const [previewError, setPreviewError] = useState('');
   const dispatchRef = useRef(dispatch);
@@ -165,6 +180,38 @@ export function AutopilotBar({
         </div>
         <div className="autopilot-actions">
           {auto && (
+            <label className="inline-check autopilot-answer-toggle">
+              <input
+                type="checkbox"
+                aria-label="Répondre automatiquement aux choix recommandés"
+                checked={answerSaving ? requestedAnswerValue : auto.autoAnswerRecommended !== false}
+                disabled={answerSaving || feature.archived || !state.workspace.trusted}
+                onChange={(event) => {
+                  answerRequest.current = crypto.randomUUID();
+                  setRequestedAnswerValue(event.target.checked);
+                  setAnswerSaving(true);
+                  setAnswerError('');
+                  dispatch({
+                    type: 'setAutopilotAnswers',
+                    featureId: feature.id,
+                    enabled: event.target.checked,
+                    requestId: answerRequest.current,
+                  });
+                }}
+              />
+              <span>
+                Réponses automatiques
+                <small>
+                  {answerSaving
+                    ? 'Enregistrement…'
+                    : auto.autoAnswerRecommended === false
+                      ? 'Les questions attendent ta réponse.'
+                      : 'Choix recommandés uniquement.'}
+                </small>
+              </span>
+            </label>
+          )}
+          {auto && (
             <button className="button secondary small" onClick={() => setShowAnswers(true)}>
               Réponses automatiques · {auto.automaticAnswers?.length ?? 0}
             </button>
@@ -211,6 +258,11 @@ export function AutopilotBar({
           )}
         </div>
       </section>
+      {answerError && (
+        <p className="inline-error" role="alert">
+          {answerError}
+        </p>
+      )}
       <CorrectionLoopPanel
         feature={feature}
         dispatch={dispatch}
@@ -298,7 +350,11 @@ export function AutopilotBar({
       {starting && (
         <StudioDialog
           title="Confier la suite à l’autopilot ?"
-          subtitle="Le pilote retient les choix explicitement recommandés et conserve ses réponses. Les autres questions attendent ta réponse, puis le parcours reprend. Les permissions restent manuelles."
+          subtitle={
+            auto?.autoAnswerRecommended === false
+              ? 'Toutes les questions attendent ta réponse, puis le parcours reprend automatiquement. Les permissions restent manuelles.'
+              : 'Le pilote retient les choix explicitement recommandés et conserve ses réponses. Les autres questions attendent ta réponse, puis le parcours reprend. Les permissions restent manuelles.'
+          }
           onClose={() => setStarting(false)}
         >
           <div className="autopilot-summary">
@@ -397,6 +453,7 @@ function AutopilotEditor({
 }) {
   const current = feature.autopilot;
   const [config, setConfig] = useState<AutopilotConfig>({
+    autoAnswerRecommended: current?.autoAnswerRecommended ?? true,
     checkpoints:
       current?.checkpoints ??
       (feature.steps.some((s) => ['plan', 'review'].includes(s.id))
@@ -516,6 +573,23 @@ function AutopilotEditor({
                   Ces profils règlent les validations. Les permissions Copilot et les validations
                   obligatoires restent indépendantes.
                 </small>
+              </label>
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={config.autoAnswerRecommended !== false}
+                  aria-label="Répondre automatiquement aux choix recommandés"
+                  onChange={(event) =>
+                    setConfig({ ...config, autoAnswerRecommended: event.target.checked })
+                  }
+                />
+                <span>
+                  Répondre automatiquement aux choix recommandés
+                  <small>
+                    Décoche pour répondre toi-même à chaque question. Le pilote reprend après ta
+                    réponse.
+                  </small>
+                </span>
               </label>
               <fieldset className="checkpoint-list">
                 <legend>Validation humaine après ces étapes</legend>
@@ -665,10 +739,11 @@ function AutopilotEditor({
                 </>
               )}
               <p className="field-help">
-                Un choix explicitement recommandé est retenu automatiquement. Une autre question
-                attend ta réponse, puis le pilote reprend. Une permission, un budget atteint ou un
-                échec demande une intervention manuelle. Vous pouvez demander sa pause à tout
-                moment.
+                {config.autoAnswerRecommended === false
+                  ? 'Chaque question attend ta réponse, même lorsqu’un choix est recommandé. '
+                  : 'Un choix explicitement recommandé est retenu automatiquement. Les autres questions attendent ta réponse. '}
+                Le pilote reprend après tes réponses. Une permission, un budget atteint ou un échec
+                demande une intervention manuelle. Vous pouvez demander sa pause à tout moment.
               </p>
             </section>
             <section className="autopilot-inputs">
