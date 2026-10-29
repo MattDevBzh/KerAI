@@ -566,7 +566,7 @@ export function LaunchDialog({
                     const block = launch.contextBlocks?.[s.id];
                     const enabled = s.compacted
                       ? false
-                      : (block?.enabled ?? s.enabled ?? contextMode === 'all');
+                      : (block?.enabled ?? contextMode === 'all');
                     const original = s.originalContent ?? s.content;
                     const content = block?.content ?? original;
                     return (
