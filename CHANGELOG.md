@@ -1,6 +1,6 @@
 # Changelog
 
-## À publier
+## 1.34.0 — 2026-10-29
 
 - Worktrees : réutilisation des contenus Git dans les points de restauration ; la limite de 10 000 fichiers et 64 MiB porte sur les contenus supplémentaires à copier. Conservation des anciens points, des fins de ligne Windows et des commits nécessaires à la restauration.
 - Autopilote : réponses recommandées désactivables dans la configuration et en cours de route ; reprise après la réponse humaine et historique conservé.

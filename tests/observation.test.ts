@@ -606,6 +606,7 @@ describe('durable archives and deletion', () => {
   });
   it('preserves shared checkpoint blobs until the last owning session is deleted', async () => {
     const f = await fixture();
+    await writeFile(join(f.workspace, 'shared-local.txt'), 'shared uncommitted content');
     const second = structuredClone(f.feature);
     second.id = 'surviving-feature';
     f.service.engine.features.push(second);
@@ -615,6 +616,7 @@ describe('durable archives and deletion', () => {
     second.checkpoints = [
       await f.service.workspaces.capture(second, { kind: 'manual', label: 'Second' }),
     ];
+    expect(second.checkpoints[0]).toMatchObject({ fileCount: 2, storedFileCount: 1 });
     await f.service.persist();
     await f.service.deleteFeature(f.feature.id);
     expect(
@@ -622,7 +624,12 @@ describe('durable archives and deletion', () => {
         await f.service.workspaces.readFile(second, second.checkpoints[0].id, 'app.txt')
       )?.toString(),
     ).toBe('protected project content');
-    expect((await readdir(join(f.storage, 'workspaces', 'objects'))).length).toBeGreaterThan(0);
+    expect(
+      (
+        await f.service.workspaces.readFile(second, second.checkpoints[0].id, 'shared-local.txt')
+      )?.toString(),
+    ).toBe('shared uncommitted content');
+    expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toHaveLength(1);
     await f.service.deleteFeature(second.id);
     expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toEqual([]);
   });
@@ -648,7 +655,16 @@ describe('durable archives and deletion', () => {
     expect(await readdir(manifests)).toContain(`${orphan.id}.json`);
     await f.service.deleteFeature(f.feature.id);
     expect(await readdir(manifests)).toEqual([`${survivor.checkpoints[0].id}.json`]);
-    expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toHaveLength(1);
+    expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toEqual([]);
+    const refs = await runProcess(
+      'git',
+      ['for-each-ref', '--format=%(refname)', 'refs/feature-studio/checkpoints/'],
+      f.workspace,
+    );
+    expect(refs.code).toBe(0);
+    expect(refs.stdout.trim().split('\n')).toEqual([
+      `refs/feature-studio/checkpoints/${survivor.id}/${survivor.checkpoints[0].id}`,
+    ]);
     expect(
       (
         await f.service.workspaces.readFile(survivor, survivor.checkpoints[0].id, 'app.txt')
@@ -657,6 +673,13 @@ describe('durable archives and deletion', () => {
     await f.service.deleteFeature(survivor.id);
     expect(await readdir(manifests)).toEqual([]);
     expect(await readdir(join(f.storage, 'workspaces', 'objects'))).toEqual([]);
+    const remainingRefs = await runProcess(
+      'git',
+      ['for-each-ref', '--format=%(refname)', 'refs/feature-studio/checkpoints/'],
+      f.workspace,
+    );
+    expect(remainingRefs.code).toBe(0);
+    expect(remainingRefs.stdout.trim()).toBe('');
   });
   it('collects orphan quality media while preserving attachments referenced by surviving sessions', async () => {
     const f = await fixture();
