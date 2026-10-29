@@ -263,6 +263,7 @@ export class StudioService extends EventEmitter {
   private active?: {
     featureId: string;
     stepId: string;
+    nativeSessionId?: string;
     controller: AbortController;
     done: Promise<void>;
   };
@@ -1555,6 +1556,24 @@ export class StudioService extends EventEmitter {
     });
     const controller = new AbortController();
     this.active = { featureId, stepId, controller, done };
+    const progress = (
+      phase: NonNullable<StudioState['runProgress']>['phase'],
+      message: string,
+      counts?: { completed: number; total: number },
+    ) => {
+      if (this.active?.controller !== controller) return;
+      this.state.runProgress = {
+        featureId,
+        stepId,
+        attemptId: attempt.id,
+        phase,
+        message,
+        nativeReady: Boolean(this.active.nativeSessionId),
+        ...counts,
+      };
+      this.publish();
+    };
+    progress('preparing', 'Préparation de la tentative — aucun prompt envoyé.');
     let streamText = '',
       streamId = '';
     let archive: SessionArchive | undefined;
@@ -1596,6 +1615,14 @@ export class StudioService extends EventEmitter {
         }),
     });
     const callbacks: RunCallbacks = {
+      onConnectionProgress: (message) =>
+        progress('connecting', `${message} — aucun prompt envoyé.`),
+      onNativeReady: (id) => {
+        if (this.active?.controller !== controller || controller.signal.aborted) return;
+        if (attempt.sessionId !== id) throw new Error('Connexion native incohérente.');
+        this.active.nativeSessionId = id;
+        progress('connecting', 'Connexion Copilot prête ; transmission du contexte.');
+      },
       onNativeToolStart: (tool, args) =>
         automated ? nativeTests.before(tool, args) : Promise.resolve(),
       onTaskBoard: (update) => {
@@ -1665,13 +1692,17 @@ export class StudioService extends EventEmitter {
         return claim;
       },
       onPromptSending: () => {
+        progress('running', 'Transmission du contexte à Copilot.');
         if (pair?.nativeConversation)
           for (const message of pair.messages)
             if (includedMessages.includes(message.id) && message.delivery === 'pending')
               message.delivery = 'sent';
         this.schedule();
       },
-      onPromptSent: promptSent,
+      onPromptSent: () => {
+        progress('running', 'Copilot travaille sur cette étape.');
+        promptSent();
+      },
       onNativeEventId: (id) => {
         if (pair?.nativeConversation && !pair.nativeEventIds!.includes(id))
           pair.nativeEventIds!.push(id);
@@ -1935,17 +1966,33 @@ export class StudioService extends EventEmitter {
       await archive.flush();
       await this.persist();
       this.assertTrusted();
+      controller.signal.throwIfAborted();
       if (feature.worktree && (!pair || isWorkTurn(turn))) {
-        const before = await this.workspaces.capture(feature, {
-          kind: 'before-run',
-          label: `Avant ${step.name}`.slice(0, 200),
-          stepId,
-          attemptId: attempt.id,
-        });
+        progress('checkpoint', 'Préparation du point de restauration — aucun prompt envoyé.');
+        const before = await this.workspaces.capture(
+          feature,
+          {
+            kind: 'before-run',
+            label: `Avant ${step.name}`.slice(0, 200),
+            stepId,
+            attemptId: attempt.id,
+          },
+          {
+            signal: controller.signal,
+            onProgress: (completed, total) =>
+              progress(
+                'checkpoint',
+                'Vérification des fichiers du point de restauration — aucun prompt envoyé.',
+                { completed, total },
+              ),
+          },
+        );
         this.rememberCheckpoint(feature, before);
         attempt.checkpointBeforeId = before.id;
         await this.persist();
       }
+      controller.signal.throwIfAborted();
+      progress('preparing', 'Préparation du projet et des outils — aucun prompt envoyé.');
       if (!continued && !usesNativeTools(input))
         attempt.existingChangesBackup = await backupProjectChanges(
           input,
@@ -2011,7 +2058,11 @@ export class StudioService extends EventEmitter {
         );
         await this.persist();
       }
+      controller.signal.throwIfAborted();
+      progress('connecting', 'Connexion à Copilot — aucun prompt envoyé.');
       const result = await this.adapter.run(input, callbacks, controller.signal);
+      if (this.active?.controller === controller) this.active.nativeSessionId = undefined;
+      progress('finishing', 'Enregistrement du résultat et des vérifications.');
       for (const evidence of await nativeTests.finish()) callbacks.onEvidence?.(evidence);
       promptSent();
       await archive.flush();
@@ -2099,6 +2150,8 @@ export class StudioService extends EventEmitter {
           );
       }
     } finally {
+      if (this.active?.controller === controller) this.active.nativeSessionId = undefined;
+      progress('finishing', 'Finalisation de la tentative.');
       this.navigation.endAgent(attempt.id);
       if (input.navigation && controller.signal.aborted)
         await this.navigation.browser.stop().catch(() => undefined);
@@ -2202,7 +2255,9 @@ export class StudioService extends EventEmitter {
         await this.applyPendingTeams();
         await this.persist();
       } finally {
+        if (this.state.runProgress?.attemptId === attempt.id) this.state.runProgress = undefined;
         this.active = undefined;
+        this.publish();
         complete();
       }
     }
@@ -2683,11 +2738,18 @@ export class StudioService extends EventEmitter {
         ? this.engine.getStep(featureId, this.active.stepId)
         : feature.steps.find((item) => item.id === feature.activeStepId);
     const attempt = step?.attempts.at(-1);
-    if (this.active?.featureId === featureId) {
-      if (!attempt?.sessionId || !this.adapter.setPermissionMode)
-        throw new Error('Attends la connexion de la session native.');
-      await this.adapter.setPermissionMode(attempt.sessionId, mode);
-      if (this.active?.featureId !== featureId)
+    const active = this.active;
+    if (active?.featureId === featureId) {
+      if (!this.adapter.setPermissionMode)
+        throw new Error(
+          'Ce runtime ne permet pas de changer les permissions pendant une exécution. Arrête la tentative avant de modifier ce choix.',
+        );
+      if (!active.nativeSessionId)
+        throw new Error(
+          `${this.state.runProgress?.message ?? 'La connexion Copilot n’est pas encore prête.'} Les permissions seront modifiables après la connexion ; tu peux aussi arrêter la tentative.`,
+        );
+      await this.adapter.setPermissionMode(active.nativeSessionId, mode);
+      if (this.active !== active)
         throw new Error('La tentative est terminée ; choisis le mode pour la prochaine reprise.');
     }
     feature.execution.permissionMode = mode;

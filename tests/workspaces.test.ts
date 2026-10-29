@@ -306,6 +306,45 @@ async function renameDirectory(from: string, to: string) {
 }
 
 describe('immutable private checkpoints and comparisons', () => {
+  it('reports file progress and cancels preparation without publishing a checkpoint or changing the workspace', async () => {
+    const f = await fixture();
+    await Promise.all(
+      Array.from({ length: 150 }, (_, index) =>
+        writeFile(path.join(f.source, `local-${index}.txt`), 'Keep this edit'),
+      ),
+    );
+    const before = await git(f.source, 'status', '--porcelain=v1');
+    const controller = new AbortController();
+    const progress: [number, number][] = [];
+    await expect(
+      f.manager.capture(
+        f.feature,
+        { kind: 'before-run', label: 'Cancelled' },
+        {
+          signal: controller.signal,
+          onProgress(completed, total) {
+            progress.push([completed, total]);
+            if (completed >= 100) controller.abort(new Error('Annulation demandée'));
+          },
+        },
+      ),
+    ).rejects.toThrow('Annulation demandée');
+    expect(progress).toEqual([
+      [0, 151],
+      [100, 151],
+    ]);
+    expect(await readdir(path.join(f.storage, 'manifests')).catch(() => [])).toEqual([]);
+    expect(
+      await git(
+        f.source,
+        'for-each-ref',
+        '--format=%(refname)',
+        'refs/feature-studio/checkpoints/',
+      ),
+    ).toBe('');
+    expect(await git(f.source, 'status', '--porcelain=v1')).toBe(before);
+    expect(await readFile(path.join(f.source, 'local-50.txt'), 'utf8')).toBe('Keep this edit');
+  });
   it('references a clean Git worktree above 10000 files and 64MiB without copying its contents', async () => {
     const f = await fixture();
     await git(f.source, 'config', 'core.autocrlf', 'false');

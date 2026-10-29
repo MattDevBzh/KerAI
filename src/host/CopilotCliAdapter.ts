@@ -578,6 +578,20 @@ export class CopilotCliAdapter implements AgentAdapter {
       }
     };
     armTimer();
+    let connectionStage = 'démarrage du CLI';
+    const connectionTimer = setTimeout(
+      () =>
+        controller.abort(
+          new Error(
+            `Connexion Copilot interrompue après 90 secondes (${connectionStage}). Aucun prompt n’a été envoyé. Relance le diagnostic Copilot puis reprends la tentative.`,
+          ),
+        ),
+      90_000,
+    );
+    const connecting = (message: string) => {
+      connectionStage = message;
+      callbacks.onConnectionProgress?.(message);
+    };
     let client: CopilotClient | undefined;
     let session: CopilotSession | undefined;
     let unsubscribe: (() => void) | undefined;
@@ -592,6 +606,7 @@ export class CopilotCliAdapter implements AgentAdapter {
         message: redactMcp(message, secrets),
       });
     try {
+      connecting('Préparation des connexions Copilot et MCP');
       const mcp = await withSignal(
         resolveMcpPlan(
           input.mode === 'discussion' || readOnlyTools ? [] : (input.mcpServers ?? []),
@@ -600,9 +615,20 @@ export class CopilotCliAdapter implements AgentAdapter {
         controller.signal,
       );
       secrets = mcp.secrets;
-      client = await this.newClient(secrets, native);
+      client = await withSignal<CopilotClient>(
+        this.newClient(secrets, native).then(async (created) => {
+          if (controller.signal.aborted) {
+            await this.close(created);
+            throw cancelled(controller.signal);
+          }
+          return created;
+        }),
+        controller.signal,
+      );
       if (controller.signal.aborted) throw cancelled(controller.signal);
+      connecting('Démarrage du CLI Copilot');
       await withSignal(client.start(), controller.signal);
+      connecting('Vérification du compte Copilot');
       const auth = await withSignal(client.getAuthStatus(), controller.signal);
       if (!auth.isAuthenticated)
         throw new Error(
@@ -976,6 +1002,11 @@ export class CopilotCliAdapter implements AgentAdapter {
         ],
         agent: 'feature-studio',
       };
+      connecting(
+        input.resumeSessionId
+          ? 'Reconnexion de la conversation Copilot'
+          : 'Création de la conversation Copilot',
+      );
       session = input.resumeSessionId
         ? await withSignal(
             client.resumeSession(input.resumeSessionId, {
@@ -986,6 +1017,7 @@ export class CopilotCliAdapter implements AgentAdapter {
           )
         : await withSignal(client.createSession(config), controller.signal);
       callbacks.onSession(session.sessionId);
+      connecting('Vérification des instructions, permissions et outils Copilot');
       const instructionReads = native
         ? new NativeInstructionReads(
             input.workspacePath,
@@ -1308,6 +1340,8 @@ export class CopilotCliAdapter implements AgentAdapter {
       contextEventsReady = true;
       for (const event of earlyContextEvents) onEvent(event);
       if (controller.signal.aborted) throw cancelled(controller.signal);
+      clearTimeout(connectionTimer);
+      if (native) callbacks.onNativeReady?.(session.sessionId);
       callbacks.onPromptSending?.();
       await withSignal(
         session.send({
@@ -1349,6 +1383,7 @@ export class CopilotCliAdapter implements AgentAdapter {
       throw new Error(message);
     } finally {
       clearTimeout(timer);
+      clearTimeout(connectionTimer);
       signal.removeEventListener('abort', relay);
       this.runs.delete(controller);
       if (abortRuntime) controller.signal.removeEventListener('abort', abortRuntime);

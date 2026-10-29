@@ -283,6 +283,32 @@ describe('StudioService isolated workspaces with real local Git and a fake agent
     expect(await readFile(join(f.workspace, 'src/app.ts'), 'utf8')).toBe('source human content\n');
   });
 
+  it('stops during checkpoint preparation without starting Copilot or publishing a partial checkpoint', async () => {
+    const f = await fixture(),
+      feature = await isolated(f);
+    const previous = feature.checkpoints?.length ?? 0;
+    const capture = f.service.workspaces.capture.bind(f.service.workspaces);
+    vi.spyOn(f.service.workspaces, 'capture').mockImplementationOnce((item, input, options) =>
+      capture(item, input, {
+        ...options,
+        onProgress(completed, total) {
+          options?.onProgress?.(completed, total);
+          expect(f.service.state.runProgress).toMatchObject({
+            phase: 'checkpoint',
+            nativeReady: false,
+            total,
+          });
+          f.service.cancel(feature.id);
+        },
+      }),
+    );
+    await f.service.runStep(feature.id, 'session');
+    expect(f.adapter.run).not.toHaveBeenCalled();
+    expect(feature.steps[0].attempts.at(-1)?.status).toBe('cancelled');
+    expect(feature.checkpoints ?? []).toHaveLength(previous);
+    expect(f.service.state.runProgress).toBeUndefined();
+  });
+
   it.each(['failed', 'cancelled'] as const)(
     'persists before/after attempt checkpoints after a %s partial write',
     async (status) => {

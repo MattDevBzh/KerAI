@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.34.1 — 2026-10-29
+
+- Connexion native : les permissions ne sont modifiables qu’après vérification de la session active, y compris à la reprise d’une conversation existante ; un ancien identifiant de session ne suffit plus.
+- Démarrage : avancement visible de la préparation, du point de restauration et de la connexion Copilot. Une connexion bloquée avant le premier prompt est interrompue après 90 secondes avec l’étape concernée.
+- Worktrees : compteur de fichiers pendant la préparation du point de restauration et prise en compte de l’arrêt avant tout lancement Copilot, sans publier de point incomplet.
+
 ## 1.34.0 — 2026-10-29
 
 - Worktrees : réutilisation des contenus Git dans les points de restauration ; la limite de 10 000 fichiers et 64 MiB porte sur les contenus supplémentaires à copier. Conservation des anciens points, des fins de ligne Windows et des commits nécessaires à la restauration.

@@ -649,7 +649,11 @@ export class FeatureWorkspace {
     await walk(root);
     return names.sort();
   }
-  private async snapshot(feature: Feature): Promise<Snapshot> {
+  private async snapshot(
+    feature: Feature,
+    options: { signal?: AbortSignal; onProgress?: (completed: number, total: number) => void } = {},
+  ): Promise<Snapshot> {
+    options.signal?.throwIfAborted();
     const root = await this.validate(feature),
       git = !!(await this.topLevel(root)),
       identity = git ? await this.identity(root, true) : { branch: 'sans Git', head: '' };
@@ -667,6 +671,9 @@ export class FeatureWorkspace {
         excludedPaths.push(`${name} : ${reason}`.slice(0, 2000));
     };
     const candidates = await this.candidates(root, git);
+    options.signal?.throwIfAborted();
+    options.onProgress?.(0, candidates.length);
+    options.signal?.throwIfAborted();
     const committed = new Map<string, string>();
     if (identity.head) {
       const tree = machineText(await this.checkedGit(root, ['ls-tree', '-r', '-z', identity.head]));
@@ -701,7 +708,10 @@ export class FeatureWorkspace {
       );
     // Ignored directories are compact prefixes; their contents are never traversed or read.
     for (const name of ignored) exclude(name, 'Ignoré par Git (fichier ou préfixe de dossier).');
-    for (const name of candidates) {
+    for (const [index, name] of candidates.entries()) {
+      options.signal?.throwIfAborted();
+      if (index > 0 && index % 100 === 0) options.onProgress?.(index, candidates.length);
+      options.signal?.throwIfAborted();
       let target: string;
       try {
         target = await this.safeFile(root, name);
@@ -756,6 +766,9 @@ export class FeatureWorkspace {
         ...(gitContent ? { git: gitContent } : {}),
       };
     }
+    options.signal?.throwIfAborted();
+    options.onProgress?.(candidates.length, candidates.length);
+    options.signal?.throwIfAborted();
     return { root, ...identity, files, contents, exclusions, excludedCount, excludedPaths };
   }
   private checkpointRef(ownerId: string, id: string): string {
@@ -810,7 +823,9 @@ export class FeatureWorkspace {
     feature: Feature,
     snapshot: Snapshot,
     input: { kind: FeatureCheckpoint['kind']; label: string; stepId?: string; attemptId?: string },
+    signal?: AbortSignal,
   ): Promise<FeatureCheckpoint> {
+    signal?.throwIfAborted();
     const checkpoint = checkpointSchema.parse({
       id: randomUUID(),
       label: input.label,
@@ -830,11 +845,14 @@ export class FeatureWorkspace {
       excludedCount: snapshot.excludedCount,
       excludedPaths: snapshot.excludedPaths,
     });
-    for (const [name, content] of snapshot.contents)
+    for (const [name, content] of snapshot.contents) {
+      signal?.throwIfAborted();
       await this.immutableWrite(
         await this.privatePath(`objects/${snapshot.files[name].hash}`, snapshot.root),
         content,
       );
+    }
+    signal?.throwIfAborted();
     const manifest: Manifest = {
       version: 2,
       featureId: feature.id,
@@ -847,6 +865,7 @@ export class FeatureWorkspace {
     if (encoded.length > CHECKPOINT_LIMITS.manifestBytes)
       throw new Error('Manifeste trop volumineux.');
     const destination = await this.privatePath(`manifests/${checkpoint.id}.json`, snapshot.root);
+    signal?.throwIfAborted();
     const ref = this.checkpointRef(feature.id, checkpoint.id);
     // A private ref keeps the original commit reachable even after commits, resets and Git GC.
     if (snapshot.head)
@@ -869,9 +888,10 @@ export class FeatureWorkspace {
   capture(
     feature: Feature,
     input: { kind: FeatureCheckpoint['kind']; label: string; stepId?: string; attemptId?: string },
+    options: { signal?: AbortSignal; onProgress?: (completed: number, total: number) => void } = {},
   ): Promise<FeatureCheckpoint> {
     return this.serial(async () =>
-      this.captureSnapshot(feature, await this.snapshot(feature), input),
+      this.captureSnapshot(feature, await this.snapshot(feature, options), input, options.signal),
     );
   }
   private async manifest(feature: Feature, id: string, root: string): Promise<Manifest> {

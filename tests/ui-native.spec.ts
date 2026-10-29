@@ -125,6 +125,59 @@ async function sent(page: Page, type: string) {
   );
 }
 
+test('shows checkpoint and connection progress and keeps a saved session ID from enabling permissions too early', async ({
+  page,
+}) => {
+  const state = fixture(true);
+  state.humanRequests = [];
+  const feature = state.features[0],
+    step = feature.steps[0];
+  state.runProgress = {
+    featureId: feature.id,
+    stepId: step.id,
+    attemptId: step.attempts[0].id,
+    phase: 'checkpoint',
+    message: 'Vérification des fichiers du point de restauration — aucun prompt envoyé.',
+    nativeReady: false,
+    completed: 100,
+    total: 12000,
+  };
+  await open(page, state);
+  const notice = page.getByRole('status', { name: 'Avancement de la tentative' });
+  const picker = page.getByRole('combobox', { name: 'Permissions Copilot' });
+  await expect(notice).toContainText(/100 \/ 12\s000 fichiers vérifiés/);
+  await expect(picker).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Arrêter l’exécution', exact: true }),
+  ).toBeEnabled();
+  await page.evaluate(() => {
+    const state = Reflect.get(window, 'nativeFixture') as StudioState;
+    Object.assign(state.runProgress!, {
+      phase: 'connecting',
+      message: 'Démarrage du CLI Copilot',
+      completed: undefined,
+      total: undefined,
+    });
+    window.postMessage({ type: 'state', state }, '*');
+  });
+  await expect(notice).toContainText('Démarrage du CLI Copilot');
+  await expect(picker).toBeDisabled();
+  expect(await sent(page, 'setPermissionMode')).toEqual([]);
+  await page.evaluate(() => {
+    const state = Reflect.get(window, 'nativeFixture') as StudioState;
+    Object.assign(state.runProgress!, {
+      phase: 'running',
+      message: 'Copilot travaille sur cette étape.',
+      nativeReady: true,
+    });
+    window.postMessage({ type: 'state', state }, '*');
+  });
+  await expect(notice).toHaveCount(0);
+  await expect(picker).toBeEnabled();
+  await picker.selectOption('allow-all');
+  await expect.poll(() => sent(page, 'setPermissionMode')).toMatchObject([{ mode: 'allow-all' }]);
+});
+
 test('creates a native session with an explicit permission choice and shows unavailable assisted mode', async ({
   page,
 }) => {

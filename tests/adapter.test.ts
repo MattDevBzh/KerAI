@@ -228,6 +228,52 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
     }));
     return run;
   }
+  it.each(['start', 'catalog'] as const)(
+    'bounds a stalled %s connection before sending any prompt',
+    async (stage) => {
+      vi.useFakeTimers();
+      const run = nativeTransport();
+      const blocked =
+        stage === 'start' ? fake.client.start : fake.session.rpc.tools.initializeAndValidate;
+      blocked.mockImplementation(() => new Promise<never>(() => {}));
+      callbacks.onNativeReady = vi.fn();
+      const pending = adapter.run(run, callbacks, new AbortController().signal);
+      const rejected = expect(pending).rejects.toThrow(
+        /Connexion Copilot interrompue après 90 secondes.*Aucun prompt/,
+      );
+      await vi.waitFor(() => expect(blocked).toHaveBeenCalled());
+      await vi.advanceTimersByTimeAsync(90_001);
+      await rejected;
+      expect(callbacks.onNativeReady).not.toHaveBeenCalled();
+      expect(fake.session.send).not.toHaveBeenCalled();
+      expect(fake.client.forceStop).toHaveBeenCalled();
+      if (stage === 'catalog') expect(fake.session.abort).toHaveBeenCalled();
+    },
+  );
+  it('announces a native connection only after verifying its catalog, before the first prompt', async () => {
+    const run = nativeTransport();
+    let release!: () => void;
+    fake.session.rpc.tools.initializeAndValidate.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({});
+        }),
+    );
+    const ready = vi.fn(),
+      sending = vi.fn();
+    callbacks.onNativeReady = ready;
+    callbacks.onPromptSending = sending;
+    const pending = adapter.run(run, callbacks, new AbortController().signal);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(callbacks.onSession).toHaveBeenCalled();
+    expect(callbacks.onNativeReady).not.toHaveBeenCalled();
+    expect(fake.session.send).not.toHaveBeenCalled();
+    release();
+    await pending;
+    expect(callbacks.onNativeReady).toHaveBeenCalledWith(fake.session.sessionId);
+    expect(ready).toHaveBeenCalledBefore(sending);
+    expect(callbacks.onPromptSending).toHaveBeenCalledBefore(fake.session.send);
+  });
   it('offers the live task board in the actual native catalog, including a read-only planning turn', async () => {
     const run = nativeTransport();
     run.nativeReadOnly = true;

@@ -44,7 +44,7 @@ import { isHosted, subscribe } from './bridge';
 import { ReportEditor } from './CollaborationUI';
 import { HumanRequests, LaunchDialog } from './ExecutionUI';
 import { AttemptCheckpointLinks, hasActiveRun } from './GitWorkspaceUI';
-import { PermissionPicker } from './NativeExecutionUI';
+import { PermissionPicker, permissionChangeBlocker, RunProgressNotice } from './NativeExecutionUI';
 import { TraceJournal } from './ObservationUI';
 import { OptionalStepChoice } from './OptionalStepsUI';
 import { ProofDossierPanel } from './ProofDossier';
@@ -346,6 +346,7 @@ export function StepPanel({
         />
       )}
       <section className="workbench">
+        <RunProgressNotice state={state} featureId={feature.id} stepId={step.id} />
         {step.status === 'skipped' && (
           <div className="optional-notice skipped-notice" role="status">
             <strong>
@@ -1198,6 +1199,7 @@ export function StepPanel({
             {feature.execution ? (
               <PermissionPicker
                 state={state}
+                blockedReason={permissionChangeBlocker(state, feature.id, step)}
                 value={feature.execution.permissionMode}
                 disabled={
                   Boolean(feature.archived) ||

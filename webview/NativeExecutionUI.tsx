@@ -3,15 +3,61 @@ import { NATIVE_PERMISSION_MODES, permissionLabels } from '../src/shared/native'
 import type { Feature, FeatureStep, RunLaunchOptions, StudioState } from '../src/shared/types';
 import { restrictedNativeTools } from './launchReadiness';
 
+export function permissionChangeBlocker(state: StudioState, featureId: string, step: FeatureStep) {
+  const progress = state.runProgress;
+  if (progress?.featureId === featureId && progress.stepId === step.id) {
+    if (progress.phase === 'finishing')
+      return 'Finalisation de la tentative. Les permissions seront modifiables pour la prochaine reprise.';
+    if (!progress.nativeReady)
+      return `${progress.message} Les permissions seront modifiables lorsque Copilot sera prêt.`;
+  } else if (step.status === 'running' && !step.attempts.at(-1)?.sessionId)
+    return 'Préparation ou connexion Copilot en cours. Les permissions seront modifiables après la connexion.';
+}
+
+export function RunProgressNotice({
+  state,
+  featureId,
+  stepId,
+}: {
+  state: StudioState;
+  featureId: string;
+  stepId: string;
+}) {
+  const progress = state.runProgress;
+  if (
+    !progress ||
+    progress.featureId !== featureId ||
+    progress.stepId !== stepId ||
+    progress.phase === 'running'
+  )
+    return null;
+  return (
+    <div className="optional-notice" role="status" aria-label="Avancement de la tentative">
+      <strong>{progress.message}</strong>
+      {progress.total !== undefined && progress.completed !== undefined && (
+        <p>
+          {progress.completed.toLocaleString('fr-FR')} / {progress.total.toLocaleString('fr-FR')}{' '}
+          fichiers vérifiés.
+        </p>
+      )}
+      {progress.phase !== 'finishing' && (
+        <p>Tu peux arrêter la tentative pendant cette préparation.</p>
+      )}
+    </div>
+  );
+}
+
 export function PermissionPicker({
   value,
   state,
   disabled,
+  blockedReason,
   onChange,
 }: {
   value: NativePermissionMode;
   state: StudioState;
   disabled?: boolean;
+  blockedReason?: string;
   onChange: (mode: NativePermissionMode) => void;
 }) {
   const available = state.runtime.native?.permissionModes;
@@ -21,7 +67,8 @@ export function PermissionPicker({
       <select
         aria-label="Permissions Copilot"
         value={value}
-        disabled={disabled}
+        disabled={disabled || Boolean(blockedReason)}
+        title={blockedReason}
         onChange={(event) => onChange(event.target.value as NativePermissionMode)}
       >
         {NATIVE_PERMISSION_MODES.map((mode) => (
@@ -35,6 +82,7 @@ export function PermissionPicker({
           </option>
         ))}
       </select>
+      {blockedReason && <small role="status">{blockedReason}</small>}
       <small>
         {value === 'manual'
           ? 'Choisissez un accord ponctuel, par type pour la session, ou pour les lectures dans la solution.'

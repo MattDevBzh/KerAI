@@ -336,6 +336,17 @@ export interface StudioState {
   humanRequests?: HumanRequest[];
   memory?: MemoryEntry[];
   workspaceOperation?: { featureId?: string; label: string; readOnly?: boolean };
+  /** Transient host progress, never restored as a live connection from storage. */
+  runProgress?: {
+    featureId: string;
+    stepId: string;
+    attemptId: string;
+    phase: 'preparing' | 'checkpoint' | 'connecting' | 'running' | 'finishing';
+    message: string;
+    nativeReady: boolean;
+    completed?: number;
+    total?: number;
+  };
 }
 export type ClientMessage =
   | { type: 'resyncState' }
@@ -712,6 +723,9 @@ export interface RunResult {
   review?: ReviewReport;
 }
 export interface RunCallbacks {
+  onConnectionProgress?(message: string): void;
+  /** Sent only after the native session's permissions and tool catalogue are verified. */
+  onNativeReady?(sessionId: string): void;
   /** Runtime validates the selected model before any optional browser image is sent. */
   validateModelImages?(images: import('./images').ImageAttachment[]): void;
   onTaskBoard?(

@@ -65,6 +65,7 @@ async function fixture(pairMode = false) {
       inputs.push(structuredClone(input));
       callbacks = events;
       events.onSession('same-native-session');
+      events.onNativeReady?.('same-native-session');
       events.onPromptSending?.();
       events.onPromptSent?.();
       signalStarted();
@@ -142,6 +143,39 @@ async function fixture(pairMode = false) {
     },
   };
 }
+
+it('requires a verified live connection to change permissions, including when resuming a saved session', async () => {
+  const f = await fixture();
+  await f.start();
+  expect(f.step.attempts[0].sessionId).toBe('same-native-session');
+  let callbacks: RunCallbacks | undefined;
+  let finish!: (value: RunResult) => void;
+  f.adapter.run = async (_input, events) => {
+    events.onSession('same-native-session');
+    callbacks = events;
+    return new Promise((resolve) => {
+      finish = resolve;
+    });
+  };
+  await f.action('message', { content: 'Explique le résultat.' });
+  await vi.waitFor(() => expect(callbacks).toBeDefined(), { timeout: 30000 });
+  expect(f.service.state.runProgress).toMatchObject({ phase: 'connecting', nativeReady: false });
+  await expect(f.service.setPermissionMode(f.feature.id, 'allow-all')).rejects.toThrow(
+    'après la connexion',
+  );
+  expect(f.feature.execution?.permissionMode).toBe('manual');
+  expect(f.adapter.setPermissionMode).not.toHaveBeenCalled();
+  callbacks!.onNativeReady?.('same-native-session');
+  callbacks!.onPromptSending?.();
+  callbacks!.onPromptSent?.();
+  await f.service.setPermissionMode(f.feature.id, 'allow-all');
+  expect(f.adapter.setPermissionMode).toHaveBeenCalledWith('same-native-session', 'allow-all');
+  expect(f.service.state.runProgress).toMatchObject({ phase: 'running', nativeReady: true });
+  finish(result());
+  await f.idle();
+  expect(f.service.state.runProgress).toBeUndefined();
+  expect(await f.store.load()).not.toHaveProperty('runProgress');
+});
 
 it('keeps a solo artifact and native session while explaining it, then negotiates an explicit correction before final validation', async () => {
   const f = await fixture();

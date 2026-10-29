@@ -26,7 +26,7 @@ import { reviewApprovalRequest, type ReviewApprovalRequest } from '../src/shared
 import { ReviewApprovalDialog } from './ReviewApprovalDialog';
 import { Avatar } from './Avatar';
 import { HumanRequests } from './ExecutionUI';
-import { PermissionPicker } from './NativeExecutionUI';
+import { PermissionPicker, permissionChangeBlocker, RunProgressNotice } from './NativeExecutionUI';
 import { PairPreferencesUI } from './PairPreferencesUI';
 import { subscribe, savedPairDraft, savePairDraft } from './bridge';
 import './pair.css';
@@ -169,6 +169,7 @@ export function PairWorkspace({
         {feature.execution && (
           <PermissionPicker
             state={state}
+            blockedReason={permissionChangeBlocker(state, feature.id, step)}
             value={feature.execution.permissionMode}
             disabled={
               locked ||
@@ -240,6 +241,7 @@ export function PairWorkspace({
           )}
         </div>
       </header>
+      <RunProgressNotice state={state} featureId={feature.id} stepId={step.id} />
       {!pair ? (
         <section className="pair-empty">
           <LoaderCircle className="spin" />
