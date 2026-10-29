@@ -261,12 +261,19 @@ describe('physical Git isolation', () => {
       `sh -c 'printf filter > "${marker}"; cat'`,
     );
     await git(f.source, 'config', 'filter.fixture.required', 'true');
+    await writeFile(
+      path.join(f.source, '.git/hooks/reference-transaction'),
+      `#!/bin/sh\nprintf ref-hook > '${marker}'\n`,
+    );
+    await chmod(path.join(f.source, '.git/hooks/reference-transaction'), 0o755);
     const foreign = await fixture();
     vi.stubEnv('GIT_DIR', path.join(foreign.source, '.git'));
     vi.stubEnv('GIT_WORK_TREE', foreign.source);
     vi.stubEnv('GIT_INDEX_FILE', path.join(foreign.root, 'poison-index'));
     const worktree = await isolate(f);
     expect(await readFile(path.join(worktree, 'tracked.txt'), 'utf8')).toBe('Committed\n');
+    const point = await capture(f);
+    await f.manager.purgeSession(f.feature.id, [point.id]);
     await expect(readFile(marker)).rejects.toThrow();
     await expect(readFile(path.join(foreign.root, 'poison-index'))).rejects.toThrow();
   });
@@ -299,6 +306,117 @@ async function renameDirectory(from: string, to: string) {
 }
 
 describe('immutable private checkpoints and comparisons', () => {
+  it('references a clean Git worktree above 10000 files and 64MiB without copying its contents', async () => {
+    const f = await fixture();
+    await git(f.source, 'config', 'core.autocrlf', 'false');
+    await mkdir(path.join(f.source, 'large'));
+    const content = 'Repository content\n'.repeat(400);
+    for (let start = 0; start < 10005; start += 50)
+      await Promise.all(
+        Array.from({ length: Math.min(50, 10005 - start) }, (_, offset) =>
+          writeFile(path.join(f.source, 'large', `${start + offset}.txt`), content),
+        ),
+      );
+    await git(f.source, 'add', '.');
+    await git(f.source, 'commit', '-m', 'Large baseline');
+    const root = await isolate(f);
+    const clean = await capture(f);
+    expect(clean.fileCount).toBe(10006);
+    expect(clean.totalBytes).toBeGreaterThan(CHECKPOINT_LIMITS.totalBytes);
+    expect(clean).toMatchObject({ storedFileCount: 0, storedBytes: 0 });
+    expect(await readdir(path.join(f.storage, 'objects')).catch(() => [])).toEqual([]);
+    await writeFile(path.join(root, 'tracked.txt'), 'Earlier human work\n');
+    await git(root, 'add', 'tracked.txt');
+    await writeFile(path.join(root, 'tracked.txt'), 'Earlier human work, still unstaged\n');
+    const before = await capture(f);
+    expect(before.storedFileCount).toBe(1);
+    const index = (
+      await git(root, 'rev-parse', '--path-format=absolute', '--git-path', 'index')
+    ).trim();
+    const indexBefore = await readFile(index);
+    await writeFile(path.join(root, 'tracked.txt'), 'A later broken attempt\n');
+    const comparison = await f.manager.compare(f.feature, before.id);
+    await f.manager.restore(
+      f.feature,
+      before.id,
+      ['tracked.txt'],
+      comparison.fingerprint,
+      recovery(f.feature, []),
+    );
+    expect(await readFile(path.join(root, 'tracked.txt'), 'utf8')).toBe(
+      'Earlier human work, still unstaged\n',
+    );
+    expect(await readFile(index)).toEqual(indexBefore);
+    expect((await f.manager.readFile(f.feature, clean.id, 'large/10004.txt'))!.toString()).toBe(
+      content,
+    );
+  }, 180_000);
+
+  it('reconstructs exact CRLF bytes from Git even after checkout attributes change', async () => {
+    const f = await fixture();
+    await git(f.source, 'config', 'core.autocrlf', 'true');
+    const root = await isolate(f);
+    const original = await readFile(path.join(root, 'tracked.txt'));
+    expect(original.toString()).toBe('Committed\r\n');
+    const before = await capture(f);
+    expect(before).toMatchObject({ storedFileCount: 0, storedBytes: 0 });
+    await writeFile(path.join(root, '.gitattributes'), '*.txt text eol=lf\n');
+    await writeFile(path.join(root, 'tracked.txt'), 'New text\n');
+    const comparison = await f.manager.compare(f.feature, before.id);
+    await f.manager.restore(
+      f.feature,
+      before.id,
+      ['tracked.txt'],
+      comparison.fingerprint,
+      recovery(f.feature, []),
+    );
+    expect(await readFile(path.join(root, 'tracked.txt'))).toEqual(original);
+  });
+
+  it('pins Git contents across reset and garbage collection, then removes only its own checkpoint refs', async () => {
+    const f = await fixture(),
+      root = await isolate(f);
+    await writeFile(path.join(root, 'tracked.txt'), 'Intermediate commit\n');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'Temporary history');
+    const point = await capture(f);
+    await git(root, 'reset', '--hard', 'HEAD^');
+    await git(root, 'reflog', 'expire', '--expire=now', '--all');
+    await git(root, 'gc', '--prune=now');
+    expect((await f.manager.readFile(f.feature, point.id, 'tracked.txt'))!.toString()).toBe(
+      'Intermediate commit\n',
+    );
+    const ref = `refs/feature-studio/checkpoints/${f.feature.id}/${point.id}`;
+    expect((await git(root, 'rev-parse', ref)).trim()).toBe(point.head);
+    await f.manager.purgeSession(f.feature.id, [point.id]);
+    expect((await git(root, 'for-each-ref', '--format=%(refname)', ref)).trim()).toBe('');
+    expect((await git(root, 'branch', '--show-current')).trim()).toBe(f.feature.branch);
+  }, 60_000);
+
+  it('reads and restores legacy private-only checkpoints', async () => {
+    const f = await fixture(),
+      root = await isolate(f);
+    await writeFile(path.join(root, 'tracked.txt'), 'Legacy uncommitted bytes\n');
+    const point = await capture(f);
+    const file = path.join(f.storage, 'manifests', `${point.id}.json`);
+    const manifest = JSON.parse(await readFile(file, 'utf8'));
+    manifest.version = 1;
+    delete manifest.checkpoint.storedFileCount;
+    delete manifest.checkpoint.storedBytes;
+    await writeFile(file, JSON.stringify(manifest));
+    await writeFile(path.join(root, 'tracked.txt'), 'Later edit');
+    const comparison = await f.manager.compare(f.feature, point.id);
+    await f.manager.restore(
+      f.feature,
+      point.id,
+      ['tracked.txt'],
+      comparison.fingerprint,
+      recovery(f.feature, []),
+    );
+    expect(await readFile(path.join(root, 'tracked.txt'), 'utf8')).toBe(
+      'Legacy uncommitted bytes\n',
+    );
+  });
   it('deduplicates content and compares additions, deletions, binary, empty files and unusual filenames', async () => {
     const f = await fixture(),
       root = await isolate(f);
@@ -388,7 +506,8 @@ describe('immutable private checkpoints and comparisons', () => {
   });
   it('rejects foreign membership and corrupted private contents', async () => {
     const f = await fixture();
-    await isolate(f);
+    const root = await isolate(f);
+    await writeFile(path.join(root, 'tracked.txt'), 'Uncommitted content\n');
     const checkpoint = await capture(f),
       other = feature();
     other.branch = f.feature.branch;
@@ -413,7 +532,7 @@ describe('immutable private checkpoints and comparisons', () => {
       data = Buffer.alloc(CHECKPOINT_LIMITS.fileBytes, 1);
     for (let index = 0; index < 17; index++)
       await writeFile(path.join(root, `size-${index}.bin`), data);
-    await expect(capture(f)).rejects.toThrow(/checkpoint refusé/);
+    await expect(capture(f)).rejects.toThrow(/64 Mio/);
     expect(f.feature.checkpoints).toEqual([]);
   });
 });

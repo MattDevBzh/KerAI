@@ -195,6 +195,63 @@
           "default": "auto",
           "scope": "application",
           "description": "Taille de toute l’interface Feature Studio. Auto adapte le zoom à la taille disponible dans la fenêtre ; un pourcentage fixe est conservé dans tous vos projets."
+        },
+        "featureStudio.appearance.sessionLayout": {
+          "type": "object",
+          "scope": "application",
+          "default": {
+            "order": [
+              "summary",
+              "work",
+              "devops",
+              "ticket",
+              "workspace",
+              "skipped",
+              "autopilot",
+              "team"
+            ],
+            "hidden": []
+          },
+          "additionalProperties": false,
+          "properties": {
+            "order": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "summary",
+                  "work",
+                  "devops",
+                  "ticket",
+                  "workspace",
+                  "skipped",
+                  "autopilot",
+                  "team"
+                ]
+              },
+              "uniqueItems": true,
+              "maxItems": 8
+            },
+            "hidden": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "summary",
+                  "work",
+                  "devops",
+                  "ticket",
+                  "workspace",
+                  "skipped",
+                  "autopilot",
+                  "team"
+                ]
+              },
+              "uniqueItems": true,
+              "maxItems": 8
+            }
+          },
+          "description": "Ordre et visibilité des modules de l’écran de session. Préférence personnelle commune à tous les projets, modifiable depuis Personnaliser l’affichage."
         }
       }
     }

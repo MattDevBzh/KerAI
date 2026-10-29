@@ -1,4 +1,4 @@
-import type { AgentProfile, RunInput, StudioSettings, WorkflowStep } from './types';
+import type { AgentProfile, FeatureStep, RunInput, StudioSettings, WorkflowStep } from './types';
 
 export interface PairPreferences {
   pace: 'small' | 'blocks' | 'oneshot';
@@ -112,6 +112,9 @@ export const pairPlan = (pair: PairState) => pair.plans.at(-1);
 export const isPairWork = (pair?: PairState) =>
   Boolean(pair && (pair.origin !== 'solo' || pair.engaged));
 export const isWorkTurn = (turn?: PairTurn) => turn?.kind === 'work' || turn?.kind === 'solo';
+/** A completed, unapproved result can be discussed directly, including after a solo run. */
+export const canDiscussResult = (status: FeatureStep['status'], pair: PairState) =>
+  status === 'awaiting_review' && pair.phase === 'review' && !pair.busy;
 export function nextPairBlock(pair: PairState) {
   const plan = pairPlan(pair);
   return plan?.blocks.find(

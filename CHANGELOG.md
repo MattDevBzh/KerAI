@@ -1,5 +1,12 @@
 # Changelog
 
+## À publier
+
+- Worktrees : réutilisation des contenus Git dans les points de restauration ; la limite de 10 000 fichiers et 64 MiB porte sur les contenus supplémentaires à copier. Conservation des anciens points, des fins de ligne Windows et des commits nécessaires à la restauration.
+- Autopilote : réponses recommandées désactivables dans la configuration et en cours de route ; reprise après la réponse humaine et historique conservé.
+- Sessions : ordre et visibilité des modules personnalisables par glisser-déposer ou flèches, préférence personnelle commune aux projets, réinitialisation et raccourcis pour les décisions en attente.
+- Conversation : message directement accessible après une tâche solo terminée, avant validation ; reprise de la même conversation en pair, avec livrable et permissions conservés.
+
 ## 1.33.0 — 2026-10-29
 
 - Boucle de correction : suivi facultatif des progrès, objectif et critères figés, commandes et parcours vérifiés avant chaque appel automatique. Une modification exige un renouvellement humain explicite.

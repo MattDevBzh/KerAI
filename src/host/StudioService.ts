@@ -71,6 +71,7 @@ import {
   type SessionStorageInfo,
 } from '../shared/observation';
 import {
+  canDiscussResult,
   isWorkTurn,
   nextPairBlock,
   pairPlan,
@@ -207,6 +208,7 @@ export class StudioService extends EventEmitter {
       'configureStep',
       'archiveFeature',
       'saveAutopilot',
+      'setAutopilotAnswers',
       'renewCorrectionLoop',
       'startAutopilot',
       'pauseAutopilot',
@@ -2320,6 +2322,11 @@ export class StudioService extends EventEmitter {
       | undefined;
     const previousPending = [...pair.pendingMessages];
     const approved = Boolean(plan && pair.approvedRevision === plan.revision && plan.acceptedAt);
+    const discussResult =
+      command.action === 'message' &&
+      pair.nativeConversation &&
+      (pair.requestedMode ?? pair.mode) !== 'pair' &&
+      canDiscussResult(step.status, pair);
     const requirePlan = () => {
       if (!approved || !nextPairBlock(pair))
         throw new Error('Valide une organisation comportant du travail restant avant de démarrer.');
@@ -2345,7 +2352,11 @@ export class StudioService extends EventEmitter {
       }
       case 'message': {
         if (!command.content) throw new Error('Écris ton message avant de l’envoyer.');
-        if (pair.nativeConversation && (pair.requestedMode ?? pair.mode) !== 'pair')
+        if (
+          pair.nativeConversation &&
+          (pair.requestedMode ?? pair.mode) !== 'pair' &&
+          !discussResult
+        )
           throw new Error('Passe en pair pour intervenir dans cette conversation.');
         if (!pair.nativeConversation) pair.mode = 'pair';
         const images = validateImages(command.images);
@@ -2361,6 +2372,11 @@ export class StudioService extends EventEmitter {
           throw Error(
             'Quatre images attendent déjà leur transmission, ou cet ajout dépasserait la limite. Attends leur envoi avant de joindre d’autres captures.',
           );
+        if (discussResult) {
+          pair.mode = 'pair';
+          pair.requestedMode = undefined;
+          pair.engaged = true;
+        }
         const message = pairMessage(pair, 'user', redact(command.content), command.requestId);
         message.images = images;
         if (pair.nativeConversation) message.delivery = 'pending';
@@ -2537,7 +2553,7 @@ export class StudioService extends EventEmitter {
       }
       await this.persist();
     }
-    if (command.action === 'pair')
+    if (command.action === 'pair' || discussResult)
       this.pauseAutopilot(feature.id, 'Travail en pair demandé dans la conversation de l’étape.');
     if (
       command.action === 'message' &&
@@ -2780,6 +2796,7 @@ export class StudioService extends EventEmitter {
     const pilot = feature.autopilot;
     if (
       !pilot ||
+      pilot.autoAnswerRecommended === false ||
       this.automation?.featureId !== feature.id ||
       (pilot.status !== 'running' && !pilot.resumeAfterInteraction)
     )
@@ -3129,6 +3146,22 @@ export class StudioService extends EventEmitter {
       errors,
       steps,
     };
+  }
+  async setAutopilotAnswers(featureId: string, enabled: boolean): Promise<void> {
+    this.assertTrusted();
+    const feature = this.engine.getFeature(featureId),
+      pilot = feature.autopilot;
+    if (!pilot || feature.archived)
+      throw new Error('Configure le pilote d’une session active avant de modifier ses réponses.');
+    const previous = pilot.autoAnswerRecommended;
+    pilot.autoAnswerRecommended = enabled;
+    try {
+      await this.persist();
+    } catch (error) {
+      if (pilot.autoAnswerRecommended === enabled) pilot.autoAnswerRecommended = previous;
+      this.publish();
+      throw error;
+    }
   }
   async saveAutopilot(featureId: string, config: AutopilotConfig): Promise<void> {
     this.assertConfigurable(featureId);

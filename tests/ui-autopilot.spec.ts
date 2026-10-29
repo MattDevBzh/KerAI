@@ -55,6 +55,57 @@ async function hosted(page: Page, configured = false) {
 const messages = (page: Page) =>
   page.evaluate(() => Reflect.get(window, 'testMessages') as ClientMessage[]);
 
+test('automatic answers can be switched off during a run and a rejected change remains visible', async ({
+  page,
+}) => {
+  const state = await hosted(page, true);
+  const pilot = state.features[0].autopilot!;
+  pilot.status = 'running';
+  state.features[0].steps[0].status = 'running';
+  await page.evaluate((state) => window.postMessage({ type: 'state', state }, '*'), state);
+  const toggle = page
+    .locator('.autopilot-bar')
+    .getByRole('checkbox', { name: 'Répondre automatiquement aux choix recommandés' });
+  await expect(toggle).toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await toggle.uncheck();
+  const first = (await messages(page)).at(-1) as Extract<
+    ClientMessage,
+    { type: 'setAutopilotAnswers' }
+  >;
+  expect(first).toMatchObject({
+    type: 'setAutopilotAnswers',
+    featureId: state.features[0].id,
+    enabled: false,
+  });
+  await expect(toggle).toBeDisabled();
+  await page.evaluate(
+    (requestId) =>
+      window.postMessage(
+        { type: 'autopilotSaved', requestId, error: 'Enregistrement indisponible.' },
+        '*',
+      ),
+    first.requestId,
+  );
+  await expect(page.getByRole('alert')).toContainText('Enregistrement indisponible.');
+  await expect(toggle).toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await toggle.uncheck();
+  const retry = (await messages(page)).at(-1) as typeof first;
+  pilot.autoAnswerRecommended = false;
+  await page.evaluate(
+    ({ state, requestId }) => {
+      window.postMessage({ type: 'state', state }, '*');
+      window.postMessage({ type: 'autopilotSaved', requestId }, '*');
+    },
+    { state, requestId: retry.requestId },
+  );
+  await expect(toggle).not.toBeChecked();
+  await expect(toggle).toBeEnabled();
+  await expect(page.locator('.autopilot-bar')).toContainText('Les questions attendent ta réponse.');
+  await expect(page.locator('.autopilot-bar')).toContainText('En cours');
+});
+
 for (const width of [1440, 390]) {
   test(`automatic answers recap is readable and closable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -100,10 +151,15 @@ test('autopilot preserves configuration after a rejected save and waits for ackn
   await hosted(page);
   await page.locator('.autopilot-bar').getByRole('button', { name: 'Configurer' }).click();
   await page.getByLabel('Profil d’autonomie').selectOption('autonomous');
+  await page
+    .getByRole('dialog')
+    .getByLabel('Répondre automatiquement aux choix recommandés')
+    .uncheck();
   await page.getByLabel('Contexte initial de Conception').fill('Conserver cette saisie');
   await page.getByRole('button', { name: 'Enregistrer l’autopilot' }).click();
   const saved = (await messages(page)).at(-1) as Extract<ClientMessage, { type: 'saveAutopilot' }>;
   expect(saved.config.checkpoints).toEqual([]);
+  expect(saved.config.autoAnswerRecommended).toBe(false);
   await expect(page.getByRole('button', { name: 'Enregistrement…' })).toBeDisabled();
   await page.evaluate(
     (requestId) =>

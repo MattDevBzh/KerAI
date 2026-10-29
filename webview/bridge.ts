@@ -125,6 +125,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       'themeState',
       'zoomState',
       'livingHqState',
+      'sessionLayoutState',
       'observationPreview',
       'observationSource',
       'sessionStorage',

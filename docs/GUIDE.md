@@ -26,7 +26,7 @@ Ajoute une carte **Sous-plan** dans une équipe enregistrée ou dans **Modifier 
 
 ## Conversation intégrée de l’étape
 
-Depuis la v1.23.0, l’onglet **Conversation** remplace l’attente opaque pendant une nouvelle tentative native. Il reste disponible avec le livrable. Passe en pair pour poser une question ou demander une correction ; reviens en solo pour confier le travail convenu. Le chat reste actif jusqu’à la validation de l’étape, puis devient consultable. Rythme, explications et permissions se règlent séparément. [Parcours complet, messages et reprise](MODE-PAIR.md).
+Depuis la v1.23.0, l’onglet **Conversation** remplace l’attente opaque pendant une nouvelle tentative native. Il reste disponible avec le livrable. Pendant une exécution solo, passe en pair pour intervenir. Dès que le résultat attend ta validation, tu peux écrire directement : le premier message reprend l’échange en pair dans la même conversation, avec les mêmes permissions et le livrable conservé. Reviens en solo pour confier le travail convenu. Le chat reste actif jusqu’à la validation de l’étape, puis devient consultable. Rythme, explications et permissions se règlent séparément. [Parcours complet, messages et reprise](MODE-PAIR.md).
 
 ## Outils natifs et permissions
 
@@ -232,6 +232,12 @@ Dans **Livraison**, inspecte le dépôt ouvert, sélectionne les fichiers comple
 
 Le profil **Livraison** (`fs-delivery.agent.md`) se modifie dans **Agents**. Son bloc fenced `delivery-rules` définit les types conventionnels et le titre de repli selon des règles déterministes. La conversation de livraison reste locale et ne déclenche aucune opération Git ; la livraison ne fait aucun appel modèle. Les hooks, filtres et signatures Git ne sont pas exécutés dans ce mode. [Fonctionnement, limites et récupération](../docs/devops-delivery.md).
 
+## Personnaliser l’écran de session
+
+**Personnaliser l’affichage**, en haut de chaque session, ouvre la liste des modules. Coche ceux à afficher et déplace-les par glisser-déposer ou avec les flèches, puis clique **Appliquer l’affichage**. Le choix est enregistré dans tes réglages utilisateur VS Code et s’applique aux autres sessions et projets. **Rétablir l’affichage par défaut** prépare l’ordre initial avec tous les modules visibles ; clique ensuite **Appliquer**. Les modules conditionnels, comme le ticket d’origine ou le bilan, apparaissent lorsqu’ils ont un contenu.
+
+Masquer ou déplacer un module ne supprime aucune donnée et ne lance aucune action d’agent. Les composants conservent leur état. Une question en attente ou une validation finale garde un raccourci visible pour rouvrir le module concerné ; **Aller à l’étape en cours** réaffiche aussi le détail de l’étape. Ces ouvertures ponctuelles ne changent pas la préférence globale.
+
 ## Un espace Git et des points de restauration par feature
 
 Le **Worktree isolé** est un dossier frère du projet, avec sa branche `codex/feature-studio-…`. Il contient uniquement l’état commité de HEAD : les modifications non commitées, les fichiers non suivis et les changements déjà stagés restent dans le dossier source. Aucune dépendance ni préparation d’outils n’est installée automatiquement. Les hooks Git, `fsmonitor` et filtres externes sont neutralisés ; LFS/smudge n’est pas matérialisé automatiquement. Prépare cet environnement avant de demander des tests qui en ont besoin.
@@ -250,7 +256,7 @@ Dans **Points de restauration** :
 
 ![Comparer des points et sélectionner les fichiers — données de démonstration](../docs/images/checkpoints.png)
 
-Ces points conservent le contenu et les permissions des fichiers inclus ; ils ne restaurent ni l’index Git, ni la branche, ni les commits. Les fichiers ignorés non suivis, secrets usuels, dossiers de configuration, dépendances, sorties de build et liens sont exclus. Limites : **4 MiB par fichier, 64 MiB par point et 10 000 fichiers candidats**. Ce mécanisme est une restauration ciblée, pas une sauvegarde exhaustive du projet. **Archiver la session** conserve son dossier et ses points sur disque.
+Ces points conservent le contenu et les permissions des fichiers inclus ; ils ne restaurent ni l’index Git, ni la branche, ni les commits. Les fichiers ignorés non suivis, secrets usuels, dossiers de configuration, dépendances, sorties de build et liens sont exclus. Les fichiers déjà présents dans Git sont référencés sans recopier leur contenu. Les limites de **64 MiB et 10 000 fichiers** s’appliquent aux contenus supplémentaires à sauvegarder hors de Git ; la limite individuelle reste de **4 MiB**. Le panneau distingue les fichiers référencés de ceux effectivement copiés. Ce mécanisme est une restauration ciblée, pas une sauvegarde exhaustive du projet. **Archiver la session** conserve son dossier et ses points sur disque.
 
 La création, la comparaison et la restauration Git n’ajoutent aucune requête IA. Elles ne publient rien. Les opérations sont verrouillées pendant une tentative ou une autre mutation ; le host recontrôle racine, branche et fichiers. Les buffers non enregistrés sont protégés dans la fenêtre VS Code courante seulement : les autres fenêtres et processus restent hors sandbox. [Périmètre, exclusions et limites détaillés](../docs/WORKSPACES.md).
 
@@ -293,6 +299,8 @@ Les équipes DevOps peuvent enregistrer leur pilote avant de connaître le résu
 Le stockage passe à la version 12 pour conserver ces preuves et le journal. Les formats précédents migrent à la lecture ; les anciens binaires refusent ce nouveau format.
 
 Dans une feature, le **pilote automatique** enchaîne les étapes disponibles suivant les dépendances. Configure les points de validation humaine, le contexte/MCP de chaque étape et les limites avant de le démarrer. Il s’arrête sur une question, une permission MCP, un échec, un seuil atteint ou un checkpoint. **Pause** laisse finir la tentative courante ; **Arrêter** l’annule. Après une réponse, le pilote reprend automatiquement, sauf si tu as demandé une pause. Une permission accordée permet aussi la reprise ; une permission refusée conserve la pause. Les questions possédant un unique choix explicitement marqué « Recommandé » ou « Recommended » sont traitées automatiquement. Le bouton **Réponses automatiques** ouvre les questions et réponses choisies, avec l’étape et l’heure (200 dernières réponses conservées). Sans recommandation claire, le pilote attend ta réponse. **Rester en pause** désactive la reprise automatique. Après un redémarrage, la reprise demeure manuelle. Une tentative échouée ou interrompue se relance manuellement.
+
+La case **Répondre automatiquement aux choix recommandés** permet de désactiver ces choix dans la configuration du pilote ou directement dans son bandeau, même pendant une exécution. Le réglage est mémorisé par session et reste activé par défaut pour les anciennes configurations. Lorsqu’il est désactivé, chaque question attend ta réponse, puis le pilote reprend. Une question déjà affichée reste à traiter manuellement. Le récapitulatif des anciennes réponses automatiques est conservé.
 
 La boucle de correction est facultative : choisis une étape de relecture et une étape de développement en amont. Le pilote utilise le verdict structuré de la relecture ou une preuve de tests en échec ; il rejoue ensuite les étapes devenues obsolètes. Un checkpoint reste prioritaire sur cette boucle. Par défaut, **zéro cycle de correction supplémentaire** : augmente le nombre seulement si tu le souhaites. Il n’y a aucun agent chargé de décider du prochain agent ; l’orchestration est du code local.
 

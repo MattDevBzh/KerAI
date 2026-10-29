@@ -1,4 +1,5 @@
 import { StateEncoder } from './shared/stateTransfer';
+import { normalizeSessionLayout } from './shared/sessionLayout';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -141,6 +142,13 @@ export async function activate(context: vscode.ExtensionContext) {
   const sendLivingHq = (requestId?: string, error?: string) =>
     send({ type: 'livingHqState', enabled: getLivingHq(), requestId, error });
   let livingHqWrites = Promise.resolve();
+  const getSessionLayout = () =>
+    normalizeSessionLayout(
+      vscode.workspace.getConfiguration('featureStudio').get('appearance.sessionLayout'),
+    );
+  const sendSessionLayout = (requestId?: string, error?: string) =>
+    send({ type: 'sessionLayoutState', layout: getSessionLayout(), requestId, error });
+  let sessionLayoutWrites = Promise.resolve();
   let zoomWrites = Promise.resolve();
   // Theme writes share a queue so fast successive choices keep their requested order.
   let themeWrites = Promise.resolve();
@@ -172,6 +180,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('featureStudio.appearance.zoom')) sendZoom();
       if (event.affectsConfiguration('featureStudio.appearance.livingHq')) sendLivingHq();
+      if (event.affectsConfiguration('featureStudio.appearance.sessionLayout')) sendSessionLayout();
       if (event.affectsConfiguration('featureStudio.appearance.theme')) sendTheme();
       if (event.affectsConfiguration('featureStudio.favoriteAgentIds')) service?.publish();
     }),
@@ -790,6 +799,27 @@ export async function activate(context: vscode.ExtensionContext) {
       await livingHqWrites;
       return;
     }
+    if (message.type === 'setSessionLayout') {
+      sessionLayoutWrites = sessionLayoutWrites.then(async () => {
+        try {
+          await vscode.workspace
+            .getConfiguration('featureStudio')
+            .update(
+              'appearance.sessionLayout',
+              normalizeSessionLayout(message.layout),
+              vscode.ConfigurationTarget.Global,
+            );
+          sendSessionLayout(message.requestId);
+        } catch (error) {
+          sendSessionLayout(
+            message.requestId,
+            redact(error instanceof Error ? error.message : String(error)),
+          );
+        }
+      });
+      await sessionLayoutWrites;
+      return;
+    }
     if (message.type === 'setZoom') {
       zoomWrites = zoomWrites.then(async () => {
         try {
@@ -1393,6 +1423,7 @@ export async function activate(context: vscode.ExtensionContext) {
         sendTheme();
         sendZoom();
         sendLivingHq();
+        sendSessionLayout();
         current.publish();
         if (devops) send({ type: 'devopsState', state: devops.getState() });
         return;
@@ -2134,6 +2165,18 @@ export async function activate(context: vscode.ExtensionContext) {
         } catch (error) {
           send({
             type: 'correctionLoopRenewed',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        }
+        return;
+      case 'setAutopilotAnswers':
+        try {
+          await current.setAutopilotAnswers(message.featureId, message.enabled);
+          send({ type: 'autopilotSaved', requestId: message.requestId });
+        } catch (error) {
+          send({
+            type: 'autopilotSaved',
             requestId: message.requestId,
             error: redact((error as Error).message),
           });

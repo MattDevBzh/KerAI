@@ -1,0 +1,95 @@
+.session-module[hidden] {
+  display: none !important;
+}
+.session-module {
+  min-width: 0;
+}
+.session-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.session-layout-fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.session-layout-list {
+  list-style: none;
+  margin: 10px 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+.session-layout-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.session-layout-list li.dragging {
+  opacity: 0.55;
+  border-color: var(--vscode-focusBorder, #729fff);
+}
+.session-layout-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.session-layout-list label span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.session-layout-list small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.session-layout-list input {
+  flex-shrink: 0;
+}
+.module-drag {
+  cursor: grab;
+  flex-shrink: 0;
+}
+.module-move-actions {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.session-layout-attention {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.autopilot-actions .autopilot-answer-toggle {
+  margin: 0;
+  max-width: 230px;
+}
+@media (max-width: 520px) {
+  .session-heading-actions {
+    justify-content: flex-start;
+  }
+  .session-layout-list li {
+    padding: 8px 4px;
+    gap: 4px;
+  }
+  .module-move-actions {
+    flex-direction: column;
+  }
+}
