@@ -191,6 +191,7 @@ test('navigation order and project selector match each page; common settings pre
   await expect(nav.getByRole('button')).toHaveText([
     'Dashboard',
     'Sessions',
+    'Relecture',
     'Stats',
     'Discussion',
     'Validation',
@@ -203,6 +204,7 @@ test('navigation order and project selector match each page; common settings pre
   ]);
   for (const name of [
     'Sessions',
+    'Relecture',
     'Stats',
     'Discussion',
     'Validation',

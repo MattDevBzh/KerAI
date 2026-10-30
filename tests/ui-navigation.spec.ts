@@ -48,7 +48,7 @@ test('les groupes se déplient au clavier et gardent la page active identifiable
 }) => {
   await page.goto('/?demo=1');
   const nav = page.getByRole('navigation', { name: 'Navigation principale' });
-  await expect(nav.getByRole('button')).toHaveCount(11);
+  await expect(nav.getByRole('button')).toHaveCount(12);
   const atelier = nav.getByRole('button', { name: 'Atelier', exact: true });
   const devops = nav.getByRole('button', { name: 'DevOps', exact: true });
   await expect(atelier).toHaveAttribute('aria-expanded', 'false');
@@ -100,7 +100,7 @@ test('la recherche retrouve les pages repliées, les groupes et les réglages', 
   await search.fill('introuvable');
   await expect(nav.getByRole('status')).toHaveText('Aucun écran. Essayez un autre mot.');
   await page.getByRole('button', { name: 'Effacer la recherche de navigation' }).click();
-  await expect(nav.getByRole('button')).toHaveCount(11);
+  await expect(nav.getByRole('button')).toHaveCount(12);
 });
 
 for (const [view, name, group] of [
