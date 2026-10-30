@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.36.0 — 2026-10-30
+
+- Relecture : entrée dédiée du menu, liste distincte avec recherche, filtres et archives ; création sans contexte obligatoire.
+- Cibles : modifications non commitées, branche source vers branche destination depuis leur ancêtre commun, ou URL de Pull Request GitHub/Azure DevOps.
+- Équipe : un relecteur initial configurable séparément pour les PR et les branches, avec les réglages et modifications habituels des sessions.
+- Exécution : contexte complémentaire facultatif, outils de lecture dédiés, lecture des PR aux révisions identifiées et compte rendu final conservé.
+- Stockage v15 : migration des versions v0 à v14 ; les versions antérieures refusent ce format pour préserver les cibles de relecture.
+
 ## 1.35.0 — 2026-10-30
 
 - Contexte : synthèse IA à la demande des anciens livrables et échanges pair, traitement par parties des historiques volumineux, édition et application humaines avant lancement. Le besoin, les critères, instructions et remarques actuelles restent distincts.

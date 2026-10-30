@@ -425,3 +425,21 @@ test('session agent MCP defaults are visible, editable and used by manual launch
   await expect.poll(async () => (await previews(page)).length).toBe(1);
   expect((await previews(page))[0].launch.mcpServerIds).toEqual(['docs']);
 });
+
+test('a dedicated review launches with an empty optional context', async ({ page }) => {
+  const state = fixture();
+  state.features[0].reviewTarget = { kind: 'working-tree' };
+  state.features[0].description = '';
+  await open(page, state);
+  const dialog = await launchDialog(page);
+  await expect(dialog.getByLabel('Contexte complémentaire (facultatif)')).toHaveValue('');
+  await expect.poll(async () => (await previews(page)).length).toBe(1);
+  await reply(page, (await previews(page))[0], 'Cible de relecture conservée');
+  await dialog.getByRole('button', { name: 'Lancer cette étape' }).click();
+  const messages = await page.evaluate(
+    () => Reflect.get(window, 'startupMessages') as ClientMessage[],
+  );
+  expect(messages.find((message) => message.type === 'runStep')).toMatchObject({
+    launch: { initialContext: '' },
+  });
+});

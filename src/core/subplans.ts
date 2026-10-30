@@ -131,6 +131,7 @@ export function acceptSubplan(feature: Feature, step: FeatureStep, agents: Agent
       },
     );
     child.parent = { featureId: feature.id, stepId: step.id, iterationId: id };
+    child.reviewTarget = structuredClone(feature.reviewTarget);
     child.execution = structuredClone(feature.execution);
     child.projects = structuredClone(feature.projects);
     child.worktree = structuredClone(feature.worktree);

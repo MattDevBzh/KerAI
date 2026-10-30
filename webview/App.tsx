@@ -45,6 +45,7 @@ import { ProjectSwitcher } from './ProjectUI';
 import { RewardTitle, RewardUnlockNotice } from './RewardsUI';
 import './session-compact.css';
 import { Sessions } from './Sessions';
+import { CreateReview } from './CreateReview';
 import { ThemeScenery } from './ThemeScenery';
 import { ZoomControls } from './ZoomControls';
 
@@ -313,7 +314,8 @@ export default function App() {
         setView(
           message.view === 'devops-prs' ||
             message.view === 'devops-tickets' ||
-            message.view === 'devops'
+            message.view === 'devops' ||
+            message.view === 'reviews'
             ? message.view
             : 'sessions',
         );
@@ -338,7 +340,7 @@ export default function App() {
   }, [featureId, stepId]);
   const loaded = Boolean(state);
   useEffect(() => {
-    if (loaded && featureId && view === 'sessions' && !create && !isDemo)
+    if (loaded && featureId && (view === 'sessions' || view === 'reviews') && !create && !isDemo)
       send({ type: 'activateFeature', featureId });
   }, [loaded, featureId, view, create]);
   useEffect(() => {
@@ -494,11 +496,14 @@ export default function App() {
     send(message);
   };
   const selected = state && allFeatures(state.features).find((f) => f.id === featureId);
+  useEffect(() => {
+    if (selected?.reviewTarget && view === 'sessions') setView('reviews');
+  }, [selected?.id, Boolean(selected?.reviewTarget), view]);
   const hqRoot = state?.features.find((f) => f.id === hqFeatureId);
   useEffect(() => {
     if (state && hqFeatureId && !hqRoot) setHqFeatureId(undefined);
   }, [Boolean(state), hqFeatureId, Boolean(hqRoot)]);
-  const activeFeatures = state?.features.filter((f) => !f.archived) ?? [];
+  const activeFeatures = state?.features.filter((f) => !f.archived && !f.reviewTarget) ?? [];
   const openCreate = (_id?: string) => {
     setCreateFrom(undefined);
     setCreate(true);
@@ -836,7 +841,7 @@ export default function App() {
           {view === 'dashboard' && (
             <DashboardUI studio={state} credits={accountCredits} dispatch={dispatch} />
           )}
-          {view === 'sessions' &&
+          {(view === 'sessions' || view === 'reviews') &&
             (selected ? (
               <FeatureDetail
                 onExpandHq={() => {
@@ -885,7 +890,14 @@ export default function App() {
             ) : (
               <Sessions
                 dispatch={dispatch}
-                state={state}
+                key={view}
+                reviewMode={view === 'reviews'}
+                state={{
+                  ...state,
+                  features: state.features.filter(
+                    (feature) => Boolean(feature.reviewTarget) === (view === 'reviews'),
+                  ),
+                }}
                 onCreate={openCreate}
                 onOpen={(id) => {
                   setFeatureId(id);
@@ -1222,7 +1234,10 @@ export default function App() {
           </span>
         </footer>
       </div>
-      {create && (
+      {create && view === 'reviews' && (
+        <CreateReview state={state} dispatch={dispatch} onClose={() => setCreate(false)} />
+      )}
+      {create && view !== 'reviews' && (
         <CreateModal
           origin={createFrom}
           state={state}

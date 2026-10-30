@@ -111,7 +111,8 @@ export function restrictedNativeTools(
   );
   const owner = Boolean(application && application.ownerNavigatorId === agent?.id);
   const readOnly = Boolean(
-    launch.pair ||
+    feature.reviewTarget ||
+      launch.pair ||
       agent?.tools.includes('documentation') ||
       (launch.navigation && (step.policy === 'read-only' || owner)),
   );

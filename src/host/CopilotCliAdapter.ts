@@ -532,6 +532,7 @@ export class CopilotCliAdapter implements AgentAdapter {
     const navigationEnabled =
       Boolean(input.navigation) && !input.observation && input.mode !== 'discussion';
     const readOnlyTools =
+      Boolean(input.feature.reviewTarget) ||
       input.nativeReadOnly ||
       input.agent.tools.includes('documentation') ||
       (navigationEnabled && input.step.policy === 'read-only');
@@ -635,7 +636,8 @@ export class CopilotCliAdapter implements AgentAdapter {
           'Copilot CLI n’est pas connecté dans l’environnement Feature Studio. Lance le diagnostic de connexion.',
         );
       const tools = [
-        ...(input.mode === 'discussion' || (readOnlyTools && !navigationEnabled)
+        ...(input.mode === 'discussion' ||
+        (readOnlyTools && !navigationEnabled && !input.feature.reviewTarget)
           ? []
           : await withSignal(
               this.options.getTools(
@@ -658,6 +660,17 @@ export class CopilotCliAdapter implements AgentAdapter {
       if (native) {
         const business = tools.filter(
           (tool) =>
+            (Boolean(input.feature.reviewTarget) &&
+              [
+                'studio_review_pr',
+                'studio_git_branches',
+                'studio_git_changes',
+                'studio_git_diff',
+                'studio_git_read',
+                'studio_read_file',
+                'studio_list_files',
+                'studio_search',
+              ].includes(tool.name)) ||
             tool.name.startsWith('studio_navigation_') ||
             tool.name.startsWith('studio_browser_') ||
             tool.name === 'studio_run_test' ||
@@ -669,7 +682,7 @@ export class CopilotCliAdapter implements AgentAdapter {
             ].includes(tool.name),
         );
         const scoped =
-          navigationEnabled && readOnlyTools
+          navigationEnabled && readOnlyTools && !input.feature.reviewTarget
             ? business.filter(
                 (tool) =>
                   (tool.name.startsWith('studio_navigation_') ||
@@ -975,11 +988,13 @@ export class CopilotCliAdapter implements AgentAdapter {
             ? 'Tu analyses une seule session Feature Studio en lecture seule. Toutes les données sont dans le prompt. Aucun accès au projet ni intervention humaine. Réponds avec le JSON demandé.'
             : input.mode === 'discussion'
               ? 'Tu participes à une conversation Feature Studio. Réponds naturellement à la dernière intervention humaine en tenant compte de l’historique et du profil fourni. Tu ne disposes d’aucun outil ni d’accès au projet. Pose tes questions directement dans ta réponse.'
-              : input.nativeReadOnly
-                ? 'Tu échanges avec l’utilisateur sur cette étape Feature Studio. Tu peux lire le code et observer l’application sélectionnée avec les outils hôtes de lecture pour comprendre et expliquer ; les outils d’écriture, le terminal et les MCP sont indisponibles. Une question ne modifie pas le livrable. Propose le travail restant pour une correction et attends sa validation.'
-                : native
-                  ? 'Tu exécutes une étape Feature Studio avec les outils natifs Copilot et les permissions décidées par l’humain. Utilise ask_user pour les questions humaines. Termine avec le livrable Markdown. Arrête les processus de travail avant de terminer ; ne détache aucun service en arrière-plan sans demande humaine explicite.'
-                  : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
+              : input.feature.reviewTarget
+                ? 'Tu effectues la relecture demandée avec les outils de lecture dédiés. Termine avec un compte rendu Markdown et un récapitulatif des constats, preuves et limites. Aucun outil d’écriture, terminal, test ou publication. Le contexte supplémentaire est facultatif.'
+                : input.nativeReadOnly
+                  ? 'Tu échanges avec l’utilisateur sur cette étape Feature Studio. Tu peux lire le code et observer l’application sélectionnée avec les outils hôtes de lecture pour comprendre et expliquer ; les outils d’écriture, le terminal et les MCP sont indisponibles. Une question ne modifie pas le livrable. Propose le travail restant pour une correction et attends sa validation.'
+                  : native
+                    ? 'Tu exécutes une étape Feature Studio avec les outils natifs Copilot et les permissions décidées par l’humain. Utilise ask_user pour les questions humaines. Termine avec le livrable Markdown. Arrête les processus de travail avant de terminer ; ne détache aucun service en arrière-plan sans demande humaine explicite.'
+                    : 'Tu exécutes une seule étape Feature Studio. Les restrictions sont appliquées par les outils hôtes. Termine avec le livrable Markdown et les questions structurées nécessaires.',
         },
         customAgents: [
           {

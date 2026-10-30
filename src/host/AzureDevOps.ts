@@ -1,3 +1,4 @@
+import { parsePullRequestUrl } from '../shared/reviews';
 import { randomUUID } from 'node:crypto';
 import { ticketQuery } from './TicketQuery';
 import type { TicketFilters, TicketMetadata } from '../shared/devopsTickets';
@@ -188,6 +189,32 @@ export class AzureDevOps {
     } catch {
       throw new Error('Réponse Azure DevOps invalide.');
     }
+  }
+  reviewReader(url: string, signal: AbortSignal): import('./DevOpsInspector').DevOpsReader {
+    const target = parsePullRequestUrl(url);
+    if (
+      target.provider !== 'azure' ||
+      target.organization.toLowerCase() !== this.config.organization.toLowerCase() ||
+      target.project.toLowerCase() !== this.config.project.toLowerCase()
+    )
+      throw new Error(
+        'La PR doit appartenir à l’organisation et au projet Azure DevOps configurés.',
+      );
+    return async (route, query) => {
+      const prefix = `git/repositories/${encodeURIComponent(target.repository)}/`;
+      if (
+        !route.startsWith(prefix) ||
+        ![`pullrequests/${target.number}`, 'diffs/commits', 'items'].includes(
+          route.slice(prefix.length),
+        )
+      )
+        throw new Error('Route de relecture interdite.');
+      return this.request(
+        `${this.base()}/_apis/${route}?${new URLSearchParams({ ...query, 'api-version': '7.1' })}`,
+        undefined,
+        signal,
+      );
+    };
   }
   /** Read-only API exposed to agents and the standalone inspection script. */
   inspector(signal?: AbortSignal): DevOpsInspector {

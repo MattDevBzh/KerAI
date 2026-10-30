@@ -1711,7 +1711,7 @@ it('keeps pilot counters and the decision journal when configuration is saved ag
     'configure',
   ]);
   const restored = await new Store(f.storage).load();
-  expect(restored.schemaVersion).toBe(14);
+  expect(restored.schemaVersion).toBe(15);
   expect(restored.features[0].autopilot).toEqual(feature.autopilot);
   expect((await f.service.previewAutopilot(feature.id)).remainingRuns).toBe(1);
   expect(f.inputs).toHaveLength(1);
@@ -2128,4 +2128,83 @@ it('creates ready starter teams durably without starting an agent or granting br
     ).toBe(workflowId);
   }
   expect(f.adapter.run).not.toHaveBeenCalled();
+});
+
+it('creates dedicated reviews without context, uses separate defaults, and persists the recap', async () => {
+  const f = await fixture();
+  f.service.state.settings.reviewDefaults = { branch: 'fs-review', pullRequest: 'fs-dev' };
+  f.service.state.agents.find((agent) => agent.id === 'fs-review')!.model = 'fixture-real-model';
+  const feature = await f.service.createFeature({
+    title: 'ignored',
+    description: '',
+    reviewTarget: { kind: 'working-tree' },
+    requestId: '804a305e-8cda-4194-b950-a78254da1274',
+  });
+  expect(feature.reviewTarget).toEqual({ kind: 'working-tree' });
+  expect(feature.description).toBe('');
+  expect(feature.steps).toHaveLength(1);
+  expect(feature.steps[0].agentId).toBe('fs-review');
+  expect(feature.steps[0].model).toBe('fixture-real-model');
+  expect(
+    await f.service.createFeature({
+      title: 'ignored',
+      description: '',
+      reviewTarget: { kind: 'working-tree' },
+      requestId: feature.creationRequestId,
+    }),
+  ).toBe(feature);
+  const pr = await f.service.createFeature({
+    title: 'PR',
+    description: '',
+    reviewTarget: { kind: 'pull-request', url: 'https://github.com/example/repo/pull/1' },
+  });
+  expect(pr.steps[0].agentId).toBe('fs-dev');
+  await f.service.checkRuntime();
+  f.run(async (input) => {
+    expect(input.nativeReadOnly).toBe(true);
+    expect(input.preparedPrompt).toContain('Modifications');
+    expect(input.preparedPrompt).toContain('studio_git_changes');
+    const tools = await f.service.getTools(
+      input,
+      { onEvent() {}, onSession() {} },
+      new AbortController().signal,
+    );
+    expect(tools.some((tool) => tool.name === 'studio_git_diff')).toBe(true);
+    expect(tools.some((tool) => /write|test|replace/.test(tool.name))).toBe(false);
+    return finished('# Récapitulatif\nAucun constat.');
+  });
+  await f.service.runStep(feature.id, 'review');
+  expect(feature.steps[0].attempts.at(-1)?.status).toBe('awaiting_review');
+  const restored = await f.service.store.load();
+  expect(restored.features.find((item) => item.id === feature.id)?.reviewTarget).toEqual({
+    kind: 'working-tree',
+  });
+  expect(restored.settings.reviewDefaults).toEqual({ branch: 'fs-review', pullRequest: 'fs-dev' });
+});
+
+it('rejects unavailable reviewers and invalid or ambiguous review targets', async () => {
+  const f = await fixture();
+  f.service.state.settings.reviewDefaults = { branch: 'deleted-agent' };
+  await expect(
+    f.service.createFeature({
+      title: 'Review',
+      description: '',
+      reviewTarget: { kind: 'working-tree' },
+    }),
+  ).rejects.toThrow('indisponible');
+  await expect(
+    f.service.createFeature({
+      title: 'Review',
+      description: '',
+      reviewTarget: { kind: 'pull-request', url: 'https://example.com/not-a-pr' },
+    }),
+  ).rejects.toThrow();
+  await expect(
+    f.service.createFeature({
+      title: 'Review',
+      description: '',
+      reviewTarget: { kind: 'working-tree' },
+      isolated: true,
+    }),
+  ).rejects.toThrow('sans création de worktree');
 });

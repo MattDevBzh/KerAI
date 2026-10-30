@@ -1,3 +1,4 @@
+import { reviewTargetLabel } from '../src/shared/reviews';
 import './work-focus.css';
 import {
   Archive,
@@ -275,7 +276,7 @@ export function FeatureDetail({
       )}
       <div className="breadcrumb">
         <button onClick={back} disabled={detailDirty}>
-          <ArrowLeft size={14} /> Vos sessions
+          <ArrowLeft size={14} /> {feature.reviewTarget ? 'Vos relectures' : 'Vos sessions'}
         </button>
         <ChevronRight size={12} />
         <span>{feature.workflowName}</span>
@@ -289,8 +290,18 @@ export function FeatureDetail({
         <div>
           <Badge {...featureStatus[feature.status]} />
           <h1>{feature.title}</h1>
+          {feature.reviewTarget && (
+            <p className="review-target">
+              {reviewTargetLabel(feature.reviewTarget)}
+              {feature.reviewTarget.kind === 'pull-request' && <> · {feature.reviewTarget.url}</>}
+            </p>
+          )}
           <details className="feature-brief-disclosure">
-            <summary>Objectif et contexte de la session</summary>
+            <summary>
+              {feature.reviewTarget
+                ? 'Contexte complémentaire de la relecture'
+                : 'Objectif et contexte de la session'}
+            </summary>
             <FeatureBrief feature={feature} state={state} />
           </details>
           <div className="feature-meta">

@@ -1,3 +1,7 @@
+import { PullRequestReview } from './PullRequestReview';
+import { parsePullRequestUrl } from '../shared/reviews';
+import { reviewTargetSchema } from '../core/reviewSchemas';
+import { reviewTargetLabel, reviewWorkflow } from '../shared/reviews';
 import { defaultNavigationSelection, isNavigator } from '../shared/navigationSelection';
 import {
   compactableSections,
@@ -252,6 +256,7 @@ export class StudioService extends EventEmitter {
   engine = new WorkflowEngine();
   state!: StudioState;
   adapter!: AgentAdapter;
+  reviewReader?: (url: string, signal: AbortSignal) => import('./DevOpsInspector').DevOpsReader;
   devopsInspector?: (signal: AbortSignal) => DevOpsInspector;
   projectInspector?: (projectId: string, signal: AbortSignal) => DevOpsInspector;
   projectDevOpsKey?: (projectId: string) => string | undefined;
@@ -322,7 +327,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 14,
+      schemaVersion: 15,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -427,6 +432,7 @@ export class StudioService extends EventEmitter {
     this.publish();
   }
   async createFeature(input: {
+    reviewTarget?: import('../shared/reviews').ReviewTarget;
     images?: import('../shared/images').ImageAttachment[];
     permissionMode?: NativePermissionMode;
     requestId?: string;
@@ -488,6 +494,32 @@ export class StudioService extends EventEmitter {
           }),
         });
       }
+      const reviewTarget = input.reviewTarget
+        ? reviewTargetSchema.parse(input.reviewTarget)
+        : undefined;
+      if (reviewTarget) {
+        if (input.isolated || (input.projects?.length ?? 0) > 1)
+          throw new Error('Une relecture porte sur un seul projet, sans création de worktree.');
+        if (reviewTarget.kind === 'branches') {
+          const branches = await this.workspaces.branchChoices();
+          if (
+            ![reviewTarget.source, reviewTarget.destination].every((ref) =>
+              branches.some((branch) => branch.ref === ref),
+            )
+          )
+            throw new Error('Une branche choisie est introuvable. Actualisez la liste.');
+        }
+        const configured =
+          this.state.settings.reviewDefaults?.[
+            reviewTarget.kind === 'pull-request' ? 'pullRequest' : 'branch'
+          ];
+        const reviewer = input.agentId ?? configured ?? 'fs-review';
+        if (!this.state.agents.some((agent) => agent.id === reviewer))
+          throw new Error(
+            'Le relecteur par défaut est indisponible. Choisissez un agent dans les réglages.',
+          );
+        workflow = reviewWorkflow(reviewer);
+      }
       const criteria = input.criteria
         ? discussionFeaturePlanSchema.shape.criteria.parse(input.criteria)
         : [];
@@ -512,6 +544,8 @@ export class StudioService extends EventEmitter {
           branch: info.branch,
         },
       );
+      feature.reviewTarget = reviewTarget;
+      if (reviewTarget) feature.title = `Relecture · ${reviewTargetLabel(reviewTarget)}`;
       feature.steps = inheritTeamProfiles(feature.steps, this.state.agents);
       feature.execution = {
         mode: 'copilot-native',
@@ -1000,6 +1034,38 @@ export class StudioService extends EventEmitter {
           }),
         },
       ];
+    if (input.feature.reviewTarget) {
+      const target = input.feature.reviewTarget;
+      if (target.kind === 'pull-request') {
+        const azure =
+          parsePullRequestUrl(target.url).provider === 'azure'
+            ? this.reviewReader?.(target.url, signal)
+            : undefined;
+        return [new PullRequestReview(target.url, input.workspacePath, signal, azure).tool()];
+      }
+      const host = new ToolHost(
+        {
+          ...input,
+          step: { ...input.step, policy: 'read-only' },
+          agent: { ...input.agent, tools: [...input.agent.tools, 'read'] },
+        },
+        callbacks,
+        signal,
+        this.devopsInspector,
+      );
+      this.toolHosts.set(input.attempt.id, host);
+      return (await host.createTools()).filter((tool) =>
+        [
+          'studio_list_files',
+          'studio_read_file',
+          'studio_search',
+          'studio_git_branches',
+          'studio_git_changes',
+          'studio_git_diff',
+          'studio_git_read',
+        ].includes(tool.name),
+      );
+    }
     const browserTools = navigationTools(this.navigation, input, callbacks, signal);
     if (input.navigation?.application.ownerNavigatorId === input.agent.id) return browserTools;
     const host =
@@ -1102,6 +1168,7 @@ export class StudioService extends EventEmitter {
     const agent = this.state.agents.find((item) => item.id === step.agentId);
     if (!agent) throw new Error('Agent introuvable.');
     Object.assign(step, resolveAgentProfile(step, agent));
+    if (feature.reviewTarget) step.policy = 'read-only';
     const skillIds = step.skills;
     const selected = launchSchema.parse(
       launch ?? {
@@ -1277,6 +1344,7 @@ export class StudioService extends EventEmitter {
       launch: selected,
     };
     return {
+      nativeReadOnly: Boolean(feature.reviewTarget),
       devopsProjectKey: this.devopsProjectKey?.(),
       navigation,
       feature,
@@ -1587,7 +1655,8 @@ export class StudioService extends EventEmitter {
         : undefined;
       input.previousEventIds = pair.nativeConversation ? pair.nativeEventIds : undefined;
       input.mode = isWorkTurn(turn) || pair.nativeConversation ? undefined : 'discussion';
-      input.nativeReadOnly = pair.nativeConversation && !isWorkTurn(turn);
+      input.nativeReadOnly =
+        Boolean(feature.reviewTarget) || (pair.nativeConversation && !isWorkTurn(turn));
     }
     let complete!: () => void;
     const done = new Promise<void>((resolve) => {

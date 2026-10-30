@@ -376,7 +376,11 @@ export function LaunchDialog({
             onChange={(navigation) => update({ navigation, omitNavigation: !navigation })}
           />
           <label className="field">
-            <span>US, demande ou contexte initial</span>
+            <span>
+              {feature.reviewTarget
+                ? 'Contexte complémentaire (facultatif)'
+                : 'US, demande ou contexte initial'}
+            </span>
             <textarea
               rows={7}
               value={launch.initialContext}
@@ -386,7 +390,11 @@ export function LaunchDialog({
                   contextBlocks: { ...launch.contextBlocks, 'initial-context': { enabled: true } },
                 })
               }
-              placeholder="Collez votre user story, vos critères d’acceptation, les contraintes et les informations utiles à cette exécution."
+              placeholder={
+                feature.reviewTarget
+                  ? 'Vous pouvez laisser ce champ vide, ou préciser les points à surveiller pendant la relecture.'
+                  : 'Collez votre user story, vos critères d’acceptation, les contraintes et les informations utiles à cette exécution.'
+              }
             />
             <small>
               Ce texte accompagne cette tentative. Dans l’aperçu, choisissez les autres blocs à

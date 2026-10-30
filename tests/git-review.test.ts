@@ -224,3 +224,33 @@ describe('branch review tools', () => {
     ).toBe('direct');
   });
 });
+
+it('compares two selected branches without reading the current checkout as source', async () => {
+  const { root, git, review, baseSha } = await fixture();
+  await writeFile(join(root, 'code.ts'), 'selected source\n');
+  await git('add', '.');
+  await git('commit', '-m', 'source');
+  const sourceSha = await git('rev-parse', 'HEAD');
+  await git('checkout', 'develop');
+  await writeFile(join(root, 'code.ts'), 'unrelated local work\n');
+  const result = await diff(review, {
+    sourceRef: 'refs/heads/feature',
+    baseRef: 'refs/heads/develop',
+    includeLocal: false,
+  });
+  expect(result.diff).toContain('+selected source');
+  expect(result.diff).not.toContain('unrelated');
+  expect(result.snapshot).toMatchObject({
+    headSha: sourceSha,
+    effectiveBaseSha: baseSha,
+    sourceRef: 'refs/heads/feature',
+  });
+  expect(await review.readFile({ ref: sourceSha, path: 'code.ts' })).toMatchObject({
+    content: 'selected source\n',
+  });
+  expect(await readFile(join(root, 'code.ts'), 'utf8')).toBe('unrelated local work\n');
+  expect(await git('branch', '--show-current')).toBe('develop');
+  await expect(
+    diff(review, { sourceRef: 'feature', baseRef: 'develop', includeLocal: true }),
+  ).rejects.toThrow('exclut');
+});

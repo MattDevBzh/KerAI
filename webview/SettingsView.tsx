@@ -117,6 +117,7 @@ export function SettingsView({
             ['models', 'Modèles et budgets'],
             ['storage', 'Archives'],
             ['sessions', 'Sessions'],
+            ['reviews', 'Relecture'],
             ['tests', 'Tests'],
           ].map(([id, label]) => (
             <a key={id} href={`#settings-${id}`}>
@@ -298,6 +299,50 @@ export function SettingsView({
                     <span>minutes</span>
                   </div>
                 </label>
+              </div>
+            </section>
+            <section className="settings-card settings-anchor" id="settings-reviews">
+              <h2>Relecteurs par défaut</h2>
+              <p>
+                Un agent par type de relecture. Vous pourrez modifier l’équipe, le modèle et les
+                paramètres dans chaque relecture.
+              </p>
+              <div className="field-row">
+                {(['pullRequest', 'branch'] as const).map((kind) => (
+                  <label className="field" key={kind}>
+                    <span>
+                      {kind === 'pullRequest'
+                        ? 'Relecteur des Pull Requests'
+                        : 'Relecteur des branches Git'}
+                    </span>
+                    <select
+                      value={draft.reviewDefaults?.[kind] ?? ''}
+                      onChange={(event) =>
+                        set({
+                          reviewDefaults: {
+                            ...draft.reviewDefaults,
+                            [kind]: event.target.value || undefined,
+                          },
+                        })
+                      }
+                    >
+                      <option value="">Relecture — agent fourni par défaut</option>
+                      {draft.reviewDefaults?.[kind] &&
+                        !state.agents.some(
+                          (agent) => agent.id === draft.reviewDefaults?.[kind],
+                        ) && (
+                          <option value={draft.reviewDefaults[kind]}>
+                            Agent indisponible — choisir un remplaçant
+                          </option>
+                        )}
+                      {state.agents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.nickname || agent.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
               </div>
             </section>
             <section className="settings-card settings-anchor" id="settings-tests">

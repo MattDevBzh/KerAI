@@ -1,3 +1,4 @@
+import { reviewInstructions } from '../shared/reviews';
 import { subplanContract } from '../shared/subplans';
 import {
   applyContextSummary,
@@ -76,6 +77,13 @@ export function promptSections(input: RunInput): PromptSection[] {
       'system',
       `Contrat de réussite approuvé au lancement :\n${loop.contract.description}\n\nCritères à conserver :\n${loop.contract.criteria.map((c) => `- ${c.id} : ${c.text}`).join('\n')}\n\nCommandes de vérification prévues :\n${loop.contract.commands.map((c) => `- ${c.projectId ? `${c.projectId} / ` : ''}${c.name} (${c.id}) : ${c.command} ${c.args.join(' ')}`).join('\n') || 'Aucune commande enregistrée ; une relecture ne prouve pas une exécution de tests.'}\n\nNe modifie pas les critères, les commandes ou les assertions pour faire disparaître un échec. Signale une attente erronée pour décision humaine. Respecte les validations humaines, notamment le code avant les tests. Un constat du relecteur ne remplace pas une preuve d'exécution. Réutilise les identifiants des problèmes déjà observés et explique les différences.\n${correctionLoopFeedback(loop)}`,
     );
+  if (input.feature.reviewTarget)
+    add(
+      'review-target',
+      'Cible de la relecture',
+      'system',
+      reviewInstructions(input.feature.reviewTarget),
+    );
   if (input.feature.images?.length)
     add(
       'images',
@@ -87,7 +95,7 @@ export function promptSections(input: RunInput): PromptSection[] {
     'step',
     'Mission de cette étape',
     'system',
-    `Étape : ${input.step.name}\n${input.step.description}\n${input.navigation && input.step.policy === 'read-only' ? 'Code en lecture seule, aucun terminal ni écriture. Outils navigateur limités au contexte et aux interactions autorisées dans KerAI.' : input.agent.tools.includes('documentation') ? `Documentation en lecture seule, sans terminal ni écriture. ${input.agent.tools.includes('web') ? 'Recherche et consultation web disponibles avec les permissions Copilot.' : 'Aucun outil web disponible pour ce rôle.'}` : native ? `Outils natifs Copilot. Permissions : ${permissionLabels[input.launch?.permissionMode ?? input.feature.execution!.permissionMode]}. Les profils techniques Studio ne limitent pas ces outils. Préserve les modifications humaines existantes.` : `Profil technique : ${input.step.policy}`}`,
+    `Étape : ${input.step.name}\n${input.step.description}\n${input.feature.reviewTarget ? 'Relecture en lecture seule, sans édition, terminal, publication ni exécution de tests.' : input.navigation && input.step.policy === 'read-only' ? 'Code en lecture seule, aucun terminal ni écriture. Outils navigateur limités au contexte et aux interactions autorisées dans KerAI.' : input.agent.tools.includes('documentation') ? `Documentation en lecture seule, sans terminal ni écriture. ${input.agent.tools.includes('web') ? 'Recherche et consultation web disponibles avec les permissions Copilot.' : 'Aucun outil web disponible pour ce rôle.'}` : native ? `Outils natifs Copilot. Permissions : ${permissionLabels[input.launch?.permissionMode ?? input.feature.execution!.permissionMode]}. Les profils techniques Studio ne limitent pas ces outils. Préserve les modifications humaines existantes.` : `Profil technique : ${input.step.policy}`}`,
   );
   if (input.navigation)
     add('navigation', 'Parcours et état applicatif', 'system', input.navigation.contextText);

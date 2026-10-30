@@ -191,6 +191,7 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  reviewTarget?: import('./reviews').ReviewTarget;
   navigation?: import('./navigation').NavigationSelection;
   proofChecks?: Record<string, import('./proofs').ProofCheck>;
   images?: import('./images').ImageAttachment[];
@@ -281,6 +282,7 @@ export interface HookDefinition {
   enabled: boolean;
 }
 export interface StudioSettings {
+  reviewDefaults?: { pullRequest?: string; branch?: string };
   traceLimitBytes?: number;
   defaultModel: string;
   timeoutMinutes: number;
@@ -316,7 +318,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
   workspace: {
     name: string;
     path: string;
@@ -349,6 +351,7 @@ export interface StudioState {
   };
 }
 export type ClientMessage =
+  | { type: 'reviewBranches'; requestId: string; projectId?: string }
   | { type: 'resyncState' }
   | { type: 'navigationIntervention'; featureId: string; stepId: string; attemptId: string }
   | { type: 'openNavigationCapture'; featureId: string; captureId: string }
@@ -399,6 +402,7 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      reviewTarget?: import('./reviews').ReviewTarget;
       images?: import('./images').ImageAttachment[];
       permissionMode?: import('./native').NativePermissionMode;
       requestId?: string;
@@ -591,6 +595,12 @@ export type ClientMessage =
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
   | { type: 'correctionLoopRenewed'; requestId: string; error?: string }
+  | {
+      type: 'reviewBranchesResult';
+      requestId: string;
+      branches?: { name: string; ref: string; commit: string }[];
+      error?: string;
+    }
   | { type: 'autopilotSaved'; requestId: string; error?: string }
   | {
       type: 'autopilotPreview';
@@ -696,6 +706,7 @@ export type HostMessage =
         | 'dashboard'
         | 'sessions'
         | 'observation'
+        | 'reviews'
         | 'devops-prs'
         | 'devops-tickets'
         | 'devops';

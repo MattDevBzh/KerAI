@@ -440,6 +440,10 @@ export async function activate(context: vscode.ExtensionContext) {
         },
       });
       await controller.initialize();
+      next.reviewReader = (url, signal) => {
+        next.assertTrusted();
+        return controller.reviewReader(url, signal);
+      };
       next.devopsInspector = (signal) => {
         next.assertTrusted();
         return controller.inspector(signal);
@@ -1086,6 +1090,29 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (message.type === 'reviewBranches') {
+      try {
+        await bootstrap();
+        const projects = catalog.resolve(
+          message.projectId ? [message.projectId] : catalog.state.selectedProjectIds.slice(0, 1),
+        );
+        const entry = await hub.entry(projects[0]?.id);
+        send({
+          type: 'reviewBranchesResult',
+          requestId: message.requestId,
+          branches: (await entry.service.workspaces.branchChoices()).filter(
+            (branch) => branch.ref !== 'HEAD',
+          ),
+        });
+      } catch (error) {
+        send({
+          type: 'reviewBranchesResult',
+          requestId: message.requestId,
+          error: redact((error as Error).message),
+        });
+      }
+      return;
+    }
     if (message.type === 'createFeature') {
       try {
         await bootstrap();
@@ -1105,7 +1132,11 @@ export async function activate(context: vscode.ExtensionContext) {
             requestId: message.requestId,
             featureId: created.id,
           });
-        send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+        send({
+          type: 'navigate',
+          view: created.reviewTarget ? 'reviews' : 'dashboard',
+          featureId: created.id,
+        });
       } catch (error) {
         if (!message.requestId) throw error;
         reportCreationError(message.requestId, error);

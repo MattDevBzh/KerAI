@@ -1,3 +1,4 @@
+import { reviewTargetSchema } from '../core/reviewSchemas';
 import { navigationCommandSchema } from '../core/navigationSchemas';
 import { proofMessageVariants } from '../core/proofSchemas';
 import { imagesSchema } from '../core/imageSchemas';
@@ -172,7 +173,15 @@ export const messageSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('reviewBranches'),
+      requestId: z.string().uuid(),
+      projectId: id.optional(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('createFeature'),
+      reviewTarget: reviewTargetSchema.optional(),
       images: imagesSchema.optional(),
       permissionMode: nativePermissionModeSchema.optional(),
       requestId: z.string().uuid().optional(),

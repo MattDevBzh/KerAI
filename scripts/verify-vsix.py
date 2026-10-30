@@ -34,6 +34,8 @@ def verify(vsix, root, extract=None, match_build=False):
         for marker in ('setReward', 'unlockDragonBall', 'setLivingHq', 'resolveOptionalStep', 'pairAction', 'setPermissionMode', 'previewAutopilot', 'autopilotSaved'):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
+        assert b'reviewBranchesResult' in host and b'reviewBranchesResult' in ui, 'Dedicated review routing missing'
+        assert b'studio_review_pr' in host and b'studio_git_read' in host, 'Review readers missing'
         assert b'autopilot-journal' in ui, 'Autopilot journal missing'
         assert b'renewCorrectionLoop' in host and b'renewCorrectionLoop' in ui, 'Correction loop renewal missing'
         assert b'correction-loop-panel' in ui, 'Correction loop progress panel missing'

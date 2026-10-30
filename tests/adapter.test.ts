@@ -335,6 +335,18 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
       }),
     );
   });
+  it('keeps dedicated review readers in the native catalog and returns a report without write tools', async () => {
+    const run = nativeTransport();
+    run.feature.reviewTarget = { kind: 'working-tree' };
+    const result = await adapter.run(run, callbacks, new AbortController().signal);
+    expect(fake.config?.availableTools).toContain('studio_read_file');
+    for (const denied of ['bash', 'powershell', 'create', 'edit', 'apply_patch', 'task'])
+      expect(fake.config?.availableTools).not.toContain(denied);
+    expect(fake.config?.systemMessage).toMatchObject({
+      content: expect.stringContaining('compte rendu Markdown'),
+    });
+    expect(result.content).toContain('# Livrable');
+  });
   it('gives documentation researchers only read and web tools and no MCP, while ordinary agents have no web', async () => {
     const run = nativeTransport();
     run.agent.tools = ['read', 'search', 'documentation', 'web'];

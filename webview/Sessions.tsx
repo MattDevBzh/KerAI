@@ -22,7 +22,7 @@ import {
 } from '../src/shared/sessionList';
 import { progressLabel, stepResolved } from '../src/shared/optionalSteps';
 import { searchText } from './Ergonomics';
-import { isHosted, persistView, savedSessionList, subscribe } from './bridge';
+import { isHosted, persistView, savedSessionList, savedReviewList, subscribe } from './bridge';
 import './sessions.css';
 import './work-focus.css';
 import { FirstSessionGuide } from './FirstSessionGuide';
@@ -71,11 +71,13 @@ function SelectAll({
 }
 
 export function Sessions({
+  reviewMode = false,
   state,
   onCreate,
   onOpen,
   dispatch,
 }: {
+  reviewMode?: boolean;
   state: StudioState;
   onCreate: () => void;
   onOpen: (id: string) => void;
@@ -83,7 +85,7 @@ export function Sessions({
 }) {
   const [filters, setFilters] = useState<SessionListFilters>(() => ({
     ...defaultSessionFilters,
-    ...savedSessionList(),
+    ...(reviewMode ? savedReviewList() : savedSessionList()),
   }));
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
@@ -148,7 +150,9 @@ export function Sessions({
     );
     if (anchor.current && !visible.has(anchor.current)) anchor.current = undefined;
   }, [visibleKey]);
-  useEffect(() => persistView({ sessionList: filters }), [filters]);
+  useEffect(() => {
+    persistView(reviewMode ? { reviewList: filters } : { sessionList: filters });
+  }, [filters, reviewMode]);
   useEffect(
     () =>
       subscribe((message) => {
@@ -200,7 +204,8 @@ export function Sessions({
         <div>
           <span className="eyebrow">VOTRE ATELIER</span>
           <h1>
-            Sessions <span className="count-pill">{state.features.length}</span>
+            {reviewMode ? 'Relectures' : 'Sessions'}{' '}
+            <span className="count-pill">{state.features.length}</span>
           </h1>
         </div>
         <button
@@ -208,13 +213,16 @@ export function Sessions({
           disabled={Boolean(pending || state.workspaceOperation)}
           onClick={() => onCreate()}
         >
-          <Plus size={16} /> Nouvelle session
+          <Plus size={16} /> {reviewMode ? 'Nouvelle relecture' : 'Nouvelle session'}
         </button>
       </header>
-      {!state.features.length && (
+      {!reviewMode && !state.features.length && (
         <FirstSessionGuide state={state} dispatch={dispatch} onCreate={onCreate} />
       )}
-      <section aria-label="Liste des sessions" hidden={!state.features.length}>
+      <section
+        aria-label={reviewMode ? 'Liste des relectures' : 'Liste des sessions'}
+        hidden={!reviewMode && !state.features.length}
+      >
         <div className="sessions-controls">
           <div className="sessions-tabs">
             <button
@@ -235,21 +243,31 @@ export function Sessions({
             </button>
             <span className="sessions-shortcuts">
               <button
-                aria-label="Afficher toutes les sessions"
+                aria-label={
+                  reviewMode ? 'Afficher toutes les relectures' : 'Afficher toutes les sessions'
+                }
                 disabled={Boolean(pending)}
                 onClick={() => change({ status: 'all', search: '', archived: false })}
               >
                 Toutes
               </button>
               <button
-                aria-label="Afficher les sessions à votre tour"
+                aria-label={
+                  reviewMode
+                    ? 'Afficher les relectures à votre tour'
+                    : 'Afficher les sessions à votre tour'
+                }
                 disabled={Boolean(pending)}
                 onClick={() => change({ status: 'attention', search: '', archived: false })}
               >
                 À votre tour
               </button>
               <button
-                aria-label="Afficher les sessions terminées"
+                aria-label={
+                  reviewMode
+                    ? 'Afficher les relectures terminées'
+                    : 'Afficher les sessions terminées'
+                }
                 disabled={Boolean(pending)}
                 onClick={() => change({ status: 'completed', search: '', archived: false })}
               >
@@ -261,7 +279,7 @@ export function Sessions({
             <label className="search-field">
               <Search size={16} />
               <input
-                aria-label="Rechercher une session"
+                aria-label={reviewMode ? 'Rechercher une relecture' : 'Rechercher une session'}
                 placeholder="Titre, branche, projet…"
                 value={filters.search}
                 disabled={Boolean(pending)}
@@ -308,7 +326,7 @@ export function Sessions({
             <label>
               <span>État</span>
               <select
-                aria-label="Filtrer les sessions"
+                aria-label={reviewMode ? 'Filtrer les relectures' : 'Filtrer les sessions'}
                 value={filters.status}
                 disabled={Boolean(pending)}
                 onChange={(event) => change({ status: event.target.value })}
@@ -324,7 +342,7 @@ export function Sessions({
             <label>
               <span>Trier</span>
               <select
-                aria-label="Trier les sessions"
+                aria-label={reviewMode ? 'Trier les relectures' : 'Trier les sessions'}
                 value={filters.sort}
                 disabled={Boolean(pending)}
                 onChange={(event) =>
@@ -342,7 +360,7 @@ export function Sessions({
           <strong>
             {selected.length
               ? `${selected.length} sélectionnée${selected.length > 1 ? 's' : ''}`
-              : `${rows.length} session${rows.length > 1 ? 's' : ''} trouvée${rows.length > 1 ? 's' : ''}`}
+              : `${rows.length} ${reviewMode ? 'relecture' : 'session'}${rows.length > 1 ? 's' : ''} trouvée${rows.length > 1 ? 's' : ''}`}
           </strong>
           {selected.length > 0 ? (
             <>
@@ -439,7 +457,11 @@ export function Sessions({
             </button>
           </div>
         )}
-        <table className="sessions-table" aria-label="Sessions" aria-busy={Boolean(pending)}>
+        <table
+          className="sessions-table"
+          aria-label={reviewMode ? 'Relectures' : 'Sessions'}
+          aria-busy={Boolean(pending)}
+        >
           <thead>
             <tr>
               <th>
@@ -457,7 +479,7 @@ export function Sessions({
                   }}
                 />
               </th>
-              <th>Session</th>
+              <th>{reviewMode ? 'Relecture' : 'Session'}</th>
               <th>Projet</th>
               <th>État / progression</th>
               <th>Dernière activité</th>
@@ -631,17 +653,25 @@ export function Sessions({
             <Search size={24} />
             <h2>
               {filtered
-                ? 'Aucune session ne correspond'
+                ? reviewMode
+                  ? 'Aucune relecture ne correspond'
+                  : 'Aucune session ne correspond'
                 : filters.archived
-                  ? 'Aucune session archivée'
-                  : 'Votre prochaine session commence ici'}
+                  ? reviewMode
+                    ? 'Aucune relecture archivée'
+                    : 'Aucune session archivée'
+                  : reviewMode
+                    ? 'Votre prochaine relecture commence ici'
+                    : 'Votre prochaine session commence ici'}
             </h2>
             <p>
               {filtered
                 ? 'Essayez une autre recherche ou un autre projet.'
                 : filters.archived
                   ? 'Les sessions archivées restent consultables et peuvent être restaurées.'
-                  : 'Créez une session et choisissez les projets concernés.'}
+                  : reviewMode
+                    ? 'Choisissez une Pull Request ou des changements Git à relire.'
+                    : 'Créez une session et choisissez les projets concernés.'}
             </p>
             {filtered ? (
               <button className="button secondary" onClick={reset}>
@@ -650,7 +680,7 @@ export function Sessions({
             ) : (
               !filters.archived && (
                 <button className="button primary" onClick={() => onCreate()}>
-                  Créer ma première session
+                  {reviewMode ? 'Créer ma première relecture' : 'Créer ma première session'}
                 </button>
               )
             )}

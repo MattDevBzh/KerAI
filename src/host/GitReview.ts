@@ -10,6 +10,7 @@ const fingerprint = z
   .regex(/^[a-f0-9]{64}$/)
   .optional();
 export const gitComparisonSchema = z.object({
+  sourceRef: z.string().min(1).max(512).optional(),
   baseRef: z.string().min(1).max(512).optional(),
   comparison: z.enum(['merge-base', 'direct']).default('merge-base'),
   includeLocal: z.boolean().optional(),
@@ -132,10 +133,16 @@ export class GitReview {
 
   private async snapshot(args: Comparison) {
     const current = await this.current();
+    const source = args.sourceRef ? await this.resolveBranch(args.sourceRef) : undefined;
+    if (source && (!args.baseRef || args.includeLocal))
+      throw new Error(
+        'Une source explicite exige une destination et exclut les modifications locales.',
+      );
+    const sourceSha = source?.sha ?? current.headSha;
     const base = args.baseRef ? await this.resolveBranch(args.baseRef) : undefined;
     let effectiveBaseSha = base?.sha ?? current.headSha;
     if (base && args.comparison === 'merge-base') {
-      const result = await gitRead(this.root, ['merge-base', '--all', base.sha, current.headSha], {
+      const result = await gitRead(this.root, ['merge-base', '--all', base.sha, sourceSha], {
         signal: this.signal,
         rawOutput: true,
       });
@@ -152,6 +159,7 @@ export class GitReview {
     }
     return {
       ...current,
+      ...(source ? { sourceRef: source.ref, headSha: sourceSha } : {}),
       baseRef: base?.ref ?? 'HEAD',
       baseSha: base?.sha ?? current.headSha,
       effectiveBaseSha,
@@ -214,6 +222,15 @@ export class GitReview {
     }
     files.sort((a, b) => a.path.localeCompare(b.path) || a.status.localeCompare(b.status));
     return { snapshot, files, excludedCount };
+  }
+
+  async readFile(args: { ref: string; path: string; startLine?: number; endLine?: number }) {
+    await this.policy.resolve(args.path);
+    const revision = /^[a-f0-9]{40,64}$/.test(args.ref)
+      ? args.ref
+      : (await this.resolveBranch(args.ref)).sha;
+    const content = await this.read(['show', `${revision}:${args.path}`]);
+    return { ref: revision, path: args.path, ...textPage(content, args.startLine, args.endLine) };
   }
 
   async changes(args: z.infer<typeof gitChangesSchema>) {

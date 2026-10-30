@@ -1,3 +1,4 @@
+import { reviewTargetLabel } from './reviews';
 import { usageCredits } from './credits';
 import { skippedStepLabel } from './optionalSteps';
 import type { Feature } from './types';
@@ -74,6 +75,10 @@ export function sessionMarkdown(feature: Feature, workspacePath: string): string
     `Branche : ${feature.branch}\nWorkflow : ${feature.workflowName}\nÉtat : ${feature.status}`,
     `Espace : ${feature.worktree?.path ?? workspacePath}`,
   ];
+  if (feature.reviewTarget)
+    parts.push(
+      `Cible de relecture : ${markdownText(reviewTargetLabel(feature.reviewTarget))}${feature.reviewTarget.kind === 'pull-request' ? `\nURL : ${markdownText(feature.reviewTarget.url)}` : ''}`,
+    );
   if (feature.finalValidation)
     parts.push(
       `Validation définitive humaine : ${feature.finalValidation.at} · ${feature.finalValidation.id}`,

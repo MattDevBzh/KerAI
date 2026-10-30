@@ -26,6 +26,7 @@ import { searchText } from './Ergonomics';
 export const navigationScreens = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'sessions', label: 'Sessions', icon: PanelsTopLeft },
+  { id: 'reviews', label: 'Relecture', icon: GitPullRequest },
   { id: 'stats', label: 'Stats', icon: ChartNoAxesCombined },
   { id: 'discussion', label: 'Discussion', icon: MessageSquare },
   { id: 'validation', label: 'Validation', icon: FileCheck2 },
@@ -126,7 +127,15 @@ export function StudioNavigation({
       ) : (
         <>
           {(
-            ['dashboard', 'sessions', 'stats', 'discussion', 'validation', 'applications'] as const
+            [
+              'dashboard',
+              'sessions',
+              'reviews',
+              'stats',
+              'discussion',
+              'validation',
+              'applications',
+            ] as const
           ).map((id) => renderScreen(id))}
           <div className="nav-groups">
             {navigationGroups.map((group) => {

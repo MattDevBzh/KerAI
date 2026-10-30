@@ -5,6 +5,7 @@ interface PersistedView {
   deliveryDrafts?: Record<string, import('../src/shared/deliveryDraft').DeliveryDraft>;
   hqFeatureId?: string;
   statistics?: import('../src/shared/statistics').StatsFilters;
+  reviewList?: import('../src/shared/sessionList').SessionListFilters;
   sessionList?: import('../src/shared/sessionList').SessionListFilters;
   navigationVersion?: number;
   view?: string;
@@ -42,6 +43,9 @@ export const initialView = {
 };
 export function savedFeatureProposal() {
   return persistedView.featureProposal;
+}
+export function savedReviewList() {
+  return persistedView.reviewList;
 }
 export function savedSessionList() {
   return persistedView.sessionList;
@@ -100,6 +104,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       'reportDiscussionOpened',
       'discussionReportOpened',
       'featureCreateResult',
+      'reviewBranchesResult',
       'workflowDeleteResult',
       'projectResult',
       'featureTeamResult',
