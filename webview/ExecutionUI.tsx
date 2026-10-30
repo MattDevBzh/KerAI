@@ -572,9 +572,7 @@ export function LaunchDialog({
                   .filter((s) => s.source !== 'system')
                   .map((s) => {
                     const block = launch.contextBlocks?.[s.id];
-                    const enabled = s.compacted
-                      ? false
-                      : (block?.enabled ?? contextMode === 'all');
+                    const enabled = s.compacted ? false : (block?.enabled ?? contextMode === 'all');
                     const original = s.originalContent ?? s.content;
                     const content = block?.content ?? original;
                     return (

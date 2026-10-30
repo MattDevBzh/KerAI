@@ -2,7 +2,7 @@
 import readline from 'node:readline';
 const tools = [
   {
-    name: 'read_story',
+    name: process.env.FEATURE_STUDIO_FIXTURE_READ_TOOL || 'read_story',
     description: 'Read a fixture story',
     inputSchema: { type: 'object', properties: { id: { type: 'integer' } }, required: ['id'] },
     annotations: { readOnlyHint: true },

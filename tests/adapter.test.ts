@@ -835,80 +835,88 @@ describe('Copilot adapter transport contract (no real prompts)', () => {
       ),
     ).toMatchObject({ kind: 'reject' });
   });
-  it('adds selected MCP tools with exact provenance and both custom-agent namespace aliases', async () => {
-    const run = input();
-    run.mcpServers = [
-      {
-        id: 'fixture',
-        name: 'Fixture',
-        transport: 'stdio',
-        command: 'node',
-        args: ['fixture.mjs'],
-        envKeys: [],
-        headers: {},
-        tools: ['read_story'],
-        enabled: true,
-        autoApproveReadOnly: false,
-      },
-    ];
-    fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({
-      tools: [
-        { name: 'studio_read_file', description: 'Read' },
-        { name: 'studio_ask_human', description: 'Ask' },
+  it.each([
+    ['fixture', 'read_story'],
+    ['mcp-8864feca-a7c4-4060-b239-055dda4b0b1d', 'repo_pull_request_thread'],
+  ])(
+    'adds selected MCP tools with exact provenance and namespace aliases (%s)',
+    async (serverId, toolName) => {
+      const runtimeName = `${serverId}-${toolName}`.slice(0, 64);
+      const namespacedName = `${serverId}/${toolName}`;
+      const run = input();
+      run.mcpServers = [
         {
-          name: 'fixture-read_story',
-          description: 'Read story',
-          mcpServerName: 'fixture',
-          mcpToolName: 'read_story',
-          namespacedName: 'fixture/read_story',
+          id: serverId,
+          name: 'Fixture',
+          transport: 'stdio',
+          command: 'node',
+          args: ['fixture.mjs'],
+          envKeys: [],
+          headers: {},
+          tools: [toolName],
+          enabled: true,
+          autoApproveReadOnly: false,
         },
-      ],
-    });
-    let decision: unknown;
-    fake.setOnSend(() => {
-      decision = fake.config!.hooks!.onPreToolUse!(
-        {
-          sessionId: 's',
-          timestamp: new Date(),
-          workingDirectory: '/workspace',
-          toolName: 'fixture-read_story',
-          toolArgs: { id: 1 },
-        },
-        { sessionId: 's' },
+      ];
+      fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({
+        tools: [
+          { name: 'studio_read_file', description: 'Read' },
+          { name: 'studio_ask_human', description: 'Ask' },
+          {
+            name: runtimeName,
+            description: 'Read story',
+            mcpServerName: serverId,
+            mcpToolName: toolName,
+            namespacedName,
+          },
+        ],
+      });
+      let decision: unknown;
+      fake.setOnSend(() => {
+        decision = fake.config!.hooks!.onPreToolUse!(
+          {
+            sessionId: 's',
+            timestamp: new Date(),
+            workingDirectory: '/workspace',
+            toolName: runtimeName,
+            toolArgs: { id: 1 },
+          },
+          { sessionId: 's' },
+        );
+        fake.emit('assistant.message', { content: 'Final' });
+        fake.emit('session.idle', {});
+      });
+      await adapter.run(run, callbacks, new AbortController().signal);
+      expect(await decision).toEqual({});
+      expect(fake.config?.availableTools).toEqual([
+        'studio_read_file',
+        'studio_ask_human',
+        runtimeName,
+      ]);
+      expect(fake.config?.customAgents?.[0].tools).toEqual([
+        'studio_read_file',
+        'studio_ask_human',
+        runtimeName,
+        namespacedName,
+      ]);
+      expect(fake.config?.customAgents?.[0].prompt).not.toContain(run.agent.instructions);
+      expect(fake.config?.managedSettings?.permissions?.ask).toEqual([`Mcp(${namespacedName})`]);
+      expect(fake.session.rpc.permissions.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          approveAllReadPermissionRequests: false,
+          approveAllToolPermissionRequests: false,
+        }),
       );
-      fake.emit('assistant.message', { content: 'Final' });
-      fake.emit('session.idle', {});
-    });
-    await adapter.run(run, callbacks, new AbortController().signal);
-    expect(await decision).toEqual({});
-    expect(fake.config?.availableTools).toEqual([
-      'studio_read_file',
-      'studio_ask_human',
-      'fixture-read_story',
-    ]);
-    expect(fake.config?.customAgents?.[0].tools).toEqual([
-      'studio_read_file',
-      'studio_ask_human',
-      'fixture-read_story',
-      'fixture/read_story',
-    ]);
-    expect(fake.config?.customAgents?.[0].prompt).not.toContain(run.agent.instructions);
-    expect(fake.config?.managedSettings?.permissions?.ask).toEqual(['Mcp(fixture/read_story)']);
-    expect(fake.session.rpc.permissions.configure).toHaveBeenCalledWith(
-      expect.objectContaining({
-        approveAllReadPermissionRequests: false,
-        approveAllToolPermissionRequests: false,
-      }),
-    );
-    fake.session.rpc.managedSettings.get.mockRejectedValue(
-      new Error('Unhandled method session.managedSettings.get'),
-    );
-    fake.session.send.mockClear();
-    await expect(adapter.run(run, callbacks, new AbortController().signal)).rejects.toThrow(
-      'confinement des outils non vérifiable',
-    );
-    expect(fake.session.send).not.toHaveBeenCalled();
-  });
+      fake.session.rpc.managedSettings.get.mockRejectedValue(
+        new Error('Unhandled method session.managedSettings.get'),
+      );
+      fake.session.send.mockClear();
+      await expect(adapter.run(run, callbacks, new AbortController().signal)).rejects.toThrow(
+        'confinement des outils non vérifiable',
+      );
+      expect(fake.session.send).not.toHaveBeenCalled();
+    },
+  );
   it('refuses paid send when runtime exposes native tools or cannot introspect them', async () => {
     fake.session.rpc.tools.getCurrentMetadata.mockResolvedValue({
       tools: [{ name: 'bash', description: 'Shell' }],

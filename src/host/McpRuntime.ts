@@ -110,8 +110,13 @@ export async function resolveMcpPlan(
     }
     if (!discovery)
       for (const name of server.tools) {
-        const runtimeName = `${server.id}-${name}`;
-        if (plan.grants.has(runtimeName)) throw new Error('Collision entre noms d’outils MCP.');
+        // Copilot CLI caps the model-facing MCP name at 64 characters. The full
+        // server/tool identity remains in metadata and permission requests.
+        const runtimeName = `${server.id}-${name}`.slice(0, 64);
+        if (plan.grants.has(runtimeName))
+          throw new Error(
+            'Collision entre noms d’outils MCP après la limite Copilot de 64 caractères. Raccourcis l’identifiant du serveur ou sélectionne des outils aux noms distincts.',
+          );
         plan.grants.set(runtimeName, {
           serverId: server.id,
           toolName: name,

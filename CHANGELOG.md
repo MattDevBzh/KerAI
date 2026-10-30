@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.36.1 — 2026-10-30
+
+- MCP : correction du refus avant prompt avec les noms d’outils dépassant 64 caractères, notamment `repo_pull_request_thread` derrière un identifiant de serveur généré. La liste autorisée utilise désormais le même nom tronqué que Copilot CLI.
+- Les identités complètes du serveur et de l’outil restent vérifiées ; les noms devenus ambigus après troncature sont refusés avant connexion. Aucun changement des paramètres ou secrets enregistrés.
+- Test du catalogue sur le CLI réel ajouté aux validations Linux et Windows, sans prompt ni appel Azure DevOps.
+
 ## 1.36.0 — 2026-10-30
 
 - Relecture : entrée dédiée du menu, liste distincte avec recherche, filtres et archives ; création sans contexte obligatoire.

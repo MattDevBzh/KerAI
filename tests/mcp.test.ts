@@ -56,6 +56,46 @@ describe('MCP scope and credentials', () => {
       'renvoyé null',
     );
   });
+  it('uses the CLI 64-character name without losing the full MCP identity', async () => {
+    const id = 'mcp-8864feca-a7c4-4060-b239-055dda4b0b1d';
+    const name = 'repo_pull_request_thread';
+    const runtimeName = `${id}-${name}`.slice(0, 64);
+    const plan = await resolveMcpPlan([server({ id, tools: [name] })]);
+    expect(plan.servers[id].tools).toEqual([name]);
+    expect(plan.grants.get(runtimeName)).toMatchObject({ serverId: id, toolName: name });
+    const metadata = { name: runtimeName, description: '', mcpServerName: id, mcpToolName: name };
+    expect(() => verifyMcpCatalog([metadata], new Set(), plan)).not.toThrow();
+    expect(() => verifyMcpCatalog([], new Set(), plan)).toThrow('Manquants');
+    expect(() =>
+      verifyMcpCatalog([{ ...metadata, mcpToolName: name.slice(0, -1) }], new Set(), plan),
+    ).toThrow('Provenance');
+    const cb = callbacks(true);
+    expect(
+      await decideMcpPermission(
+        plan,
+        permission({ serverName: id, toolName: name }),
+        'read-only',
+        cb,
+      ),
+    ).toMatchObject({ kind: 'approve-once' });
+    expect(cb.onMcpPermission).toHaveBeenCalledWith(
+      expect.objectContaining({ serverId: id, toolName: name }),
+    );
+  });
+  it('rejects ambiguous truncated MCP names before starting the runtime', async () => {
+    const id = 'mcp-8864feca-a7c4-4060-b239-055dda4b0b1d';
+    await expect(
+      resolveMcpPlan([
+        server({ id, tools: ['repo_pull_request_thread', 'repo_pull_request_thread_write'] }),
+      ]),
+    ).rejects.toThrow('Collision');
+    await expect(
+      resolveMcpPlan([
+        server({ id: 'a'.repeat(63), tools: ['one'] }),
+        server({ id: 'a'.repeat(63) + '-', tools: ['two'] }),
+      ]),
+    ).rejects.toThrow('Collision');
+  });
   it('resolves secret references only into a transient SDK plan, without changing saved configuration', async () => {
     const config = server({
       transport: 'http',
