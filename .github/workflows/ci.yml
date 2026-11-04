@@ -29,7 +29,8 @@ jobs:
       - run: npx playwright install chromium
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - name: Verify navigation and task boards on Windows
-        run: npx vitest run navigation- tests/task-board.test.ts
+        # Keep browser profiles and the 5,000-journey disk fixture from competing for Windows I/O.
+        run: npx vitest run navigation- tests/task-board.test.ts --maxWorkers=1
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - name: Verify session creation feedback on Windows
         run: >-

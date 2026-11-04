@@ -772,20 +772,37 @@ describe.skipIf(!executablePath)(
         updatedAt: '',
       };
       const replayHost = await launch('replay', journey);
-      await expect
-        .poll(
-          async () => {
-            const saved = JSON.parse(
-              await readFile(path.join(crashRoot, 'navigation', 'browser-recovery.json'), 'utf8'),
-            );
-            return saved.runs[0]?.events?.at(-1)?.stepId;
-          },
-          { timeout: 10000 },
-        )
-        .toBe('filled');
-      const replayExited = new Promise<void>((resolve) => replayHost.once('exit', () => resolve()));
-      replayHost.kill('SIGKILL');
-      await replayExited;
+      try {
+        await expect
+          .poll(
+            async () => {
+              if (replayHost.exitCode !== null || replayHost.signalCode !== null)
+                throw new Error(
+                  `Crash fixture exited before its checkpoint: ${replayHost.exitCode ?? replayHost.signalCode}`,
+                );
+              const saved = JSON.parse(
+                await readFile(path.join(crashRoot, 'navigation', 'browser-recovery.json'), 'utf8'),
+              );
+              const run = saved.runs[0];
+              if (run && run.status !== 'running')
+                throw new Error(
+                  `Replay ended before the crash checkpoint: ${run.status}: ${run.error ?? ''}`,
+                );
+              return run?.events?.at(-1)?.stepId;
+            },
+            // Replay resets Chromium (up to 30s) before durably recording its first action.
+            { timeout: 35000 },
+          )
+          .toBe('filled');
+      } finally {
+        if (replayHost.exitCode === null && replayHost.signalCode === null) {
+          const replayExited = new Promise<void>((resolve) =>
+            replayHost.once('exit', () => resolve()),
+          );
+          replayHost.kill('SIGKILL');
+          await replayExited;
+        }
+      }
       const next = new BrowserSessionManager({
         storageRoot: crashRoot,
         workerPath: '/must-not-launch.cjs',
@@ -798,7 +815,7 @@ describe.skipIf(!executablePath)(
       await next.clearRecoveredRuns([receipts[0].id]);
       expect(next.recoveryRuns()).toEqual([]);
       await next.dispose();
-    }, 30000);
+    }, 60000);
     test('read-only application rejects browser actions and replay', async () => {
       await manager.open({ ...application, interactionPolicy: 'inspect' });
       await expect(manager.act(step('click', 'click', { target: target('#go') }))).rejects.toThrow(
