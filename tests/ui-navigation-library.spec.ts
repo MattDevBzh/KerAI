@@ -602,3 +602,13 @@ test('editor composes a pinned block and a business data selector', async ({ pag
     resolver: { output: 'garageId', attribute: 'data-id', pick: 'unique' },
   });
 });
+
+test('a browser command keeps the access selected after an earlier import', async ({ page }) => {
+  await hosted(page, { ...navigation, focusedJourneyId: 'billing' });
+  await page.getByRole('button', { name: /Depuis une notification/ }).click();
+  await page.getByRole('button', { name: 'Préparer le navigateur', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retrouver ou apprendre un écran' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Fiche de parcours' })).toContainText(
+    'Depuis une notification',
+  );
+});

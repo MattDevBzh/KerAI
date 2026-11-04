@@ -160,11 +160,11 @@ export function ApplicationsUI({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [pending, setPending] = useState(false);
-  const requests = useRef(new Set<string>());
+  const requests = useRef(new Map<string, NavigationCommand['action']>());
   const completed = useRef(new Map<string, () => void>());
   const command: Command = (command, onSuccess) => {
     const requestId = newId();
-    requests.current.add(requestId);
+    requests.current.set(requestId, command.action);
     if (onSuccess) completed.current.set(requestId, onSuccess);
     setPending(true);
     setError('');
@@ -175,11 +175,17 @@ export function ApplicationsUI({
     const cleanup = subscribe((message) => {
       if (message.type !== 'navigationState') return;
       if (message.requestId && requests.current.has(message.requestId)) {
+        const action = requests.current.get(message.requestId)!;
         requests.current.delete(message.requestId);
         setPending(requests.current.size > 0);
         setError(message.error ?? message.state.error ?? '');
         setNotice(message.message ?? message.state.notice ?? '');
-        if (!message.error && message.state.focusedJourneyId)
+        if (
+          !message.error &&
+          !message.state.error &&
+          message.state.focusedJourneyId &&
+          ['saveDraft', 'import', 'recordFinish'].includes(action)
+        )
           setJourneyId(message.state.focusedJourneyId);
         if (!message.error && !message.state.error) completed.current.get(message.requestId)?.();
         completed.current.delete(message.requestId);
@@ -2741,7 +2747,7 @@ export function NavigationLaunchPicker({
               <label className="field" key={parameter.name}>
                 <span>{parameter.label || parameter.name}</span>
                 <input
-                  value={value.parameters[parameter.name] ?? ''}
+                  value={value.parameters[parameter.name] ?? parameter.defaultValue ?? ''}
                   onChange={(event) =>
                     onChange({
                       ...value,

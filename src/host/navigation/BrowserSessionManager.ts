@@ -1,4 +1,4 @@
-import { navigationOutputs, resolveNavigationConditions } from '../../shared/navigationRecipes';
+import { navigationParameters, resolveNavigationConditions } from '../../shared/navigationRecipes';
 import { fork, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile, lstat, realpath, readFile, readdir } from 'node:fs/promises';
@@ -533,31 +533,15 @@ export class BrowserSessionManager {
       throw new Error('Le parcours ne correspond pas à l’application ouverte.');
     const steps = options.plan?.steps ?? journey.steps;
     const definitions = options.plan?.parameters ?? journey.parameters;
-    const outputs = navigationOutputs(steps);
     if (steps.length > NAVIGATION_LIMITS.steps) throw new Error('Limite de 80 étapes dépassée.');
     if (
       (options.plan?.prerequisites ?? journey.prerequisites).length &&
       !options.prerequisitesConfirmed
     )
       throw new Error('Prérequis du parcours non confirmés.');
-    for (const parameter of definitions) {
-      if (parameter.sensitive)
-        throw new Error('Les paramètres secrets doivent être renseignés manuellement.');
-      if (
-        parameter.required &&
-        !outputs.has(parameter.name) &&
-        !(parameter.name in parameters) &&
-        parameter.defaultValue === undefined
-      )
-        throw new Error(`Paramètre manquant : ${parameter.name}`);
-    }
-    const resolved = Object.fromEntries(
-      definitions
-        .filter((p) => !outputs.has(p.name) || Object.hasOwn(parameters, p.name))
-        .map((p) => [p.name, parameters[p.name] ?? p.defaultValue ?? '']),
-    );
-    for (const name of outputs)
-      if (Object.hasOwn(parameters, name)) resolved[name] = parameters[name];
+    if (definitions.some((parameter) => parameter.sensitive))
+      throw new Error('Les paramètres secrets doivent être renseignés manuellement.');
+    const resolved = navigationParameters(definitions, steps, parameters);
     const started = Date.now();
     const run: NavigationRun = {
       id: randomUUID(),
@@ -581,6 +565,7 @@ export class BrowserSessionManager {
       events: [],
       evidencePaths: [],
       metrics: { actions: 0, durationMs: 0, outputChars: 0, providerCalls: 0 },
+      resolvedParameters: { ...resolved },
     };
     await this.exclusive(async () => {
       if (this.recoveredRuns.length >= 63)
@@ -610,13 +595,14 @@ export class BrowserSessionManager {
           }
         };
         if (run.mode === 'reach') {
-          // Explicit viewport changes must still run even if the destination is already visible.
-          if (!steps.some((s) => s.action === 'viewport') && (await matches(journey.arrival)))
-            startIndex = steps.length;
+          // A visible destination does not prove a business identity. Always rerun its selector.
+          const canSkip = (prefix: NavigationStep[]) =>
+            !prefix.some((s) => ['viewport', 'resolve', 'manual'].includes(s.action));
+          if (canSkip(steps) && (await matches(journey.arrival))) startIndex = steps.length;
           else
             for (let index = steps.length - 1; index >= 0; index--) {
               if (
-                !steps.slice(0, index + 1).some((s) => s.action === 'viewport') &&
+                canSkip(steps.slice(0, index + 1)) &&
                 (await matches(steps[index].postconditions ?? []))
               ) {
                 startIndex = index + 1;

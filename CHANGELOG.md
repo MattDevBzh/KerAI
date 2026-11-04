@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.37.1 — 2026-11-04
+
+- Le mode « atteindre » vérifie la sélection des données métier même lorsque la condition d’arrivée est déjà visible.
+- Les valeurs par défaut sont affichées et figées dans le contexte transmis aux agents ; une valeur obligatoire vide est refusée avant toute interaction.
+- Créer une correction conserve la révision sélectionnée : si elle a changé entre-temps, l’interface demande d’actualiser la sélection.
+- Une capture n’est associée au même cas qu’après un rejeu réussi et cohérent avec les paramètres choisis. Changer de page modifie la clé de comparaison ; une action libre, un nouvel enregistrement ou un rejeu rejeté annule l’association précédente.
+- Préparer le navigateur ne ramène plus sur un ancien parcours importé ou enregistré.
+
 ## 1.37.0 — 2026-11-04
 
 - Navigation : imports Edge/Chrome étendus, vrai double-clic et diagnostic groupé ; actions quotidiennes, favoris et finalisation guidée.

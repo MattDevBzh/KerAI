@@ -205,6 +205,7 @@ export class NavigationService extends EventEmitter {
     } = {},
   ) {
     this.assertBrowser(journey.applicationId);
+    this.activeCase = undefined;
     const binding = options.binding ?? (await this.checkEnvironment(journey.applicationId));
     const run = await this.browser.replay(journey, parameters, {
       ...options,
@@ -223,6 +224,10 @@ export class NavigationService extends EventEmitter {
         : undefined;
     this.publish();
     return run;
+  }
+  async act(step: Parameters<BrowserSessionManager['act']>[0], parameters: Record<string, string>) {
+    this.activeCase = undefined;
+    return this.browser.act(step, parameters);
   }
   async inspect(
     target?: Parameters<BrowserSessionManager['inspect']>[0],
@@ -318,9 +323,13 @@ export class NavigationService extends EventEmitter {
     const caseParameters =
       active &&
       active.journey.id === selectedJourney?.id &&
-      active.journey.revision === selectedJourney?.revision
+      active.journey.revision === selectedJourney?.revision &&
+      (!context ||
+        Object.entries(context.selection.parameters).every(
+          ([name, value]) => active.parameters[name] === value,
+        ))
         ? active.parameters
-        : context?.selection.parameters;
+        : undefined;
     const capture: NavigationCapture = {
       ...raw,
       id: randomUUID(),
@@ -345,6 +354,7 @@ export class NavigationService extends EventEmitter {
               .update(
                 JSON.stringify({
                   app: application.id,
+                  url: raw.url,
                   journey: selectedJourney.id,
                   revision: selectedJourney.revision,
                   parameters: Object.fromEntries(
@@ -489,6 +499,10 @@ export class NavigationService extends EventEmitter {
             (j) => j.id === command.journeyId && j.applicationId === application.id,
           );
           if (command.journeyId && !journey) throw new Error('Choisis un parcours disponible.');
+          if (journey && command.revision !== journey.revision)
+            throw new Error(
+              'La révision de ce parcours a changé. Actualise la sélection avant de créer la correction.',
+            );
           const allowed = journey ? navigationPlan(journey, this.store.snapshot()) : undefined;
           const names = new Set([
             ...(allowed?.parameters.filter((p) => !p.sensitive).map((p) => p.name) ?? []),
@@ -630,6 +644,7 @@ export class NavigationService extends EventEmitter {
         }
         case 'recordStart':
           this.assertBrowser(command.applicationId);
+          this.activeCase = undefined;
           await this.browser.startRecording();
           break;
         case 'recordPause':

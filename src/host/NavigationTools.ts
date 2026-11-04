@@ -288,7 +288,7 @@ export function navigationTools(
           throw new Error(
             'Même action répétée sans nouvelle information. Inspecte l’état et demande une précision.',
           );
-        return service.browser.act(step, guard().selection.parameters);
+        return service.act(step, guard().selection.parameters);
       },
     ),
     tool(

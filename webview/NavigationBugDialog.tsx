@@ -41,6 +41,7 @@ export function NavigationBugDialog({
             action: 'createBug',
             applicationId,
             journeyId: journey?.id,
+            revision: journey?.revision,
             parameters,
             title,
             observed,

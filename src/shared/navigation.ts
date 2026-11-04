@@ -245,6 +245,7 @@ export type NavigationCommand =
       action: 'createBug';
       applicationId: string;
       journeyId?: string;
+      revision?: number;
       parameters: Record<string, string>;
       title: string;
       observed: string;

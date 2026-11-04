@@ -3,6 +3,7 @@ import type {
   NavigationJourney,
   NavigationLocator,
   NavigationPlan,
+  NavigationParameter,
   NavigationSnapshot,
   NavigationStep,
 } from './navigation';
@@ -159,6 +160,42 @@ export function resolveNavigationStep(
 
 export function navigationOutputs(steps: NavigationStep[]) {
   return new Set(steps.flatMap((step) => (step.resolver ? [step.resolver.output] : [])));
+}
+
+/** One effective parameter set for the prompt, replay and subsequent case receipts. */
+export function navigationParameters(
+  definitions: NavigationParameter[],
+  steps: NavigationStep[],
+  supplied: Record<string, string>,
+): Record<string, string> {
+  const outputs = navigationOutputs(steps);
+  const names = new Set([...definitions.map((parameter) => parameter.name), ...outputs]);
+  if (Object.keys(supplied).some((name) => !names.has(name)))
+    throw new Error('Un paramètre est absent de la définition du parcours.');
+  const entries: [string, string][] = [];
+  for (const parameter of definitions) {
+    const provided = Object.hasOwn(supplied, parameter.name);
+    if (parameter.sensitive) {
+      if (provided && supplied[parameter.name])
+        throw new Error(
+          'Les valeurs sensibles ne sont pas transmises au contexte IA. Utilise la connexion manuelle.',
+        );
+      if (parameter.required && !outputs.has(parameter.name))
+        throw new Error(`Renseigne le paramètre ${parameter.label}.`);
+      continue;
+    }
+    if (outputs.has(parameter.name)) continue;
+    const value = provided ? supplied[parameter.name] : (parameter.defaultValue ?? '');
+    if (parameter.required && !value.trim())
+      throw new Error(`Renseigne le paramètre ${parameter.label}.`);
+    entries.push([parameter.name, value]);
+  }
+  for (const name of outputs) {
+    if (!Object.hasOwn(supplied, name)) continue;
+    if (!supplied[name].trim()) throw new Error(`Identifiant métier vide : ${name}.`);
+    entries.push([name, supplied[name]]);
+  }
+  return Object.fromEntries(entries);
 }
 
 export function navigationMaintenance(state: NavigationSnapshot) {

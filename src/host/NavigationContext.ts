@@ -1,4 +1,8 @@
-import { navigationPlan, navigationOutputs, publishedJourneys } from '../shared/navigationRecipes';
+import {
+  navigationPlan,
+  navigationParameters,
+  publishedJourneys,
+} from '../shared/navigationRecipes';
 import { createHash } from 'node:crypto';
 import type {
   ApplicationProfile,
@@ -33,27 +37,13 @@ export function freezeNavigationContext(
       'Cette révision est indisponible ou a changé. Choisis le parcours actuel et prépare une nouvelle tentative.',
     );
   const plan = journey ? navigationPlan(journey, state) : undefined;
-  const outputs = navigationOutputs(plan?.steps ?? []);
   if (plan?.prerequisites.length && !selection.prerequisitesConfirmed)
     throw new Error('Confirme les prérequis du parcours avant le lancement.');
-  const declared = new Set([...(plan?.parameters.map((p) => p.name) ?? []), ...outputs]);
-  if (Object.keys(selection.parameters).some((key) => !declared.has(key)))
-    throw new Error(
-      'Un paramètre est absent de la définition du parcours. Ajoute-le explicitement avant le lancement.',
-    );
-  for (const parameter of plan?.parameters ?? []) {
-    if (parameter.sensitive && selection.parameters[parameter.name])
-      throw new Error(
-        'Les valeurs sensibles ne sont pas transmises au contexte IA. Utilise la connexion manuelle.',
-      );
-    if (
-      parameter.required &&
-      !outputs.has(parameter.name) &&
-      !selection.parameters[parameter.name] &&
-      !parameter.defaultValue
-    )
-      throw new Error(`Renseigne le paramètre ${parameter.label}.`);
-  }
+  selection.parameters = navigationParameters(
+    plan?.parameters ?? [],
+    plan?.steps ?? [],
+    selection.parameters,
+  );
   let binding: ExecutionBinding = {
     applicationId: application.id,
     origin: application.origin,

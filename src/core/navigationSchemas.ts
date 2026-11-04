@@ -455,13 +455,18 @@ export const navigationCommandSchema = z.discriminatedUnion('action', [
       action: z.literal('createBug'),
       applicationId: id,
       journeyId: id.optional(),
+      revision: z.number().int().positive().optional(),
       parameters: z.record(id, text),
       title: text.min(1),
       observed: text.min(1),
       expected: text.min(1),
       currentScreen: z.boolean(),
     })
-    .strict(),
+    .strict()
+    .refine(
+      (value) => Boolean(value.journeyId) === (value.revision !== undefined),
+      'Le parcours et sa révision doivent être sélectionnés ensemble.',
+    ),
   z.object({ action: z.literal('linkSource'), anchorId: id, journeyId: id }).strict(),
   command('authenticate'),
   command('resumeControl'),

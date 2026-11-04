@@ -252,3 +252,29 @@ it('propagates stale source links and changed pinned blocks to dependent journey
     ).map((j) => j.status),
   ).toEqual(['available', 'draft']);
 });
+
+it('freezes effective defaults and rejects an explicitly empty required value', () => {
+  const recipe = journey({
+    parameters: [
+      { name: 'garage', label: 'Garage', type: 'string', required: true, defaultValue: 'Oula' },
+    ],
+  });
+  const selection = {
+    applicationId: app.id,
+    journeyId: recipe.id,
+    revision: recipe.revision,
+    parameters: {},
+    intent: 'reproduce' as const,
+    allowInteractions: false,
+  };
+  const frozen = freezeNavigationContext(snapshot([recipe]), selection, [
+    { id: 'project', path: '/fixture' },
+  ]);
+  expect(frozen.selection.parameters).toEqual({ garage: 'Oula' });
+  for (const garage of ['', '   '])
+    expect(() =>
+      freezeNavigationContext(snapshot([recipe]), { ...selection, parameters: { garage } }, [
+        { id: 'project', path: '/fixture' },
+      ]),
+    ).toThrow('Garage');
+});

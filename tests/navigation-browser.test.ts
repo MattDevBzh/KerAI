@@ -174,6 +174,68 @@ describe.skipIf(!executablePath)(
       expect(reproduced.metrics.actions).toBe(2);
       expect(reproduced.events[0].stepId).toBe('browser-reset');
     });
+    test('reach still verifies business identity even when the arrival is already visible', async () => {
+      const recipe: NavigationJourney = {
+        id: 'business-reach',
+        applicationId: application.id,
+        revision: 1,
+        title: 'Garage',
+        intent: 'Même garage',
+        tags: [],
+        prerequisites: [],
+        parameters: [],
+        steps: [
+          step('resolve', 'select-garage', {
+            target: target('.garage'),
+            resolver: {
+              output: 'garageId',
+              attribute: 'data-id',
+              pick: 'unique',
+              filters: [{ selector: '.brand', text: 'Oula' }],
+            },
+          }),
+        ],
+        arrival: [{ kind: 'visible', target: target('#double') }],
+        status: 'available',
+        provenance: { mode: 'human' },
+        createdAt: '',
+        updatedAt: '',
+      };
+      const first = await manager.replay(recipe, {}, { mode: 'reach' });
+      expect(first.status).toBe('succeeded');
+      expect(first.resolvedParameters).toEqual({ garageId: 'g1' });
+      const gone = await manager.replay(recipe, { garageId: 'missing' }, { mode: 'reach' });
+      expect(gone.status).toBe('failed');
+      expect(gone.error).toContain('Aucune donnée métier');
+    });
+    test('replay refuses blank required parameters before changing the browser', async () => {
+      const recipe: NavigationJourney = {
+        id: 'required',
+        applicationId: application.id,
+        revision: 1,
+        title: 'Commune',
+        intent: 'Afficher',
+        tags: [],
+        prerequisites: [],
+        parameters: [
+          {
+            name: 'city',
+            label: 'Commune',
+            type: 'string',
+            required: true,
+            defaultValue: 'Liffré',
+          },
+        ],
+        steps: [step('fill', 'city', { target: target('#city'), value: { parameter: 'city' } })],
+        arrival: [{ kind: 'visible', target: target('#city') }],
+        status: 'available',
+        provenance: { mode: 'human' },
+        createdAt: '',
+        updatedAt: '',
+      };
+      for (const city of ['', '   '])
+        await expect(manager.replay(recipe, { city })).rejects.toThrow('Commune');
+    });
     test('compares a bounded same-origin served resource without returning its body', async () => {
       const result = await manager.assetDigest(`${fixture.origin}/build.js`);
       expect(result.sha256).toBe(

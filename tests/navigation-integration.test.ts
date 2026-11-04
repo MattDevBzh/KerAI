@@ -551,6 +551,7 @@ it('prepares a correction with a published recipe while a newer draft stays edit
     action: 'createBug',
     applicationId: app.id,
     journeyId: journey.id,
+    revision: 2,
     parameters: { customer: 'client-42' },
     title: 'Montant erroné',
     observed: 'Le montant est vide',
@@ -569,6 +570,7 @@ it('prepares a correction with a published recipe while a newer draft stays edit
       action: 'createBug',
       applicationId: app.id,
       journeyId: journey.id,
+      revision: 2,
       parameters: { password: 'forbidden' },
       title: 'Bug',
       observed: 'Vu',
@@ -687,4 +689,85 @@ it('keeps a verified initial screen capture available to later agents of the cor
       .resultType,
   ).toBe('success');
   expect(callbacks.validateModelImages).toHaveBeenCalledOnce();
+});
+
+it('does not silently replace the selected published revision when creating a bug', async () => {
+  await expect(
+    service.handle({
+      action: 'createBug',
+      applicationId: app.id,
+      journeyId: journey.id,
+      revision: 1,
+      parameters: { customer: 'client-42' },
+      title: 'Bug',
+      observed: 'Vide',
+      expected: 'Montant',
+      currentScreen: false,
+    }),
+  ).rejects.toThrow('révision');
+});
+
+it('does not label a requested case as observed before a successful replay', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9h8AAAAASUVORK5CYII=',
+    'base64',
+  );
+  const file = path.join(directory, 'browser', 'objects', 'case.png');
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, png);
+  browser.capture.mockResolvedValue({
+    browser: 'Fixture',
+    path: file,
+    bytes: png.length,
+    sha256: createHash('sha256').update(png).digest('hex'),
+    url: app.origin,
+    createdAt: now,
+    viewport: { width: 1, height: 1 },
+  });
+  const context = input().navigation!;
+  const capture = await service.capture(context, 'attempt');
+  expect(capture.journeyId).toBe(journey.id);
+  expect(capture.caseKey).toBeUndefined();
+
+  const published = service.store.snapshot().journeys[0];
+  browser.replay.mockResolvedValue({
+    ...service.store.snapshot().runs[0],
+    id: 'case-replay',
+    revision: published.revision,
+    definitionHash: published.hash!,
+    mode: 'reproduce',
+    resolvedParameters: { customer: 'demo' },
+  });
+  const replay = () =>
+    service.replay(
+      published,
+      { customer: 'demo' },
+      {
+        binding: context.binding,
+        prerequisitesConfirmed: true,
+      },
+    );
+  await replay();
+  const observed = await service.capture(context, 'attempt');
+  expect(observed.caseKey).toBeTruthy();
+  const other = input('fs-dev', { parameters: { customer: 'other' } }).navigation!;
+  expect((await service.capture(other)).caseKey).toBeUndefined();
+
+  browser.capture.mockResolvedValue({ ...capture, url: `${app.origin}/other` });
+  expect((await service.capture(context)).caseKey).not.toBe(observed.caseKey);
+  await service.act(
+    { id: 'move', action: 'click', target: { strategy: 'css', value: '#move' } },
+    {},
+  );
+  expect((await service.capture(context)).caseKey).toBeUndefined();
+
+  await replay();
+  browser.replay.mockRejectedValueOnce(new Error('Rejeu indisponible'));
+  await expect(replay()).rejects.toThrow('Rejeu indisponible');
+  expect((await service.capture(context)).caseKey).toBeUndefined();
+
+  await replay();
+  Object.assign(browser, { startRecording: vi.fn(async () => undefined) });
+  await service.handle({ action: 'recordStart', applicationId: app.id });
+  expect((await service.capture(context)).caseKey).toBeUndefined();
 });

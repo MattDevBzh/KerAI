@@ -1,5 +1,15 @@
 # Validation et limites
 
+## Passe globale — v1.37.1, 4 novembre 2026
+
+- **1 174 tests de logique/intégration réussis**, complétés par **8 contrôles natifs réussis** avec Copilot CLI 1.0.102. Les 3 autres tests ignorés sur macOS concernent les lanceurs Windows et sont exécutés dans la CI Windows. Types, format et construction réussis.
+- **348 scénarios d’interface réussis**, dont le parcours réel interface → service → Chromium pour importer, corriger, rejouer, publier et retrouver les preuves. La suite a tourné dans une copie isolée afin de ne pas modifier les captures de documentation du dépôt.
+- Les nouveaux tests ont d’abord reproduit les défauts : sélection métier sautée en mode atteindre, paramètre obligatoire vide accepté, valeur par défaut absente du contexte figé, révision remplacée lors de la création d’une correction, capture associée à un cas non rejoué et retour vers un ancien accès après préparation du navigateur. Ils passent après correction.
+- Les captures sont aussi vérifiées après changement de paramètres ou de page, action libre, démarrage d’enregistrement et rejeu rejeté. Une observation libre reste disponible, sans être présentée comme la preuve d’un cas rejoué.
+- Une première exécution simultanée des suites de logique et d’interface a dépassé les 15 secondes autorisées pour le test d’archivage de 3 100 événements. Les 26 tests d’archivage, puis toute la suite de logique, passent sans concurrence avec les tests d’interface ; aucun délai ni assertion n’a été assoupli.
+- La publication exige les suites Linux et Windows, la vérification du paquet construit, son chargement dans VS Code et le contrôle des fichiers téléchargés. Le résultat du commit livré est lié dans la [release v1.37.1](https://github.com/MattDevBzh/KerAI/releases/tag/v1.37.1).
+- Les applications, comptes et données utilisés sont synthétiques. Aucun prompt Copilot payant n’est envoyé. Ces tests ne remplacent pas la recette de l’application réelle et de la connexion de l’utilisateur sur son poste.
+
 ## Quatre lots — v1.32.0, 28 octobre 2026
 
 - TypeScript, mise en forme et construction réussis. Suite complète : **1 060 tests de logique/intégration réussis, 10 conditionnels ignorés** (89 fichiers réussis, 6 ignorés). Les contrôles qui demandent un CLI configuré sont exécutés séparément par la CI avec le runtime épinglé.
