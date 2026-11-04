@@ -117,6 +117,8 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
     await expect(page.getByRole('region', { name: 'Contrôle du navigateur' })).toContainText(
       'Prêt',
     );
+    await page.getByText('Chemin du navigateur', { exact: true }).click();
+    await expect(page.getByText(executablePath!, { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Capturer cet état', exact: true }).click();
     await expect.poll(() => service.snapshot().captures?.length).toBe(1);
     await page.getByRole('button', { name: 'Importer un JSON' }).click();

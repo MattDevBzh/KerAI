@@ -106,6 +106,22 @@ describe.skipIf(!executablePath)(
       await manager?.dispose();
     });
 
+    test('distinguishes a refused local connection from browser startup and can retry', async () => {
+      const stopped = await navigationFixture();
+      await stopped.close();
+      await expect(manager.open({ ...application, origin: stopped.origin })).rejects.toThrow(
+        'Le navigateur a démarré, mais l’application refuse la connexion',
+      );
+      expect(manager.status()?.state).toBe('interrupted');
+      await manager.open(application);
+      expect((await manager.inspect()).text).toContain('Parcours local');
+    });
+    test('diagnoses HTTPS failure without bypassing TLS checks', async () => {
+      await expect(
+        manager.open({ ...application, origin: fixture.origin.replace('http:', 'https:') }),
+      ).rejects.toThrow('Le navigateur a démarré, mais la connexion HTTPS');
+      expect(manager.status()?.state).toBe('interrupted');
+    });
     test('replays a real imported double click, then waits for delayed postconditions', async () => {
       const imported = importNavigationJSON(
         JSON.stringify({

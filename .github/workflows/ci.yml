@@ -51,6 +51,7 @@ jobs:
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
         env:
           FEATURE_STUDIO_EXTENSION_PATH: ${{ runner.temp }}/feature-studio-windows/extension
+          FEATURE_STUDIO_TEST_NAVIGATION: '1'
   validate:
     runs-on: ubuntu-latest
     steps:

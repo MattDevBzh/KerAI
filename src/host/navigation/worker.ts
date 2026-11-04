@@ -21,6 +21,8 @@ import { inspectChromium } from './ChromiumInspection';
 import { redactPng } from './redactPng';
 import { hasSensitiveNavigationUrl, isNavigationUrl } from '../../core/navigationSchemas';
 import { installRecorder } from './recorder';
+import { browserErrorMessage, type BrowserPhase } from './BrowserErrors';
+import { browserFailureEvidence, type BrowserDiagnostic } from './BrowserDiagnostics';
 
 let context: BrowserContext | undefined;
 let openOptions: WorkerOpen | undefined;
@@ -53,14 +55,6 @@ const isAllowed = (url: string) => {
   } catch {
     return false;
   }
-};
-const safeError = (error: unknown) => {
-  // Playwright messages include selectors and fill arguments. Never send those logs to the host.
-  const message = error instanceof Error ? error.message : '';
-  if (message.startsWith('NAV:')) return message.slice(4, 800);
-  if (message.includes('Timeout'))
-    return 'Délai de l’action dépassé ; cible absente, ambiguë ou non interactive.';
-  return 'Opération navigateur échouée ; vérifiez la cible et l’état de la page.';
 };
 function fail(message: string): never {
   throw new Error(`NAV:${message}`);
@@ -834,6 +828,24 @@ async function initializeRecorder() {
 }
 async function dispatch(request: WorkerRequest): Promise<unknown> {
   const payload = request.payload as any;
+  const started = Date.now();
+  const trace = (phase: BrowserPhase, outcome: BrowserDiagnostic['outcome'], error?: unknown) => {
+    process.send?.({
+      event: 'diagnostic',
+      generation: request.generation,
+      diagnostic: {
+        at: new Date().toISOString(),
+        requestId: request.id,
+        phase,
+        outcome,
+        elapsedMs: Date.now() - started,
+        platform: process.platform,
+        arch: process.arch,
+        runtime: require('playwright-core/package.json').version,
+        ...browserFailureEvidence(error),
+      } satisfies BrowserDiagnostic,
+    });
+  };
   if (request.command === 'close') {
     generation = request.generation;
     auth = true;
@@ -844,7 +856,15 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
     return {};
   }
   if (request.command === 'prepare') {
-    const executablePath = executable(payload?.executablePath);
+    trace('prepare', 'started');
+    let executablePath: string | undefined;
+    try {
+      executablePath = executable(payload?.executablePath);
+      trace('prepare', executablePath ? 'ok' : 'error');
+    } catch (error) {
+      trace('prepare', 'error', error);
+      throw error;
+    }
     return {
       runtime: require('playwright-core/package.json').version,
       executablePath,
@@ -888,56 +908,71 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
     const executablePath = executable(options.executablePath);
     if (!executablePath)
       fail('Aucun navigateur Chromium existant. Installation ou sélection humaine requise.');
-    context = await chromium.launchPersistentContext(options.profilePath, {
-      executablePath,
-      headless: options.headless,
-      viewport: { width: 1280, height: 800 },
-      acceptDownloads: false,
-      serviceWorkers: 'block',
-    });
-    context.setDefaultTimeout(15000);
-    let blockedNavigation = false;
-    await context.route('**/*', async (route) => {
-      const request = route.request();
-      if (
-        request.isNavigationRequest() &&
-        !isAllowed(request.url()) &&
-        !(auth && authenticationOrigins.includes(new URL(request.url()).origin))
-      ) {
-        blockedNavigation = true;
-        warn(
-          'Navigation externe bloquée ; connexion manuelle explicite et origine déclarée requises.',
-        );
-        await route.abort();
-      } else await route.continue();
-    });
-    context.on('request', (request) => {
-      if (!auth && isAllowed(request.url())) {
-        network.push({
-          url: cleanUrl(request.url()),
-          method: request.method(),
-          type: request.resourceType(),
-        });
-        if (network.length > 100) network.shift();
-      }
-    });
-    context.on('response', (response) => {
-      if (auth || !isAllowed(response.url())) return;
-      const found = [...network].reverse().find((item) => item.url === cleanUrl(response.url()));
-      if (found) found.status = response.status();
-    });
-    await initializeRecorder();
-    const page = context.pages()[0] ?? (await context.newPage());
+    let phase: BrowserPhase = 'launch';
     try {
-      await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      trace(phase, 'started');
+      context = await chromium.launchPersistentContext(options.profilePath, {
+        executablePath,
+        timeout: 15000,
+        headless: options.headless,
+        viewport: { width: 1280, height: 800 },
+        acceptDownloads: false,
+        serviceWorkers: 'block',
+      });
+      trace(phase, 'ok');
+      phase = 'setup';
+      trace(phase, 'started');
+      context.setDefaultTimeout(15000);
+      let blockedNavigation = false;
+      await context.route('**/*', async (route) => {
+        const request = route.request();
+        if (
+          request.isNavigationRequest() &&
+          !isAllowed(request.url()) &&
+          !(auth && authenticationOrigins.includes(new URL(request.url()).origin))
+        ) {
+          blockedNavigation = true;
+          warn(
+            'Navigation externe bloquée ; connexion manuelle explicite et origine déclarée requises.',
+          );
+          await route.abort();
+        } else await route.continue();
+      });
+      context.on('request', (request) => {
+        if (!auth && isAllowed(request.url())) {
+          network.push({
+            url: cleanUrl(request.url()),
+            method: request.method(),
+            type: request.resourceType(),
+          });
+          if (network.length > 100) network.shift();
+        }
+      });
+      context.on('response', (response) => {
+        if (auth || !isAllowed(response.url())) return;
+        const found = [...network].reverse().find((item) => item.url === cleanUrl(response.url()));
+        if (found) found.status = response.status();
+      });
+      await initializeRecorder();
+      const page = context.pages()[0] ?? (await context.newPage());
+      trace(phase, 'ok');
+      phase = 'navigate';
+      trace(phase, 'started');
+      try {
+        await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      } catch (error) {
+        if (!blockedNavigation) throw error;
+      }
+      if (!isAllowed(page.url())) {
+        auth = true;
+        warn('Redirection externe : connexion manuelle requise, capture suspendue.');
+      }
+      trace(phase, 'ok');
+      return { url: cleanUrl(page.url()) };
     } catch (error) {
-      if (!blockedNavigation) throw error;
+      trace(phase, 'error', error);
+      fail(browserErrorMessage(error, phase));
     }
-    if (!isAllowed(page.url())) {
-      auth = true;
-      warn('Redirection externe : connexion manuelle requise, capture suspendue.');
-    }
-    return { url: cleanUrl(page.url()) };
   }
   if (request.generation !== generation) fail('Génération de bail périmée.');
   switch (request.command) {
@@ -1062,7 +1097,11 @@ process.on('message', async (request: WorkerRequest) => {
     const result = await dispatch(request);
     process.send?.({ id: request.id, generation: request.generation, result });
   } catch (error) {
-    process.send?.({ id: request.id, generation: request.generation, error: safeError(error) });
+    process.send?.({
+      id: request.id,
+      generation: request.generation,
+      error: browserErrorMessage(error, request.command === 'prepare' ? 'prepare' : 'operation'),
+    });
   } finally {
     if (!cancellation) busy = false;
   }

@@ -63,6 +63,8 @@ let browser: {
   recoveryRuns: ReturnType<typeof vi.fn>;
   clearRecoveredRuns: ReturnType<typeof vi.fn>;
   acknowledgeRecording: ReturnType<typeof vi.fn>;
+  prepare: ReturnType<typeof vi.fn>;
+  open: ReturnType<typeof vi.fn>;
   status: ReturnType<typeof vi.fn>;
   act: ReturnType<typeof vi.fn>;
   replay: ReturnType<typeof vi.fn>;
@@ -105,6 +107,8 @@ beforeEach(async () => {
     recoveryRuns: vi.fn(() => []),
     clearRecoveredRuns: vi.fn(async () => undefined),
     acknowledgeRecording: vi.fn(async () => undefined),
+    prepare: vi.fn(),
+    open: vi.fn(),
     status: vi.fn(() => ({
       id: 'browser',
       applicationId: 'app',
@@ -166,6 +170,32 @@ beforeEach(async () => {
 afterEach(async () => {
   await service.dispose();
   await rm(directory, { recursive: true, force: true });
+});
+it('replaces the preparation spinner message when executable verification fails', async () => {
+  browser.prepare.mockRejectedValue(new Error('Exécutable navigateur configuré introuvable.'));
+  await expect(service.handle({ action: 'prepare', applicationId: app.id })).rejects.toThrow(
+    'introuvable',
+  );
+  expect(service.snapshot().preparation).toMatchObject({
+    ready: false,
+    message: 'Exécutable navigateur configuré introuvable.',
+  });
+  expect(browser.open).not.toHaveBeenCalled();
+});
+it('preserves the full executable path and launch failure for the Applications view', async () => {
+  const executablePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+  browser.prepare.mockResolvedValue({ ready: true, executablePath });
+  browser.open.mockRejectedValue(
+    new Error('Le profil de navigateur réservé à KerAI est déjà utilisé.'),
+  );
+  await expect(service.handle({ action: 'prepare', applicationId: app.id })).rejects.toThrow(
+    'déjà utilisé',
+  );
+  expect(service.snapshot().preparation).toMatchObject({
+    ready: false,
+    browser: executablePath,
+    message: 'Le profil de navigateur réservé à KerAI est déjà utilisé.',
+  });
 });
 describe('frozen navigation authority', () => {
   it('never publishes an uncorroborated demonstration marker as an automatic journey', async () => {

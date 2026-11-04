@@ -16,6 +16,7 @@ import type {
 } from '../../shared/navigation';
 import { hasSensitiveNavigationUrl, isNavigationUrl } from '../../core/navigationSchemas';
 import { NavigationRecovery } from './NavigationRecovery';
+import { browserDiagnostics } from './BrowserDiagnostics';
 import { navigationDefinitionHash } from '../NavigationStore';
 import { NAVIGATION_LIMITS } from '../../shared/navigation';
 import type {
@@ -154,6 +155,10 @@ export class BrowserSessionManager {
     this.worker = worker;
     worker.on('message', (message: WorkerResponse) => {
       if ('event' in message) {
+        if (message.event === 'diagnostic') {
+          if (worker === this.worker) browserDiagnostics.record(message.diagnostic);
+          return;
+        }
         if (!this.state || message.generation !== this.generation) return;
         if (message.event === 'interrupted') {
           this.generation++;
@@ -325,7 +330,8 @@ export class BrowserSessionManager {
             executablePath: application.browserExecutable ?? this.options.executablePath,
             headless: this.options.headless ?? false,
           },
-          30000,
+          // Leave room for launch (15s), setup and navigation (15s) to return their own diagnosis.
+          45000,
         );
         requireOpening();
         this.state.url = result.url;

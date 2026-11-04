@@ -49,6 +49,7 @@ import { allFeatures, configurationSteps } from './shared/subplans';
 import { normalizeTheme } from './shared/themes';
 import type { CheckpointComparison, ClientMessage, HostMessage } from './shared/types';
 import { normalizeZoom } from './shared/zoom';
+import { browserDiagnostics } from './host/navigation/BrowserDiagnostics';
 
 let panel: vscode.WebviewPanel | undefined;
 let dashboardPanel: vscode.WebviewPanel | undefined;
@@ -66,6 +67,8 @@ export async function activate(context: vscode.ExtensionContext) {
   const taskDrafts = new TaskDraftStore(path.join(context.globalStorageUri.fsPath, 'task-drafts'));
   const output = vscode.window.createOutputChannel('Feature Studio');
   startupDiagnostics.configure((row) => output.appendLine(`[Démarrage] ${JSON.stringify(row)}`));
+  browserDiagnostics.configure((row) => output.appendLine(`[Navigateur] ${JSON.stringify(row)}`));
+  context.subscriptions.push({ dispose: () => browserDiagnostics.configure() });
   let quotaAdapter: CopilotCliAdapter | undefined;
   let quotaCliPath: string | undefined;
   const launcher = new CockpitLauncher();

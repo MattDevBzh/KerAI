@@ -4,6 +4,7 @@ import type {
   NavigationStep,
   NavigationCondition,
 } from '../../shared/navigation';
+import type { BrowserDiagnostic } from './BrowserDiagnostics';
 export type InspectionRequest = {
   target?: NavigationLocator;
   category?: 'dom' | 'styles' | 'network' | 'sources';
@@ -48,6 +49,7 @@ export type WorkerRequest = {
 };
 export type WorkerResponse =
   | { id: number; generation: number; result?: unknown; error?: string }
+  | { event: 'diagnostic'; generation: number; diagnostic: BrowserDiagnostic }
   | { event: 'record'; generation: number; sequence: number; step: NavigationStep }
   | { event: 'warning' | 'interrupted'; generation: number; message: string };
 export type WorkerOpen = {

@@ -327,12 +327,20 @@ export function ApplicationsUI({
                   utiliser
                 </p>
                 {data.preparation?.applicationId === applicationId && (
-                  <p role="status">
-                    {data.preparation.browser
-                      ? `Navigateur : ${data.preparation.browser.split(/[\\/]/).pop()}. `
-                      : ''}
-                    {data.preparation.message}
-                  </p>
+                  <div>
+                    <p role="status">
+                      {data.preparation.browser
+                        ? `Navigateur : ${data.preparation.browser.split(/[\\/]/).pop()}. `
+                        : ''}
+                      {data.preparation.message}
+                    </p>
+                    {data.preparation.browser && (
+                      <details>
+                        <summary>Chemin du navigateur</summary>
+                        <p style={{ overflowWrap: 'anywhere' }}>{data.preparation.browser}</p>
+                      </details>
+                    )}
+                  </div>
                 )}
                 {application.environment && (
                   <div className="applications-actions">

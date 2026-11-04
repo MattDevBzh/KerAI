@@ -603,13 +603,13 @@ export class NavigationService extends EventEmitter {
             ready: false,
             message: 'Vérification du navigateur et ouverture…',
           };
-          const diagnostic = await this.browser.prepare(app.browserExecutable);
-          this.preparation.browser = diagnostic.executablePath;
-          if (!diagnostic.ready) {
-            this.preparation.message = diagnostic.reason || 'Navigateur introuvable.';
-            throw new Error(this.preparation.message);
-          }
           try {
+            const diagnostic = await this.browser.prepare(app.browserExecutable);
+            this.preparation.browser = diagnostic.executablePath;
+            if (!diagnostic.ready) {
+              this.preparation.message = diagnostic.reason || 'Navigateur introuvable.';
+              throw new Error(this.preparation.message);
+            }
             await this.browser.open(app);
             this.preparation.ready = true;
             this.preparation.message =
