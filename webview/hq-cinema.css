@@ -926,3 +926,79 @@
     box-shadow: none;
   }
 }
+.cinema-prompt {
+  z-index: 2100;
+  background: #07110dd9;
+  backdrop-filter: blur(7px);
+}
+.cinema-prompt .human-prompt-dialog {
+  border-radius: 22px;
+  border-color: var(--apricot);
+  width: min(760px, 95vw);
+  box-shadow: 0 30px 100px #0008;
+}
+.cinema-prompt h2 {
+  font-size: clamp(22px, 2.8vw, 32px);
+}
+.cinema-request {
+  position: absolute;
+  bottom: 48px;
+  right: 22px;
+  z-index: 8;
+  max-width: min(480px, calc(100vw - 44px));
+  max-height: 35vh;
+  overflow: auto;
+  background: var(--panel);
+  color: var(--fg);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px #0005;
+}
+.cinema-request .human-request {
+  margin: 0;
+}
+.cinema-drawer {
+  position: absolute;
+  inset: 65px 20px 40px auto;
+  width: min(1100px, calc(100vw - 40px));
+  z-index: 10;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: -20px 0 70px #0007;
+  padding: 18px;
+}
+.cinema-drawer > header {
+  position: sticky;
+  top: -18px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg);
+  padding: 14px 0;
+}
+.cinema-controls .cinema-stop {
+  border-color: var(--apricot);
+}
+.hq-cinema:has(.cinema-prompt) .cinema-room {
+  animation-play-state: paused;
+}
+@media (max-width: 600px) {
+  .cinema-drawer {
+    inset: 90px 8px 35px;
+    width: auto;
+    padding: 12px;
+  }
+  .cinema-controls {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cinema-prompt * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

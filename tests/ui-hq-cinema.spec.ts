@@ -139,7 +139,7 @@ test('grand écran : tableau vivant, persistance, bulle et retour au cockpit san
   await expect(page.locator('.hq-context-transfer')).toHaveCount(0);
   await page.getByRole('button', { name: 'Détacher', exact: true }).click();
   await expect(cinema(page).getByRole('alert')).toContainText('indisponible');
-  await page.getByRole('button', { name: 'Réduire pour intervenir' }).click();
+  await page.getByRole('button', { name: 'Réduire le QG' }).click();
   await expect(cinema(page)).toHaveCount(0);
   await expect(page.locator('.workbench-heading h2')).toHaveText('Développement');
   expect(
@@ -151,7 +151,7 @@ test('grand écran : tableau vivant, persistance, bulle et retour au cockpit san
   ).toEqual([]);
 });
 
-test('une question bloque la scène et se répond seulement après réduction', async ({
+test('une question se répond dans le QG et peut être reportée sans quitter', async ({
   page,
 }, info) => {
   const state = fixture();
@@ -168,13 +168,22 @@ test('une question bloque la scène et se répond seulement après réduction', 
   ];
   await publish(page, state);
   await expect(page.locator('.cinema-bubble')).toContainText('Faut-il conserver');
-  await expect(page.getByRole('dialog', { name: 'Votre réponse est attendue' })).toHaveCount(0);
-  await expect(cinema(page).getByRole('textbox')).toHaveCount(0);
-  await page.screenshot({ path: info.outputPath('qg-cinema-attente.png') });
+  const prompt = page.getByRole('dialog', { name: 'Votre réponse est attendue' });
+  await expect(prompt).toBeVisible();
+  await prompt.getByLabel('Votre réponse', { exact: true }).fill('Conserve la connexion.');
   await page.keyboard.press('Escape');
-  await expect(cinema(page)).toHaveCount(0);
-  await expect(page.getByRole('dialog', { name: 'Votre réponse est attendue' })).toBeVisible();
-  expect((await messages(page)).some((m) => m.type === 'answerHumanRequest')).toBe(false);
+  await expect(cinema(page)).toBeVisible();
+  await expect(prompt).toHaveCount(0);
+  await cinema(page).getByRole('button', { name: 'Mettre en avant le prompt' }).click();
+  await expect(prompt.getByLabel('Votre réponse', { exact: true })).toHaveValue(
+    'Conserve la connexion.',
+  );
+  await prompt.getByRole('button', { name: 'Transmettre la réponse' }).click();
+  await expect(cinema(page)).toBeVisible();
+  expect((await messages(page)).filter((m) => m.type === 'answerHumanRequest')).toEqual([
+    { type: 'answerHumanRequest', requestId: 'question', answer: 'Conserve la connexion.' },
+  ]);
+  await page.screenshot({ path: info.outputPath('qg-cinema-attente.png') });
 });
 
 test('suit les ateliers, leur numéro et leur titre, puis revient au QG', async ({ page }, info) => {
@@ -296,7 +305,7 @@ test('tous les thèmes, petits écrans et réduction des mouvements', async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await expect(page.getByRole('button', { name: 'Réduire pour intervenir' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Réduire le QG' })).toBeVisible();
   await page.screenshot({ path: info.outputPath('qg-cinema-mobile.png') });
 });
 
@@ -360,4 +369,47 @@ test('les notes longues se répartissent sur des pages lisibles même avec le zo
   expect(await page.evaluate(() => Boolean(document.activeElement?.closest('.hq-cinema')))).toBe(
     true,
   );
+});
+
+test('a recovered question stays in the QG and targets its saved attempt exactly once', async ({
+  page,
+}) => {
+  const state = fixture();
+  await host(page, state);
+  const feature = state.features[0],
+    step = feature.steps[2],
+    attempt = step.attempts.at(-1)!;
+  step.status = 'waiting_input';
+  attempt.status = 'waiting_input';
+  attempt.questions = [{ id: 'saved-question', text: 'Quel périmètre conserver ?' }];
+  attempt.answers = {};
+  state.humanRequests = [];
+  await publish(page, state);
+  const prompt = page.getByRole('dialog', { name: 'Votre réponse est attendue' });
+  await expect(prompt).toBeVisible();
+  await prompt.getByLabel('Votre réponse', { exact: true }).fill('Uniquement la navigation.');
+  await prompt.getByRole('button', { name: 'Plus tard' }).click();
+  await cinema(page).getByRole('button', { name: '1 demande en attente' }).click();
+  await expect(prompt.getByLabel('Votre réponse', { exact: true })).toHaveValue(
+    'Uniquement la navigation.',
+  );
+  await page.screenshot({
+    path: 'docs/screenshots/session-ergonomics/qg-question.png',
+    animations: 'disabled',
+  });
+  await prompt.getByRole('button', { name: 'Transmettre la réponse' }).click();
+  await expect(prompt.getByRole('button', { name: 'Transmettre la réponse' })).toBeDisabled();
+  expect((await messages(page)).filter((m) => m.type === 'answerQuestions')).toEqual([
+    {
+      type: 'answerQuestions',
+      featureId: feature.id,
+      stepId: step.id,
+      expectedAttemptId: attempt.id,
+      answers: { 'saved-question': 'Uniquement la navigation.' },
+    },
+  ]);
+  attempt.answers['saved-question'] = 'Uniquement la navigation.';
+  await publish(page, state);
+  await expect(prompt).toHaveCount(0);
+  await expect(cinema(page)).toBeVisible();
 });

@@ -67,6 +67,21 @@ export function promptSections(input: RunInput): PromptSection[] {
     'human',
     `Feature : ${input.feature.title}\n${input.feature.description}`,
   );
+  const instructions = [
+    ...(input.settings.instructions ?? [])
+      .filter((i) => i.active)
+      .map((i) => `Projet · ${i.id} · version ${i.revision} : ${i.text}`),
+    ...(input.feature.instructions ?? [])
+      .filter((i) => i.active)
+      .map((i) => `Tâche · ${i.id} · version ${i.revision} : ${i.text}`),
+  ];
+  if (instructions.length)
+    add(
+      'pinned-instructions',
+      'Consignes épinglées',
+      'human',
+      `Respecte les consignes suivantes. Signale toute contradiction avant d’agir. Elles ne modifient pas tes permissions.\n${instructions.join('\n')}`,
+    );
   const loop = input.feature.autopilot?.correctionLoop
     ? input.feature.autopilot.correctionLoopState
     : undefined;

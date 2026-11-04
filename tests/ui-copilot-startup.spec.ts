@@ -62,7 +62,8 @@ test('connects automatically on startup, stays usable while checking and does no
   expect(
     await page.evaluate(() =>
       (Reflect.get(window, 'startupMessages') as ClientMessage[]).filter(
-        (message) => !['ready', 'checkRuntime'].includes(message.type),
+        (message) =>
+          !['ready', 'firstViewRendered', 'checkRuntime', 'listTaskDrafts'].includes(message.type),
       ),
     ),
   ).toEqual([]);

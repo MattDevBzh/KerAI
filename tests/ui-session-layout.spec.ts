@@ -64,6 +64,17 @@ async function open(
     { state, layout },
   );
   await page.goto('/');
+  if (
+    state.features.some((feature) =>
+      feature.steps.some(
+        (step) => step.status === 'waiting_input' && step.attempts.at(-1)?.questions.length,
+      ),
+    )
+  )
+    await page
+      .getByRole('dialog', { name: 'Votre réponse est attendue' })
+      .getByRole('button', { name: 'Réduire au chat' })
+      .click();
   await page
     .locator('.session-row')
     .filter({ hasText: state.features[0].title })

@@ -1,0 +1,205 @@
+{
+  "platform": "darwin",
+  "node": "v24.1.0",
+  "measuredAt": "2026-11-04T21:24:55.945Z",
+  "fixture": {
+    "projects": 2,
+    "trackedFilesPerProject": 2000,
+    "changedFilesPerProject": 300,
+    "untrackedFilesPerProject": 1500,
+    "sessionsPerProject": 100
+  },
+  "limitation": "Synthetic core initialization; no OS cache reset, VS Code rendering, real user projects, or Copilot connection.",
+  "before": {
+    "freshProcesses": [
+      {
+        "activeMs": 1088,
+        "allMs": 1088,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1152,
+        "allMs": 1152,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1202,
+        "allMs": 1202,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1086,
+        "allMs": 1086,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1058,
+        "allMs": 1058,
+        "activeGit": 48,
+        "allGit": 48
+      }
+    ],
+    "repeated": [
+      {
+        "activeMs": 1091,
+        "allMs": 1091,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1079,
+        "allMs": 1079,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1036,
+        "allMs": 1036,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1015,
+        "allMs": 1015,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1029,
+        "allMs": 1029,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1006,
+        "allMs": 1006,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1025,
+        "allMs": 1025,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 988,
+        "allMs": 988,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 999,
+        "allMs": 999,
+        "activeGit": 48,
+        "allGit": 48
+      },
+      {
+        "activeMs": 1022,
+        "allMs": 1022,
+        "activeGit": 48,
+        "allGit": 48
+      }
+    ]
+  },
+  "after": {
+    "freshProcesses": [
+      {
+        "activeMs": 138,
+        "allMs": 228,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 135,
+        "allMs": 222,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 133,
+        "allMs": 221,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 131,
+        "allMs": 218,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 131,
+        "allMs": 224,
+        "activeGit": 9,
+        "allGit": 18
+      }
+    ],
+    "repeated": [
+      {
+        "activeMs": 131,
+        "allMs": 217,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 82,
+        "allMs": 162,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 80,
+        "allMs": 160,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 78,
+        "allMs": 158,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 77,
+        "allMs": 162,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 83,
+        "allMs": 167,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 85,
+        "allMs": 167,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 84,
+        "allMs": 163,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 106,
+        "allMs": 195,
+        "activeGit": 9,
+        "allGit": 18
+      },
+      {
+        "activeMs": 83,
+        "allMs": 161,
+        "activeGit": 9,
+        "allGit": 18
+      }
+    ]
+  }
+}

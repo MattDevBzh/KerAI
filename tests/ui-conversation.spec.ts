@@ -143,6 +143,12 @@ async function open(page: Page, state: StudioState) {
         },
         postMessage(message: ClientMessage) {
           sent.push(message);
+          if (
+            message.type === 'pairAction' &&
+            message.action === 'message' &&
+            Reflect.get(window, 'holdMessage')
+          )
+            return;
           if (message.type === 'ready')
             setTimeout(() => {
               publish();
@@ -277,7 +283,7 @@ test('shows the same native timeline in solo, joins pair without changing permis
 }) => {
   await open(page, scenario('solo', true));
   await expect(page.getByLabel('Ton message à l’agent')).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Livrable', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Résultat', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Afficher les messages intermédiaires/ }).click();
   await page.locator('.conversation-tool summary').click();
   await expect(page.locator('.conversation-tool')).toContainText('src/filters.ts');
@@ -299,7 +305,7 @@ for (const mode of ['solo', 'pair'] as const) {
   }) => {
     await open(page, scenario(mode));
     await expect(page.locator('.conversation-state')).toContainText('Résultat prêt');
-    await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
+    await page.getByRole('tab', { name: 'Résultat', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Filtres simples' })).toBeVisible();
     await page.getByRole('button', { name: 'Revenir à la conversation' }).click();
     await page.getByLabel('Ton message à l’agent').fill('Pourquoi ces contrôles ?');
@@ -307,7 +313,7 @@ for (const mode of ['solo', 'pair'] as const) {
     await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Stockage indisponible');
     await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('Pourquoi ces contrôles ?');
-    await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
+    await page.getByRole('tab', { name: 'Résultat', exact: true }).click();
     await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
     await expect(page.getByLabel('Ton message à l’agent')).toHaveValue('Pourquoi ces contrôles ?');
     await page.evaluate(() => Reflect.set(window, 'conversationError', ''));
@@ -380,7 +386,7 @@ test('does not claim the user has control before the native runtime has stopped'
   page,
 }) => {
   await open(page, scenario('pair', true));
-  await page.getByRole('button', { name: 'Reprendre la main', exact: true }).click();
+  await page.getByRole('button', { name: 'Arrêter', exact: true }).click();
   await expect(page.locator('.conversation-state')).toContainText('Arrêt demandé');
   await expect(page.locator('.conversation-state')).not.toContainText('À toi');
   await update(page, 'paused');
@@ -518,17 +524,15 @@ test('shares the prompt draft across the popin and chat, avoids duplicate answer
   await expect(chat.getByRole('button', { name: 'Mettre en avant le prompt' })).toHaveCount(0);
 });
 
-test('automatically folds live technical messages when a user-facing message arrives', async ({
-  page,
-}) => {
+test('keeps technical messages folded until explicitly expanded', async ({ page }) => {
   const state = scenario('pair', true),
     pair = state.features[0].steps[0].attempts[0].pair!;
   pair.messages = pair.messages.filter((m) => m.id !== 'assistant');
   await open(page, state);
   await expect(
-    page.getByRole('button', { name: /Masquer les messages intermédiaires/ }),
+    page.getByRole('button', { name: /Afficher les messages intermédiaires/ }),
   ).toBeVisible();
-  await expect(page.locator('.conversation-tool')).toBeVisible();
+  await expect(page.locator('.conversation-tool')).toHaveCount(0);
   await page.evaluate(() => {
     const data = Reflect.get(window, 'conversationState') as StudioState;
     data.features[0].steps[0].attempts[0].pair!.messages.push({
@@ -663,6 +667,8 @@ test('dossier : conclusions reliées, sources datées, export et affichage compa
     },
   ];
   await open(page, state);
+  if (!(await page.getByRole('tab', { name: 'Activité', exact: true }).isVisible()))
+    await page.getByText('Détails et vérifications', { exact: true }).click();
   await page.getByRole('tab', { name: /Preuves/ }).click();
   const dossier = page.getByRole('region', { name: 'Dossier de preuves' });
   await expect(dossier).toBeVisible();
@@ -688,7 +694,7 @@ test('dossier : conclusions reliées, sources datées, export et affichage compa
 test('exports : chaque format conserve la tentative et la révision affichées', async ({ page }) => {
   const state = scenario();
   await open(page, state);
-  await page.getByRole('tab', { name: 'Livrable', exact: true }).click();
+  await page.getByRole('tab', { name: 'Résultat', exact: true }).click();
   for (const format of ['md', 'docx', 'pptx', 'html']) {
     await page.getByLabel('Format du document').selectOption(format);
     await page.getByRole('button', { name: `Télécharger .${format}`, exact: true }).click();
@@ -712,4 +718,21 @@ test('exports : chaque format conserve la tentative et la révision affichées',
       message,
     );
   }
+});
+
+test('stop remains available while sending a message is awaiting acknowledgement', async ({
+  page,
+}) => {
+  await open(page, scenario('pair', true));
+  await page.evaluate(() => Reflect.set(window, 'holdMessage', true));
+  await page.getByLabel('Ton message à l’agent').fill('Ne modifie pas la navigation.');
+  await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Arrêter', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Arrêter', exact: true }).click();
+  await expect
+    .poll(async () =>
+      (await sent(page)).filter((m) => m.type === 'pairAction').map((m) => m.action),
+    )
+    .toEqual(['message', 'pause']);
+  await expect(page.locator('.conversation-state')).toContainText('Arrêt demandé');
 });

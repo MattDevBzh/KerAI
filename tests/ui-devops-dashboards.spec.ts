@@ -201,8 +201,10 @@ test('groupe DevOps, reprise de vue et configuration/livraison préservées', as
   await expect(page.getByRole('button', { name: 'PR', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tickets', exact: true })).toBeVisible();
   expect(
-    (await messages(page)).filter((message) => !['ready', 'checkRuntime'].includes(message.type)),
-  ).toEqual([]);
+    (await messages(page)).filter(
+      (message) => !['ready', 'firstViewRendered', 'checkRuntime'].includes(message.type),
+    ),
+  ).toEqual([{ type: 'deliveryInspect' }]);
 });
 
 test('PR : branches, revue honnête, aperçu texte sûr et actions locales inchangées', async ({

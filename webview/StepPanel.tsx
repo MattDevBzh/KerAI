@@ -1,3 +1,4 @@
+import { sessionView, saveSessionView } from './bridge';
 import { ReviewApprovalDialog } from './ReviewApprovalDialog';
 import {
   acceptedReviewRemarks,
@@ -91,7 +92,18 @@ export function StepPanel({
   const historic = Boolean(attempt && latest && attempt.id !== latest.id);
   const [tab, setTab] = useState<
     'conversation' | 'artifact' | 'activity' | 'diffs' | 'evidence' | 'review'
-  >(reportTarget ? 'artifact' : latest?.pair?.nativeConversation ? 'conversation' : 'artifact');
+  >(() => {
+    const saved = sessionView(`${feature.id}:${step.id}`)?.tab;
+    return reportTarget
+      ? 'artifact'
+      : saved &&
+          ['conversation', 'artifact', 'activity', 'diffs', 'evidence', 'review'].includes(saved)
+        ? (saved as 'conversation' | 'artifact' | 'activity' | 'diffs' | 'evidence' | 'review')
+        : latest?.pair?.nativeConversation
+          ? 'conversation'
+          : 'artifact';
+  });
+  useEffect(() => saveSessionView(`${feature.id}:${step.id}`, { tab }), [feature.id, step.id, tab]);
   const conversationAttempt = useRef(latest?.id);
   useEffect(() => {
     if (conversationAttempt.current !== latest?.id && latest?.pair?.nativeConversation)
@@ -206,11 +218,22 @@ export function StepPanel({
   const [approvalPending, setApprovalPending] = useState(false);
   const [approvalError, setApprovalError] = useState('');
   const [reviewWarning, setReviewWarning] = useState<ReviewApprovalRequest | null>(null);
+  const continueTo = useRef<string | undefined>(undefined);
+  const [nextChoice, setNextChoice] = useState('');
+  const availableNext = feature.steps.filter(
+    (s) =>
+      s.status === 'pending' &&
+      s.dependsOn.includes(step.id) &&
+      s.dependsOn.every(
+        (id) => id === step.id || stepResolved(feature.steps.find((d) => d.id === id)),
+      ),
+  );
   function approveCurrent(warning?: ReviewApprovalRequest) {
     setApprovalError('');
     setApprovalPending(true);
     dispatch({
       type: 'approveStep',
+      ...(continueTo.current ? { continueToStepId: continueTo.current } : {}),
       featureId: feature.id,
       stepId: step.id,
       expectedAttemptId: warning?.attemptId ?? latest?.id,
@@ -384,28 +407,33 @@ export function StepPanel({
           </div>
           <Badge {...statuses[step.status]} />
         </div>
-        <div className="agent-strip">
-          <Avatar agent={agent} status={step.status} small />
-          <div>
-            <strong>{agent?.nickname || agent?.name || step.agentId}</strong>
-            <span>
-              {(step.model ?? agent?.model) || state.settings.defaultModel || 'Modèle automatique'}
-              <span className="inline-dot" />
-              {feature.execution
-                ? `Copilot natif · ${permissionLabels[feature.execution.permissionMode]}`
-                : policyLabels[displayPolicy]}
-            </span>
+        <details className="agent-settings" open={!attempt || undefined}>
+          <summary>Agent et réglages</summary>
+          <div className="agent-strip">
+            <Avatar agent={agent} status={step.status} small />
+            <div>
+              <strong>{agent?.nickname || agent?.name || step.agentId}</strong>
+              <span>
+                {(step.model ?? agent?.model) ||
+                  state.settings.defaultModel ||
+                  'Modèle automatique'}
+                <span className="inline-dot" />
+                {feature.execution
+                  ? `Copilot natif · ${permissionLabels[feature.execution.permissionMode]}`
+                  : policyLabels[displayPolicy]}
+              </span>
+            </div>
+            <button
+              className="text-button"
+              disabled={running || dirty || Boolean(feature.archived)}
+              onClick={() => (step.subplan ? configureTeam() : setConfig(!config))}
+              aria-expanded={config}
+            >
+              <Settings2 size={14} />
+              {config ? 'Fermer' : 'Configurer'}
+            </button>
           </div>
-          <button
-            className="text-button"
-            disabled={running || dirty || Boolean(feature.archived)}
-            onClick={() => (step.subplan ? configureTeam() : setConfig(!config))}
-            aria-expanded={config}
-          >
-            <Settings2 size={14} />
-            {config ? 'Fermer' : 'Configurer'}
-          </button>
-        </div>
+        </details>
         {config && (
           <StepConfig
             native={Boolean(feature.execution)}
@@ -442,17 +470,16 @@ export function StepPanel({
           />
         )}
         <div className="workbench-tabs" role="tablist" aria-label="Contenu de l’étape">
-          {attempt?.pair?.nativeConversation && (
-            <button
-              role="tab"
-              id="tab-conversation"
-              aria-controls="step-content"
-              aria-selected={tab === 'conversation'}
-              onClick={() => setTab('conversation')}
-            >
-              <MessageSquare size={15} /> Conversation
-            </button>
-          )}
+          <button
+            role="tab"
+            id="tab-conversation"
+            aria-controls="step-content"
+            disabled={!attempt?.pair?.nativeConversation}
+            aria-selected={tab === 'conversation'}
+            onClick={() => setTab('conversation')}
+          >
+            <MessageSquare size={15} /> Conversation
+          </button>
           <button
             role="tab"
             id="tab-artifact"
@@ -460,17 +487,7 @@ export function StepPanel({
             aria-selected={tab === 'artifact'}
             onClick={() => setTab('artifact')}
           >
-            <FileText size={15} /> Livrable
-          </button>
-          <button
-            role="tab"
-            id="tab-activity"
-            aria-controls="step-content"
-            aria-selected={tab === 'activity'}
-            onClick={() => setTab('activity')}
-          >
-            <Workflow size={15} /> Activité{' '}
-            {attempt?.logs.length ? <span>{attempt.logs.length}</span> : null}
+            <FileText size={15} /> Résultat
           </button>
           <button
             role="tab"
@@ -479,28 +496,56 @@ export function StepPanel({
             aria-selected={tab === 'diffs'}
             onClick={() => setTab('diffs')}
           >
-            <FileCode2 size={15} /> Fichiers <span>{attempt?.changedFiles.length ?? 0}</span>
-          </button>
-          <button
-            role="tab"
-            id="tab-evidence"
-            aria-controls="step-content"
-            aria-selected={tab === 'evidence'}
-            onClick={() => setTab('evidence')}
-          >
-            <ShieldCheck size={15} /> Preuves{' '}
-            <span>{(attempt?.evidence?.length ?? 0) + (attempt?.nativeActivity?.length ?? 0)}</span>
-          </button>
-          <button
-            role="tab"
-            id="tab-review"
-            aria-controls="step-content"
-            aria-selected={tab === 'review'}
-            onClick={() => setTab('review')}
-          >
-            <MessageSquare size={15} /> Relecture
+            <FileCode2 size={15} /> Modifications <span>{attempt?.changedFiles.length ?? 0}</span>
           </button>
         </div>
+        <details
+          className="work-details"
+          open={['activity', 'evidence', 'review'].includes(tab) || undefined}
+        >
+          <summary>Détails et vérifications</summary>
+          <div
+            className="workbench-tabs secondary-tabs"
+            role="tablist"
+            aria-label="Détails de l’étape"
+          >
+            <button
+              role="tab"
+              id="tab-evidence"
+              aria-controls="step-content"
+              aria-selected={tab === 'evidence'}
+              onClick={() => setTab('evidence')}
+            >
+              <ShieldCheck size={15} /> Preuves
+            </button>
+            <button
+              role="tab"
+              id="tab-review"
+              aria-controls="step-content"
+              aria-selected={tab === 'review'}
+              onClick={() => setTab('review')}
+            >
+              <MessageSquare size={15} /> Relecture
+            </button>
+            <button
+              role="tab"
+              id="tab-activity"
+              aria-controls="step-content"
+              aria-selected={tab === 'activity'}
+              onClick={() => setTab('activity')}
+            >
+              <Workflow size={15} /> Activité
+            </button>
+          </div>
+        </details>
+        {approvalReasons.length > 0 && (
+          <p className="session-attention" role="status">
+            {approvalReasons.length} point(s) à résoudre avant validation.{' '}
+            <button className="text-button" onClick={() => setTab('review')}>
+              Voir les points à résoudre
+            </button>
+          </p>
+        )}
         {attempt?.navigationRequest && (
           <NavigationInterventionCard
             data={state.navigation}
@@ -1040,6 +1085,46 @@ export function StepPanel({
               <>
                 {step.status === 'awaiting_review' && (
                   <>
+                    {availableNext.length > 0 && (
+                      <>
+                        {availableNext.length > 1 && (
+                          <label className="field">
+                            <span>Étape suivante</span>
+                            <select
+                              value={nextChoice}
+                              onChange={(e) => setNextChoice(e.target.value)}
+                            >
+                              <option value="">Choisir la suite</option>
+                              {availableNext.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        <button
+                          className="button primary"
+                          disabled={
+                            approvalPending ||
+                            approvalReasons.length > 0 ||
+                            running ||
+                            dirty ||
+                            Boolean(feature.archived) ||
+                            !state.workspace.trusted ||
+                            (availableNext.length > 1 && !nextChoice)
+                          }
+                          onClick={() => {
+                            continueTo.current =
+                              availableNext.length === 1 ? availableNext[0].id : nextChoice;
+                            requestApproval(false);
+                          }}
+                        >
+                          Valider et lancer la suite
+                        </button>
+                      </>
+                    )}
+
                     {approvalReasons.length > 0 && (
                       <div className="approval-blockers" role="status">
                         <strong>Validation bloquée</strong>
@@ -1060,7 +1145,7 @@ export function StepPanel({
                       </div>
                     )}
                     <button
-                      className="button primary"
+                      className={`button ${availableNext.length ? 'secondary' : 'primary'}`}
                       disabled={
                         approvalPending ||
                         approvalReasons.length > 0 ||
@@ -1070,7 +1155,10 @@ export function StepPanel({
                         !state.workspace.trusted ||
                         Boolean(state.workspaceOperation)
                       }
-                      onClick={() => requestApproval()}
+                      onClick={() => {
+                        continueTo.current = undefined;
+                        requestApproval();
+                      }}
                     >
                       {approvalPending ? (
                         <LoaderCircle size={16} className="spin" />

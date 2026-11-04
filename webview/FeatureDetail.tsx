@@ -1,3 +1,4 @@
+import { PinnedInstructions } from './PinnedInstructions';
 import { reviewTargetLabel } from '../src/shared/reviews';
 import './work-focus.css';
 import {
@@ -423,6 +424,7 @@ export function FeatureDetail({
           )}
         </SessionModule>
         <SessionModule id="work">
+          <PinnedInstructions feature={feature} state={state} dispatch={dispatch} />
           {step ? (
             <section
               ref={workbench}

@@ -51,6 +51,7 @@ export const pairActionSchema = z
       'continue',
       'solo',
       'pair',
+      'redirect',
       'pause',
       'resume',
       'reorganize',
@@ -61,6 +62,16 @@ export const pairActionSchema = z
     ]),
     content: z.string().trim().min(1).max(30000).optional(),
     images: imagesSchema.optional(),
+    selection: z
+      .object({
+        path: z.string().min(1).max(4000),
+        startLine: z.number().int().positive(),
+        endLine: z.number().int().positive(),
+        hash: z.string().regex(/^[a-f0-9]{64}$/),
+        text: z.string().min(1).max(12000),
+      })
+      .strict()
+      .optional(),
     messageId: id.optional(),
     preferences: pairPreferencesSchema.optional(),
   })

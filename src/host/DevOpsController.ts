@@ -198,17 +198,17 @@ export class DevOpsController {
       ),
     };
   }
-  initialize(): Promise<void> {
+  initialize(inspect = true): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('Le menu de livraison est fermé.'));
     if (this.initialization) return this.initialization;
     if (this.operation)
       return Promise.reject(new Error('Une opération de livraison est en cours.'));
-    this.initialization = this.initializeState().finally(() => {
+    this.initialization = this.initializeState(inspect).finally(() => {
       this.initialization = undefined;
     });
     return this.initialization;
   }
-  private async initializeState() {
+  private async initializeState(inspect: boolean) {
     try {
       let prunedLinks = false;
       try {
@@ -231,9 +231,10 @@ export class DevOpsController {
       }
       this.options.guard();
       if (prunedLinks) await this.save();
-      this.state.snapshot = await this.delivery.inspect();
-      if (!this.state.config && this.state.snapshot.remoteUrl) {
-        const detected = detectAzureRemote(this.state.snapshot.remoteUrl);
+      if (inspect) this.state.snapshot = await this.delivery.inspect();
+      const remoteUrl = this.state.snapshot?.remoteUrl ?? (await this.delivery.remoteUrl());
+      if (!this.state.config && remoteUrl) {
+        const detected = detectAzureRemote(remoteUrl);
         if (detected) {
           this.state.config = { ...detected, remote: 'origin' };
           await this.save();

@@ -153,7 +153,7 @@ test('a prior custom starter is retained after existing sessions and an explicit
   let dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
   await expect(dialog.getByRole('radio', { name: /Composer mon équipe/ })).toBeChecked();
   await dialog.getByRole('radio', { name: /Relire des changements/ }).check();
-  await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Garder en brouillon', exact: true }).click();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
   dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
   await expect(dialog.getByRole('radio', { name: /Relire des changements/ })).toBeChecked();
@@ -404,6 +404,9 @@ test('session agent MCP defaults are visible, editable and used by manual launch
   ];
   state.features[0].steps[0].mcpServerIds = ['docs'];
   await open(page, state);
+  await expect(page.getByText('Agent et réglages', { exact: true })).toBeVisible();
+  if (!(await page.getByRole('button', { name: 'Configurer', exact: true }).isVisible()))
+    await page.getByText('Agent et réglages', { exact: true }).click();
   await page.getByRole('button', { name: 'Configurer', exact: true }).click();
   const defaults = page.getByRole('group', { name: 'MCP par défaut de cet agent dans la session' });
   await expect(defaults.getByRole('checkbox')).toBeChecked();

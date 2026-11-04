@@ -314,7 +314,7 @@ test('a discussion becomes an editable feature proposal and failed creation keep
   await expect(page.getByLabel('Qu’allons-nous faire ?', { exact: false })).toHaveValue(
     'Recherche validée par Matt',
   );
-  await page.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await page.getByRole('button', { name: 'Garder en brouillon', exact: true }).click();
   await expect(page.getByLabel('Votre message', { exact: true })).toHaveValue(
     'Une question encore en brouillon',
   );

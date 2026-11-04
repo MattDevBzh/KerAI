@@ -915,3 +915,18 @@ describe('ticket search, frozen import and cross-project recovery', () => {
     expect(f.options.createFeature).not.toHaveBeenCalled();
   });
 });
+
+it('defers the full delivery inspection while retaining remote configuration and inspects on demand', async () => {
+  const { options, delivery } = await fixture();
+  vi.mocked(delivery.inspect).mockClear();
+  delivery.remoteUrl = vi.fn(async () => snapshot.remoteUrl);
+  const controller = new DevOpsController(options);
+  await controller.initialize(false);
+  expect(delivery.inspect).not.toHaveBeenCalled();
+  expect(controller.getState().snapshot).toBeUndefined();
+  expect(controller.getState().config?.organization).toBe('org');
+  await controller.handle({ type: 'deliveryInspect' });
+  expect(delivery.inspect).toHaveBeenCalledOnce();
+  expect(controller.getState().snapshot?.fingerprint).toBe(snapshot.fingerprint);
+  await controller.dispose();
+});

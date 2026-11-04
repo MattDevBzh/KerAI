@@ -22,16 +22,18 @@ const RequestContext = createContext<{
   highlight: (id: string) => void;
   submit: (id: string, value: string) => void;
   pending: Set<string>;
+  requests: HumanRequest[];
 } | null>(null);
 
 /** A single queue and draft per request, shared by the chat and the foreground dialog. */
 export function HumanRequestProvider({
-  requests,
+  requests: liveRequests,
   features,
   className,
   dispatch,
   children,
   presentationOnly = false,
+  cinemaFeatureId,
 }: {
   requests: HumanRequest[];
   features: Feature[];
@@ -39,7 +41,34 @@ export function HumanRequestProvider({
   dispatch: Dispatch;
   children: ReactNode;
   presentationOnly?: boolean;
+  cinemaFeatureId?: string;
 }) {
+  const recovered = allFeatures(features).flatMap((feature) =>
+    feature.archived
+      ? []
+      : feature.steps.flatMap((step) => {
+          const attempt = step.attempts.at(-1);
+          if (
+            !attempt ||
+            !['waiting_input', 'interrupted', 'cancelled'].includes(step.status) ||
+            liveRequests.some((r) => r.featureId === feature.id && r.stepId === step.id)
+          )
+            return [];
+          return attempt.questions
+            .filter((q) => !attempt.answers[q.id]?.trim())
+            .map((q) => ({
+              id: `recovered:${attempt.id}:${q.id}`,
+              featureId: feature.id,
+              stepId: step.id,
+              kind: 'question' as const,
+              question: q.text,
+              choices: q.choices,
+              allowFreeform: true,
+              recovery: { attemptId: attempt.id, questionId: q.id },
+            }));
+        }),
+  );
+  const requests = [...liveRequests, ...recovered];
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [reduced, setReduced] = useState(new Set<string>());
   const [selected, setSelected] = useState<string>();
@@ -62,8 +91,14 @@ export function HumanRequestProvider({
       setPending(pendingRef.current);
     }
   }, [requests]);
+  const family = cinemaFeatureId
+    ? allFeatures(features).find((f) => f.id === cinemaFeatureId)
+    : undefined;
+  const familyIds = family ? new Set(allFeatures([family]).map((f) => f.id)) : undefined;
+  const visibleRequests = familyIds ? requests.filter((r) => familyIds.has(r.featureId)) : requests;
   const active =
-    requests.find((r) => r.id === selected) ?? requests.find((r) => !reduced.has(r.id));
+    visibleRequests.find((r) => r.id === selected) ??
+    visibleRequests.find((r) => !reduced.has(r.id));
   const owner = active && allFeatures(features).find((feature) => feature.id === active.featureId);
   const ownerStep = owner && owner.steps.find((step) => step.id === active?.stepId);
   useEffect(
@@ -84,6 +119,7 @@ export function HumanRequestProvider({
     <RequestContext.Provider
       value={{
         answers,
+        requests: visibleRequests,
         answer: (id, value) => setAnswers((current) => ({ ...current, [id]: value })),
         foreground: presentationOnly ? undefined : active?.id,
         highlight: setSelected,
@@ -92,11 +128,20 @@ export function HumanRequestProvider({
           if (pendingRef.current.has(id) || !requests.some((r) => r.id === id)) return;
           pendingRef.current = new Set([...pendingRef.current, id]);
           setPending(pendingRef.current);
-          dispatch({ type: 'answerHumanRequest', requestId: id, answer: value });
+          const recovery = recovered.find((r) => r.id === id);
+          if (recovery)
+            dispatch({
+              type: 'answerQuestions',
+              featureId: recovery.featureId,
+              stepId: recovery.stepId,
+              expectedAttemptId: recovery.recovery.attemptId,
+              answers: { [recovery.recovery.questionId]: value },
+            });
+          else dispatch({ type: 'answerHumanRequest', requestId: id, answer: value });
         },
       }}
     >
-      <div className={className} inert={presentationOnly || undefined}>
+      <div className={className} inert={presentationOnly || Boolean(cinemaFeatureId) || undefined}>
         {children}
       </div>
       {active &&
@@ -105,24 +150,27 @@ export function HumanRequestProvider({
           <PromptDialog
             key={active.id}
             request={active}
-            count={requests.length}
+            count={visibleRequests.length}
+            cinema={Boolean(cinemaFeatureId)}
             context={owner ? `${owner.title}${ownerStep ? ` · ${ownerStep.name}` : ''}` : undefined}
             minimize={minimize}
             dispatch={dispatch}
           />,
-          document.body,
+          (cinemaFeatureId && document.getElementById('hq-interactions')) || document.body,
         )}
     </RequestContext.Provider>
   );
 }
 
 function PromptDialog({
+  cinema = false,
   request,
   count,
   context,
   minimize,
   dispatch,
 }: {
+  cinema?: boolean;
   request: HumanRequest;
   count: number;
   context?: string;
@@ -132,7 +180,7 @@ function PromptDialog({
   const ref = useRef<HTMLElement>(null);
   useDialogAccessibility(ref, minimize);
   return (
-    <div className="human-prompt-backdrop">
+    <div className={`human-prompt-backdrop ${cinema ? 'cinema-prompt' : ''}`}>
       <section
         className="human-prompt-dialog"
         role="dialog"
@@ -152,12 +200,23 @@ function PromptDialog({
             </p>
           </div>
           <button className="button secondary small" onClick={minimize}>
-            <Minimize2 size={14} /> Réduire au chat
+            <Minimize2 size={14} /> {cinema ? 'Plus tard' : 'Réduire au chat'}
           </button>
         </header>
         <RequestCard request={request} dispatch={dispatch} popup />
       </section>
     </div>
+  );
+}
+
+export function PendingRequestLauncher() {
+  const queue = useContext(RequestContext);
+  if (!queue?.requests.length) return null;
+  return (
+    <button className="button primary" onClick={() => queue.highlight(queue.requests[0].id)}>
+      <MessageSquare size={16} /> {queue.requests.length} demande
+      {queue.requests.length > 1 ? 's' : ''} en attente
+    </button>
   );
 }
 

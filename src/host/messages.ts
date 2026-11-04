@@ -1,3 +1,5 @@
+import { instructionCommand } from '../core/instructions';
+import { taskDraftMessages } from '../core/taskDrafts';
 import { reviewTargetSchema } from '../core/reviewSchemas';
 import { navigationCommandSchema } from '../core/navigationSchemas';
 import { proofMessageVariants } from '../core/proofSchemas';
@@ -34,6 +36,11 @@ const id = z.string().min(1).max(150),
   text = z.string().max(500_000);
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
+  ...taskDraftMessages,
+  instructionCommand,
+  z
+    .object({ type: z.literal('quoteEditorSelection'), featureId: id, stepId: id, attemptId: id })
+    .strict(),
   z
     .object({ type: z.literal('navigation'), requestId: id, command: navigationCommandSchema })
     .strict(),
@@ -169,6 +176,7 @@ export const messageSchema = z.discriminatedUnion('type', [
     .object({
       type: z.enum([
         'ready',
+        'firstViewRendered',
         'resyncState',
         'refresh',
         'checkRuntime',
@@ -191,6 +199,10 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('createFeature'),
+      start: z
+        .object({ pair: z.boolean(), progression: z.enum(['guided', 'balanced']) })
+        .strict()
+        .optional(),
       reviewTarget: reviewTargetSchema.optional(),
       images: imagesSchema.optional(),
       permissionMode: nativePermissionModeSchema.optional(),
@@ -224,6 +236,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('approveStep'),
+      continueToStepId: id.optional(),
       ...step,
       expectedAttemptId: id.optional(),
       expectedRevision: z.number().int().nonnegative().optional(),
@@ -267,7 +280,14 @@ export const messageSchema = z.discriminatedUnion('type', [
       value: z.string().max(16000),
     })
     .strict(),
-  z.object({ type: z.literal('answerQuestions'), ...step, answers: z.record(id, text) }).strict(),
+  z
+    .object({
+      type: z.literal('answerQuestions'),
+      expectedAttemptId: id.optional(),
+      ...step,
+      answers: z.record(id, text),
+    })
+    .strict(),
   z
     .object({
       type: z.literal('saveArtifact'),

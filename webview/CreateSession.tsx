@@ -1,3 +1,5 @@
+import { useTaskDraft } from './useTaskDraft';
+import { savedTaskDraft } from './bridge';
 import { sessionStarters, type SessionStarterId } from '../src/shared/sessionStarters';
 import './first-session.css';
 import { ArrowRight, LoaderCircle, TriangleAlert } from 'lucide-react';
@@ -16,28 +18,34 @@ import { initialSessionStarter } from './launchReadiness';
 import { WorkspaceChoice, hasActiveRun } from './GitWorkspaceUI';
 import { ImagePicker, useImageDraft } from './Images';
 import { PermissionPicker } from './NativeExecutionUI';
-import { ProjectPicker } from './ProjectUI';
 
 import type { DiscussionFeatureDraft } from '../src/shared/discussions';
 
 import { Modal } from './SessionPrimitives';
 
-export function CreateModal({
+function CreateForm({
   origin,
+  chooseDraft,
   state,
   onClose,
   onCreate,
   dispatch,
 }: {
+  chooseDraft: (id: string) => void;
   origin?: { discussionId: string; draft: DiscussionFeatureDraft };
   state: StudioState;
   dispatch: (message: ClientMessage) => void;
   onClose: () => void;
   onCreate: (message: Extract<ClientMessage, { type: 'createFeature' }>) => void;
 }) {
-  const imageDraft = useImageDraft();
+  const [draftSeed] = useState(() =>
+    origin && savedTaskDraft()?.origin?.discussionId !== origin.discussionId
+      ? undefined
+      : savedTaskDraft(),
+  );
+  const imageDraft = useImageDraft(draftSeed?.images);
   const [starter, setStarter] = useState<SessionStarterId>(
-    initialSessionStarter(state, savedSessionStarter()),
+    draftSeed?.starter ?? initialSessionStarter(state, savedSessionStarter()),
   );
   const workflow = state.workflows.find((w) => w.id === starter);
   const invalidStarter =
@@ -54,8 +62,8 @@ export function CreateModal({
       ? saved.draft
       : origin?.draft;
   });
-  const [title, setTitle] = useState(restored?.title ?? ''),
-    [description, setDescription] = useState(restored?.description ?? '');
+  const [title, setTitle] = useState(restored?.title ?? draftSeed?.title ?? ''),
+    [description, setDescription] = useState(restored?.description ?? draftSeed?.description ?? '');
   const [criteria, setCriteria] = useState(restored?.criteria.join('\n') ?? '');
   const [team, setTeam] = useState(restored?.team ?? []);
   useEffect(() => {
@@ -67,6 +75,11 @@ export function CreateModal({
         },
       });
   }, [title, description, criteria, team]);
+  const [startNow, setStartNow] = useState(false);
+  const [pairMode, setPairMode] = useState(draftSeed?.pair ?? false);
+  const [progression, setProgression] = useState<'guided' | 'balanced'>(
+    draftSeed?.progression ?? 'guided',
+  );
   const [pending, setPending] = useState<string>();
   const [error, setError] = useState('');
   const lastCreation = useRef<{ content: string; requestId: string } | undefined>(undefined);
@@ -81,6 +94,7 @@ export function CreateModal({
         setPending(undefined);
         if (message.error) setError(message.error);
         else {
+          draft.finish();
           persistView({ featureProposal: undefined });
           onClose();
         }
@@ -102,11 +116,61 @@ export function CreateModal({
         )),
   );
   const [isolated, setIsolated] = useState(
-    starter !== 'code-review' && Boolean(state.workspace.canIsolate),
+    draftSeed?.isolated ?? (starter !== 'code-review' && Boolean(state.workspace.canIsolate)),
   );
-  const [permissionMode, setPermissionMode] = useState<NativePermissionMode>('manual');
+  const [permissionMode, setPermissionMode] = useState<NativePermissionMode>(
+    draftSeed?.permissionMode ?? 'manual',
+  );
   const [projectPending, setProjectPending] = useState(false);
-  const ids = state.projectCatalog?.selectedProjectIds;
+  const [ids, setIds] = useState(
+    draftSeed?.projectIds ?? state.projectCatalog?.selectedProjectIds ?? [],
+  );
+  const addRequest = useRef<string | undefined>(undefined);
+  const addingProjects = useRef<Set<string> | undefined>(undefined);
+  useEffect(
+    () =>
+      subscribe((message) => {
+        if (message.type !== 'projectResult' || message.requestId !== addRequest.current) return;
+        setProjectPending(false);
+        addRequest.current = undefined;
+        if (message.error) {
+          setError(message.error);
+          addingProjects.current = undefined;
+        }
+      }),
+    [],
+  );
+  useEffect(() => {
+    if (!addingProjects.current) return;
+    const added =
+      state.projectCatalog?.projects.filter((p) => !addingProjects.current!.has(p.id)) ?? [];
+    if (added.length) {
+      setIds((current) => [...current, ...added.map((p) => p.id)]);
+      addingProjects.current = undefined;
+    }
+  }, [state.projectCatalog?.projects]);
+  const draft = useTaskDraft(
+    {
+      title,
+      description,
+      starter,
+      projectIds: ids,
+      isolated,
+      permissionMode,
+      images: imageDraft.images,
+      pair: pairMode,
+      progression,
+      ...(origin
+        ? {
+            origin: {
+              ...origin,
+              draft: { ...origin.draft, title, description, criteria: criteria.split('\n'), team },
+            },
+          }
+        : {}),
+    },
+    dispatch,
+  );
   const multiple = (ids?.length ?? 0) > 1;
   const missing = Boolean(state.projectCatalog && !ids?.length);
   const busy =
@@ -135,6 +199,7 @@ export function CreateModal({
           if (title.trim() && !busy && !missing && !invalidProposal && !invalidStarter) {
             const request: Extract<ClientMessage, { type: 'createFeature' }> = {
               type: 'createFeature',
+              ...(startNow ? { start: { pair: pairMode, progression } } : {}),
               ...(imageDraft.images.length ? { images: imageDraft.images } : {}),
               ...(origin
                 ? {
@@ -151,7 +216,7 @@ export function CreateModal({
               permissionMode,
               description: description.trim(),
               isolated: !multiple && isolated && Boolean(state.workspace.canIsolate),
-              ...(ids ? { projectIds: ids } : {}),
+              ...(state.projectCatalog ? { projectIds: ids } : {}),
             };
             // A failed save may already own a worktree. Retry the same request without duplicating it.
             const content = JSON.stringify(request);
@@ -166,7 +231,99 @@ export function CreateModal({
           }
         }}
       >
-        <ProjectPicker state={state} dispatch={dispatch} onPendingChange={setProjectPending} />
+        <div className="draft-controls">
+          <label className="field" hidden={!draft.drafts.length}>
+            <span>Brouillons enregistrés</span>
+            <select
+              value={draftSeed?.id ?? ''}
+              onChange={(e) => {
+                const selected = draft.drafts.find((d) => d.id === e.target.value);
+                persistView({ taskDraft: selected });
+                chooseDraft(selected?.id ?? crypto.randomUUID());
+              }}
+            >
+              <option value="">Nouveau brouillon</option>
+              {draft.drafts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.title || 'Sans titre'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p role="status">{draft.status}</p>
+          <button
+            type="button"
+            className="text-button"
+            hidden={
+              !draft.saved && !title.trim() && !description.trim() && !imageDraft.images.length
+            }
+            disabled={Boolean(pending)}
+            onClick={() => {
+              draft.finish();
+              onClose();
+            }}
+          >
+            Abandonner ce brouillon
+          </button>
+          <button type="button" className="text-button" hidden={!draft.error} onClick={draft.retry}>
+            Réessayer l’enregistrement
+          </button>
+        </div>
+        {state.projectCatalog && (
+          <details className="project-picker">
+            <summary>
+              Projets :{' '}
+              {ids
+                .map((id) => state.projectCatalog?.projects.find((p) => p.id === id)?.name ?? id)
+                .join(' + ') || 'Choisir un projet'}
+            </summary>
+            <fieldset>
+              <legend>Projets de la session</legend>
+              {state.projectCatalog.projects
+                .filter((p) => !p.hidden)
+                .map((p) => (
+                  <div className="draft-project" key={p.id}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={ids.includes(p.id)}
+                        onChange={(e) =>
+                          setIds(
+                            e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id),
+                          )
+                        }
+                      />
+                      {p.name}
+                    </label>
+                    <button
+                      type="button"
+                      className="text-button"
+                      aria-label={`Projet principal : ${p.name}`}
+                      aria-pressed={ids[0] === p.id}
+                      disabled={!ids.includes(p.id)}
+                      onClick={() => setIds([p.id, ...ids.filter((id) => id !== p.id)])}
+                    >
+                      {ids[0] === p.id ? 'Projet principal' : 'Utiliser comme principal'}
+                    </button>
+                  </div>
+                ))}
+              <button
+                type="button"
+                className="button secondary"
+                disabled={projectPending || !state.workspace.trusted}
+                onClick={() => {
+                  const requestId = crypto.randomUUID();
+                  addRequest.current = requestId;
+                  addingProjects.current = new Set(state.projectCatalog?.projects.map((p) => p.id));
+                  setProjectPending(true);
+                  dispatch({ type: 'addProjects', requestId });
+                }}
+              >
+                Ajouter un espace de travail
+              </button>
+            </fieldset>
+          </details>
+        )}
         <label className="field">
           <span>
             Qu’allons-nous faire ? <em>*</em>
@@ -190,9 +347,9 @@ export function CreateModal({
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
-        <ImagePicker draft={imageDraft} disabled={busy} />
+        <ImagePicker draft={imageDraft} disabled={Boolean(pending) || imageDraft.loading} />
         {!origin && (
-          <fieldset className="session-starters" disabled={busy}>
+          <fieldset className="session-starters" disabled={Boolean(pending) || imageDraft.loading}>
             <legend>Comment souhaitez-vous avancer ?</legend>
             {sessionStarters.map((choice) => {
               const available =
@@ -372,7 +529,7 @@ export function CreateModal({
             state={state}
             value={permissionMode}
             onChange={setPermissionMode}
-            disabled={busy}
+            disabled={Boolean(pending) || imageDraft.loading}
           />
           {multiple ? (
             <p className="muted">
@@ -412,25 +569,80 @@ export function CreateModal({
             </div>
           </div>
         )}
+        <fieldset>
+          <legend>Comment avancer</legend>
+          <label className="field">
+            <span>Pendant une étape</span>
+            <select
+              value={pairMode ? 'pair' : 'solo'}
+              onChange={(e) => setPairMode(e.target.value === 'pair')}
+            >
+              <option value="solo">Confier le travail à l’agent</option>
+              <option value="pair">Travailler en pair</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Entre les étapes</span>
+            <select
+              value={progression}
+              onChange={(e) => setProgression(e.target.value as 'guided' | 'balanced')}
+            >
+              <option value="guided">Je valide chaque étape</option>
+              <option value="balanced">Je valide le plan et le résultat</option>
+            </select>
+          </label>
+          <p className="field-help">
+            Les questions et autorisations restent à ta main. En pair, l’agent propose son
+            organisation avant le travail.
+          </p>
+        </fieldset>
         <div className="modal-actions">
-          <span className="muted">Créer ne lance aucune exécution.</span>
+          <span className="muted">Créer seulement la session, ou démarrer son premier agent.</span>
           <button
             type="button"
             className="button secondary"
             disabled={Boolean(pending)}
             onClick={onClose}
           >
-            Annuler
+            Garder en brouillon
           </button>
           <button
             type="submit"
-            className="button primary"
+            onClick={() => setStartNow(false)}
+            className="button secondary"
             disabled={!title.trim() || busy || missing || invalidProposal || invalidStarter}
           >
             {pending ? 'Création en cours…' : 'Créer la session'} <ArrowRight size={16} />
           </button>
+          <button
+            type="submit"
+            className="button primary"
+            onClick={() => setStartNow(true)}
+            disabled={
+              !title.trim() ||
+              busy ||
+              missing ||
+              invalidProposal ||
+              invalidStarter ||
+              (starter === 'custom' && !origin)
+            }
+          >
+            Créer et démarrer
+          </button>
         </div>
       </form>
     </Modal>
+  );
+}
+
+export function CreateModal(props: Omit<Parameters<typeof CreateForm>[0], 'chooseDraft'>) {
+  const [draftKey, setDraftKey] = useState(() => savedTaskDraft()?.id ?? 'new');
+  return (
+    <CreateForm
+      key={draftKey}
+      {...props}
+      origin={props.origin ?? savedTaskDraft()?.origin}
+      chooseDraft={setDraftKey}
+    />
   );
 }

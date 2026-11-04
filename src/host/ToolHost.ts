@@ -20,6 +20,20 @@ import { needsDevOpsEvidence } from '../shared/devopsKit';
 import type { DevOpsInspector } from './DevOpsInspector';
 import { readHeadFile } from './GitFileContent';
 
+export async function gitBranch(root: string): Promise<{ branch: string }> {
+  const branch = await gitRead(root, ['symbolic-ref', '--short', 'HEAD'], {
+    timeoutMs: 5000,
+    rawOutput: true,
+  });
+  if (branch.truncated) throw new Error('Nom de branche trop volumineux.');
+  if (!branch.code) return { branch: branch.stdout.trim() };
+  const repository = await gitRead(root, ['rev-parse', '--git-dir'], {
+    timeoutMs: 5000,
+    rawOutput: true,
+  });
+  return { branch: repository.code ? 'sans Git' : 'HEAD détachée' };
+}
+
 export async function gitInfo(root: string): Promise<{ branch: string; dirty: Set<string> }> {
   const branch = await gitRead(root, ['symbolic-ref', '--short', 'HEAD'], {
     timeoutMs: 5000,

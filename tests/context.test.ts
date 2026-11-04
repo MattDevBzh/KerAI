@@ -429,3 +429,26 @@ describe('deterministic context compiler', () => {
     expect(previewContext(data).fingerprint).not.toBe(fourth);
   });
 });
+
+it('keeps active pinned instructions in the human context with their version and excludes disabled entries', () => {
+  const data = input();
+  const instruction = {
+    id: 'instruction',
+    revision: 2,
+    text: 'Conserver les accents',
+    active: true,
+    updatedAt: '2026-11-04T00:00:00Z',
+    history: [],
+  };
+  data.feature.instructions = [
+    instruction,
+    { ...instruction, id: 'disabled', active: false, text: 'NE_PAS_TRANSMETTRE' },
+  ];
+  data.settings.instructions = [
+    { ...instruction, id: 'project', text: 'Respecter le style existant' },
+  ];
+  const prompt = buildPrompt(data);
+  expect(prompt).toContain('Tâche · instruction · version 2 : Conserver les accents');
+  expect(prompt).toContain('Projet · project · version 2');
+  expect(prompt).not.toContain('NE_PAS_TRANSMETTRE');
+});

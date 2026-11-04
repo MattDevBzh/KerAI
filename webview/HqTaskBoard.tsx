@@ -120,7 +120,7 @@ export function HqTaskBoard({ step, name }: { step?: FeatureStep; name: string }
             : board.source === 'plan'
               ? 'D’après le plan de travail'
               : 'Mission confiée'}{' '}
-          · validation dans le cockpit
+          · validation humaine
         </span>
         {(changed > 0 || added > 0) && (
           <button type="button" onClick={() => setOriginal((v) => !v)} aria-pressed={original}>

@@ -135,6 +135,8 @@ test('qualité : contre-exemple lisible, preuves sélectionnées par id et aucun
     .filter({ hasText: 'Conception' })
     .getByRole('button', { name: 'Examiner les blocages', exact: true })
     .click();
+  if (!(await page.getByRole('tab', { name: 'Activité', exact: true }).isVisible()))
+    await page.getByText('Détails et vérifications', { exact: true }).click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
   await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   const panel = page.getByRole('region', { name: 'Recette et contre-exemples' });

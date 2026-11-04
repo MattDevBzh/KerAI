@@ -1,3 +1,8 @@
+import { sessionView, saveSessionView } from './bridge';
+import { TaskConversationHistory } from './TaskConversationHistory';
+import { savedPairAttachments, savePairAttachments } from './bridge';
+import type { CodeSelection } from '../src/shared/codeSelection';
+import { SessionRecovery } from './SessionRecovery';
 import { ImagePicker, ImageGallery, useImageDraft } from './Images';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Bot, Check, FileText, Pause, Play, Users } from 'lucide-react';
@@ -44,7 +49,14 @@ export function SessionConversation({
   dispatch: (message: ClientMessage) => void;
   showArtifact: () => void;
 }) {
-  const imageDraft = useImageDraft();
+  const imageDraft = useImageDraft(savedPairAttachments(attempt.id)?.images);
+  const [selection, setSelection] = useState<CodeSelection | undefined>(
+    savedPairAttachments(attempt.id)?.selection,
+  );
+  useEffect(
+    () => savePairAttachments(attempt.id, { images: imageDraft.images, selection }),
+    [attempt.id, imageDraft.images, selection],
+  );
   const pair = attempt.pair!;
   const historic = step.attempts.at(-1)?.id !== attempt.id;
   const locked =
@@ -57,11 +69,13 @@ export function SessionConversation({
   const [preferences, setPreferences] = useState(pair.preferences);
   const [pending, setPending] = useState<string>();
   const [error, setError] = useState('');
+  const [stopPending, setStopPending] = useState<string>();
+  const stopRequest = useRef<{ id: string; draft?: string } | undefined>(undefined);
   const sent = useRef<{ id: string; draft?: string } | undefined>(undefined);
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const feed = useRef<HTMLDivElement>(null),
-    follow = useRef(true);
+    follow = useRef(sessionView(attempt.id)?.follow ?? true);
   const requests = (state.humanRequests ?? []).filter(
     (r) => r.featureId === feature.id && r.stepId === step.id,
   );
@@ -72,12 +86,33 @@ export function SessionConversation({
   useEffect(
     () =>
       subscribe((message) => {
-        if (message.type !== 'pairActionResult' || message.requestId !== sent.current?.id) return;
+        if (
+          message.type === 'sessionQuote' &&
+          message.attemptId === attempt.id &&
+          message.featureId === feature.id
+        ) {
+          setError(message.error ?? '');
+          if (message.selection) setSelection(message.selection);
+          return;
+        }
+        if (message.type !== 'pairActionResult') return;
+        if (message.requestId === stopRequest.current?.id) {
+          setStopPending(undefined);
+          setError(message.error ?? '');
+          if (!message.error && stopRequest.current.draft === draftRef.current) {
+            setDraft('');
+            savePairDraft(attempt.id, '');
+          }
+          stopRequest.current = undefined;
+          return;
+        }
+        if (message.requestId !== sent.current?.id) return;
         setPending(undefined);
         setError(message.error ?? '');
         if (!message.error && sent.current.draft === draftRef.current) {
           setDraft('');
           imageDraft.setImages([]);
+          setSelection(undefined);
           savePairDraft(attempt.id, '');
         }
         sent.current = undefined;
@@ -87,15 +122,25 @@ export function SessionConversation({
   useEffect(() => {
     setPreferences(pair.preferences);
   }, [pair.preferences]);
+  useEffect(() => {
+    const saved = sessionView(attempt.id);
+    if (feed.current && saved?.scroll !== undefined) feed.current.scrollTop = saved.scroll;
+  }, [attempt.id]);
   const latestMessage = pair.messages.at(-1);
   useEffect(() => {
     if (follow.current && feed.current) feed.current.scrollTop = feed.current.scrollHeight;
   }, [latestMessage?.content, pair.messages.length, attempt.nativeActivity?.length]);
   const act = (action: PairAction['action'], content?: string, messageId?: string) => {
-    if (locked || pending || imageDraft.loading) return;
+    const stopping = action === 'pause' || action === 'redirect';
+    if (locked || (stopping ? stopPending : pending || imageDraft.loading)) return;
     const id = crypto.randomUUID();
-    sent.current = { id, draft: action === 'message' ? draft : content };
-    setPending(id);
+    if (stopping) {
+      stopRequest.current = { id, draft: action === 'redirect' ? draft : undefined };
+      setStopPending(id);
+    } else {
+      sent.current = { id, draft: action === 'message' ? draft : content };
+      setPending(id);
+    }
     setError('');
     dispatch({
       type: 'pairAction',
@@ -105,6 +150,7 @@ export function SessionConversation({
       expectedVersion: pair.version,
       requestId: id,
       action,
+      ...(action === 'message' && selection ? { selection } : {}),
       ...(action === 'message' && imageDraft.images.length ? { images: imageDraft.images } : {}),
       ...(content?.trim() ? { content: content.trim() } : {}),
       ...(messageId ? { messageId } : {}),
@@ -172,6 +218,24 @@ export function SessionConversation({
             })}
           </time>
         </div>
+        {!locked && (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              const quote = `À propos du message ${entry.message.id} (${step.name}, tentative ${attempt.id}) :\n${entry.message.content
+                .slice(0, 6000)
+                .split('\n')
+                .map((line) => `> ${line}`)
+                .join('\n')}\n\n`;
+              const value = `${draftRef.current}${draftRef.current ? '\n\n' : ''}${quote}`;
+              setDraft(value);
+              savePairDraft(attempt.id, value);
+            }}
+          >
+            Répondre à ce passage
+          </button>
+        )}
         <ImageGallery images={entry.message.images} />
         {entry.message.kind === 'reasoning' ? (
           <details className="conversation-reasoning">
@@ -229,11 +293,25 @@ export function SessionConversation({
         )}
       </article>
     );
+  const [query, setQuery] = useState('');
   const [historyPage, setHistoryPage] = useState(0);
   const historyPages = Math.max(1, Math.ceil(timeline.length / 100));
   const currentHistoryPage = Math.min(historyPage, historyPages - 1);
   const windowEnd = timeline.length - currentHistoryPage * 100;
-  const visibleTimeline = timeline.slice(Math.max(0, windowEnd - 100), windowEnd);
+  const matchingTimeline = query.trim()
+    ? timeline.filter((entry) =>
+        (entry.kind === 'message'
+          ? entry.message.content
+          : `${entry.tool.tool} ${entry.tool.command ?? ''}`
+        )
+          .toLocaleLowerCase('fr')
+          .includes(query.trim().toLocaleLowerCase('fr')),
+      )
+    : timeline;
+  const visibleTimeline = matchingTimeline.slice(
+    Math.max(0, (query ? matchingTimeline.length : windowEnd) - 100),
+    query ? matchingTimeline.length : windowEnd,
+  );
   const groups: { id: string; intermediate: boolean; entries: typeof timeline }[] = [];
   for (const entry of visibleTimeline) {
     const intermediate =
@@ -288,10 +366,10 @@ export function SessionConversation({
               (step.subplanState && !step.subplanState.paused && pair.phase !== 'review')) && (
               <button
                 className="button secondary small"
-                disabled={Boolean(pending || pair.pauseRequested)}
+                disabled={Boolean(stopPending || pair.pauseRequested)}
                 onClick={() => act('pause')}
               >
-                <Pause size={14} /> Reprendre la main
+                <Pause size={14} /> Arrêter
               </button>
             )}
           </div>
@@ -324,8 +402,45 @@ export function SessionConversation({
                           ? 'Point de contrôle · à toi de décider de la suite'
                           : 'Convenons de l’organisation'}
       </div>
+      <TaskConversationHistory
+        locked={locked}
+        feature={feature}
+        currentAttemptId={attempt.id}
+        quote={(text) => {
+          if (locked) return;
+          const value = `${draftRef.current}${draftRef.current ? '\n\n' : ''}${text}`;
+          setDraft(value);
+          savePairDraft(attempt.id, value);
+        }}
+      />
+      <p className="conversation-recipient">
+        Message adressé à {attempt.agentName ?? pair.snapshot.agent.name} · {step.name}
+        {historic ? ' · consultation d’une ancienne tentative' : ''}
+      </p>
+      <SessionRecovery feature={feature} step={step} attempt={attempt} dispatch={dispatch} />
       <ImageGallery images={feature.images} />
       <NativeContextPanel loads={attempt.nativeContextLoads ?? []} />
+      <div className="conversation-navigation">
+        <input
+          aria-label="Rechercher dans l’échange actuel"
+          type="search"
+          placeholder="Rechercher un échange…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => {
+            setQuery('');
+            setHistoryPage(0);
+            follow.current = true;
+            if (feed.current) feed.current.scrollTop = feed.current.scrollHeight;
+          }}
+        >
+          Derniers messages
+        </button>
+      </div>
       <div
         className="conversation-feed"
         role="log"
@@ -333,7 +448,10 @@ export function SessionConversation({
         ref={feed}
         onScroll={() => {
           const el = feed.current;
-          if (el) follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+          if (el) {
+            follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+            saveSessionView(attempt.id, { scroll: el.scrollTop, follow: follow.current });
+          }
         }}
       >
         {historyPages > 1 && (
@@ -445,7 +563,10 @@ export function SessionConversation({
               disabled={idleDisabled || unanswered.length > 0}
               onClick={() => act('resume')}
             >
-              <Play size={14} /> Reprendre le travail
+              <Play size={14} />{' '}
+              {pair.pendingMessages.length
+                ? 'Reprendre avec mes consignes'
+                : 'Reprendre le travail'}
             </button>
           )}
           {attempt.artifact && (
@@ -517,8 +638,12 @@ export function SessionConversation({
             className="conversation-composer"
             onSubmit={(event) => {
               event.preventDefault();
-              if (draft.trim() || imageDraft.images.length)
-                act('message', draft.trim() || 'Analyse les images jointes.');
+              if (draft.trim() || imageDraft.images.length || selection)
+                act(
+                  'message',
+                  draft.trim() ||
+                    (selection ? 'Analyse la sélection jointe.' : 'Analyse les images jointes.'),
+                );
             }}
           >
             <label className="field">
@@ -538,16 +663,63 @@ export function SessionConversation({
                   if (
                     (event.ctrlKey || event.metaKey) &&
                     event.key === 'Enter' &&
-                    (draft.trim() || imageDraft.images.length)
+                    (draft.trim() || imageDraft.images.length || selection)
                   ) {
                     event.preventDefault();
-                    act('message', draft.trim() || 'Analyse les images jointes.');
+                    act(
+                      'message',
+                      draft.trim() ||
+                        (selection
+                          ? 'Analyse la sélection jointe.'
+                          : 'Analyse les images jointes.'),
+                    );
                   }
                 }}
               />
             </label>
             <ImagePicker draft={imageDraft} disabled={Boolean(pending)} />
+            <button
+              type="button"
+              className="text-button"
+              disabled={Boolean(pending)}
+              onClick={() =>
+                dispatch({
+                  type: 'quoteEditorSelection',
+                  featureId: feature.id,
+                  stepId: step.id,
+                  attemptId: attempt.id,
+                })
+              }
+            >
+              Joindre la sélection de code
+            </button>
+            {selection && (
+              <aside>
+                <strong>
+                  {selection.path}:{selection.startLine}–{selection.endLine}
+                </strong>
+                <pre>{selection.text}</pre>
+                <small>Extrait figé ; la version du fichier sera vérifiée à l’envoi.</small>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setSelection(undefined)}
+                >
+                  Retirer la sélection
+                </button>
+              </aside>
+            )}
             <div className="conversation-composer-actions">
+              {pair.busy && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={Boolean(stopPending || pair.pauseRequested || !draft.trim())}
+                  onClick={() => act('redirect', draft.trim())}
+                >
+                  Arrêter et réorienter
+                </button>
+              )}
               <small>
                 {pair.busy
                   ? 'Le message est conservé et transmis pendant le travail si Copilot l’accepte ; son état reste visible.'
@@ -558,7 +730,7 @@ export function SessionConversation({
                 disabled={
                   Boolean(pending) ||
                   imageDraft.loading ||
-                  (!draft.trim() && !imageDraft.images.length)
+                  (!draft.trim() && !imageDraft.images.length && !selection)
                 }
               >
                 <ArrowUp size={15} /> Envoyer
@@ -607,8 +779,7 @@ function IntermediateMessages({
   count: number;
   children: ReactNode;
 }) {
-  const [expanded, setExpanded] = useState(active);
-  useEffect(() => setExpanded(active), [active]);
+  const [expanded, setExpanded] = useState(false);
   return (
     <section className="conversation-intermediate" aria-label="Messages intermédiaires">
       <button

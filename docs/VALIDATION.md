@@ -1,5 +1,11 @@
 # Validation et limites
 
+## Parcours quotidien et ouverture progressive — v1.38.0, 4 novembre 2026
+
+Les quinze lots sont décrits dans le [périmètre livré](features/daily-session-flow/IMPLEMENTATION.md). **1 184 tests de logique**, **353 scénarios d’interface**, les types, le format, la construction et le paquet extrait dans VS Code sur macOS passent. Les onze tests conditionnels locaux sont repris par leurs environnements CLI/Windows en CI.
+
+La [validation détaillée](features/daily-session-flow/VALIDATION.md) contient le protocole, les mesures synthétiques avant/après, les captures et les limites. Les projets Windows personnels ne sont pas accessibles et leur mesure a été retirée du périmètre à la demande de l’utilisateur. La publication reste conditionnée à la CI Linux et Windows et au test du paquet livré ; son exécution est liée dans la [release v1.38.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.38.0).
+
 ## Passe globale — v1.37.1, 4 novembre 2026
 
 - **1 174 tests de logique/intégration réussis**, complétés par **8 contrôles natifs réussis** avec Copilot CLI 1.0.102. Les 3 autres tests ignorés sur macOS concernent les lanceurs Windows et sont exécutés dans la CI Windows. Types, format et construction réussis.

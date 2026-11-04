@@ -25,6 +25,7 @@ import { searchText } from './Ergonomics';
 import { isHosted, persistView, savedSessionList, savedReviewList, subscribe } from './bridge';
 import './sessions.css';
 import './work-focus.css';
+import { savedTaskDrafts } from './bridge';
 import { FirstSessionGuide } from './FirstSessionGuide';
 
 const statuses = {
@@ -83,6 +84,17 @@ export function Sessions({
   onOpen: (id: string) => void;
   dispatch: (message: ClientMessage) => void;
 }) {
+  const [drafts, setDrafts] = useState(savedTaskDrafts);
+  useEffect(() => {
+    const off = subscribe((m) => {
+      if (m.type === 'taskDrafts') {
+        setDrafts(m.drafts);
+        persistView({ taskDrafts: m.drafts });
+      }
+    });
+    if (isHosted) dispatch({ type: 'listTaskDrafts' });
+    return off;
+  }, []);
   const [filters, setFilters] = useState<SessionListFilters>(() => ({
     ...defaultSessionFilters,
     ...(reviewMode ? savedReviewList() : savedSessionList()),
@@ -208,15 +220,55 @@ export function Sessions({
             <span className="count-pill">{state.features.length}</span>
           </h1>
         </div>
-        <button
-          className="button primary"
-          disabled={Boolean(pending || state.workspaceOperation)}
-          onClick={() => onCreate()}
-        >
+        <button className="button primary" disabled={Boolean(pending)} onClick={() => onCreate()}>
           <Plus size={16} /> {reviewMode ? 'Nouvelle relecture' : 'Nouvelle session'}
         </button>
       </header>
-      {!reviewMode && !state.features.length && (
+      {state.projectCatalog?.partial && (
+        <section className="notice" role="status" aria-label="Chargement des projets">
+          <strong>Liste et compteurs partiels</strong>
+          <p>Les sessions déjà disponibles restent accessibles.</p>
+          {state.projectCatalog.projects.map((project) => {
+            const loading = state.projectCatalog?.loading?.[project.id];
+            return loading && loading.status !== 'ready' ? (
+              <div key={project.id}>
+                {project.name} ·{' '}
+                {loading.status === 'error'
+                  ? loading.error
+                  : loading.status === 'loading'
+                    ? 'Chargement…'
+                    : 'En attente'}
+                {loading.status === 'error' && (
+                  <button
+                    className="text-button"
+                    onClick={() => dispatch({ type: 'activateProject', projectId: project.id })}
+                  >
+                    Réessayer
+                  </button>
+                )}
+              </div>
+            ) : null;
+          })}
+        </section>
+      )}
+      {!reviewMode && drafts.length > 0 && (
+        <section className="task-drafts" aria-label="Brouillons de tâches">
+          <h2>Brouillons</h2>
+          {drafts.map((d) => (
+            <button
+              className="button secondary"
+              key={d.id}
+              onClick={() => {
+                persistView({ taskDraft: d });
+                onCreate();
+              }}
+            >
+              {d.title || 'Sans titre'} · Reprendre la préparation
+            </button>
+          ))}
+        </section>
+      )}
+      {!reviewMode && !state.features.length && !state.projectCatalog?.partial && (
         <FirstSessionGuide state={state} dispatch={dispatch} onCreate={onCreate} />
       )}
       <section

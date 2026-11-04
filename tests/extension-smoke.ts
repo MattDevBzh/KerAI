@@ -19,6 +19,8 @@ import type { DashboardState } from '../src/shared/dashboard';
 interface Api {
   getState(): StudioState | undefined;
   getUiReady(): boolean;
+  getStartupDiagnostics(): { stage: string; atMs: number }[];
+  holdStartupForTest(): () => void;
   getLauncherVisible(): boolean;
   getLauncherReady(): boolean;
   getTheme(): ThemeId;
@@ -30,6 +32,11 @@ interface Api {
   getDashboardReady(): boolean;
   dispatchDashboard(message: ClientMessage): Promise<void | CheckpointComparison>;
   dispatch(message: ClientMessage): Promise<void | CheckpointComparison>;
+}
+async function waitForProjectReady(api: Api): Promise<void> {
+  for (let retry = 0; retry < 200 && !api.getUiReady(); retry++)
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(api.getUiReady(), 'The opened panel completes project preparation');
 }
 async function waitForAutomaticConnection(api: Api): Promise<void> {
   for (let retry = 0; retry < 250; retry++) {
@@ -180,6 +187,30 @@ async function smokeRun(): Promise<void> {
     );
   const originalFolders = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.toString());
   const originalWorkspace = vscode.workspace.workspaceFile?.toString();
+  // Hold project preparation indefinitely: the panel and its React shell must still open.
+  const releaseStartup = api.holdStartupForTest();
+  await Promise.all([
+    vscode.commands.executeCommand('featureStudio.open'),
+    vscode.commands.executeCommand('featureStudio.open'),
+  ]);
+  for (
+    let retry = 0;
+    retry < 100 && !api.getStartupDiagnostics().some((row) => row.stage === 'interface.ready');
+    retry++
+  )
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(
+    api.getStartupDiagnostics().some((row) => row.stage === 'interface.ready'),
+    'The interface opens while project initialization is blocked',
+  );
+  assert.equal(api.getState(), undefined, 'Project initialization is still blocked');
+  const heldTabs = vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .filter((tab) => tab.input instanceof vscode.TabInputWebview && tab.label === 'Feature Studio');
+  assert.equal(heldTabs.length, 1, 'Repeated opens share the loading panel');
+  await vscode.window.tabGroups.close(heldTabs[0]);
+  await vscode.commands.executeCommand('featureStudio.open');
+  releaseStartup();
   await vscode.commands.executeCommand('featureStudio.launcher.focus');
   for (let retry = 0; retry < 100 && (!api.getUiReady() || api.getLauncherVisible()); retry++)
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -248,6 +279,7 @@ async function smokeRun(): Promise<void> {
     );
   assert.equal(cockpitTabs().length, 1, 'Concurrent launcher clicks create only one cockpit');
   await vscode.commands.executeCommand('featureStudio.open');
+  await waitForProjectReady(api);
   assert.equal(cockpitTabs().length, 1, 'The launcher command reuses the existing cockpit panel');
   await vscode.commands.executeCommand('featureStudio.launcher.focus');
   for (let retry = 0; retry < 100 && api.getLauncherVisible(); retry++)
@@ -762,6 +794,7 @@ async function smokeRun(): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
   await new Promise((resolve) => setTimeout(resolve, 200));
   await vscode.commands.executeCommand('featureStudio.open');
+  await waitForProjectReady(api);
   assert.equal(
     api.getState()?.features.find((f) => f.id === feature.id)?.title,
     'Smoke extension host',
@@ -851,6 +884,7 @@ async function smokeRun(): Promise<void> {
   );
   await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
   await vscode.commands.executeCommand('featureStudio.open');
+  await waitForProjectReady(api);
   assert.equal(
     api.getState()!.features.find((item) => item.id === proposed.id)?.criteria?.[0].text,
     'Keyboard navigation works',
@@ -911,11 +945,17 @@ async function smokeRun(): Promise<void> {
   assert.equal(api.getDashboardState().config.modules[0].title, 'Sessions à suivre');
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   await vscode.commands.executeCommand('featureStudio.open');
+  await waitForProjectReady(api);
   assert.equal(
     api.getDashboardState().config.modules[0].title,
     'Sessions à suivre',
     'Layout survives closing and reopening both surfaces',
   );
+  if (process.env.FEATURE_STUDIO_STARTUP_OUTPUT)
+    await writeFile(
+      process.env.FEATURE_STUDIO_STARTUP_OUTPUT,
+      JSON.stringify(api.getStartupDiagnostics(), null, 2),
+    );
   console.log(
     'PASS: activity-bar direct opening in the current window/sidebar dismissal/panel reuse, activation, panel/CSP, personal themes/strict protocol/ordered writes/reopen/business-state preservation, personal quest ledger/feature and team creation/workflow deduplication/budget/reopen/no rewards for refused launches, manual context/MCP/secret settings, budget/autopilot/memory, avatars/kit, user/project profile priority and persistence, offline ADO config/reopen, real Git delivery inspection, explicit quality reporter installation, isolated Git worktree, source/index preservation, checkpoints/diff, dirty-buffer refusal, selected restore, stale comparison refusal, recovery restore and v7 close/reopen, optional team override/manual skip without inference/persistence, observer command/profile and offline dossier/storage preparation, roast profile scopes and premature final-validation refusal. No paid prompt.',
   );

@@ -1,3 +1,11 @@
+import { startupDiagnostics } from './StartupDiagnostics';
+import { selectionContext } from './CodeSelection';
+import { instructionCommand } from '../core/instructions';
+import {
+  progressionConfig,
+  sessionLaunch,
+  type SessionProgression,
+} from '../shared/sessionProgression';
 import { PullRequestReview } from './PullRequestReview';
 import { parsePullRequestUrl } from '../shared/reviews';
 import { reviewTargetSchema } from '../core/reviewSchemas';
@@ -152,7 +160,7 @@ import {
 import { sessionDirectory } from './SessionFiles';
 import { observationSource, prepareObservation, runObservation } from './SessionObserver';
 import { checkedProofClaim, inspectProofDossier, verifyProofFiles } from './SessionProofs';
-import { gitInfo, ToolHost } from './ToolHost';
+import { gitInfo, gitBranch, ToolHost } from './ToolHost';
 import { WorkspaceLease } from './WorkspaceLease';
 
 export class StudioService extends EventEmitter {
@@ -324,10 +332,20 @@ export class StudioService extends EventEmitter {
     });
   }
   async initialize(): Promise<void> {
-    const persisted = await this.store.load();
+    const persisted = await startupDiagnostics.measure(
+      'project.sessions',
+      () => this.store.load(),
+      this.workspacePath,
+    );
     this.engine = new WorkflowEngine(persisted.features);
-    const data = await this.registry.load();
-    const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
+    const data = await startupDiagnostics.measure(
+      'project.catalogues',
+      () => this.registry.load(),
+      this.workspacePath,
+    );
+    const info = await startupDiagnostics
+      .measure('project.git-branch', () => gitBranch(this.workspacePath), this.workspacePath)
+      .catch(() => ({ branch: 'sans Git' }));
     this.state = {
       schemaVersion: 16,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
@@ -355,13 +373,21 @@ export class StudioService extends EventEmitter {
         (m) => m.source?.featureId !== deletion.featureId,
       );
     }
-    await this.navigation.initialize();
+    await startupDiagnostics.measure(
+      'project.navigation',
+      () => this.navigation.initialize(),
+      this.workspacePath,
+    );
     this.state.navigation = this.navigation.snapshot();
-    await this.refreshIsolationSupport();
+    await startupDiagnostics.measure(
+      'project.git-isolation',
+      () => this.refreshIsolationSupport(),
+      this.workspacePath,
+    );
   }
   private async refreshIsolationSupport(): Promise<void> {
     try {
-      await this.workspaces.inspectRepository();
+      await this.workspaces.inspectIdentity();
       this.state.workspace.canIsolate = true;
       this.state.workspace.isolationReason = undefined;
     } catch (error) {
@@ -417,21 +443,177 @@ export class StudioService extends EventEmitter {
     await this.refreshIsolationSupport();
     this.publish();
   }
+  private runtimeCheck?: Promise<void>;
   async checkRuntime(): Promise<void> {
     this.assertTrusted();
-    if (this.active || this.state.runtime.state === 'checking') return;
+    if (this.active) return;
+    if (this.runtimeCheck) return this.runtimeCheck;
     this.state.runtime = { ...this.state.runtime, state: 'checking' };
     this.publish();
+    this.runtimeCheck = (async () => {
+      try {
+        this.state.runtime = await this.adapter.check();
+      } catch (error) {
+        this.state.runtime = {
+          state: 'unavailable',
+          models: [],
+          error: redact((error as Error).message),
+        };
+      }
+      this.publish();
+    })().finally(() => {
+      this.runtimeCheck = undefined;
+    });
+    return this.runtimeCheck;
+  }
+  async pinInstruction(
+    value: Extract<import('../shared/types').ClientMessage, { type: 'pinInstruction' }>,
+  ): Promise<void> {
+    const command = instructionCommand.parse(value);
+    this.assertTrusted();
+    const feature = this.engine.getFeature(command.featureId);
+    if (feature.archived) throw Error('La session est archivée.');
+    const owner = command.scope === 'task' ? feature : this.state.settings;
+    const before = owner.instructions ?? [];
+    const previous = before.find((i) => i.id === command.id);
+    if ((previous?.revision ?? 0) !== command.expectedRevision)
+      throw Error('La consigne a changé. Relis sa version actuelle.');
+    if (before.length >= 100 && !previous) throw Error('Cent consignes sont déjà conservées.');
+    if ((previous?.history.length ?? 0) >= 200)
+      throw Error('Historique complet : crée une nouvelle consigne.');
+    const at = new Date().toISOString();
+    owner.instructions = [
+      ...before.filter((i) => i.id !== command.id),
+      {
+        id: command.id,
+        revision: (previous?.revision ?? 0) + 1,
+        text: command.text,
+        active: command.active,
+        updatedAt: at,
+        history: [
+          ...(previous?.history ?? []),
+          ...(previous
+            ? [
+                {
+                  revision: previous.revision,
+                  text: previous.text,
+                  active: previous.active,
+                  at: previous.updatedAt,
+                },
+              ]
+            : []),
+        ],
+      },
+    ];
     try {
-      this.state.runtime = await this.adapter.check();
+      await this.persist();
     } catch (error) {
-      this.state.runtime = {
-        state: 'unavailable',
-        models: [],
-        error: redact((error as Error).message),
-      };
+      owner.instructions = before;
+      throw error;
     }
-    this.publish();
+    const targets = allFeatures(this.engine.features).filter(
+      (candidate) =>
+        !candidate.archived &&
+        (command.scope === 'project' ||
+          treePath(this.engine.features, candidate.id).some((f) => f.id === feature.id)),
+    );
+    for (const target of targets) {
+      const step = target.steps.find(
+        (s) => !['approved', 'stale', 'skipped'].includes(s.status) && s.attempts.at(-1)?.pair,
+      );
+      const attempt = step?.attempts.at(-1);
+      if (!attempt?.pair || !step) continue;
+      const pair = attempt.pair;
+      const text = `Consigne ${command.scope === 'task' ? 'de tâche' : 'de projet'} ${command.id} version ${(previous?.revision ?? 0) + 1} ${command.active ? 'active' : 'désactivée'} : ${command.text}. Signale les contradictions avant de poursuivre.`;
+      if (pair.busy && (pair.requestedMode ?? pair.mode) === 'pair') {
+        try {
+          await this.pairAction({
+            type: 'pairAction',
+            featureId: target.id,
+            stepId: step.id,
+            attemptId: attempt.id,
+            expectedVersion: pair.version,
+            requestId: command.requestId,
+            action: 'message',
+            content: text,
+          });
+        } catch {
+          this.error(
+            new Error(
+              'Consigne enregistrée. Sa transmission au tour actif reste à vérifier ; arrête puis reprends pour la réappliquer.',
+            ),
+          );
+        }
+      } else {
+        pairMessage(pair, 'system', text);
+        await this.persist();
+      }
+    }
+  }
+
+  private initialStarts = new Set<string>();
+  private continuationEpoch = new Map<string, number>();
+  private continuations = new Set<string>();
+  async continueAfterApproval(featureId: string, fromId: string, nextId: string): Promise<void> {
+    if (this.continuations.has(featureId)) return;
+    const feature = this.engine.getFeature(featureId);
+    const next = feature.steps.find((s) => s.id === nextId);
+    if (
+      !next ||
+      !next.dependsOn.includes(fromId) ||
+      next.status !== 'pending' ||
+      !next.dependsOn.every((id) => stepResolved(feature.steps.find((s) => s.id === id)))
+    )
+      throw Error('La suite a changé. Choisis une étape disponible dans la session.');
+    const epoch = this.continuationEpoch.get(featureId) ?? 0;
+    this.continuations.add(featureId);
+    try {
+      const prior = this.engine.getStep(featureId, fromId).attempts.at(-1)?.pair;
+      const paired = prior?.mode === 'pair';
+      const launch =
+        feature.autopilot?.stepInputs[nextId] ?? sessionLaunch(feature, nextId, paired);
+      const options = paired ? { ...launch, pair: prior.preferences } : launch;
+      const preview = await this.previewRun(featureId, nextId, '', false, options);
+      if ((this.continuationEpoch.get(featureId) ?? 0) !== epoch) return;
+      if (next.askBeforeRun)
+        throw Error(
+          'La prochaine étape demande un contexte initial. Ouvre son lancement pour le préciser.',
+        );
+      if (
+        feature.autopilot &&
+        !paired &&
+        feature.steps.filter(
+          (s) =>
+            s.status === 'pending' &&
+            s.dependsOn.every((id) => stepResolved(feature.steps.find((d) => d.id === id))),
+        ).length === 1
+      )
+        await this.startAutopilot(featureId);
+      else await this.runStep(featureId, nextId, '', false, options, preview.fingerprint);
+    } finally {
+      this.continuations.delete(featureId);
+    }
+  }
+  async startCreatedFeature(
+    featureId: string,
+    options: { pair: boolean; progression: SessionProgression },
+  ): Promise<void> {
+    const feature = this.engine.getFeature(featureId);
+    if (this.initialStarts.has(featureId) || feature.steps.some((s) => s.attempts.length)) return;
+    if (!feature.steps.length) throw Error('Compose une équipe avant de démarrer.');
+    this.initialStarts.add(featureId);
+    try {
+      await this.saveAutopilot(featureId, progressionConfig(feature, options.progression));
+      if (this.state.runtime.state !== 'ready') await this.checkRuntime();
+      if (options.pair) {
+        const first = feature.steps[0],
+          launch = sessionLaunch(feature, first.id, true);
+        const preview = await this.previewRun(featureId, first.id, '', false, launch);
+        await this.runStep(featureId, first.id, '', false, launch, preview.fingerprint);
+      } else await this.startAutopilot(featureId);
+    } finally {
+      this.initialStarts.delete(featureId);
+    }
   }
   async createFeature(input: {
     reviewTarget?: import('../shared/reviews').ReviewTarget;
@@ -1148,6 +1330,9 @@ export class StudioService extends EventEmitter {
     const issues = subplanIssues(originalFeature.steps);
     if (issues.length) throw new Error(issues.join(' '));
     const feature = structuredClone(originalFeature);
+    feature.instructions = treePath(this.engine.features, featureId).flatMap((f) =>
+      structuredClone(f.instructions ?? []),
+    );
     if (
       originalFeature.autopilot?.correctionLoop &&
       originalFeature.autopilot.correctionLoopState &&
@@ -2495,14 +2680,22 @@ export class StudioService extends EventEmitter {
       throw new Error('Le contexte de la feature a changé. Prépare une nouvelle tentative.');
     if (pair.sourceKey && pair.sourceKey !== pairSourceKey(feature, step))
       throw new Error('Les sources ont changé depuis le cadrage. Prépare une nouvelle tentative.');
-    if (!isDeepStrictEqual(pair.snapshot.settings, this.state.settings))
+    if (
+      !isDeepStrictEqual(
+        { ...pair.snapshot.settings, instructions: undefined },
+        { ...this.state.settings, instructions: undefined },
+      )
+    )
       throw new Error(
         'Les réglages du projet ont changé depuis le cadrage. Prépare une nouvelle tentative avec les permissions actuelles.',
       );
     for (const project of pair.snapshot.projects ?? []) {
       if (
         this.projectSettings &&
-        !isDeepStrictEqual(project.settings, this.projectSettings(project.id))
+        !isDeepStrictEqual(
+          { ...project.settings, instructions: undefined },
+          { ...this.projectSettings(project.id), instructions: undefined },
+        )
       )
         throw new Error(
           `Les réglages de ${project.name} ont changé. Prépare une nouvelle tentative.`,
@@ -2529,7 +2722,13 @@ export class StudioService extends EventEmitter {
     const { prompt: _prompt, ...snapshot } = structuredClone(pair.snapshot);
     return {
       ...snapshot,
-      feature: structuredClone(feature),
+      feature: {
+        ...structuredClone(feature),
+        instructions: treePath(this.engine.features, featureId).flatMap((f) =>
+          structuredClone(f.instructions ?? []),
+        ),
+      },
+      settings: structuredClone(this.state.settings),
       step: { ...snapshot.step, status: step.status, attempts: [] },
       attempt: structuredClone({ ...attempt, pair: undefined }),
       launch: structuredClone(attempt.launch),
@@ -2555,20 +2754,53 @@ export class StudioService extends EventEmitter {
         'Cette action ne concerne plus la tentative actuelle. Rouvre le travail en pair.',
       );
     if (pair.requests.includes(command.requestId)) return;
+    // Stop is scoped to the current attempt, but must not wait for a send or a stale UI revision.
+    if (command.action === 'pause' || command.action === 'redirect') {
+      if (command.action === 'redirect' && !command.content?.trim())
+        throw new Error('Précise la nouvelle direction avant de réorienter.');
+      this.continuationEpoch.set(feature.id, (this.continuationEpoch.get(feature.id) ?? 0) + 1);
+      pair.pauseRequested = true;
+      if (!pair.busy) pair.phase = 'paused';
+      for (const child of allFeatures([feature])) {
+        this.pauseAutopilot(child.id, 'Arrêt volontaire : reprise explicite nécessaire.');
+        for (const childStep of child.steps)
+          if (childStep.subplanState) childStep.subplanState.paused = true;
+      }
+      if (command.action === 'redirect') {
+        pair.mode = 'pair';
+        pair.requestedMode = undefined;
+        pair.engaged = true;
+        const message = pairMessage(
+          pair,
+          'user',
+          `Nouvelle direction après arrêt : ${redact(command.content!)}\nAvant de reprendre le travail, explique brièvement ce que tu changes dans ton approche.`,
+          command.requestId,
+        );
+        message.delivery = 'pending';
+        pair.pendingMessages.push(message.id);
+      } else
+        pairMessage(
+          pair,
+          'system',
+          'Arrêt demandé. Travail conservé ; reprise explicite nécessaire.',
+          command.requestId,
+        );
+      pair.requests.push(command.requestId);
+      pair.version++;
+      feature.updatedAt = new Date().toISOString();
+      // Cancellation remains effective even when saving fails. No pending message restarts this run.
+      if (this.active && allFeatures([feature]).some((f) => f.id === this.active!.featureId))
+        this.active.controller.abort(new Error('Arrêt demandé par l’utilisateur.'));
+      this.publish();
+      await this.persist();
+      return;
+    }
     if (command.expectedVersion !== pair.version)
       throw new Error('Le travail en pair a évolué. Relis son état actuel avant de réessayer.');
     const liveAction = ['message', 'solo', 'pair', 'pause'].includes(command.action);
     if (!liveAction && (pair.busy || this.pairTasks.has(attempt.id) || this.workspaceTask))
       throw new Error('Attends la fin du bloc en cours avant de changer son organisation.');
-    if (
-      this.active &&
-      this.active.featureId !== feature.id &&
-      !(
-        step.subplan &&
-        command.action === 'pause' &&
-        allFeatures([feature]).some((f) => f.id === this.active!.featureId)
-      )
-    )
+    if (this.active && this.active.featureId !== feature.id)
       throw new Error('Une autre session travaille actuellement. Reviens après son exécution.');
     if (step.subplan && command.action === 'approve-plan') validateSubplanProposal(step);
     let next: PairTurn | undefined;
@@ -2647,7 +2879,22 @@ export class StudioService extends EventEmitter {
           pair.requestedMode = undefined;
           pair.engaged = true;
         }
-        const message = pairMessage(pair, 'user', redact(command.content), command.requestId);
+        const reference = command.selection
+          ? await selectionContext(command.selection, [
+              await this.featurePath(feature.id),
+              ...(feature.projects?.map((p) => p.path) ?? []),
+            ])
+          : '';
+        if (step.attempts.at(-1)?.id !== attempt.id || (pair.pauseRequested && pair.busy))
+          throw Error(
+            'La tentative a changé ou son arrêt est demandé. Reprends explicitement avant d’envoyer.',
+          );
+        const message = pairMessage(
+          pair,
+          'user',
+          redact([command.content, reference].filter(Boolean).join('\n\n')),
+          command.requestId,
+        );
         message.images = images;
         if (pair.nativeConversation) message.delivery = 'pending';
         pair.pendingMessages.push(message.id);
@@ -2755,16 +3002,6 @@ export class StudioService extends EventEmitter {
           'L’utilisateur reprend le travail en pair. Arrêt au prochain point de contrôle.',
         );
         break;
-      case 'pause':
-        pair.pauseRequested = true;
-        if (!pair.nativeConversation) pair.mode = 'pair';
-        if (!pair.busy) pair.phase = 'paused';
-        pairMessage(
-          pair,
-          'system',
-          'Pause demandée par l’utilisateur. Les changements déjà réalisés sont conservés.',
-        );
-        break;
     }
     let advanceChildren = false;
     const subplanBefore = step.subplan ? structuredClone(step.subplanState) : undefined;
@@ -2803,25 +3040,6 @@ export class StudioService extends EventEmitter {
       if (feature.updatedAt === updatedAt) feature.updatedAt = previousUpdatedAt;
       this.publish();
       throw error;
-    }
-    if (
-      command.action === 'pause' &&
-      this.active?.featureId === feature.id &&
-      this.active.stepId === step.id
-    )
-      this.active.controller.abort(new Error('Pause demandée par l’utilisateur.'));
-    if (step.subplan && command.action === 'pause') {
-      step.subplanState && (step.subplanState.paused = true);
-      const current = currentIteration(step);
-      if (current) {
-        this.pauseAutopilot(current.feature.id);
-        if (
-          this.active &&
-          allFeatures([current.feature]).some((f) => f.id === this.active!.featureId)
-        )
-          this.active.controller.abort(new Error('Sous-plan mis en pause.'));
-      }
-      await this.persist();
     }
     if (command.action === 'pair' || discussResult)
       this.pauseAutopilot(feature.id, 'Travail en pair demandé dans la conversation de l’étape.');
@@ -2924,6 +3142,8 @@ export class StudioService extends EventEmitter {
     }
   }
   cancel(featureId: string): void {
+    this.continuationEpoch.set(featureId, (this.continuationEpoch.get(featureId) ?? 0) + 1);
+    if (!this.active && this.continuations.has(featureId)) return;
     this.pauseAutopilot(featureId, 'Exécution arrêtée par l’utilisateur.');
     for (const f of allFeatures([this.engine.getFeature(featureId)])) {
       this.pauseAutopilot(f.id);

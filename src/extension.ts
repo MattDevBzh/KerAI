@@ -1,3 +1,7 @@
+import { clearCatalogueCache } from './core/registry';
+import { startupDiagnostics } from './host/StartupDiagnostics';
+import { selectionContext } from './host/CodeSelection';
+import { TaskDraftStore } from './host/TaskDraftStore';
 import { StateEncoder } from './shared/stateTransfer';
 import { normalizeSessionLayout } from './shared/sessionLayout';
 import { randomBytes } from 'node:crypto';
@@ -58,7 +62,10 @@ let webviewReady = false;
 const diffContents = new Map<string, string>();
 
 export async function activate(context: vscode.ExtensionContext) {
+  startupDiagnostics.mark('activation.begin');
+  const taskDrafts = new TaskDraftStore(path.join(context.globalStorageUri.fsPath, 'task-drafts'));
   const output = vscode.window.createOutputChannel('Feature Studio');
+  startupDiagnostics.configure((row) => output.appendLine(`[Démarrage] ${JSON.stringify(row)}`));
   let quotaAdapter: CopilotCliAdapter | undefined;
   let quotaCliPath: string | undefined;
   const launcher = new CockpitLauncher();
@@ -231,7 +238,7 @@ export async function activate(context: vscode.ExtensionContext) {
       );
       next.navigationProjects = () =>
         catalog.state.projects.map((p) => ({ id: p.id, path: p.path }));
-      await next.initialize();
+      await startupDiagnostics.measure('project.ready', () => next.initialize(), root);
       next.on(
         'optionalStep',
         (
@@ -439,7 +446,11 @@ export async function activate(context: vscode.ExtensionContext) {
           send({ type: 'navigate', view: 'dashboard', featureId: id });
         },
       });
-      await controller.initialize();
+      await startupDiagnostics.measure(
+        'project.delivery',
+        () => controller.initialize(false),
+        root,
+      );
       next.reviewReader = (url, signal) => {
         next.assertTrusted();
         return controller.reviewReader(url, signal);
@@ -506,6 +517,7 @@ export async function activate(context: vscode.ExtensionContext) {
     },
     adapter: async () => (await hub.entry('empty')).service.adapter,
     profiles: async () => {
+      await hub.waitForProjects();
       const personal = await (await hub.entry('empty')).service.registry.load();
       const profiles: DiscussionProfile[] = personal.agents.map((profile) => ({
         key: `global:${profile.id}`,
@@ -515,7 +527,7 @@ export async function activate(context: vscode.ExtensionContext) {
       for (const project of catalog.state.projects) {
         if (project.hidden) continue;
         try {
-          const data = await (await hub.entry(project.id)).service.registry.load();
+          const data = (await hub.entry(project.id)).service.state;
           profiles.push(
             ...data.agents
               .filter((agent) => agent.source === 'workspace')
@@ -538,6 +550,8 @@ export async function activate(context: vscode.ExtensionContext) {
     void quests.record(discussionQuestFacts(state));
   });
   disposeHub = async () => {
+    await initializing?.catch(() => {});
+    await secondaryInitialization;
     await dashboard.dispose();
     credits.setVisible(false);
     await discussions.dispose();
@@ -546,11 +560,14 @@ export async function activate(context: vscode.ExtensionContext) {
     await rewards.flush();
     initialized = false;
   };
+  let startupTestGate: Promise<void> | undefined;
+  let secondaryInitialization: Promise<void> | undefined;
   const bootstrap = async (): Promise<void> => {
     if (shuttingDown) await shuttingDown;
     if (initialized) return;
     if (initializing) return initializing;
     initializing = (async () => {
+      await startupTestGate;
       await dedicatedWindow.prepare();
       if (!lease) {
         const nextLease = new WorkspaceLease(dedicatedWindow.home);
@@ -577,14 +594,21 @@ export async function activate(context: vscode.ExtensionContext) {
           );
         }
       }
-      await refreshPersonalRewards();
+      send({ type: 'startup', stage: 'Chargement des sessions du projet…' });
       await hub.initialize();
-      await dashboard.initialize();
-      await discussions.initialize();
-      for (const entry of hub.entries.values())
-        await quests.record(studioQuestFacts(entry.service.snapshot()));
-      await quests.record(discussionQuestFacts(discussions.snapshot()));
-      if (getTheme() !== 'auto') await recordQuest('theme', getTheme());
+      initialized = true;
+      secondaryInitialization = (async () => {
+        await hub.waitForProjects();
+        await refreshPersonalRewards();
+        await dashboard.initialize();
+        for (const entry of hub.entries.values())
+          await quests.record(studioQuestFacts(entry.service.snapshot()));
+        if (getTheme() !== 'auto') await recordQuest('theme', getTheme());
+        startupDiagnostics.mark('startup.secondary-ready');
+        await startupDiagnostics.save(
+          path.join(context.globalStorageUri.fsPath, 'startup-diagnostics.json'),
+        );
+      })().catch(report);
       initialized = true;
     })();
     try {
@@ -644,9 +668,72 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       throw error;
     }
+    if (message.type === 'firstViewRendered') {
+      startupDiagnostics.mark('interface.first-view');
+      return;
+    }
+    if (message.type === 'ready') {
+      const target = panel;
+      startupDiagnostics.mark('interface.ready');
+      if (target) stateEncoders.delete(target);
+      sendTheme();
+      sendZoom();
+      sendLivingHq();
+      sendSessionLayout();
+      send({ type: 'startup', stage: 'Préparation du projet…' });
+      try {
+        await bootstrap();
+        if (target !== panel) return;
+        const entry = await hub.current();
+        if (target !== panel) return;
+        const current = entry.service;
+        service = current;
+        devops = entry.devops;
+        webviewReady = true;
+        updateDashboardVisibility();
+        sendSecrets();
+        quests.publish();
+        send({ type: 'dashboardState', state: dashboard.snapshot() });
+        current.publish();
+        if (devops) send({ type: 'devopsState', state: devops.getState() });
+        if (dedicated) void drainRequests();
+      } catch (error) {
+        if (target === panel)
+          send({
+            type: 'startup',
+            stage: 'Le projet n’a pas pu être préparé.',
+            error: redact((error as Error).message),
+          });
+      }
+      return;
+    }
     if (message.type === 'manageWorkspaceTrust') {
       // Open VS Code's own decision screen, including in restricted or busy workspaces.
       await vscode.commands.executeCommand('workbench.trust.manage');
+      return;
+    }
+    if (
+      message.type === 'listTaskDrafts' ||
+      message.type === 'saveTaskDraft' ||
+      message.type === 'deleteTaskDraft'
+    ) {
+      const requestId = 'requestId' in message ? message.requestId : undefined;
+      try {
+        const drafts =
+          message.type === 'listTaskDrafts'
+            ? await taskDrafts.list()
+            : message.type === 'saveTaskDraft'
+              ? await taskDrafts.change(message.draft.id, message.draft.revision, message.draft)
+              : await taskDrafts.change(message.id, message.revision);
+        send({ type: 'taskDrafts', drafts, requestId });
+      } catch (error) {
+        send({
+          type: 'taskDrafts',
+          drafts: await taskDrafts.list().catch(() => []),
+          requestId,
+          error: redact((error as Error).message),
+        });
+      }
       return;
     }
     if (message.type.startsWith('dashboard')) {
@@ -1113,6 +1200,9 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (message.type === 'refreshDiscussions') await hub.refreshProfiles();
+    if (message.type.toLowerCase().includes('discussion'))
+      await startupDiagnostics.measure('discussions.ready', () => discussions.initialize());
     if (message.type === 'createFeature') {
       try {
         await bootstrap();
@@ -1137,6 +1227,12 @@ export async function activate(context: vscode.ExtensionContext) {
           view: created.reviewTarget ? 'reviews' : 'dashboard',
           featureId: created.id,
         });
+        if (message.start) {
+          const owner = service;
+          void owner.startCreatedFeature(created.id, message.start).catch((error) => {
+            notice(`Session créée, démarrage à reprendre : ${(error as Error).message}`);
+          });
+        }
       } catch (error) {
         if (!message.requestId) throw error;
         reportCreationError(message.requestId, error);
@@ -1454,25 +1550,10 @@ export async function activate(context: vscode.ExtensionContext) {
         if (panel) stateEncoders.delete(panel);
         hub.publish();
         return;
-      case 'ready':
-        if (panel) stateEncoders.delete(panel);
-        sendSecrets();
-        quests.publish();
-        discussions.publish();
-        webviewReady = true;
-        updateDashboardVisibility();
-        send({ type: 'dashboardState', state: dashboard.snapshot() });
-        if (dedicated) void drainRequests();
-        sendTheme();
-        sendZoom();
-        sendLivingHq();
-        sendSessionLayout();
-        current.publish();
-        if (devops) send({ type: 'devopsState', state: devops.getState() });
-        return;
       case 'refresh':
+        clearCatalogueCache();
+        await hub.refreshProfiles();
         await discussions.refreshProfiles();
-        await current.refresh();
         return;
       case 'refreshQuests':
         await refreshPersonalRewards();
@@ -1481,7 +1562,11 @@ export async function activate(context: vscode.ExtensionContext) {
         await quests.record(discussionQuestFacts(discussions.snapshot()));
         return;
       case 'checkRuntime':
-        await current.checkRuntime();
+        await startupDiagnostics.measure(
+          'copilot.connection',
+          () => current.checkRuntime(),
+          current.workspacePath,
+        );
         return;
       case 'autoDetectCli':
         await vscode.workspace
@@ -1633,6 +1718,60 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         return;
       }
+      case 'quoteEditorSelection':
+        try {
+          if (!vscode.workspace.isTrusted)
+            throw Error('Approuve le projet avant de joindre du code.');
+          const editors = vscode.window.visibleTextEditors.filter(
+            (editor) => !editor.selection.isEmpty && editor.document.uri.scheme === 'file',
+          );
+          if (editors.length !== 1)
+            throw Error('Sélectionne un passage dans un seul éditeur visible, puis réessaie.');
+          const editor = editors[0],
+            text = editor.document.getText(editor.selection);
+          if (text.length > 12000)
+            throw Error('La sélection dépasse 12 000 caractères. Réduis le passage.');
+          const selection = {
+            path: editor.document.uri.fsPath,
+            startLine: editor.selection.start.line + 1,
+            endLine: editor.selection.end.line + 1,
+            hash: sha256(editor.document.getText()),
+            text,
+          };
+          const feature = current.engine.getFeature(message.featureId);
+          await selectionContext(selection, [
+            await current.featurePath(feature.id),
+            ...(feature.projects?.map((p) => p.path) ?? []),
+          ]);
+          send({
+            type: 'sessionQuote',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            attemptId: message.attemptId,
+            selection,
+          });
+        } catch (error) {
+          send({
+            type: 'sessionQuote',
+            featureId: message.featureId,
+            stepId: message.stepId,
+            attemptId: message.attemptId,
+            error: (error as Error).message,
+          });
+        }
+        return;
+      case 'pinInstruction':
+        try {
+          await current.pinInstruction(message);
+          send({ type: 'instructionSaved', requestId: message.requestId });
+        } catch (error) {
+          send({
+            type: 'instructionSaved',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        }
+        return;
       case 'pairAction':
         try {
           await current.pairAction(message);
@@ -2362,8 +2501,10 @@ export async function activate(context: vscode.ExtensionContext) {
     });
   const shutdownIfUnused = () => {
     updateDashboardVisibility();
-    if (panel || dashboardPanel) return;
+    if (panel || dashboardPanel || shuttingDown) return;
     shuttingDown = (async () => {
+      await initializing?.catch(() => {});
+      await secondaryInitialization;
       await discussions.unload();
       await hub.dispose();
       await quests.flush();
@@ -2452,18 +2593,19 @@ export async function activate(context: vscode.ExtensionContext) {
   const mount = async (target: vscode.WebviewPanel): Promise<void> => {
     webviewReady = false;
     panel = target;
+    startupDiagnostics.mark('panel.created');
     updateDashboardVisibility();
-    await setWebviewHtml(target, 'cockpit');
     target.webview.onDidReceiveMessage(
       (raw) => {
-        void dispatch(raw).catch(report);
+        if (panel === target) void dispatch(raw).catch(report);
       },
       undefined,
       context.subscriptions,
     );
     target.onDidDispose(
       () => {
-        if (panel === target) panel = undefined;
+        if (panel !== target) return;
+        panel = undefined;
         webviewReady = false;
         cockpitDashboardVisible = false;
         shutdownIfUnused();
@@ -2478,11 +2620,7 @@ export async function activate(context: vscode.ExtensionContext) {
       undefined,
       context.subscriptions,
     );
-    await ensure();
-    sendTheme();
-    sendZoom();
-    service!.publish();
-    if (devops) send({ type: 'devopsState', state: devops.getState() });
+    await setWebviewHtml(target, 'cockpit');
   };
   const revealPanel = () => {
     if (!panel) return false;
@@ -2576,22 +2714,8 @@ export async function activate(context: vscode.ExtensionContext) {
     panel?.reveal(vscode.ViewColumn.One);
   };
   const open = async (): Promise<boolean> => {
+    startupDiagnostics.mark('panel.open-request');
     try {
-      if (revealPanel()) {
-        await hub.initialize();
-        const active = await hub.current();
-        service = active.service;
-        devops = active.devops;
-        hub.publish();
-        send({ type: 'devopsState', state: devops.getState() });
-        if (dedicated) {
-          await focusCockpit();
-          await drainRequests();
-        }
-        return true;
-      }
-      await ensure();
-      // Another click may have mounted the panel while project initialization was pending.
       if (revealPanel()) return true;
       await mount(
         vscode.window.createWebviewPanel('featureStudio', 'Feature Studio', vscode.ViewColumn.One, {
@@ -2688,9 +2812,25 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     void open();
   }
+  startupDiagnostics.mark('activation.ready');
   // The isolated extension-host smoke test uses the same validated message handler as the UI.
   return {
     getState: () => hub.snapshot(),
+    getStartupDiagnostics: () => startupDiagnostics.snapshot(),
+    ...(context.extensionMode === vscode.ExtensionMode.Test
+      ? {
+          holdStartupForTest: () => {
+            let release!: () => void;
+            startupTestGate = new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            return () => {
+              release();
+              startupTestGate = undefined;
+            };
+          },
+        }
+      : {}),
     getUiReady: () => webviewReady,
     getLauncherVisible: () => launcher.visible,
     getLauncherReady: () => launcher.isReady,

@@ -207,6 +207,8 @@ test('correction previews dependent route and adjusted reports before emitting a
     ],
   };
   await open(page, state);
+  if (!(await page.getByRole('tab', { name: 'Activité', exact: true }).isVisible()))
+    await page.getByText('Détails et vérifications', { exact: true }).click();
   await page.getByRole('tab', { name: 'Relecture', exact: true }).click();
   await page.getByRole('button', { name: 'Demander une correction', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Demander une correction' });

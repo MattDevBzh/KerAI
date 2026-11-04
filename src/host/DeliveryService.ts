@@ -150,6 +150,10 @@ export class DeliveryService {
   private async indexPath() {
     return (await this.git(['rev-parse', '--path-format=absolute', '--git-path', 'index'])).trim();
   }
+  async remoteUrl(): Promise<string | undefined> {
+    const result = await this.run(['remote', 'get-url', '--push', 'origin']);
+    return result.code ? undefined : result.stdout.trim().replace(/(https?:\/\/)[^/@]+@/, '$1');
+  }
   async inspect(remote = 'origin'): Promise<DeliverySnapshot> {
     const filters = await this.filters();
     // Git uses forward slashes on Windows; compare canonical filesystem paths

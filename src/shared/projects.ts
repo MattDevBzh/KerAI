@@ -20,6 +20,8 @@ export interface ProjectCatalogState {
   dedicated: boolean;
   windows: boolean;
   errors?: string[];
+  loading?: Record<string, { status: 'pending' | 'loading' | 'ready' | 'error'; error?: string }>;
+  partial?: boolean;
 }
 export type ProjectClientMessage =
   | { type: 'addProjects'; requestId: string }

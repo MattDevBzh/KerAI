@@ -96,6 +96,7 @@ export type PairAction = {
     | 'continue'
     | 'solo'
     | 'pair'
+    | 'redirect'
     | 'pause'
     | 'resume'
     | 'reorganize'
@@ -103,6 +104,7 @@ export type PairAction = {
     | 'retry-message'
     | 'keep-message'
     | 'revise';
+  selection?: import('./codeSelection').CodeSelection;
   messageId?: string;
   content?: string;
   images?: import('./images').ImageAttachment[];

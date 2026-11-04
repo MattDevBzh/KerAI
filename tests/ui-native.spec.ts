@@ -227,6 +227,8 @@ test('renders native command evidence without claiming host test validation', as
     updatedAt: '2026-10-21T12:01:00Z',
   };
   await open(page, state);
+  if (!(await page.getByRole('tab', { name: 'Activité', exact: true }).isVisible()))
+    await page.getByText('Détails et vérifications', { exact: true }).click();
   await page.getByRole('tab', { name: /Preuves/ }).click();
   await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   const activity = page.getByRole('region', { name: 'Activité native Copilot' });

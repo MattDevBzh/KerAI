@@ -1,3 +1,4 @@
+import { startupDiagnostics } from './StartupDiagnostics';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 
@@ -37,8 +38,25 @@ export async function runProcess(
     env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<ProcessResult> {
+  const started = performance.now();
+  const operation =
+    args.find((arg) =>
+      [
+        'config',
+        'rev-parse',
+        'symbolic-ref',
+        'status',
+        'diff',
+        'ls-files',
+        'log',
+        'remote',
+        'show',
+        'worktree',
+      ].includes(arg),
+    ) ?? 'other';
+  if (command === 'git') startupDiagnostics.mark(`git.process.${operation}`, cwd);
   if (options.signal?.aborted) throw new Error('Exécution annulée.');
-  return new Promise((resolve, reject) => {
+  return new Promise<ProcessResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       shell: false,
@@ -138,5 +156,8 @@ export async function runProcess(
           truncated,
         });
     });
+  }).finally(() => {
+    if (command === 'git')
+      startupDiagnostics.mark(`git.duration.${operation}`, cwd, performance.now() - started);
   });
 }

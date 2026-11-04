@@ -28,6 +28,12 @@ export async function handleSessionReview(
           stepId: message.stepId,
           attemptId: message.expectedAttemptId,
         });
+        if (message.continueToStepId)
+          void current
+            .continueAfterApproval(message.featureId, message.stepId, message.continueToStepId)
+            .catch((error) =>
+              notice(`Étape validée. Suite à préparer : ${(error as Error).message}`),
+            );
         notice(
           current.engine.getFeature(message.featureId).status === 'awaiting_final_validation'
             ? 'Parcours relu : la validation définitive reste à confirmer.'
@@ -45,6 +51,12 @@ export async function handleSessionReview(
       }
       return true;
     case 'answerQuestions':
+      if (
+        message.expectedAttemptId &&
+        current.engine.getStep(message.featureId, message.stepId).attempts.at(-1)?.id !==
+          message.expectedAttemptId
+      )
+        throw Error('La question appartient à une ancienne tentative.');
       await current.answerQuestions(message.featureId, message.stepId, message.answers);
       return true;
     case 'saveArtifact': {

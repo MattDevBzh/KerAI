@@ -1,3 +1,4 @@
+import { progressionCheckpoints } from '../src/shared/sessionProgression';
 import { useState, useEffect, useRef } from 'react';
 import {
   Check,
@@ -34,16 +35,7 @@ const blankLaunch = (step: FeatureStep, feature: Feature): RunLaunchOptions => (
   useProjectMemory: false,
   ...(feature.navigation ? { navigation: feature.navigation } : {}),
 });
-const balancedCheckpoints = (feature: Feature) =>
-  feature.steps
-    .filter(
-      (step) =>
-        step.id === 'plan' ||
-        step.id === 'review' ||
-        step.agentId.includes('plan') ||
-        step.agentId.includes('review'),
-    )
-    .map((step) => step.id);
+const balancedCheckpoints = (feature: Feature) => progressionCheckpoints(feature, 'balanced');
 export function AutopilotBar({
   feature,
   state,

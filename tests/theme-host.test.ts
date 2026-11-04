@@ -346,7 +346,14 @@ describe('personal theme host boundary', () => {
     host.initialize.mockRejectedValue(new Error('Stockage indisponible · password=private-value'));
     try {
       // A restored panel exists before its project store is ready.
-      await expect(host.restorePanel!(host.panel)).rejects.toThrow('Stockage indisponible');
+      await host.restorePanel!(host.panel);
+      await api.dispatch({ type: 'ready' });
+      expect(host.messages).toContainEqual(
+        expect.objectContaining({
+          type: 'startup',
+          error: 'Stockage indisponible · password=[secret masqué]',
+        }),
+      );
       host.messages.length = 0;
       const requestId = '770b2fa4-73df-4acd-adf4-93f6cc493812';
       await api.dispatch({
@@ -550,9 +557,10 @@ describe('personal theme host boundary', () => {
   });
   it('opens and reuses the cockpit in the ordinary project window in production mode', async () => {
     host.mode = 1;
-    await activate();
+    const api = await activate();
     await host.commands.get('featureStudio.open')!();
     await host.commands.get('featureStudio.open')!();
+    await api.dispatch({ type: 'ready' });
     expect(host.initialize).toHaveBeenCalledOnce();
     expect(host.createPanel).toHaveBeenCalledOnce();
     expect(host.executeCommand).not.toHaveBeenCalled();
@@ -582,20 +590,23 @@ describe('personal theme host boundary', () => {
   });
   it('restores the cockpit into the same ordinary window after reload', async () => {
     host.mode = 1;
-    await activate();
+    const api = await activate();
     await host.restorePanel!(host.panel);
     expect(host.panel.webview.html).toMatch(/<html\b[^>]*\bdata-studio-theme="auto"/);
+    await api.dispatch({ type: 'ready' });
     expect(host.initialize).toHaveBeenCalledOnce();
     expect(host.createPanel).not.toHaveBeenCalled();
     expect(host.executeCommand).not.toHaveBeenCalled();
   });
   it('releases the shared cockpit on tab close so another window can open it', async () => {
-    await activate();
+    const api = await activate();
     await host.commands.get('featureStudio.open')!();
+    await api.dispatch({ type: 'ready' });
     expect(host.acquireLease).toHaveBeenCalledOnce();
     host.disposePanel!();
     await vi.waitFor(() => expect(host.releaseLease).toHaveBeenCalledOnce());
     await host.commands.get('featureStudio.open')!();
+    await api.dispatch({ type: 'ready' });
     expect(host.acquireLease).toHaveBeenCalledTimes(2);
     expect(host.createPanel).toHaveBeenCalledTimes(2);
   });
@@ -604,6 +615,7 @@ describe('personal theme host boundary', () => {
     host.dedicated = true;
     const api = await activate();
     await host.commands.get('featureStudio.open')!();
+    await api.dispatch({ type: 'ready' });
     expect(host.initialize).toHaveBeenCalledTimes(1);
     expect(host.createPanel).toHaveBeenCalledTimes(1);
     expect(host.panel.webview.html).toMatch(/<html\b[^>]*\bdata-studio-theme="auto"/);
@@ -631,7 +643,14 @@ describe('personal theme host boundary', () => {
       layout: normalizeSessionLayout(undefined),
       requestId: 'layout-failure',
     });
-    expect(host.messages.at(-1)).toMatchObject({
+    expect(
+      host.messages
+        .filter(
+          (message) =>
+            message.type === 'sessionLayoutState' && message.requestId === 'layout-failure',
+        )
+        .at(-1),
+    ).toMatchObject({
       type: 'sessionLayoutState',
       requestId: 'layout-failure',
       layout,

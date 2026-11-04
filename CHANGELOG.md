@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.38.0 — 2026-11-04
+
+- Préparations persistantes, y compris pendant une exécution : texte, images, projets, permissions et préférences. Création seule ou création suivie du démarrage.
+- Envoi pendant le travail en pair, arrêt indépendant, arrêt et réorientation, consignes de tâche/projet versionnées et héritées par les sous-tâches.
+- Validation et lancement de la suite, récapitulatif de reprise, citations de messages et de code, historique consultable entre étapes et tentatives.
+- Conversation, Résultat et Modifications au premier plan ; réglages et détails repliés, onglet et position de lecture conservés.
+- Questions et permissions dans le QG plein écran, volet d’intervention et de lecture, validation et correction sans réduire le QG.
+- Ouverture du panneau avant la préparation, projet actif prioritaire, autres projets progressifs et erreurs indépendantes ; Git minimal, Livraison différée, lectures de catalogues partagées et discussions à la demande.
+- Diagnostic local du démarrage et tests de fermeture/réouverture pendant la préparation. Qualification du paquet automatisée sous Windows ; les temps sur les deux projets Windows de l’utilisateur restent non mesurés.
+
 ## 1.37.1 — 2026-11-04
 
 - Le mode « atteindre » vérifie la sélection des données métier même lorsque la condition d’arrivée est déjà visible.

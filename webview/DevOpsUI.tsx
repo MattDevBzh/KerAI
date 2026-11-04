@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { savedDeliveryDraft, saveDeliveryDraft } from './bridge';
+import { useEffect, useState, useRef } from 'react';
+import { isHosted, savedDeliveryDraft, saveDeliveryDraft } from './bridge';
 import {
   deliveryScope,
   deliveryTicket,
@@ -425,6 +425,21 @@ function DevOpsContent({
   visible = true,
   draftKey,
 }: DevOpsUIProps & { draftKey: string }) {
+  const inspected = useRef(false);
+  useEffect(() => {
+    if (
+      isHosted &&
+      visible &&
+      mode !== 'dashboard' &&
+      state &&
+      !state.snapshot &&
+      !state.busy &&
+      !inspected.current
+    ) {
+      inspected.current = true;
+      dispatch({ type: 'deliveryInspect' });
+    }
+  }, [visible, mode, state, dispatch]);
   const [initialDraft] = useState<DeliveryDraft>(() => {
     const saved = savedDeliveryDraft(draftKey);
     if (saved) return saved;

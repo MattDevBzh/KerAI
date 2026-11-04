@@ -328,6 +328,10 @@ test('les questions structurées sont répondues et les diffs utilisent le bridg
   ];
   step.attempts[0].changedFiles = ['src/palette.ts'];
   await hosted(page, state);
+  await page
+    .getByRole('dialog', { name: 'Votre réponse est attendue' })
+    .getByRole('button', { name: 'Réduire au chat' })
+    .click();
   await page.getByRole('button', { name: /^Ouvrir Une palette de commandes/ }).click();
   await expandSessionTools(page);
   await page.getByLabel('Quelle portée ?').selectOption('Locale');
@@ -337,7 +341,7 @@ test('les questions structurées sont répondues et les diffs utilisent le bridg
     type: 'answerQuestions',
     answers: { scope: 'Locale', detail: 'Navigation clavier' },
   });
-  await page.getByRole('tab', { name: 'Fichiers' }).click();
+  await page.getByRole('tab', { name: 'Modifications' }).click();
   await page.getByRole('button', { name: 'Voir le diff' }).click();
   expect((await messages(page)).at(-1)).toEqual({
     type: 'openDiff',
@@ -630,6 +634,8 @@ test('thèmes VS Code et détail mobile restent lisibles et dans le viewport', a
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+  if (!(await page.getByRole('tab', { name: 'Activité', exact: true }).isVisible()))
+    await page.getByText('Détails et vérifications', { exact: true }).click();
   await page.getByRole('tab', { name: 'Activité' }).click();
   await expect(page.getByText('Contexte du projet chargé.')).toBeVisible();
 });
@@ -1064,10 +1070,14 @@ test('validation : preuves host, critères et remarques ; approbation liée à l
     .filter({ hasText: 'Conception' })
     .getByRole('button', { name: /Relire et décider|Examiner les blocages/ })
     .click();
+  if (!(await page.getByRole('tab', { name: 'Activité', exact: true }).isVisible()))
+    await page.getByText('Détails et vérifications', { exact: true }).click();
   await page.getByRole('tab', { name: 'Preuves' }).click();
   await page.getByText('Détails des outils et tests de cette tentative', { exact: true }).click();
   await expect(page.getByText('Exécuté par le host', { exact: false })).toBeVisible();
   await expect(page.getByText('4 tests passed', { exact: true })).toBeVisible();
+  if (!(await page.getByRole('tab', { name: 'Activité', exact: true }).isVisible()))
+    await page.getByText('Détails et vérifications', { exact: true }).click();
   await page.getByRole('tab', { name: 'Relecture', exact: true }).click();
   await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
   await page.getByLabel('Critère 1', { exact: true }).fill('Échap ferme la palette');
@@ -1431,7 +1441,7 @@ test('création : activité et erreur visibles dans la fenêtre, saisie conserv�
   await expect(dialog.getByLabel('Le contexte et le résultat souhaité')).toHaveValue(
     'Mon contexte reste ici.',
   );
-  await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: 'Garder en brouillon' })).toBeEnabled();
   await expect(dialog.getByRole('button', { name: 'Créer la session' })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('creation-error.png') });
   await dialog.getByRole('button', { name: 'Créer la session' }).click();

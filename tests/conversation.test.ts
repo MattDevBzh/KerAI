@@ -570,3 +570,105 @@ it('persists factual sources and agent claims, rejects invented sources and chec
     }),
   ).rejects.toThrow('revérifier');
 });
+
+it('stops despite a stale view and retains a redirection without starting another turn', async () => {
+  const f = await fixture();
+  f.run(
+    async (_input, _callbacks, signal) =>
+      new Promise<RunResult>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('Stopped')), { once: true });
+      }),
+  );
+  const { completed } = await f.startRunning();
+  const pair = f.step.attempts[0].pair!;
+  pair.version += 4;
+  const command = await f.action('redirect', {
+    content: 'Conserve l’API actuelle.',
+    expectedVersion: 0,
+  });
+  await completed;
+  await f.service.pairAction(command);
+  expect(pair).toMatchObject({ busy: false, phase: 'paused', mode: 'pair', pauseRequested: true });
+  expect(pair.messages.filter((m) => m.requestId === command.requestId)).toHaveLength(1);
+  expect(pair.messages.find((m) => m.requestId === command.requestId)?.content).toContain(
+    'Conserve l’API actuelle.',
+  );
+  expect(pair.pendingMessages).toHaveLength(1);
+  expect(f.inputs).toHaveLength(1);
+  const saved = await f.store.load();
+  expect(saved.features[0].steps[0].attempts[0].pair?.pendingMessages).toHaveLength(1);
+});
+
+it('persists instruction revisions and lets a pair session resume with changed project instructions', async () => {
+  const f = await fixture(true);
+  await f.start();
+  const id = randomUUID();
+  await f.service.pinInstruction({
+    type: 'pinInstruction',
+    featureId: f.feature.id,
+    scope: 'project',
+    id,
+    expectedRevision: 0,
+    text: 'Conserver les accents',
+    active: true,
+    requestId: randomUUID(),
+  });
+  await f.service.pinInstruction({
+    type: 'pinInstruction',
+    featureId: f.feature.id,
+    scope: 'project',
+    id,
+    expectedRevision: 1,
+    text: 'Conserver tous les accents',
+    active: true,
+    requestId: randomUUID(),
+  });
+  expect(f.service.state.settings.instructions?.[0].history).toHaveLength(1);
+  await expect(
+    f.service.pinInstruction({
+      type: 'pinInstruction',
+      featureId: f.feature.id,
+      scope: 'project',
+      id,
+      expectedRevision: 0,
+      text: 'Stale',
+      active: false,
+      requestId: randomUUID(),
+    }),
+  ).rejects.toThrow('a changé');
+  await f.action('message', { content: 'Explique le prochain bloc' });
+  await f.idle();
+  expect(f.inputs.at(-1)?.settings.instructions?.[0].text).toBe('Conserver tous les accents');
+  expect((await f.store.load()).settings.instructions?.[0].revision).toBe(2);
+});
+
+it('deduplicates the next launch and an explicit stop cancels a prepared continuation', async () => {
+  const f = await fixture();
+  await f.start();
+  const previous = f.step;
+  previous.status = 'approved';
+  f.feature.steps.push({
+    ...structuredClone(previous),
+    id: 'next',
+    status: 'pending',
+    dependsOn: [previous.id],
+    attempts: [],
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  const preview = vi.spyOn(f.service, 'previewRun').mockImplementation(async () => {
+    await gate;
+    return { fingerprint: 'preview' } as Awaited<ReturnType<StudioService['previewRun']>>;
+  });
+  const run = vi.spyOn(f.service, 'runStep').mockResolvedValue(undefined);
+  const first = f.service.continueAfterApproval(f.feature.id, previous.id, 'next');
+  await f.service.continueAfterApproval(f.feature.id, previous.id, 'next');
+  expect(preview).toHaveBeenCalledOnce();
+  await f.service.cancel(f.feature.id);
+  release();
+  await first;
+  expect(run).not.toHaveBeenCalled();
+  expect(previous.status).toBe('approved');
+});

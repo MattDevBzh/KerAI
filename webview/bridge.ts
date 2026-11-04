@@ -1,6 +1,9 @@
 import { StateReceiver } from '../src/shared/stateTransfer';
 import type { ClientMessage, HostMessage } from '../src/shared/types';
 interface PersistedView {
+  sessionViews?: Record<string, { tab?: string; scroll?: number; follow?: boolean }>;
+  taskDraft?: import('../src/shared/taskDrafts').TaskDraft;
+  taskDrafts?: import('../src/shared/taskDrafts').TaskDraft[];
   sessionStarter?: import('../src/shared/sessionStarters').SessionStarterId;
   deliveryDrafts?: Record<string, import('../src/shared/deliveryDraft').DeliveryDraft>;
   hqFeatureId?: string;
@@ -13,6 +16,13 @@ interface PersistedView {
   stepId?: string;
   discussionId?: string;
   pairOpen?: boolean;
+  pairAttachments?: Record<
+    string,
+    {
+      images: import('../src/shared/images').ImageAttachment[];
+      selection?: import('../src/shared/codeSelection').CodeSelection;
+    }
+  >;
   pairDrafts?: Record<string, string>;
   celebrationEnabled?: boolean;
   featureProposal?: {
@@ -87,6 +97,9 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
   }
   if (
     [
+      'taskDrafts',
+      'instructionSaved',
+      'sessionQuote',
       'dashboardState',
       'autopilotSaved',
       'correctionLoopRenewed',
@@ -113,6 +126,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       'devopsState',
       'error',
       'notice',
+      'startup',
       'navigate',
       'runPreview',
       'contextCompactionProgress',
@@ -172,4 +186,27 @@ export function saveDeliveryDraft(
   draft: import('../src/shared/deliveryDraft').DeliveryDraft,
 ) {
   persistView({ deliveryDrafts: { ...persistedView.deliveryDrafts, [key]: draft } });
+}
+
+export const savedTaskDraft = () => persistedView.taskDraft;
+export const savedTaskDrafts = () => persistedView.taskDrafts ?? [];
+
+export const savedPairAttachments = (id: string) => persistedView.pairAttachments?.[id];
+export const savePairAttachments = (
+  id: string,
+  value: NonNullable<PersistedView['pairAttachments']>[string],
+) => persistView({ pairAttachments: { ...persistedView.pairAttachments, [id]: value } });
+
+export function sessionView(id: string) {
+  return persistedView.sessionViews?.[id];
+}
+export function saveSessionView(
+  id: string,
+  value: { tab?: string; scroll?: number; follow?: boolean },
+) {
+  const views = {
+    ...persistedView.sessionViews,
+    [id]: { ...persistedView.sessionViews?.[id], ...value },
+  };
+  persistView({ sessionViews: Object.fromEntries(Object.entries(views).slice(-200)) });
 }

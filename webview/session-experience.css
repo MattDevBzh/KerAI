@@ -1,0 +1,188 @@
+/* Shared interaction language across the session, composer and fullscreen. */
+.work-details,
+.agent-settings,
+.task-conversation-history {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+}
+.work-details > summary,
+.agent-settings > summary,
+.task-conversation-history > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+.secondary-tabs {
+  border: 0;
+  margin-top: 8px;
+}
+.session-conversation .markdown {
+  line-height: 1.65;
+  max-width: 86ch;
+}
+.session-conversation blockquote {
+  margin: 12px 0;
+  padding: 8px 14px;
+  border-left: 3px solid var(--lavender);
+  background: var(--side);
+}
+.session-conversation .conversation-message {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+}
+.session-conversation .conversation-message.user {
+  border-color: var(--border);
+  background: var(--side);
+}
+.conversation-recipient {
+  color: var(--muted);
+  font-size: 12px;
+}
+.conversation-navigation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+.conversation-navigation input {
+  min-width: 0;
+  flex: 1;
+  background: var(--side);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.conversation-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--panel);
+  padding: 14px;
+  border-radius: 14px;
+  box-shadow: 0 -8px 24px #0000000c;
+}
+.conversation-composer-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conversation-composer-actions small {
+  flex: 1 1 220px;
+}
+.session-recovery,
+.session-attention {
+  background: color-mix(in srgb, var(--apricot) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--apricot) 45%, var(--border));
+  border-radius: 14px;
+  margin: 12px 0;
+  padding: 16px;
+}
+.session-recovery h3 {
+  margin-top: 0;
+}
+.pinned-instructions article,
+.conversation-history-step article {
+  padding: 12px;
+  border-left: 2px solid var(--border);
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+.pinned-instructions form {
+  display: grid;
+  gap: 10px;
+}
+.task-drafts {
+  padding: 12px 0 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.task-drafts h2 {
+  width: 100%;
+  margin: 0;
+  font-size: 16px;
+}
+.draft-controls {
+  padding: 12px;
+  background: var(--side);
+  border-radius: 12px;
+}
+.draft-controls p {
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .session-conversation {
+    padding: 10px;
+  }
+  .conversation-message,
+  .conversation-message.user {
+    margin: 8px 0;
+    padding: 12px;
+  }
+  .conversation-composer {
+    padding: 10px;
+  }
+  .workbench-tabs {
+    flex-wrap: wrap;
+  }
+  .conversation-navigation {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-conversation *,
+  .human-prompt-dialog * {
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.draft-controls {
+  padding: 8px 12px;
+}
+.draft-controls .text-button {
+  margin-right: 14px;
+}
+.draft-controls .field[hidden],
+.draft-controls button[hidden] {
+  display: none;
+}
+.session-creation .modal-actions > .muted {
+  flex: 0 0 100%;
+  font-size: 12px;
+}
+.session-creation .modal-actions {
+  gap: 8px;
+  justify-content: flex-end;
+}
+.agent-settings {
+  margin-block: 10px 0;
+}
+
+.artifact-toolbar {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.artifact-toolbar select {
+  flex: 0 1 150px;
+  width: auto;
+  max-width: 100%;
+}
+.cinema-drawer .workbench-header {
+  padding: 18px;
+}
+
+.draft-project {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.draft-project label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

@@ -1,3 +1,4 @@
+import { instructionSchema } from './instructions';
 import { reviewDefaultsSchema, reviewTargetSchema } from './reviewSchemas';
 import {
   navigationContextSnapshotSchema,
@@ -277,6 +278,7 @@ const feature: z.ZodType<Feature> = z
       .optional(),
     teamRevision: z.number().int().nonnegative().optional(),
     discussionId: z.string().uuid().optional(),
+    instructions: z.array(instructionSchema).max(100).optional(),
     creationRequestId: z.string().uuid().optional(),
     ticketSource: ticketSourceSnapshotSchema.optional(),
     teamLockedAt: z.string().optional(),
@@ -478,6 +480,7 @@ const feature: z.ZodType<Feature> = z
   });
 export const settingsSchema = z
   .object({
+    instructions: z.array(instructionSchema).max(100).optional(),
     reviewDefaults: reviewDefaultsSchema.optional(),
     traceLimitBytes: z
       .number()

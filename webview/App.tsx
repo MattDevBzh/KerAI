@@ -1,3 +1,4 @@
+import './session-experience.css';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -198,6 +199,9 @@ export default function App() {
     links: [],
     history: [],
   });
+  const [startup, setStartup] = useState<{ stage: string; error?: string }>({
+    stage: 'Préparation du projet…',
+  });
   const [state, setState] = useState<StudioState | null>(
     isDemo ? structuredClone(demoState) : null,
   );
@@ -292,7 +296,8 @@ export default function App() {
           ticketPreparationId.current = message.state.ticketPreparation.snapshotId;
           setView('devops-tickets');
         }
-      } else if ((message.type === 'error' && !message.requestId) || message.type === 'notice')
+      } else if (message.type === 'startup') setStartup(message);
+      else if ((message.type === 'error' && !message.requestId) || message.type === 'notice')
         setNotice({ text: message.message, error: message.type === 'error' });
       else if (message.type === 'deleteFeatureResult') {
         if (message.error) setNotice({ text: message.error, error: true });
@@ -339,6 +344,9 @@ export default function App() {
     pairLocation.current = location;
   }, [featureId, stepId]);
   const loaded = Boolean(state);
+  useEffect(() => {
+    if (loaded && isHosted) requestAnimationFrame(() => send({ type: 'firstViewRendered' }));
+  }, [loaded]);
   useEffect(() => {
     if (loaded && featureId && (view === 'sessions' || view === 'reviews') && !create && !isDemo)
       send({ type: 'activateFeature', featureId });
@@ -545,11 +553,26 @@ export default function App() {
         <h1>Feature Studio</h1>
         <p>
           {isHosted
-            ? 'Connexion à votre espace de travail…'
+            ? startup.stage
             : 'Ouvrez Feature Studio dans VS Code pour travailler avec vos agents GitHub Copilot.'}
         </p>
         {isHosted ? (
-          <LoaderCircle className="spin" size={22} />
+          startup.error ? (
+            <div role="alert">
+              <p>{startup.error}</p>
+              <button
+                className="primary"
+                onClick={() => {
+                  setStartup({ stage: 'Nouvelle préparation…' });
+                  send({ type: 'ready' });
+                }}
+              >
+                Réessayer
+              </button>
+            </div>
+          ) : (
+            <LoaderCircle className="spin" size={22} />
+          )
         ) : (
           <>
             <div className="launch-command">
@@ -569,7 +592,7 @@ export default function App() {
       requests={state.humanRequests ?? []}
       features={state.features}
       dispatch={dispatch}
-      presentationOnly={Boolean(hqRoot)}
+      cinemaFeatureId={hqRoot?.id}
     >
       <a className="skip-link" href="#main-content">
         Aller au contenu
@@ -787,6 +810,12 @@ export default function App() {
           </div>
         )}
         <main id="main-content" tabIndex={-1}>
+          {state.projectCatalog?.partial && view !== 'sessions' && (
+            <p className="notice" role="status">
+              Certains projets ne sont pas encore disponibles. Les listes et compteurs restent
+              partiels ; retrouve le détail et les possibilités de reprise dans Sessions.
+            </p>
+          )}
           <RewardUnlockNotice />
           {earnedQuests.length > 0 && (
             <QuestCelebration
@@ -1300,6 +1329,7 @@ export default function App() {
         <HqCinema
           root={hqRoot}
           state={state}
+          dispatch={dispatch}
           reduce={(id, step) => {
             setHqFeatureId(undefined);
             setFeatureId(id);

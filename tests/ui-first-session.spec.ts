@@ -13,13 +13,37 @@ function fixture(): StudioState {
 async function open(page: Page, state = fixture()) {
   await page.addInitScript((state) => {
     const messages: ClientMessage[] = [];
+    let persisted: Record<string, unknown> = { view: 'sessions', navigationVersion: 2 };
+    let drafts: import('../src/shared/taskDrafts').TaskDraft[] = [];
     Object.assign(window, {
       firstSessionMessages: messages,
       acquireVsCodeApi: () => ({
-        getState: () => ({ view: 'sessions', navigationVersion: 2 }),
-        setState() {},
+        getState: () => persisted,
+        setState(value: Record<string, unknown>) {
+          persisted = value;
+        },
         postMessage(message: ClientMessage) {
           messages.push(message);
+          if (message.type === 'saveTaskDraft')
+            drafts = [
+              ...drafts.filter((d) => d.id !== message.draft.id),
+              { ...message.draft, revision: message.draft.revision + 1 },
+            ];
+          if (message.type === 'deleteTaskDraft')
+            drafts = drafts.filter((d) => d.id !== message.id);
+          if (['listTaskDrafts', 'saveTaskDraft', 'deleteTaskDraft'].includes(message.type))
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'taskDrafts',
+                    drafts,
+                    requestId: 'requestId' in message ? message.requestId : undefined,
+                  },
+                  '*',
+                ),
+              0,
+            );
           if (message.type === 'ready')
             setTimeout(() => window.postMessage({ type: 'state', state }, '*'), 0);
           if (message.type === 'createFeature')
@@ -146,4 +170,78 @@ test('first session respects trust and keeps controls accessible in a narrow win
   await expect(dialog).toBeInViewport();
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
+});
+
+test('keeps a task draft while another task runs and restores its pair and progression choices', async ({
+  page,
+}) => {
+  const state = fixture();
+  state.workspaceOperation = { label: 'Agent au travail' };
+  await open(page, state);
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
+  await dialog.getByLabel('Qu’allons-nous faire ?').fill('Préparer sans interrompre');
+  await dialog
+    .getByRole('combobox')
+    .filter({ has: page.locator('option[value="pair"]') })
+    .selectOption('pair');
+  await dialog
+    .getByRole('combobox')
+    .filter({ has: page.locator('option[value="balanced"]') })
+    .selectOption('balanced');
+  await expect(dialog.getByRole('button', { name: 'Créer et démarrer' })).toBeDisabled();
+  await expect(dialog.getByText('Brouillon enregistré', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Garder en brouillon' }).click();
+  await page.getByRole('button', { name: /Préparer sans interrompre · Reprendre/ }).click();
+  await expect(dialog.getByLabel('Qu’allons-nous faire ?')).toHaveValue(
+    'Préparer sans interrompre',
+  );
+  await expect(
+    dialog.getByRole('combobox').filter({ has: page.locator('option[value="pair"]') }),
+  ).toHaveValue('pair');
+  await expect(
+    dialog.getByRole('combobox').filter({ has: page.locator('option[value="balanced"]') }),
+  ).toHaveValue('balanced');
+  expect((await messages(page)).filter((m) => m.type === 'createFeature')).toHaveLength(0);
+});
+
+test('create and start sends one concrete launch choice', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
+  await dialog.getByLabel('Qu’allons-nous faire ?').fill('Une tâche guidée');
+  await dialog
+    .getByRole('combobox')
+    .filter({ has: page.locator('option[value="pair"]') })
+    .selectOption('pair');
+  await dialog.getByRole('button', { name: 'Créer et démarrer' }).click();
+  await expect(dialog).not.toBeVisible();
+  const creates = (await messages(page)).filter((m) => m.type === 'createFeature');
+  expect(creates).toHaveLength(1);
+  expect(creates[0]).toMatchObject({ start: { pair: true, progression: 'guided' } });
+});
+
+test('clearing a saved task keeps the empty edit and still allows explicit abandonment', async ({
+  page,
+}) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Nouvelle session' });
+  const title = dialog.getByLabel('Qu’allons-nous faire ?');
+  await title.fill('Une idée à effacer');
+  await expect(dialog.getByText('Brouillon enregistré', { exact: true })).toBeVisible();
+  await title.fill('');
+  await expect
+    .poll(
+      async () =>
+        (await messages(page)).filter((m) => m.type === 'saveTaskDraft').at(-1)?.draft.title,
+    )
+    .toBe('');
+  await expect(dialog.getByText('Brouillon enregistré', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Abandonner ce brouillon' }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect
+    .poll(async () => (await messages(page)).filter((m) => m.type === 'deleteTaskDraft').length)
+    .toBe(1);
+  await expect(page.getByRole('region', { name: 'Brouillons de tâches' })).toHaveCount(0);
 });

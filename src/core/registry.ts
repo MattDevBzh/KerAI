@@ -47,10 +47,37 @@ export interface InstallationReport {
   conflicts: string[];
 }
 
+// Shared read/parse cache; every lookup still verifies path and filesystem identity.
+// Directory enumeration remains live, so additions/removals and project overrides are visible.
+const catalogueFiles = new Map<string, { stamp: string; content: Promise<string> }>();
+const parsedMarkdown = new Map<string, { metadata: unknown; body: string }>();
+export function clearCatalogueCache() {
+  catalogueFiles.clear();
+  parsedMarkdown.clear();
+}
+async function catalogueRead(file: string): Promise<string> {
+  const stat = await lstat(file, { bigint: true });
+  if (!stat.isFile()) throw new Error('Profil non régulier.');
+  const stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+  const cached = catalogueFiles.get(file);
+  if (cached?.stamp === stamp) return cached.content;
+  const content = readFile(file, 'utf8').catch((error) => {
+    catalogueFiles.delete(file);
+    throw error;
+  });
+  catalogueFiles.set(file, { stamp, content });
+  if (catalogueFiles.size > 2000) catalogueFiles.delete(catalogueFiles.keys().next().value!);
+  return content;
+}
 function markdown(source: string): { metadata: unknown; body: string } {
+  const cached = parsedMarkdown.get(source);
+  if (cached) return structuredClone(cached);
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/.exec(source);
   if (!match) throw new Error('Frontmatter YAML requis.');
-  return { metadata: parse(match[1], { uniqueKeys: true }), body: match[2].trim() };
+  const result = { metadata: parse(match[1], { uniqueKeys: true }), body: match[2].trim() };
+  if (parsedMarkdown.size > 1000) parsedMarkdown.clear();
+  parsedMarkdown.set(source, result);
+  return structuredClone(result);
 }
 /** Reject symlinks as well as traversal, including parent directory symlinks. */
 export async function safePath(root: string, fragment: string): Promise<string> {
@@ -196,7 +223,7 @@ export class AgentRegistry {
         if (file.endsWith('.agent.md')) {
           try {
             const path = await safePath(root, file),
-              content = await readFile(path, 'utf8'),
+              content = await catalogueRead(path),
               { metadata, body } = markdown(content);
             const id = identifier.parse(basename(file, '.agent.md'));
             const fields = z.record(z.string(), z.unknown()).parse(metadata);
@@ -222,7 +249,7 @@ export class AgentRegistry {
         if (basename(file) === 'SKILL.md') {
           try {
             const path = await safePath(root, file),
-              content = await readFile(path, 'utf8'),
+              content = await catalogueRead(path),
               { metadata, body } = markdown(content);
             const meta = skillMetadata.parse(metadata),
               id = identifier.parse(basename(dirname(file)));
@@ -241,7 +268,7 @@ export class AgentRegistry {
           try {
             const path = await safePath(root, file);
             const workflow = validateWorkflow(
-              parse(await readFile(path, 'utf8'), { uniqueKeys: true }),
+              parse(await catalogueRead(path), { uniqueKeys: true }),
             );
             workflows.set(workflow.id, { ...workflow, source: path });
           } catch (error) {

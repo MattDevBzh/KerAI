@@ -96,7 +96,7 @@ test('multi-selection is remembered, can reorder the primary and creates a multi
     'true',
   );
   await page.screenshot({ path: testInfo.outputPath('project-picker.png') });
-  await page.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await page.getByRole('button', { name: 'Garder en brouillon', exact: true }).click();
   await page.getByRole('button', { name: 'Nouvelle session', exact: true }).first().click();
   await expect(page.locator('.project-picker summary')).toContainText('Web + API');
   await page
@@ -104,6 +104,9 @@ test('multi-selection is remembered, can reorder the primary and creates a multi
     .fill('API et interface');
   await page.getByRole('button', { name: 'Créer la session' }).click();
   const messages = await page.evaluate(() => Reflect.get(window, 'projectMessages'));
+  expect(messages.filter((message: ClientMessage) => message.type === 'selectProjects')).toEqual(
+    [],
+  );
   expect(messages.find((message: ClientMessage) => message.type === 'createFeature')).toMatchObject(
     { projectIds: ['web', 'api'], isolated: false, title: 'API et interface' },
   );

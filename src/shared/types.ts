@@ -192,6 +192,7 @@ export interface FeatureStep extends WorkflowStep {
   attempts: Attempt[];
 }
 export interface Feature {
+  instructions?: import('./instructions').PinnedInstruction[];
   reviewTarget?: import('./reviews').ReviewTarget;
   navigation?: import('./navigation').NavigationSelection;
   navigationInitialCapture?: import('./navigation').NavigationCapture;
@@ -284,6 +285,7 @@ export interface HookDefinition {
   enabled: boolean;
 }
 export interface StudioSettings {
+  instructions?: import('./instructions').PinnedInstruction[];
   reviewDefaults?: { pullRequest?: string; branch?: string };
   traceLimitBytes?: number;
   defaultModel: string;
@@ -353,6 +355,18 @@ export interface StudioState {
   };
 }
 export type ClientMessage =
+  | { type: 'quoteEditorSelection'; featureId: string; stepId: string; attemptId: string }
+  | {
+      type: 'pinInstruction';
+      featureId: string;
+      scope: 'task' | 'project';
+      id: string;
+      expectedRevision: number;
+      text: string;
+      active: boolean;
+      requestId: string;
+    }
+  | import('./taskDrafts').TaskDraftCommand
   | { type: 'reviewBranches'; requestId: string; projectId?: string }
   | { type: 'resyncState' }
   | {
@@ -401,6 +415,7 @@ export type ClientMessage =
   | { type: 'openQualityAttachment'; featureId: string; evidenceId: string; attachmentId: string }
   | {
       type:
+        | 'firstViewRendered'
         | 'ready'
         | 'refresh'
         | 'checkRuntime'
@@ -412,6 +427,7 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      start?: { pair: boolean; progression: import('./sessionProgression').SessionProgression };
       reviewTarget?: import('./reviews').ReviewTarget;
       images?: import('./images').ImageAttachment[];
       permissionMode?: import('./native').NativePermissionMode;
@@ -472,13 +488,20 @@ export type ClientMessage =
   | { type: 'cancelRun'; featureId: string }
   | {
       type: 'approveStep';
+      continueToStepId?: string;
       featureId: string;
       stepId: string;
       expectedAttemptId?: string;
       expectedRevision?: number;
       expectedReviewWarningsKey?: string;
     }
-  | { type: 'answerQuestions'; featureId: string; stepId: string; answers: Record<string, string> }
+  | {
+      type: 'answerQuestions';
+      expectedAttemptId?: string;
+      featureId: string;
+      stepId: string;
+      answers: Record<string, string>;
+    }
   | ({ type: 'saveArtifact'; featureId: string; stepId: string; content: string } & Partial<
       import('./collaboration').EditorialSaveOptions
     >)
@@ -604,6 +627,17 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | { type: 'startup'; stage: string; error?: string }
+  | {
+      type: 'sessionQuote';
+      featureId: string;
+      stepId: string;
+      attemptId: string;
+      selection?: import('./codeSelection').CodeSelection;
+      error?: string;
+    }
+  | { type: 'instructionSaved'; requestId: string; error?: string }
+  | import('./taskDrafts').TaskDraftEvent
   | { type: 'correctionLoopRenewed'; requestId: string; error?: string }
   | {
       type: 'reviewBranchesResult';

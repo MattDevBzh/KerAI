@@ -38,8 +38,8 @@ export function ImageGallery({
     </div>
   );
 }
-export function useImageDraft() {
-  const [images, setImages] = useState<ImageAttachment[]>([]);
+export function useImageDraft(initial: ImageAttachment[] = []) {
+  const [images, setImages] = useState<ImageAttachment[]>(initial);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const busy = useRef(false);

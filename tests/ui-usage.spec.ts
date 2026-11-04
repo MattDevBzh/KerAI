@@ -168,9 +168,12 @@ test('consommation : mesures partielles, zéro réel, unités exactes et validat
   const messages = await page.evaluate(
     () => Reflect.get(window, 'usageMessages') as ClientMessage[],
   );
-  expect(messages.filter((message) => !['ready', 'checkRuntime'].includes(message.type))).toEqual(
-    [],
-  );
+  expect(
+    messages.filter(
+      (message) =>
+        !['ready', 'firstViewRendered', 'checkRuntime', 'listTaskDrafts'].includes(message.type),
+    ),
+  ).toEqual([]);
 });
 test('consommation : filtres, archives, historique hors sélection et ouverture session', async ({
   page,

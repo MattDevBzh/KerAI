@@ -305,11 +305,10 @@ export class FeatureWorkspace {
     const symbolic = await this.git(root, ['symbolic-ref', '--short', 'HEAD']);
     return { head, branch: symbolic.code ? 'HEAD détachée' : machineText(symbolic.stdout).trim() };
   }
-  async inspectRepository(): Promise<{
+  async inspectIdentity(): Promise<{
     root: string;
     head: string;
     branch: string;
-    dirtyCount: number;
   }> {
     const root = await this.source(),
       top = await this.topLevel(root);
@@ -320,6 +319,15 @@ export class FeatureWorkspace {
         'Ouvre la racine du dépôt Git ; un sous-dossier ne peut pas créer une isolation.',
       );
     const identity = await this.identity(root);
+    return { root, ...identity };
+  }
+  async inspectRepository(): Promise<{
+    root: string;
+    head: string;
+    branch: string;
+    dirtyCount: number;
+  }> {
+    const { root, ...identity } = await this.inspectIdentity();
     const records = machineText(
       await this.checkedGit(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']),
     ).split('\0');

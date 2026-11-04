@@ -1,3 +1,7 @@
+import { CorrectionPanel } from './CollaborationUI';
+import { StepPanel } from './StepPanel';
+import { HumanRequests, PendingRequestLauncher } from './HumanRequests';
+import { Modal } from './SessionPrimitives';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDownLeft, Maximize2, Minimize2, MonitorUp, Send } from 'lucide-react';
@@ -17,12 +21,32 @@ import './hq-cinema.css';
 export function HqCinema({
   root,
   state,
+  dispatch,
   reduce,
 }: {
+  dispatch: (message: import('../src/shared/types').ClientMessage) => void;
   root: Feature;
   state: StudioState;
   reduce: (featureId: string, stepId?: string) => void;
 }) {
+  const [drawer, setDrawer] = useState<{ featureId: string; stepId: string; result?: boolean }>();
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    description: string;
+    action: () => void;
+  }>();
+  const [correction, setCorrection] = useState<{
+    featureId: string;
+    sourceStepId: string;
+    feedback: string;
+    findingIds?: string[];
+    commentIds?: string[];
+  }>();
+  const correctionFeature =
+    correction && allFeatures([root]).find((f) => f.id === correction.featureId);
+  const [drawerDirty, setDrawerDirty] = useState(false);
+  const drawerFeature = drawer && allFeatures([root]).find((f) => f.id === drawer.featureId);
+  const drawerStep = drawerFeature?.steps.find((s) => s.id === drawer?.stepId);
   const scene = hqScene(root, state);
   const { feature, step, request } = scene;
   const ref = useRef<HTMLElement>(null);
@@ -41,6 +65,10 @@ export function HqCinema({
   const [arrival, setArrival] = useState<{ text: string; delivery: boolean }>();
   const close = () => {
     // Exiting this browser's fullscreen does not cancel or restart a running session.
+    if (drawerDirty) {
+      setError('Enregistre ou abandonne les modifications du résultat avant de quitter.');
+      return;
+    }
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
     reduce(feature.id, step?.id);
   };
@@ -172,6 +200,7 @@ export function HqCinema({
       ref={ref}
       tabIndex={-1}
     >
+      <div id="hq-interactions" />
       <header className="cinema-toolbar">
         <div className="cinema-session">
           <span className="cinema-indicator" data-attention={speech.kind === 'attention'} />
@@ -179,6 +208,40 @@ export function HqCinema({
           <span>{root.archived ? 'Dernier état enregistré' : 'Suivi automatique'}</span>
         </div>
         <div className="cinema-controls">
+          {step && !root.archived && (
+            <button onClick={() => setDrawer({ featureId: feature.id, stepId: step.id })}>
+              Intervenir
+            </button>
+          )}
+          {step?.attempts.at(-1)?.artifact && (
+            <button
+              onClick={() => setDrawer({ featureId: feature.id, stepId: step.id, result: true })}
+            >
+              Relire le résultat
+            </button>
+          )}
+          {step?.status === 'running' && (
+            <button
+              className="cinema-stop"
+              onClick={() => {
+                const attempt = step.attempts.at(-1);
+                if (attempt?.pair)
+                  dispatch({
+                    type: 'pairAction',
+                    featureId: feature.id,
+                    stepId: step.id,
+                    attemptId: attempt.id,
+                    expectedVersion: attempt.pair.version,
+                    requestId: crypto.randomUUID(),
+                    action: 'pause',
+                  });
+                else dispatch({ type: 'cancelRun', featureId: feature.id });
+              }}
+            >
+              Arrêter
+            </button>
+          )}
+
           {isHosted && (
             <button
               disabled={Boolean(pending)}
@@ -192,7 +255,7 @@ export function HqCinema({
             <Maximize2 size={16} /> Plein écran / fenêtré
           </button>
           <button className="cinema-reduce" onClick={close}>
-            <Minimize2 size={16} /> Réduire pour intervenir
+            <Minimize2 size={16} /> Réduire le QG
           </button>
         </div>
       </header>
@@ -257,7 +320,8 @@ export function HqCinema({
               )}
               {speech.kind === 'attention' && (
                 <small>
-                  <ArrowDownLeft size={14} /> Réduis le QG pour répondre dans le cockpit.
+                  <ArrowDownLeft size={14} /> Ouvre Intervenir pour échanger, ou Relire le résultat
+                  pour valider.
                 </small>
               )}
             </div>
@@ -338,6 +402,87 @@ export function HqCinema({
           </div>
         )}
       </div>
+      <PendingRequestLauncher />
+      {request && (
+        <div className="cinema-request">
+          <HumanRequests requests={[request]} dispatch={dispatch} />
+        </div>
+      )}
+      {drawer && drawerFeature && drawerStep && (
+        <div className="cinema-drawer">
+          <header>
+            <strong>
+              {drawerFeature.title} · {drawerStep.name}
+            </strong>
+            <button
+              className="button secondary"
+              disabled={drawerDirty}
+              onClick={() => setDrawer(undefined)}
+            >
+              Revenir au QG
+            </button>
+          </header>
+          <StepPanel
+            key={`${drawerFeature.id}:${drawerStep.id}:${drawer.result}`}
+            feature={drawerFeature}
+            step={drawerStep}
+            state={state}
+            dispatch={dispatch}
+            selectStep={(stepId) => setDrawer({ featureId: drawerFeature.id, stepId })}
+            reportTarget={
+              drawer.result && drawerStep.attempts.at(-1)
+                ? { attemptId: drawerStep.attempts.at(-1)!.id, edit: false }
+                : undefined
+            }
+            openPair={() => reduce(drawerFeature.id, drawerStep.id)}
+            configureTeam={() => reduce(drawerFeature.id, drawerStep.id)}
+            onDirtyChange={setDrawerDirty}
+            onCorrection={(sourceStepId, feedback = '', findingIds, commentIds) =>
+              setCorrection({
+                featureId: drawerFeature.id,
+                sourceStepId,
+                feedback,
+                findingIds,
+                commentIds,
+              })
+            }
+            confirm={(title, description, action) =>
+              setConfirmation({ title, description, action })
+            }
+          />
+        </div>
+      )}
+      {correction && correctionFeature && (
+        <Modal
+          title="Demander une correction"
+          subtitle="Choisis les étapes et le contexte pour guider l’équipe."
+          wide
+          onClose={() => setCorrection(undefined)}
+        >
+          <CorrectionPanel
+            feature={correctionFeature}
+            state={state}
+            {...correction}
+            initialFeedback={correction.feedback}
+            dispatch={dispatch}
+            onClose={() => setCorrection(undefined)}
+          />
+        </Modal>
+      )}
+      {confirmation && (
+        <Modal title={confirmation.title} onClose={() => setConfirmation(undefined)}>
+          <p>{confirmation.description}</p>
+          <button
+            className="button primary"
+            onClick={() => {
+              confirmation.action();
+              setConfirmation(undefined);
+            }}
+          >
+            Confirmer
+          </button>
+        </Modal>
+      )}
       <footer className="cinema-footer">
         <span>
           {root.archived
@@ -346,9 +491,7 @@ export function HqCinema({
               ? 'En attente de ton intervention'
               : (station?.label ?? 'Équipe prête')}
         </span>
-        <span>
-          Les cases barrées décrivent l’avancement. Les validations restent dans le cockpit.
-        </span>
+        <span>Les cases décrivent l’avancement. Relis le résultat avant de le valider.</span>
       </footer>
     </section>,
     document.body,

@@ -1,3 +1,4 @@
+import { startupDiagnostics } from './StartupDiagnostics';
 import { spawn } from 'node:child_process';
 import { redact } from './process';
 
@@ -19,6 +20,11 @@ export function runWorkspaceGit(
   extraConfig: string[],
   maxBytes: number,
 ): Promise<WorkspaceGitResult> {
+  startupDiagnostics.mark(
+    `git.process.${/^[a-z-]+$/.test(args[0] ?? '') ? args[0] : 'operation'}`,
+    root,
+  );
+  const started = performance.now();
   const creatingWorktree = args[0] === 'worktree' && args[1] === 'add';
   const timeoutMs = creatingWorktree
     ? WORKSPACE_GIT_TIMEOUTS.worktree
@@ -39,7 +45,7 @@ export function runWorkspaceGit(
     ...extraConfig.flatMap((value) => ['-c', value]),
     ...args,
   ];
-  return new Promise((resolve, reject) => {
+  return new Promise<WorkspaceGitResult>((resolve, reject) => {
     const windows = process.platform === 'win32';
     const child = spawn('git', command, {
       cwd: root,
@@ -114,5 +120,11 @@ export function runWorkspaceGit(
         );
       else resolve({ code, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) });
     });
-  });
+  }).finally(() =>
+    startupDiagnostics.mark(
+      `git.duration.${/^[a-z-]+$/.test(args[0] ?? '') ? args[0] : 'operation'}`,
+      root,
+      performance.now() - started,
+    ),
+  );
 }

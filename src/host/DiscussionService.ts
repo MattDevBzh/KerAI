@@ -110,8 +110,16 @@ export class DiscussionService extends EventEmitter {
   publish(): void {
     this.emit('state', this.snapshot());
   }
-  async initialize(): Promise<void> {
-    if (this.loaded) return;
+  private initialization?: Promise<void>;
+  initialize(): Promise<void> {
+    if (this.initialization) return this.initialization;
+    if (this.loaded) return Promise.resolve();
+    this.initialization = this.initializeState().finally(() => {
+      this.initialization = undefined;
+    });
+    return this.initialization;
+  }
+  private async initializeState(): Promise<void> {
     this.loaded = true;
     this.state.discussions = [];
     this.state.error = undefined;
@@ -693,6 +701,7 @@ export class DiscussionService extends EventEmitter {
     await this.settled();
   }
   async unload(): Promise<void> {
+    await this.initialization;
     await this.pause();
     // Another cockpit may own the store before this window opens it again.
     this.loaded = false;

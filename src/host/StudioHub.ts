@@ -1,3 +1,5 @@
+import { startupDiagnostics } from './StartupDiagnostics';
+import type { ProjectCatalogState } from '../shared/projects';
 import { allFeatures } from '../shared/subplans';
 import { EventEmitter } from 'node:events';
 import type { StudioState } from '../shared/types';
@@ -17,6 +19,9 @@ export class StudioHub extends EventEmitter {
   private loading = new Map<string, Promise<HubEntry>>();
   private activeId = 'empty';
   private errors: string[] = [];
+  private statuses: NonNullable<ProjectCatalogState['loading']> = {};
+  private background?: Promise<void>;
+  private generation = 0;
   private disposing?: Promise<void>;
   constructor(
     readonly catalog: ProjectCatalog,
@@ -38,6 +43,8 @@ export class StudioHub extends EventEmitter {
         ? undefined
         : this.catalog.state.projects.find((project) => project.id === key);
     if (key !== 'empty' && !project) throw new Error('Projet inconnu.');
+    this.statuses[key] = { status: 'loading' };
+    this.publish();
     const work = (async () => {
       if (project) {
         const { realpath } = await import('node:fs/promises');
@@ -48,6 +55,7 @@ export class StudioHub extends EventEmitter {
     })()
       .then((entry) => {
         this.entries.set(key, entry);
+        this.statuses[key] = { status: 'ready' };
         entry.service.globalGuard = () => {
           if (
             [...this.entries.values()].some(
@@ -74,27 +82,63 @@ export class StudioHub extends EventEmitter {
         entry.service.on('state', (state: StudioState) => this.publish({ entry, state }));
         return entry;
       })
-      .finally(() => this.loading.delete(key));
+      .catch((error) => {
+        this.statuses[key] = { status: 'error', error: (error as Error).message };
+        throw error;
+      })
+      .finally(() => {
+        this.loading.delete(key);
+        this.publish();
+      });
     this.loading.set(key, work);
     return work;
   }
   async initialize(): Promise<void> {
     await this.catalog.load();
     this.errors = [];
-    for (const project of this.catalog.state.projects) {
-      try {
-        await this.entry(project.id);
-      } catch (error) {
-        this.errors.push(`${project.name} : ${(error as Error).message}`);
-      }
-    }
-    const selected = this.catalog.state.selectedProjectIds[0];
-    if (this.activeId === 'empty' || !this.entries.has(this.activeId))
+    for (const project of this.catalog.state.projects)
+      this.statuses[project.id] ??= { status: 'pending' };
+    if (this.activeId === 'empty')
       this.activeId =
-        selected && this.entries.has(selected)
-          ? selected
-          : (this.entries.keys().next().value ?? 'empty');
-    await this.entry(this.activeId);
+        this.catalog.state.selectedProjectIds[0] ?? this.catalog.state.projects[0]?.id ?? 'empty';
+    try {
+      await this.entry(this.activeId);
+    } catch (error) {
+      // Keep the cockpit usable to repair/remove an inaccessible active project.
+      this.errors.push((error as Error).message);
+      this.activeId = 'empty';
+      await this.entry('empty');
+    }
+    startupDiagnostics.mark('project.active-ready');
+    this.publish();
+    if (!this.background) {
+      const generation = this.generation;
+      const queue = this.catalog.state.projects.filter(
+        (p) => !this.entries.has(p.id) && this.statuses[p.id]?.status !== 'error',
+      );
+      const worker = async () => {
+        while (queue.length && generation === this.generation) {
+          const project = queue.shift()!;
+          try {
+            await this.entry(project.id);
+          } catch (error) {
+            this.errors.push(`${project.name} : ${(error as Error).message}`);
+            this.publish();
+          }
+        }
+      };
+      this.background = Promise.all([worker(), worker()])
+        .then(() => {
+          startupDiagnostics.mark('projects.background-ready');
+        })
+        .finally(() => {
+          this.background = undefined;
+          this.publish();
+        });
+    }
+  }
+  async waitForProjects(): Promise<void> {
+    await this.background;
   }
   async activateProject(id: string): Promise<HubEntry> {
     const entry = await this.entry(id);
@@ -106,10 +150,21 @@ export class StudioHub extends EventEmitter {
     return this.entry(this.activeId);
   }
   async activateFeature(id: string): Promise<HubEntry> {
+    if (
+      ![...this.entries.values()].some((entry) =>
+        allFeatures(entry.service.state.features).some((f) => f.id === id),
+      )
+    )
+      await this.waitForProjects();
     const found = [...this.entries].find(([, entry]) =>
       allFeatures(entry.service.state.features).some((feature) => feature.id === id),
     );
-    if (!found) throw new Error('Session inconnue dans les projets enregistrés.');
+    if (!found)
+      throw new Error(
+        Object.values(this.statuses).some((s) => s.status === 'error')
+          ? 'Certains projets sont indisponibles. Réessaie leur chargement pour retrouver cette session.'
+          : 'Session inconnue dans les projets enregistrés.',
+      );
     this.activeId = found[0];
     this.publish();
     return found[1];
@@ -187,6 +242,8 @@ export class StudioHub extends EventEmitter {
       windows: this.windows,
       activeProjectId: entry.project?.id,
       errors: [...this.errors],
+      loading: structuredClone(this.statuses),
+      partial: Object.values(this.statuses).some((s) => s.status !== 'ready'),
     };
     return state;
   }
@@ -199,13 +256,17 @@ export class StudioHub extends EventEmitter {
   }
   async dispose(): Promise<void> {
     if (this.disposing) return this.disposing;
+    this.generation++;
     this.disposing = (async () => {
+      await this.background;
       await Promise.allSettled([...this.loading.values()]);
       for (const entry of this.entries.values()) {
         await entry.devops.dispose();
         await entry.service.dispose();
       }
       this.entries.clear();
+      this.statuses = {};
+      this.activeId = 'empty';
     })().finally(() => {
       this.disposing = undefined;
     });
