@@ -689,7 +689,8 @@ async function smokeRun(): Promise<void> {
     featureId: isolated.id,
     path: 'story.txt',
   });
-  assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, file);
+  // VS Code canonicalizes Windows drive letters in fsPath (C: becomes c:).
+  assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, vscode.Uri.file(file).fsPath);
   const document = vscode.window.activeTextEditor!.document;
   const edit = new vscode.WorkspaceEdit();
   edit.insert(document.uri, new vscode.Position(0, 0), 'Unsaved human buffer\n');
