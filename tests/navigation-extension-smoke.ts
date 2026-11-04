@@ -36,7 +36,7 @@ export async function navigationExtensionSmoke(api: {
     assert.equal(
       api.getState()?.navigation?.browser?.state,
       'idle',
-      `The worker bundled in this VSIX starts through the real extension host: ${api.getState()?.navigation?.preparation?.message}`,
+      `The worker bundled in this VSIX starts through the real extension host: ${JSON.stringify(api.getState()?.navigation?.preparation)}`,
     );
     await dispatch({ action: 'inspect' });
     assert.ok(

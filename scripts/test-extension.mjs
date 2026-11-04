@@ -50,6 +50,34 @@ try {
         });
     }
   }
+  if (process.platform === 'win32' && process.env.FEATURE_STUDIO_TEST_BROWSER_PROBE === '1') {
+    const probe = path.resolve('.vscode-test/navigation-launch-probe.cjs');
+    await build({
+      entryPoints: ['tests/navigation-launch-probe.ts'],
+      outfile: probe,
+      bundle: true,
+      platform: 'node',
+      format: 'cjs',
+      external: ['playwright-core'],
+      logLevel: 'silent',
+    });
+    for (const [label, executable, headless, transport] of [
+      ['node-headed-pipe', process.execPath, 'headed', 'pipe'],
+      ['electron-headed-pipe', installed, 'headed', 'pipe'],
+      ['electron-headed-websocket', installed, 'headed', 'websocket'],
+      ['electron-headless-websocket', installed, 'headless', 'websocket'],
+    ]) {
+      try {
+        execFileSync(executable, [probe, label, headless, transport], {
+          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+          stdio: 'inherit',
+          timeout: 20000,
+        });
+      } catch (error) {
+        console.error('BROWSER_PROBE_PROCESS_ERROR', label, error.message);
+      }
+    }
+  }
   await runTests({
     ...(installed ? { vscodeExecutablePath: installed } : { version: 'stable' }),
     extensionDevelopmentPath: path.resolve(
