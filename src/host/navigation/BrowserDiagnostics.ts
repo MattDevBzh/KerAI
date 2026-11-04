@@ -9,7 +9,8 @@ export interface BrowserDiagnostic {
   platform: string;
   arch: string;
   runtime: string;
-  transport: 'pipe' | 'loopback-websocket';
+  transport: 'pipe';
+  profilePathLength?: number;
   systemCode?: string;
   networkCode?: string;
   exitCode?: number;

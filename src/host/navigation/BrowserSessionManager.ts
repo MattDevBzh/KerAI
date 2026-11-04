@@ -17,6 +17,7 @@ import type {
 import { hasSensitiveNavigationUrl, isNavigationUrl } from '../../core/navigationSchemas';
 import { NavigationRecovery } from './NavigationRecovery';
 import { browserDiagnostics } from './BrowserDiagnostics';
+import { prepareBrowserProfile } from './BrowserProfiles';
 import { navigationDefinitionHash } from '../NavigationStore';
 import { NAVIGATION_LIMITS } from '../../shared/navigation';
 import type {
@@ -38,6 +39,7 @@ export type BrowserSessionOptions = {
   workerPath?: string;
   executablePath?: string;
   headless?: boolean;
+  profileRoot?: string;
   onChange?: (state: BrowserSessionState) => void;
 };
 
@@ -310,14 +312,11 @@ export class BrowserSessionManager {
       this.changed();
       try {
         // Browser credentials are separated from exportable navigation objects and never imported from personal profiles.
-        const profilePath = path.join(
+        const profilePath = await prepareBrowserProfile(
           this.options.storageRoot,
-          'browser-profiles',
-          createHash('sha256')
-            .update(JSON.stringify([application.id, origin, application.role ?? 'default']))
-            .digest('hex'),
+          [application.id, origin, application.role ?? 'default'],
+          this.options.profileRoot,
         );
-        await mkdir(profilePath, { recursive: true, mode: 0o700 });
         requireOpening();
         const result = await this.request<{ url: string }>(
           'open',

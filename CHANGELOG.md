@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.38.1 — 2026-11-04
+## 1.38.1 — 2026-11-05
 
-- Lancement depuis VS Code sous Windows : communication avec Chromium par une connexion locale temporaire, après reproduction d’un échec du paquet avec les canaux de processus habituels.
+- Navigateur sous Windows : dossier de profil local plus court, isolation par projet et application conservée, migration des profils existants sur le même disque sans perdre leurs connexions.
 - Applications : erreurs distinctes pour la vérification du navigateur, son démarrage, la préparation de la session et le chargement du site. Les échecs de lancement ne renvoient plus vers une cible dans la page.
 - Diagnostics de profil déjà utilisé, accès refusé, navigateur fermé, HTTPS, serveur inaccessible, DNS, proxy et délais ; aucun journal brut de Playwright n’est affiché.
 - Chemin complet du navigateur consultable dans un détail replié et message de préparation mis à jour même si la vérification échoue.

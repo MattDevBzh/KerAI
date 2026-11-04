@@ -25,9 +25,6 @@ import { browserErrorMessage, type BrowserPhase } from './BrowserErrors';
 import { browserFailureEvidence, type BrowserDiagnostic } from './BrowserDiagnostics';
 
 let context: BrowserContext | undefined;
-// Electron's Node host on Windows can fail to establish Chromium's extra stdio pipes.
-// Let Playwright own an ephemeral loopback WebSocket instead; retain the dedicated profile.
-const useLoopbackTransport = process.platform === 'win32' && Boolean(process.versions.electron);
 let openOptions: WorkerOpen | undefined;
 let origins: string[] = [];
 let authenticationOrigins: string[] = [];
@@ -845,7 +842,10 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
         platform: process.platform,
         arch: process.arch,
         runtime: require('playwright-core/package.json').version,
-        transport: useLoopbackTransport ? 'loopback-websocket' : 'pipe',
+        transport: 'pipe',
+        ...(typeof payload?.profilePath === 'string'
+          ? { profilePathLength: payload.profilePath.length }
+          : {}),
         ...browserFailureEvidence(error),
       } satisfies BrowserDiagnostic,
     });
@@ -918,12 +918,6 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
       context = await chromium.launchPersistentContext(options.profilePath, {
         executablePath,
         timeout: 30000,
-        ...(useLoopbackTransport
-          ? {
-              args: ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'],
-              ignoreDefaultArgs: ['--remote-debugging-pipe'],
-            }
-          : {}),
         headless: options.headless,
         viewport: { width: 1280, height: 800 },
         acceptDownloads: false,

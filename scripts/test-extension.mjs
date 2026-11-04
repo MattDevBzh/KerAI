@@ -61,14 +61,14 @@ try {
       external: ['playwright-core'],
       logLevel: 'silent',
     });
-    for (const [label, executable, headless, transport] of [
+    for (const [label, executable, headless, profileLength] of [
       ['node-headed-pipe', process.execPath, 'headed', 'pipe'],
       ['electron-headed-pipe', installed, 'headed', 'pipe'],
-      ['electron-headed-websocket', installed, 'headed', 'websocket'],
-      ['electron-headless-websocket', installed, 'headless', 'websocket'],
+      ['node-long-profile', process.execPath, 'headed', 'long'],
+      ['electron-long-profile', installed, 'headed', 'long'],
     ]) {
       try {
-        execFileSync(executable, [probe, label, headless, transport], {
+        execFileSync(executable, [probe, label, headless, profileLength], {
           env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
           stdio: 'inherit',
           timeout: 20000,

@@ -26,6 +26,7 @@ import type {
 import { navigationCaptureSchema, navigationJourneySchema } from '../core/navigationSchemas';
 import { NavigationStore } from './NavigationStore';
 import { BrowserSessionManager } from './navigation/BrowserSessionManager';
+import { windowsBrowserProfileRoot } from './navigation/BrowserProfiles';
 import { CodeAnchorIndex } from './CodeAnchorIndex';
 import { sameApplicationAuthority } from './NavigationContext';
 import { importNavigationJSON, exportNavigationJourney } from './ChromeRecorderImport';
@@ -73,6 +74,7 @@ export class NavigationService extends EventEmitter {
       new BrowserSessionManager({
         storageRoot: join(options.storageRoot, 'browser'),
         workerPath: options.workerPath,
+        profileRoot: windowsBrowserProfileRoot(),
         onChange: () => this.publish(),
       });
   }
