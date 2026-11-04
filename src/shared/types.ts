@@ -194,6 +194,7 @@ export interface FeatureStep extends WorkflowStep {
 export interface Feature {
   reviewTarget?: import('./reviews').ReviewTarget;
   navigation?: import('./navigation').NavigationSelection;
+  navigationInitialCapture?: import('./navigation').NavigationCapture;
   proofChecks?: Record<string, import('./proofs').ProofCheck>;
   images?: import('./images').ImageAttachment[];
   parent?: { featureId: string; stepId: string; iterationId: string };
@@ -319,7 +320,7 @@ export interface StudioState {
   projectCatalog?: import('./projects').ProjectCatalogState;
   favoriteAgentIds?: string[];
   profileDirectories?: { user: string; workspace: string };
-  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
   workspace: {
     name: string;
     path: string;

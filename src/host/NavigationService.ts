@@ -205,8 +205,10 @@ export class NavigationService extends EventEmitter {
     } = {},
   ) {
     this.assertBrowser(journey.applicationId);
+    const binding = options.binding ?? (await this.checkEnvironment(journey.applicationId));
     const run = await this.browser.replay(journey, parameters, {
       ...options,
+      binding,
       plan: options.plan ?? navigationPlan(journey, this.store.snapshot()),
     });
     await this.store.recordRun(run);
@@ -416,6 +418,7 @@ export class NavigationService extends EventEmitter {
       application: ApplicationProfile;
       title: string;
       description: string;
+      capture?: NavigationCapture;
       selection: import('../shared/navigation').NavigationSelection;
     };
     description?: { application: ApplicationProfile; title: string; description: string };
@@ -503,9 +506,12 @@ export class NavigationService extends EventEmitter {
             prerequisitesConfirmed: false,
           };
           let evidence = '';
+          let initialCapture: NavigationCapture | undefined;
           if (command.currentScreen) {
             this.assertBrowser(application.id);
             const capture = await this.capture();
+            const { previewUrl: _preview, ...receipt } = capture;
+            initialCapture = receipt;
             evidence = `\nObservation initiale : capture ${capture.id}, empreinte ${capture.sha256}, adresse ${capture.url}, rôle ${application.role || 'non précisé'}, fenêtre ${JSON.stringify(capture.viewport)}. Accès ${journey ? 'documenté' : 'à compléter par le Navigateur avant une reproduction complète'}.`;
           }
           return {
@@ -513,6 +519,7 @@ export class NavigationService extends EventEmitter {
               application,
               title: command.title,
               selection,
+              capture: initialCapture,
               description: `Comportement observé :\n${command.observed}\n\nRésultat attendu :\n${command.expected}\n\nAccès : ${journey ? `${journey.title} r${journey.revision}` : 'Écran courant ; parcours à compléter'}.${evidence}`,
             },
           };
@@ -527,6 +534,13 @@ export class NavigationService extends EventEmitter {
           if (this.browser.status()?.applicationId === command.application.id)
             await this.browser.close();
           await this.store.saveApplication(command.application);
+          this.bindings = this.bindings.filter(
+            (binding) => binding.applicationId !== command.application.id,
+          );
+          if (this.activeCase?.applicationId === command.application.id)
+            this.activeCase = undefined;
+          if (this.preparation?.applicationId === command.application.id)
+            this.preparation = undefined;
           break;
         }
         case 'saveDraft':
@@ -686,7 +700,17 @@ export class NavigationService extends EventEmitter {
         case 'export': {
           const journey = this.store.snapshot().journeys.find((j) => j.id === command.journeyId);
           if (!journey) throw new Error('Parcours inconnu.');
-          return { exportText: exportNavigationJourney(journey), exportName: 'parcours.json' };
+          const plan = navigationPlan(journey, this.store.snapshot());
+          return {
+            exportText: exportNavigationJourney({
+              ...journey,
+              blocks: undefined,
+              steps: plan.steps,
+              parameters: plan.parameters,
+              prerequisites: plan.prerequisites,
+            }),
+            exportName: 'parcours.json',
+          };
         }
         case 'exportMetrics':
           return {

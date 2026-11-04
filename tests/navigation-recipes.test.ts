@@ -212,3 +212,43 @@ describe('daily navigation recipes', () => {
     await expect(index.linkJourney(found.anchors[0].id, 'car', projects)).rejects.toThrow('changé');
   });
 });
+
+it('propagates stale source links and changed pinned blocks to dependent journeys', async () => {
+  const { navigationMaintenance } = await import('../src/shared/navigationRecipes');
+  const block = journey({ revision: 2 });
+  const car = journey({ id: 'car', blocks: [{ journeyId: block.id, revision: 1 }] });
+  const state = snapshot([block, car]);
+  state.codeAnchors = [
+    {
+      id: 'source',
+      applicationId: app.id,
+      projectId: 'project',
+      relativePath: 'Garage.tsx',
+      line: 1,
+      hash: 'a'.repeat(64),
+      query: 'Garage',
+      reason: 'Modifié',
+      state: 'stale',
+      journeyIds: [block.id],
+      observedAt: now,
+    },
+  ];
+  const affected = navigationMaintenance(state);
+  expect(affected.find((item) => item.journeyId === 'garage')?.reasons.join(' ')).toContain(
+    'Garage.tsx',
+  );
+  expect(affected.find((item) => item.journeyId === 'car')?.reasons.join(' ')).toMatch(
+    /r2.*r1.*Bloc à revérifier/,
+  );
+  const { searchNavigation } = await import('../src/host/NavigationSearch');
+  expect(
+    searchNavigation(
+      {
+        ...state,
+        journeys: [journey({ status: 'draft', revision: 3 })],
+        publishedJourneys: [block],
+      },
+      'Garage',
+    ).map((j) => j.status),
+  ).toEqual(['available', 'draft']);
+});

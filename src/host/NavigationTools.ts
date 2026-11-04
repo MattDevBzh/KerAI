@@ -349,14 +349,17 @@ export function navigationTools(
         if (imagesSent >= IMAGE_LIMITS.count)
           throw new Error('Budget de captures envoyées au modèle atteint (4 par tentative).');
         const { captureId } = viewSchema.parse(raw);
-        const capture = service
-          .snapshot()
-          .captures?.find(
-            (item) =>
-              item.id === captureId &&
-              item.applicationId === appId &&
-              item.attemptId === input.attempt.id,
-          );
+        const initial = input.feature?.navigationInitialCapture;
+        const capture =
+          service
+            .snapshot()
+            .captures?.find(
+              (item) =>
+                item.id === captureId &&
+                item.applicationId === appId &&
+                item.attemptId === input.attempt.id,
+            ) ??
+          (initial?.id === captureId && initial.applicationId === appId ? initial : undefined);
         if (!capture) throw new Error('Capture introuvable dans cette tentative.');
         if (capture.bytes > IMAGE_LIMITS.bytes)
           throw new Error(

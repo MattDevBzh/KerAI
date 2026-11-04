@@ -554,3 +554,51 @@ for (const action of ['fill', 'select', 'scroll'] as const) {
     );
   });
 }
+
+test('daily actions preserve the selected case when preparing a bug', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: /Depuis une notification/ }).click();
+  const detail = page.getByRole('region', { name: 'Fiche de parcours' });
+  await detail.getByLabel('Référence client').fill('client-42');
+  await detail.getByRole('button', { name: 'Ajouter aux favoris' }).click();
+  await expect(detail.getByRole('button', { name: 'Retirer des favoris' })).toBeVisible();
+  await detail.getByRole('button', { name: 'Utiliser pour corriger un bug' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Préparer une correction' });
+  await dialog.getByLabel('Comportement observé').fill('Le montant est vide.');
+  await dialog.getByLabel('Résultat attendu').fill('Afficher le montant de ce client.');
+  await dialog.getByRole('button', { name: 'Créer la session de correction' }).click();
+  expect((await commands(page)).find((command) => command.action === 'createBug')).toMatchObject({
+    journeyId: 'notification',
+    parameters: { client: 'client-42' },
+    currentScreen: false,
+  });
+  await page.reload();
+  await navigate(page, 'Applications');
+  await expect(page.getByRole('region', { name: 'Fiche de parcours' })).toContainText(
+    'Depuis une notification',
+  );
+  await expect(page.getByRole('button', { name: 'Retirer des favoris' })).toBeVisible();
+});
+
+test('editor composes a pinned block and a business data selector', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: /Facturation du client/ }).click();
+  await page.getByRole('button', { name: 'Corriger le brouillon' }).click();
+  const editor = page.getByRole('dialog');
+  await editor.getByText('Blocs réutilisables avant ces étapes', { exact: true }).click();
+  await editor.getByRole('checkbox', { name: /Depuis une notification/ }).check();
+  const step = editor.getByRole('group', { name: 'Étape 2', exact: true });
+  await step.getByRole('combobox', { name: 'Action', exact: true }).selectOption('resolve');
+  await step.getByLabel('Cible', { exact: true }).fill('.garage');
+  await step.getByLabel('Nom réutilisable', { exact: true }).fill('garageId');
+  await step.getByLabel('Attribut portant l’identifiant (data-id, href…)').fill('data-id');
+  await editor.getByRole('button', { name: 'Enregistrer une nouvelle révision' }).click();
+  const saved = (await commands(page)).find((command) => command.action === 'saveDraft');
+  expect(saved?.action === 'saveDraft' && saved.journey.blocks).toEqual([
+    { journeyId: 'notification', revision: 1 },
+  ]);
+  expect(saved?.action === 'saveDraft' && saved.journey.steps[1]).toMatchObject({
+    action: 'resolve',
+    resolver: { output: 'garageId', attribute: 'data-id', pick: 'unique' },
+  });
+});

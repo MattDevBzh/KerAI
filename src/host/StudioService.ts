@@ -329,7 +329,7 @@ export class StudioService extends EventEmitter {
     const data = await this.registry.load();
     const info = await gitInfo(this.workspacePath).catch(() => ({ branch: 'sans Git' }));
     this.state = {
-      schemaVersion: 15,
+      schemaVersion: 16,
       profileDirectories: { user: this.registry.userPath, workspace: this.registry.workspacePath },
       workspace: {
         name: basename(this.workspacePath),
@@ -1533,6 +1533,8 @@ export class StudioService extends EventEmitter {
     const input = pairContinuation
       ? this.pairInput(featureId, stepId)
       : this.prepareInput(featureId, stepId, feedback, resume, launch);
+    if (input.navigation?.selection.allowInteractions)
+      this.navigation.assertBrowser(input.navigation.application.id);
     if (usesNativeTools(input) && this.state.runtime.native && !this.state.runtime.native.available)
       throw new Error(
         this.state.runtime.native.error ?? 'Copilot natif indisponible. Relance le diagnostic.',
@@ -1798,8 +1800,16 @@ export class StudioService extends EventEmitter {
       },
       onNavigationRun: async (run) => {
         (attempt.navigationRuns ??= []).push(structuredClone(run));
-        if (run.status === 'succeeded' && feature.navigation && run.resolvedParameters) {
-          feature.navigation.parameters = { ...run.resolvedParameters };
+        if (
+          run.status === 'succeeded' &&
+          feature.navigation?.journeyId === run.journeyId &&
+          feature.navigation.revision === run.revision &&
+          run.resolvedParameters
+        ) {
+          feature.navigation.parameters = {
+            ...feature.navigation.parameters,
+            ...run.resolvedParameters,
+          };
         }
         await this.persist();
       },

@@ -18,6 +18,7 @@ import {
   navigationRunSchema,
 } from '../core/navigationSchemas';
 import { WorkspaceLease } from './WorkspaceLease';
+import { navigationPlan } from '../shared/navigationRecipes';
 
 const digest = (input: string) => createHash('sha256').update(input).digest('hex');
 const opaque = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/);
@@ -334,6 +335,7 @@ export class NavigationStore {
         throw new Error('Un brouillon courant est requis.');
       const app = this.author(journey.applicationId, actor);
       const run = this.state.runs.find((item) => item.id === runId);
+      const plan = navigationPlan(journey, this.state);
       if (
         !run ||
         run.journeyId !== id ||
@@ -348,7 +350,7 @@ export class NavigationStore {
         !run.finishedAt ||
         !journey.arrival.length ||
         !(journey.steps.length || journey.blocks?.length) ||
-        journey.steps.some(
+        plan.steps.some(
           (step) =>
             step.action === 'manual' ||
             !run.events.some((event) => event.stepId === step.id && event.status === 'succeeded'),

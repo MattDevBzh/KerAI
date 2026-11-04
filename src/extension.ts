@@ -1343,6 +1343,7 @@ export async function activate(context: vscode.ExtensionContext) {
             requestId: message.requestId,
           });
           feature.navigation = selection;
+          feature.navigationInitialCapture = result.bug.capture;
           await current.persist();
           send({ type: 'navigate', view: 'dashboard', featureId: feature.id });
         }

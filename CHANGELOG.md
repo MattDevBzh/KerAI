@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.37.0 — 2026-11-04
+
+- Navigation : imports Edge/Chrome étendus, vrai double-clic et diagnostic groupé ; actions quotidiennes, favoris et finalisation guidée.
+- Accès : ancienne publication disponible pendant la correction, paramètres réutilisables, attentes bornées, modes atteindre/reproduire distincts et blocs versionnés.
+- Corrections : sélection des données métier et conservation du cas, démarrage depuis un parcours ou une capture, mission du Navigateur liée et reprise sur la révision réparée.
+- Environnement et preuves : tâches VS Code configurables, comparaison d’une ressource servie, captures du même cas, liens écran-code et entretien des dépendances.
+- Intégration des correctifs navigateur préparés en 1.32.1 ; stockage des sessions v16 avec migration des versions précédentes.
+
 ## 1.36.1 — 2026-10-30
 
 - MCP : correction du refus avant prompt avec les noms d’outils dépassant 64 caractères, notamment `repo_pull_request_thread` derrière un identifiant de serveur généré. La liste autorisée utilise désormais le même nom tronqué que Copilot CLI.

@@ -66,6 +66,7 @@ export function freezeNavigationContext(
   const checked = state.bindings?.find(
     (b) =>
       b.applicationId === application.id &&
+      b.origin === application.origin &&
       JSON.stringify(b.projectIds) === JSON.stringify(binding.projectIds) &&
       JSON.stringify(b.roots) === JSON.stringify(binding.roots),
   );

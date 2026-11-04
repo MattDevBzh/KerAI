@@ -539,3 +539,152 @@ describe('host tool permissions', () => {
     expect(service.snapshot().captures).toHaveLength(1);
   });
 });
+
+it('prepares a correction with a published recipe while a newer draft stays editable', async () => {
+  const published = service.snapshot().journeys[0];
+  await service.store.saveDraft(
+    { ...published, title: 'En cours de réparation' },
+    published.revision,
+    { kind: 'human' },
+  );
+  const result = await service.handle({
+    action: 'createBug',
+    applicationId: app.id,
+    journeyId: journey.id,
+    parameters: { customer: 'client-42' },
+    title: 'Montant erroné',
+    observed: 'Le montant est vide',
+    expected: 'Le montant est présent',
+    currentScreen: false,
+  });
+  expect(result.bug?.selection).toMatchObject({
+    revision: 2,
+    parameters: { customer: 'client-42' },
+    allowInteractions: false,
+  });
+  expect(result.bug?.description).toContain('Factures r2');
+  expect(browser.act).not.toHaveBeenCalled();
+  await expect(
+    service.handle({
+      action: 'createBug',
+      applicationId: app.id,
+      journeyId: journey.id,
+      parameters: { password: 'forbidden' },
+      title: 'Bug',
+      observed: 'Vu',
+      expected: 'Attendu',
+      currentScreen: false,
+    }),
+  ).rejects.toThrow('sensible');
+});
+
+it('verifies the served resource against the chosen worktree and detects mismatch', async () => {
+  const project = path.join(directory, 'source');
+  await mkdir(project);
+  await writeFile(path.join(project, 'build.js'), 'build 1');
+  const hash = createHash('sha256').update('build 1').digest('hex');
+  const assetDigest = vi.fn(async () => ({ sha256: hash, bytes: 7 }));
+  Object.assign(browser, { assetDigest });
+  await service.store.saveApplication({
+    ...app,
+    environment: {
+      projectId: 'project',
+      artifactPath: 'build.js',
+      resourceUrl: `${app.origin}/build.js`,
+      startTask: 'Démarrer',
+      buildTask: 'Construire',
+    },
+  });
+  const binding = await service.checkEnvironment(app.id, [{ id: 'project', path: project }]);
+  expect(binding).toMatchObject({ roots: [project], worktree: project, verification: 'verified' });
+  expect(binding.reason).toContain('ne couvre que cette ressource');
+  expect(assetDigest).toHaveBeenCalledWith(`${app.origin}/build.js`);
+  await writeFile(path.join(project, 'build.js'), 'build 2');
+  expect(await service.checkEnvironment(app.id, [{ id: 'project', path: project }])).toMatchObject({
+    verification: 'unknown',
+    reason: expect.stringContaining('diffère'),
+  });
+  expect(
+    await service.handle({ action: 'environmentTask', applicationId: app.id, task: 'start' }),
+  ).toEqual({ task: { projectId: 'project', name: 'Démarrer' } });
+});
+
+it('requires every composed block step before publication and exports an independent recipe', async () => {
+  const parent = await service.store.saveDraft(
+    {
+      ...journey,
+      id: 'composed',
+      parameters: [],
+      steps: [],
+      blocks: [{ journeyId: 'journey', revision: 2 }],
+    },
+    0,
+    { kind: 'human' },
+  );
+  const verified = {
+    ...service.snapshot().runs[0],
+    id: 'incomplete',
+    journeyId: parent.id,
+    revision: parent.revision,
+    definitionHash: parent.hash!,
+    events: [],
+  };
+  await service.store.recordRun(verified);
+  await expect(
+    service.store.commit(parent.id, parent.revision, verified.id, { kind: 'human' }),
+  ).rejects.toThrow('rejeu hôte');
+  await service.store.recordRun({
+    ...verified,
+    id: 'complete',
+    events: [
+      { stepId: 'b0-s1', status: 'succeeded', at: now },
+      { stepId: 'b0-arrival', status: 'succeeded', at: now },
+    ],
+  });
+  await service.store.commit(parent.id, parent.revision, 'complete', { kind: 'human' });
+  const exported = await service.handle({ action: 'export', journeyId: parent.id });
+  const portable = JSON.parse(exported.exportText!);
+  expect(portable.journey.blocks).toBeUndefined();
+  expect(portable.journey.steps.map((s: { id: string }) => s.id)).toEqual(['b0-s1', 'b0-arrival']);
+  expect(portable.journey.parameters[0].name).toBe('customer');
+});
+
+it('keeps a verified initial screen capture available to later agents of the correction', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9h8AAAAASUVORK5CYII=',
+    'base64',
+  );
+  const file = path.join(directory, 'browser', 'objects', 'initial.png');
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, png);
+  browser.capture.mockResolvedValue({
+    browser: 'Chromium fixture',
+    path: file,
+    bytes: png.length,
+    sha256: createHash('sha256').update(png).digest('hex'),
+    url: app.origin,
+    createdAt: now,
+    viewport: { width: 1, height: 1 },
+  });
+  const result = await service.handle({
+    action: 'createBug',
+    applicationId: app.id,
+    parameters: {},
+    currentScreen: true,
+    title: 'Bug',
+    observed: 'Vide',
+    expected: 'Rempli',
+  });
+  expect(result.bug?.capture?.sha256).toBeTruthy();
+  expect(result.bug?.capture?.previewUrl).toBeUndefined();
+  expect(result.bug?.description).toContain(result.bug!.capture!.id);
+  const request = input();
+  request.feature = { navigationInitialCapture: result.bug!.capture } as RunInput['feature'];
+  callbacks.validateModelImages = vi.fn();
+  const tools = navigationTools(service, request, callbacks, new AbortController().signal);
+  expect(
+    (await invoke(tools, 'studio_browser_view_capture', { captureId: result.bug!.capture!.id }))
+      .resultType,
+  ).toBe('success');
+  expect(callbacks.validateModelImages).toHaveBeenCalledOnce();
+});

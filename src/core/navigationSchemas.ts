@@ -161,7 +161,13 @@ export const navigationStepSchema = z
     resolver: z
       .object({
         output: id,
-        attribute: z.string().regex(/^(data-[a-z0-9-]+|href|id)$/),
+        attribute: z
+          .string()
+          .regex(/^(data-[a-z0-9-]+|href|id)$/)
+          .refine(
+            (name) => !/token|secret|password|credential|auth|session|cookie/i.test(name),
+            'Choisir un identifiant métier non sensible.',
+          ),
         pick: z.enum(['unique', 'first']),
         filters: z
           .array(z.object({ selector: text.min(1).optional(), text: text.optional() }).strict())

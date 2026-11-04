@@ -634,16 +634,13 @@ export function ApplicationsUI({
           )}
         </>
       )}
-      <details className="applications-inspection">
-        <summary>Évaluer la qualité, le temps et la consommation</summary>
-        <NavigationEvaluationUI
-          snapshot={data.evaluation}
-          state={state}
-          send={command}
-          error={error}
-          busy={pending}
-        />
-      </details>
+      <NavigationEvaluationUI
+        snapshot={data.evaluation}
+        state={state}
+        send={command}
+        error={error}
+        busy={pending}
+      />
       {bug && (
         <NavigationBugDialog
           applicationId={applicationId}
@@ -1314,7 +1311,7 @@ function JourneyDetail({
     setParameters(
       Object.fromEntries(
         (plan?.parameters ?? journey.parameters)
-          .filter((parameter) => !parameter.sensitive)
+          .filter((parameter) => !parameter.sensitive && !outputs.has(parameter.name))
           .map((parameter) => [parameter.name, parameter.defaultValue ?? '']),
       ),
     );
@@ -1435,9 +1432,9 @@ function JourneyDetail({
         </button>
       </div>
       <h3>Prérequis</h3>
-      {journey.prerequisites.length ? (
+      {(plan?.prerequisites ?? journey.prerequisites).length ? (
         <ul>
-          {journey.prerequisites.map((item, index) => (
+          {(plan?.prerequisites ?? journey.prerequisites).map((item, index) => (
             <li key={index}>{item}</li>
           ))}
         </ul>
@@ -1448,7 +1445,7 @@ function JourneyDetail({
       )}
       <h3>Étapes</h3>
       <ol className="applications-step-list">
-        {journey.steps.map((step, index) => (
+        {(plan?.steps ?? journey.steps).map((step, index) => (
           <li key={step.id}>
             <span>
               <strong>

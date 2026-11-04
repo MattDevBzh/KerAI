@@ -260,7 +260,7 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
 
     // Real persisted journal; declared synthetic times are never provider evidence.
     const journal = page.getByRole('region', { name: 'Journal de campagne A et B' });
-    await journal
+    await page
       .getByText('Évaluer la qualité, le temps et la consommation', { exact: true })
       .click();
     await journal.getByRole('button', { name: 'Créer une campagne A/B' }).click();
@@ -358,7 +358,7 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
     await createService();
     await page.reload();
     await navigate(page, 'Applications');
-    await journal
+    await page
       .getByText('Évaluer la qualité, le temps et la consommation', { exact: true })
       .click();
     await expect(

@@ -146,6 +146,9 @@ export function resolveNavigationStep(
             ...step.resolver,
             filters: step.resolver.filters.map((f) => ({
               ...f,
+              ...(f.selector !== undefined
+                ? { selector: substituteNavigation(f.selector, parameters, 'css') }
+                : {}),
               ...(f.text !== undefined ? { text: substituteNavigation(f.text, parameters) } : {}),
             })),
           },

@@ -243,7 +243,88 @@ it('prepares one linked Navigator mission after releasing the correction workspa
     child.id,
   );
   expect(f.service.state.features.filter((feature) => feature.id === child.id)).toHaveLength(1);
+  const now = new Date().toISOString();
+  const draft = await f.service.navigation.store.saveDraft(
+    {
+      id: 'repaired',
+      applicationId: 'app',
+      revision: 0,
+      title: 'Voiture Oula',
+      intent: 'Ouvrir la même voiture',
+      tags: [],
+      prerequisites: [],
+      parameters: [{ name: 'carId', type: 'string', label: 'Voiture', required: true }],
+      steps: [{ id: 'open', action: 'navigate', url: '/cars/{{carId}}' }],
+      arrival: [{ kind: 'visible', target: { strategy: 'css', value: '#car' } }],
+      status: 'draft',
+      provenance: { mode: 'human' },
+      createdAt: now,
+      updatedAt: now,
+    },
+    0,
+    { kind: 'human' },
+  );
+  await f.service.navigation.store.recordRun({
+    id: 'verified',
+    applicationId: 'app',
+    journeyId: draft.id,
+    revision: draft.revision,
+    definitionHash: draft.hash!,
+    mode: 'verify',
+    status: 'succeeded',
+    startedAt: now,
+    finishedAt: now,
+    prerequisitesConfirmed: true,
+    arrivalVerified: true,
+    events: [{ stepId: 'open', status: 'succeeded', at: now }],
+    evidencePaths: [],
+    metrics: { actions: 1, durationMs: 1, outputChars: 0, providerCalls: 0 },
+    binding: {
+      applicationId: 'app',
+      origin: app.origin,
+      projectIds: ['project'],
+      roots: [f.workspace],
+      verification: 'unknown',
+      reason: 'Fixture',
+    },
+  });
+  const published = await f.service.navigation.store.commit(draft.id, draft.revision, 'verified', {
+    kind: 'human',
+  });
+  f.feature.navigation!.parameters = { carId: 'c1', obsolete: 'discard' };
+  const frozen = structuredClone(attempt.navigation);
+  await f.service.resumeNavigation(
+    f.feature.id,
+    f.step.id,
+    attempt.id,
+    published.id,
+    published.revision,
+  );
+  expect(f.feature.navigation).toMatchObject({
+    journeyId: published.id,
+    revision: published.revision,
+    parameters: { carId: 'c1' },
+    allowInteractions: false,
+    prerequisitesConfirmed: false,
+  });
+  expect(attempt.navigation).toEqual(frozen);
+  expect(attempt.navigationRequest?.resolvedJourney).toEqual({
+    id: published.id,
+    revision: published.revision,
+  });
+
   await expect(
     f.service.resumeNavigation(f.feature.id, f.step.id, attempt.id, 'missing', 1),
   ).rejects.toThrow('publiée');
+});
+
+it('checks browser readiness before spending an agent call with interactions enabled', async () => {
+  const f = await fixture();
+  await expect(
+    f.service.runStep(f.feature.id, f.step.id, '', false, {
+      ...f.launch,
+      navigation: { ...f.launch.navigation!, allowInteractions: true },
+    }),
+  ).rejects.toThrow('navigateur');
+  expect(f.adapter.run).not.toHaveBeenCalled();
 });

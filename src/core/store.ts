@@ -229,6 +229,7 @@ const feature: z.ZodType<Feature> = z
   .object({
     reviewTarget: reviewTargetSchema.optional(),
     navigation: navigationSelectionSchema.optional(),
+    navigationInitialCapture: navigationCaptureSchema.optional(),
     parent: z
       .object({ featureId: z.string(), stepId: z.string(), iterationId: z.string() })
       .strict()
@@ -537,7 +538,7 @@ export const settingsSchema = z
 const pairStateSchema = createPairStateSchema(settingsSchema);
 const persistedSchema = z
   .object({
-    schemaVersion: z.literal(15),
+    schemaVersion: z.literal(16),
     features: z.array(feature),
     settings: settingsSchema,
     memory: z
@@ -550,14 +551,14 @@ const persistedSchema = z
   })
   .strict();
 export interface PersistedStudio {
-  schemaVersion: 15;
+  schemaVersion: 16;
   features: Feature[];
   settings: StudioSettings;
   memory: MemoryEntry[];
 }
 const indexSchema = z
   .object({
-    schemaVersion: z.literal(15),
+    schemaVersion: z.literal(16),
     entries: z
       .array(z.object({ id: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/) }))
       .refine(
@@ -584,7 +585,7 @@ export class Store {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT')
         return {
-          schemaVersion: 15,
+          schemaVersion: 16,
           features: [],
           settings: structuredClone(defaultSettings),
           memory: [],
@@ -610,7 +611,8 @@ export class Store {
       version !== 12 &&
       version !== 13 &&
       version !== 14 &&
-      version !== 15
+      version !== 15 &&
+      version !== 16
     )
       throw new Error(`Version de stockage inconnue : ${String(version)}. Original conservé.`);
     if (
@@ -624,9 +626,10 @@ export class Store {
       version === 12 ||
       version === 13 ||
       version === 14 ||
-      version === 15
+      version === 15 ||
+      version === 16
     ) {
-      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 15 });
+      const index = indexSchema.parse({ ...(raw as object), schemaVersion: 16 });
       const deleted = new Set((await pendingDeletions(this.rootPath)).map((d) => d.featureId));
       const features: Feature[] = [];
       for (const entry of index.entries) {
@@ -645,13 +648,13 @@ export class Store {
         features.push(item);
       }
       raw = {
-        schemaVersion: 15,
+        schemaVersion: 16,
         features,
         settings: index.settings,
         memory: index.memory.filter((m) => !m.source || !deleted.has(m.source.featureId)),
       };
     }
-    const migration = version !== 15;
+    const migration = version !== 16;
     if (migration) {
       const old = raw as {
         features?: unknown;
@@ -659,7 +662,7 @@ export class Store {
         memory?: unknown;
       };
       raw = {
-        schemaVersion: 15,
+        schemaVersion: 16,
         features: old.features ?? [],
         settings: { ...structuredClone(defaultSettings), ...old.settings },
         memory: old.memory ?? [],
@@ -734,7 +737,7 @@ export class Store {
   save(features: Feature[], settings: StudioSettings, memory: MemoryEntry[] = []): Promise<void> {
     validateFeatureTree(features);
     const snapshot = persistedSchema.parse({
-      schemaVersion: 15,
+      schemaVersion: 16,
       features: structuredClone(features),
       settings: structuredClone(settings),
       memory: structuredClone(memory),
@@ -762,7 +765,7 @@ export class Store {
           this.rootPath,
           'state.json',
           JSON.stringify({
-            schemaVersion: 15,
+            schemaVersion: 16,
             entries,
             settings: snapshot.settings,
             memory: snapshot.memory,

@@ -100,7 +100,10 @@ export function launchReadiness(
       (a) => a.id === launch.navigation!.applicationId,
     );
     const browser = state.navigation?.browser;
-    if (!browser || browser.applicationId !== app?.id || browser.state !== 'idle')
+    if (
+      launch.navigation.allowInteractions &&
+      (!browser || browser.applicationId !== app?.id || browser.state !== 'idle')
+    )
       issues.push({
         message:
           'Ouvre le navigateur dans Applications et termine la connexion avant de lancer cet agent.',

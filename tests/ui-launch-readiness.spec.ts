@@ -227,6 +227,7 @@ test('application diagnostics explain the missing Navigator and the profile only
   };
   await open(page, state);
   await navigate(page, 'Applications');
+  await page.getByText('Configuration de l’application et droits', { exact: true }).click();
   const diagnostic = page.getByRole('region', { name: 'Diagnostic de navigation' });
   await expect(diagnostic).toContainText('https://private.example:8443/espace');
   await expect(diagnostic).toContainText('Choisissez un agent doté de la capacité navigation');
