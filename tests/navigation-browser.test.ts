@@ -323,6 +323,8 @@ describe.skipIf(!executablePath)(
           'non autorisée',
         );
     });
+    // Two deliberately absent arrivals each consume the real 15s deadline, plus
+    // three browser restarts and durable receipts. This is a correctness test.
     test('replays known journey without AI and verifies arrival separately', async () => {
       const journey: NavigationJourney = {
         id: 'journey',
@@ -369,7 +371,7 @@ describe.skipIf(!executablePath)(
       );
       expect(failed.status).toBe('failed');
       expect(failed.arrivalVerified).toBe(false);
-    }, 45000);
+    }, 90000);
     test('arrival URL distinguishes business queries and hash routes while receipts stay redacted', async () => {
       const current = `${fixture.origin}/settings?tab=profile#details`;
       const result = await manager.act(step('navigate', 'profile', { url: current }));

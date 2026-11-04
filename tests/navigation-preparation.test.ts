@@ -219,6 +219,7 @@ it.each([false, true])(
   },
 );
 
+// This fixture creates two sessions and their Git checkpoints on the real disk.
 it('prepares one linked Navigator mission after releasing the correction workspace', async () => {
   const f = await fixture();
   const app = f.service.navigation.snapshot().applications[0];
@@ -316,7 +317,7 @@ it('prepares one linked Navigator mission after releasing the correction workspa
   await expect(
     f.service.resumeNavigation(f.feature.id, f.step.id, attempt.id, 'missing', 1),
   ).rejects.toThrow('publiée');
-});
+}, 60000);
 
 it('checks browser readiness before spending an agent call with interactions enabled', async () => {
   const f = await fixture();
