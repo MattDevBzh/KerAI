@@ -20,14 +20,23 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npx playwright install chromium
+        if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
+      - name: Package and verify the Windows extension
+        run: npm run package
+      - run: python scripts/verify-vsix.py --match-build --extract "${{ runner.temp }}/feature-studio-windows"
+      - name: Load the delivered package in VS Code on Windows
+        run: npm run test:extension
+        if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
+        env:
+          FEATURE_STUDIO_EXTENSION_PATH: ${{ runner.temp }}/feature-studio-windows/extension
+          FEATURE_STUDIO_TEST_NAVIGATION: '1'
       - run: npm install --prefix "${{ runner.temp }}/copilot-catalog" --no-audit --no-fund @github/copilot@1.0.102
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - run: npx vitest run tests/devops-cli-catalog.test.ts tests/native-runtime.test.ts tests/mcp-runtime.test.ts tests/native-test-runtime.test.ts tests/native-context-runtime.test.ts tests/images-runtime.test.ts tests/task-board-runtime.test.ts
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
         env:
           FEATURE_STUDIO_CATALOG_CLI: ${{ runner.temp }}/copilot-catalog/node_modules/.bin/copilot.cmd
-      - run: npx playwright install chromium
-        if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
       - name: Verify navigation and task boards on Windows
         # Keep browser profiles and the 5,000-journey disk fixture from competing for Windows I/O.
         run: npx vitest run navigation- tests/task-board.test.ts --maxWorkers=1
@@ -44,15 +53,6 @@ jobs:
       - name: Verify daily chat and fullscreen questions on Windows
         run: npx playwright test tests/ui-first-session.spec.ts tests/ui-conversation.spec.ts tests/ui-hq-cinema.spec.ts --workers=1
         if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
-      - name: Package and verify the Windows extension
-        run: npm run package
-      - run: python scripts/verify-vsix.py --match-build --extract "${{ runner.temp }}/feature-studio-windows"
-      - name: Load the delivered package in VS Code on Windows
-        run: npm run test:extension
-        if: env.FEATURE_STUDIO_SKIP_TESTS != 'true'
-        env:
-          FEATURE_STUDIO_EXTENSION_PATH: ${{ runner.temp }}/feature-studio-windows/extension
-          FEATURE_STUDIO_TEST_NAVIGATION: '1'
   validate:
     runs-on: ubuntu-latest
     steps:

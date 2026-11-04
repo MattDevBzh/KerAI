@@ -1,6 +1,6 @@
 import { runTests, downloadAndUnzipVSCode } from '@vscode/test-electron';
 import { build } from 'esbuild';
-import { mkdtemp, mkdir, access, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, access, writeFile, rm, readdir, readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -71,6 +71,19 @@ try {
     ],
   });
 } finally {
+  if (process.env.FEATURE_STUDIO_TEST_NAVIGATION === '1') {
+    // Only the curated navigation metadata from this run's isolated output channel.
+    const logRoot = path.join(testRoot, 'user-data', 'logs');
+    for (const file of await readdir(logRoot, { recursive: true }).catch(() => [])) {
+      if (!file.endsWith('.log') || !file.includes('Feature Studio')) continue;
+      const text = await readFile(path.join(logRoot, file), 'utf8').catch(() => '');
+      for (const line of text
+        .split('\n')
+        .filter((line) => line.includes('[Navigateur]'))
+        .slice(-80))
+        console.log(line);
+    }
+  }
   // Only this run's isolated fixture, user data and profile directory are removed.
   await rm(testRoot, { recursive: true, force: true });
 }
