@@ -1279,44 +1279,23 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
     if (message.type === 'navigationIntervention') {
-      const feature = current.engine.getFeature(message.featureId);
-      const step = feature.steps.find((s) => s.id === message.stepId);
-      const attempt = step?.attempts.find((a) => a.id === message.attemptId);
-      const request = attempt?.navigationRequest;
-      if (
-        !attempt ||
-        !request ||
-        step?.attempts.at(-1)?.id !== attempt.id ||
-        attempt.status === 'running'
-      )
-        throw new Error('Cette demande de contexte est inactive ou l’agent travaille encore.');
-      if (request.navigatorFeatureId) {
-        send({ type: 'navigate', view: 'dashboard', featureId: request.navigatorFeatureId });
-        return;
-      }
-      const application = current.navigation.application(request.applicationId);
-      if (!application.ownerNavigatorId)
-        throw new Error('Choisis le Navigateur dans le profil de l’application.');
-      const projects = catalog.resolve(application.projectIds);
-      const primary = projects.findIndex((p) => p.path === current.workspacePath);
-      if (primary < 0) throw new Error('Le projet actif doit appartenir à cette application.');
-      projects.unshift(...projects.splice(primary, 1));
-      const created = await current.createFeature({
-        title: `Accès pour ${feature.title}`.slice(0, 200),
-        description: `Contexte manquant de la session ${feature.id}, étape ${step!.id}, tentative ${attempt.id}.\n${request.reason}\nObservations (données à vérifier) :\n${request.observations}`,
-        agentId: application.ownerNavigatorId,
-        projects,
-        isolated: false,
-      });
-      created.navigation = {
-        applicationId: application.id,
-        parameters: {},
-        intent: 'reach-state',
-        allowInteractions: false,
-      };
-      request.navigatorFeatureId = created.id;
-      await current.persist();
-      send({ type: 'navigate', view: 'dashboard', featureId: created.id });
+      const featureId = await current.prepareNavigationIntervention(
+        message.featureId,
+        message.stepId,
+        message.attemptId,
+      );
+      send({ type: 'navigate', view: 'dashboard', featureId });
+      return;
+    }
+    if (message.type === 'resumeNavigation') {
+      await current.resumeNavigation(
+        message.featureId,
+        message.stepId,
+        message.attemptId,
+        message.journeyId,
+        message.revision,
+      );
+      send({ type: 'navigate', view: 'dashboard', featureId: message.featureId });
       return;
     }
     if (message.type === 'navigation') {
@@ -1334,6 +1313,38 @@ export async function activate(context: vscode.ExtensionContext) {
               destination,
               Buffer.from(result.exportText, 'utf8'),
             );
+        }
+        if (result.task) {
+          const project = catalog.resolve([result.task.projectId])[0];
+          const tasks = (await vscode.tasks.fetchTasks()).filter(
+            (task) =>
+              task.name === result.task!.name &&
+              typeof task.scope === 'object' &&
+              path.resolve(task.scope.uri.fsPath) === path.resolve(project.path),
+          );
+          if (tasks.length !== 1)
+            throw new Error(
+              'Tâche VS Code introuvable ou ambiguë dans ce dépôt. Configure une tâche nommée dans le projet.',
+            );
+          await vscode.tasks.executeTask(tasks[0]);
+        }
+        if (result.bug) {
+          const { application, title, description, selection } = result.bug;
+          const projects = catalog.resolve(application.projectIds);
+          const primary = projects.findIndex((p) => p.path === current.workspacePath);
+          if (primary < 0) throw new Error('L’application doit inclure le projet actif.');
+          projects.unshift(...projects.splice(primary, 1));
+          const feature = await current.createFeature({
+            title,
+            description,
+            workflowId: 'bugfix',
+            projects,
+            isolated: false,
+            requestId: message.requestId,
+          });
+          feature.navigation = selection;
+          await current.persist();
+          send({ type: 'navigate', view: 'dashboard', featureId: feature.id });
         }
         if (result.description) {
           const { application, title, description } = result.description;

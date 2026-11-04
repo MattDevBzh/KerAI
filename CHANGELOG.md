@@ -43,6 +43,14 @@
 - Renouvellement sans appel IA ni remise à zéro des budgets, sauvegarde version 13 et migration des sessions existantes. Les checkpoints, validations des sous-équipes, permissions et limites restent applicables.
 - Centre de validation : affichage par pages de 50 décisions pour garder l'ouverture rapide avec de nombreuses sessions, en conservant les compteurs, le tri et les filtres globaux.
 
+## Correctifs préparés pour 1.32.1 — intégrés à la 1.37.0
+
+- Navigateur : double activation Entrée/clic supprimée, pause et reprise de démonstration réparées, arrêt respecté pendant l’ouverture, ouvertures concurrentes isolées et tailles de fenêtre cohérentes.
+- Démonstration : une interaction impossible à corroborer reste une étape manuelle à corriger avant publication, au lieu de disparaître.
+- Parcours : valeurs affichées enregistrées, conditions d’attente éditables, reprise disponible dans le dialogue de démonstration ; imports Recorder corrigés pour les délais et sélecteurs, limite des paramètres vérifiée après transformation.
+- Agents et stockage : répétition réévaluée après une inspection réussie, sans supprimer les limites d’exploration ; lectures et écritures sérialisées pour éviter le retour d’une ancienne révision.
+- Compte rendu des 15 bugs reproduits, priorités et limites : `docs/features/navigation-documentee/AUDIT-2026-10-28.md`.
+
 ## 1.32.0 — 2026-10-28
 
 - Démarrage : dernier parcours mémorisé, capacités effectives et diagnostic d’application, aperçu du contexte automatiquement actualisé avec rejet des réponses périmées.

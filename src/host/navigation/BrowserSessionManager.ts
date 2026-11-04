@@ -1,3 +1,4 @@
+import { navigationOutputs, resolveNavigationConditions } from '../../shared/navigationRecipes';
 import { fork, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile, lstat, realpath, readFile, readdir } from 'node:fs/promises';
@@ -11,6 +12,7 @@ import type {
   NavigationStep,
   ExecutionBinding,
   NavigationLocator,
+  NavigationPlan,
 } from '../../shared/navigation';
 import { hasSensitiveNavigationUrl, isNavigationUrl } from '../../core/navigationSchemas';
 import { NavigationRecovery } from './NavigationRecovery';
@@ -46,6 +48,7 @@ export class BrowserSessionManager {
   private sequence = 0;
   private commandId = 0;
   private generation = 0;
+  private lifecycleVersion = 0;
   private busy = false;
   private recordingBeforeHuman = false;
   private capturedBytes = 0;
@@ -251,8 +254,10 @@ export class BrowserSessionManager {
       await this.recovery.flush();
     }
   }
-  async prepare(): Promise<BrowserPreparation> {
-    return this.request('prepare', { executablePath: this.options.executablePath });
+  async prepare(executablePath?: string): Promise<BrowserPreparation> {
+    return this.request('prepare', {
+      executablePath: executablePath ?? this.options.executablePath,
+    });
   }
   async open(application: ApplicationProfile): Promise<BrowserSessionState> {
     const origin = navigationOrigin(application.origin);
@@ -261,64 +266,76 @@ export class BrowserSessionManager {
       throw new Error('L’URL de démarrage doit appartenir au site de l’application.');
     const startUrl = new URL(entryUrl).href;
     const origins = [...new Set([origin, ...application.allowedOrigins.map(navigationOrigin)])];
-    await this.initialize();
-    if (this.recordingActive)
-      throw new Error(
-        'Terminez ou annulez la démonstration conservée avant d’ouvrir une nouvelle session.',
-      );
     if (this.busy) throw new Error('Le navigateur possède déjà une commande active.');
-    await this.close();
-    this.application = structuredClone({
-      ...application,
-      origin,
-      startUrl,
-      allowedOrigins: origins,
-    });
-    this.recordingBeforeHuman = false;
-    this.recordingActive = false;
-    this.capturedBytes = 0;
-    this.generation++;
-    this.state = {
-      id: randomUUID(),
-      applicationId: application.id,
-      state: 'idle',
-      generation: this.generation,
-      recordedSteps: [],
-      recordingPaused: true,
-      warnings: [],
-    };
-    this.changed();
+    // Reserve the lease before recovery/close can yield to a second opening.
     this.busy = true;
+    const lifecycleVersion = this.lifecycleVersion;
+    const requireOpening = () => {
+      if (lifecycleVersion !== this.lifecycleVersion)
+        throw new Error('Ouverture du navigateur interrompue.');
+    };
     try {
-      // Browser credentials are separated from exportable navigation objects and never imported from personal profiles.
-      const profilePath = path.join(
-        this.options.storageRoot,
-        'browser-profiles',
-        createHash('sha256')
-          .update(JSON.stringify([application.id, origin, application.role ?? 'default']))
-          .digest('hex'),
-      );
-      await mkdir(profilePath, { recursive: true, mode: 0o700 });
-      const result = await this.request<{ url: string }>(
-        'open',
-        {
-          origin,
-          startUrl,
-          allowedOrigins: origins,
-          authenticationOrigins: application.authenticationOrigins ?? [],
-          profilePath,
-          executablePath: application.browserExecutable ?? this.options.executablePath,
-          headless: this.options.headless ?? false,
-        },
-        30000,
-      );
-      this.state.url = result.url;
+      await this.initialize();
+      requireOpening();
+      if (this.recordingActive)
+        throw new Error(
+          'Terminez ou annulez la démonstration conservée avant d’ouvrir une nouvelle session.',
+        );
+      await this.closeSession();
+      requireOpening();
+      this.application = structuredClone({
+        ...application,
+        origin,
+        startUrl,
+        allowedOrigins: origins,
+      });
+      this.recordingBeforeHuman = false;
+      this.recordingActive = false;
+      this.capturedBytes = 0;
+      this.generation++;
+      this.state = {
+        id: randomUUID(),
+        applicationId: application.id,
+        state: 'idle',
+        generation: this.generation,
+        recordedSteps: [],
+        recordingPaused: true,
+        warnings: [],
+      };
       this.changed();
-      return this.status()!;
-    } catch (error) {
-      this.state.state = 'interrupted';
-      this.changed();
-      throw error;
+      try {
+        // Browser credentials are separated from exportable navigation objects and never imported from personal profiles.
+        const profilePath = path.join(
+          this.options.storageRoot,
+          'browser-profiles',
+          createHash('sha256')
+            .update(JSON.stringify([application.id, origin, application.role ?? 'default']))
+            .digest('hex'),
+        );
+        await mkdir(profilePath, { recursive: true, mode: 0o700 });
+        requireOpening();
+        const result = await this.request<{ url: string }>(
+          'open',
+          {
+            origin,
+            startUrl,
+            allowedOrigins: origins,
+            authenticationOrigins: application.authenticationOrigins ?? [],
+            profilePath,
+            executablePath: application.browserExecutable ?? this.options.executablePath,
+            headless: this.options.headless ?? false,
+          },
+          30000,
+        );
+        requireOpening();
+        this.state.url = result.url;
+        this.changed();
+        return this.status()!;
+      } catch (error) {
+        this.state.state = 'interrupted';
+        this.changed();
+        throw error;
+      }
     } finally {
       this.busy = false;
       await this.recovery.flush();
@@ -342,6 +359,9 @@ export class BrowserSessionManager {
         this.changed();
       }
     });
+  }
+  async assetDigest(url: string): Promise<{ sha256: string; bytes: number }> {
+    return this.exclusive(() => this.request('assetDigest', { url }, 15000));
   }
   async inspect(request: InspectionRequest = {}): Promise<BrowserInspection> {
     return this.exclusive(() => this.request('inspect', request));
@@ -439,9 +459,17 @@ export class BrowserSessionManager {
       this.state!.state = 'recording';
     }
     return this.exclusive(async () => {
-      if (this.state!.state !== 'recording') throw new Error('Aucune démonstration active.');
+      if (!this.recordingActive || !['recording', 'idle'].includes(this.state!.state))
+        throw new Error('Aucune démonstration active.');
+      this.state!.state = 'recording';
       this.state!.recordingPaused = false;
-      await this.request('recordResume');
+      try {
+        await this.request('recordResume');
+      } catch (error) {
+        this.state!.recordingPaused = true;
+        this.changed();
+        throw error;
+      }
       this.changed();
       return this.status()!;
     }, true);
@@ -497,28 +525,39 @@ export class BrowserSessionManager {
     options: {
       binding?: ExecutionBinding;
       mode?: NavigationRun['mode'];
+      plan?: NavigationPlan;
       prerequisitesConfirmed?: boolean;
     } = {},
   ): Promise<NavigationRun> {
     if (journey.applicationId !== this.application?.id || !this.state)
       throw new Error('Le parcours ne correspond pas à l’application ouverte.');
-    if (journey.steps.length > NAVIGATION_LIMITS.steps)
-      throw new Error('Limite de 80 étapes dépassée.');
-    if (journey.prerequisites.length && !options.prerequisitesConfirmed)
+    const steps = options.plan?.steps ?? journey.steps;
+    const definitions = options.plan?.parameters ?? journey.parameters;
+    const outputs = navigationOutputs(steps);
+    if (steps.length > NAVIGATION_LIMITS.steps) throw new Error('Limite de 80 étapes dépassée.');
+    if (
+      (options.plan?.prerequisites ?? journey.prerequisites).length &&
+      !options.prerequisitesConfirmed
+    )
       throw new Error('Prérequis du parcours non confirmés.');
-    for (const parameter of journey.parameters) {
+    for (const parameter of definitions) {
       if (parameter.sensitive)
         throw new Error('Les paramètres secrets doivent être renseignés manuellement.');
       if (
         parameter.required &&
+        !outputs.has(parameter.name) &&
         !(parameter.name in parameters) &&
         parameter.defaultValue === undefined
       )
         throw new Error(`Paramètre manquant : ${parameter.name}`);
     }
     const resolved = Object.fromEntries(
-      journey.parameters.map((p) => [p.name, parameters[p.name] ?? p.defaultValue ?? '']),
+      definitions
+        .filter((p) => !outputs.has(p.name) || Object.hasOwn(parameters, p.name))
+        .map((p) => [p.name, parameters[p.name] ?? p.defaultValue ?? '']),
     );
+    for (const name of outputs)
+      if (Object.hasOwn(parameters, name)) resolved[name] = parameters[name];
     const started = Date.now();
     const run: NavigationRun = {
       id: randomUUID(),
@@ -556,17 +595,48 @@ export class BrowserSessionManager {
           throw new Error('Le rejeu exige une autorisation d’interaction.');
         // Fresh documents and tabs; preserve only the explicit private authentication profile.
         // Existing server/application data are prerequisites, never silently reset.
-        const initial = await this.request<{ url: string }>('reset', undefined, 30000);
-        this.state!.url = initial.url;
-        run.metrics.actions++;
-        run.events.push({
-          stepId: 'browser-reset',
-          status: 'succeeded',
-          at: new Date().toISOString(),
-        });
+        let startIndex = 0;
+        const matches = async (conditions: NonNullable<NavigationStep['postconditions']>) => {
+          if (!conditions.length) return false;
+          try {
+            return (
+              await this.request<boolean[]>(
+                'conditions',
+                resolveNavigationConditions(conditions, resolved),
+              )
+            ).every(Boolean);
+          } catch {
+            return false;
+          }
+        };
+        if (run.mode === 'reach') {
+          // Explicit viewport changes must still run even if the destination is already visible.
+          if (!steps.some((s) => s.action === 'viewport') && (await matches(journey.arrival)))
+            startIndex = steps.length;
+          else
+            for (let index = steps.length - 1; index >= 0; index--) {
+              if (
+                !steps.slice(0, index + 1).some((s) => s.action === 'viewport') &&
+                (await matches(steps[index].postconditions ?? []))
+              ) {
+                startIndex = index + 1;
+                break;
+              }
+            }
+        }
+        if (!startIndex) {
+          const initial = await this.request<{ url: string }>('reset', undefined, 30000);
+          this.state!.url = initial.url;
+          run.metrics.actions++;
+          run.events.push({
+            stepId: 'browser-reset',
+            status: 'succeeded',
+            at: new Date().toISOString(),
+          });
+        } else run.skippedSteps = steps.slice(0, startIndex).map((s) => s.id);
         this.changed();
         await this.recovery.flush();
-        for (const step of journey.steps) {
+        for (const [offset, step] of steps.slice(startIndex).entries()) {
           if (generation !== this.generation) throw new Error('Rejeu interrompu.');
           if (Date.now() - started > NAVIGATION_LIMITS.replayTimeoutMs)
             throw new Error('Durée maximale du rejeu dépassée.');
@@ -583,6 +653,8 @@ export class BrowserSessionManager {
               ),
             );
             this.state!.url = result.url;
+            Object.assign(resolved, result.resolvedParameters);
+            run.resolvedParameters = { ...resolved };
             run.metrics.actions++;
             run.events.push({ stepId: step.id, status: 'succeeded', at: new Date().toISOString() });
             this.changed();
@@ -591,13 +663,23 @@ export class BrowserSessionManager {
             run.events.push({
               stepId: step.id,
               status: generation !== this.generation ? 'interrupted' : 'failed',
-              message: (error as Error).message,
+              message:
+                `Étape ${startIndex + offset + 1} — ${step.note || step.action} (${step.target?.name || step.target?.value || step.url || 'arrivée'}) : ${(error as Error).message}`.slice(
+                  0,
+                  4000,
+                ),
               at: new Date().toISOString(),
             });
             throw error;
           }
         }
-        const conditions = await this.request<boolean[]>('conditions', journey.arrival);
+        const conditions = await this.request<boolean[]>('conditions', {
+          conditions: resolveNavigationConditions(journey.arrival, resolved),
+          timeoutMs: Math.min(
+            15000,
+            Math.max(1, NAVIGATION_LIMITS.replayTimeoutMs - (Date.now() - started)),
+          ),
+        });
         run.arrivalVerified = journey.arrival.length > 0 && conditions.every(Boolean);
         if (!run.arrivalVerified)
           throw new Error('Conditions d’arrivée absentes ou non vérifiées.');
@@ -607,7 +689,9 @@ export class BrowserSessionManager {
           generation !== this.generation || this.status()?.state === 'interrupted'
             ? 'interrupted'
             : 'failed';
-        run.error = (error as Error).message;
+        run.error =
+          [...run.events].reverse().find((event) => event.status !== 'succeeded')?.message ??
+          (error as Error).message;
       } finally {
         if (this.state?.state === 'agent') this.state.state = 'idle';
         this.changed();
@@ -622,6 +706,10 @@ export class BrowserSessionManager {
     return run;
   }
   async stop(): Promise<void> {
+    this.lifecycleVersion++;
+    await this.stopSession();
+  }
+  private async stopSession(): Promise<void> {
     this.generation++;
     if (this.state) {
       this.state.generation = this.generation;
@@ -655,7 +743,11 @@ export class BrowserSessionManager {
     await this.recovery.flush();
   }
   async close(): Promise<void> {
-    if (this.worker) await this.stop();
+    this.lifecycleVersion++;
+    await this.closeSession();
+  }
+  private async closeSession(): Promise<void> {
+    if (this.worker) await this.stopSession();
     if (this.state) {
       this.state.state = this.recordingActive ? 'interrupted' : 'closed';
       this.changed();

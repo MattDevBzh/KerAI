@@ -41,7 +41,7 @@ Bornes de l’import : 2 Mio, 80 étapes, 20 niveaux JSON et 4 000 caractères p
 
 Préparer le navigateur, choisir **Montrer**, puis démarrer l’enregistrement. Réaliser le parcours dans l’application ordinaire. Les commandes Pause, Reprendre, Capturer et Terminer restent dans KerAI.
 
-Suspendre l’enregistrement avant toute connexion. À la fin, donner un titre, une intention et les conditions d’arrivée ; relire les étapes, paramètres et limites avant le rejeu. Une interruption ou une action non prise en charge reste visible. Elle ne devient pas une réussite par simple sauvegarde.
+Suspendre l’enregistrement avant toute connexion. Après avoir rendu le contrôle, reprendre explicitement l’enregistrement si une démonstration est conservée. À la fin, donner un titre, une intention et les conditions d’arrivée ; relire les étapes, paramètres et limites avant le rejeu. Une interaction dont la cible a disparu avant vérification reste une étape manuelle à corriger avant publication. Elle ne devient pas une réussite par simple sauvegarde.
 
 ## Vérifier, publier et corriger
 

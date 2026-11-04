@@ -71,7 +71,7 @@ describe.skipIf(!executablePath)(
           const testLaunch = testChromium.launchPersistentContext.bind(testChromium);
           testChromium.launchPersistentContext = (profile, options) => testLaunch(profile, {
             ...options,
-            args: ['--host-resolver-rules=MAP *.kerai.test 127.0.0.1', '--no-proxy-server'],
+            args: ['--host-resolver-rules=MAP *.kerai.test 127.0.0.1', '--no-proxy-server', '--remote-debugging-port=0'],
           });
         `,
         },
@@ -106,6 +106,84 @@ describe.skipIf(!executablePath)(
       await manager?.dispose();
     });
 
+    test('replays a real imported double click, then waits for delayed postconditions', async () => {
+      const imported = importNavigationJSON(
+        JSON.stringify({
+          title: 'Double',
+          steps: [{ type: 'doubleClick', selectors: [['#double']] }],
+        }),
+        'fixture',
+      );
+      await manager.act(imported.journey.steps[0]);
+      expect((await manager.inspect()).text).toContain('Double réussi');
+      await manager.act(
+        step('click', 'delayed', {
+          target: target('#delayed'),
+          postconditions: [{ kind: 'visible', target: target('#delayed-result') }],
+        }),
+      );
+      expect((await manager.inspect()).text).toContain('Prêt');
+    });
+    test('resolves a related business entity and refuses to silently substitute a frozen identity', async () => {
+      const selection = step('resolve', 'garage', {
+        target: target('.garage'),
+        resolver: {
+          output: 'garageId',
+          attribute: 'data-id',
+          pick: 'unique',
+          filters: [{ selector: '.brand', text: 'Oula' }, { selector: '.car' }],
+        },
+      });
+      const result = await manager.act(selection);
+      expect(result.resolvedParameters).toEqual({ garageId: 'g1' });
+      await expect(manager.act(selection, { garageId: 'g2' })).rejects.toThrow(
+        'Aucune donnée métier',
+      );
+      const car = await manager.act(
+        step('resolve', 'car', {
+          target: target('.garage[data-id="{{garageId}}"] .car'),
+          resolver: { output: 'carId', attribute: 'data-car', pick: 'unique', filters: [] },
+        }),
+        result.resolvedParameters,
+      );
+      expect(car.resolvedParameters).toEqual({ carId: 'c1' });
+    });
+    test('reaches an already verified state without reset but reproduces the full sequence', async () => {
+      const recipe: NavigationJourney = {
+        id: 'reach',
+        applicationId: application.id,
+        revision: 1,
+        title: 'Garage',
+        intent: 'Atteindre',
+        tags: [],
+        prerequisites: [],
+        parameters: [],
+        steps: [step('click', 'double', { target: target('#double') })],
+        arrival: [{ kind: 'visible', target: target('#double') }],
+        status: 'available',
+        provenance: { mode: 'human' },
+        createdAt: '',
+        updatedAt: '',
+      };
+      const reached = await manager.replay(recipe, {}, { mode: 'reach' });
+      expect(reached.status).toBe('succeeded');
+      expect(reached.metrics.actions).toBe(0);
+      expect(reached.skippedSteps).toEqual(['double']);
+      const reproduced = await manager.replay(recipe, {}, { mode: 'reproduce' });
+      expect(reproduced.status).toBe('succeeded');
+      expect(reproduced.metrics.actions).toBe(2);
+      expect(reproduced.events[0].stepId).toBe('browser-reset');
+    });
+    test('compares a bounded same-origin served resource without returning its body', async () => {
+      const result = await manager.assetDigest(`${fixture.origin}/build.js`);
+      expect(result.sha256).toBe(
+        createHash('sha256').update('window.fixtureBuild = 1;').digest('hex'),
+      );
+      expect(Object.keys(result).sort()).toEqual(['bytes', 'sha256']);
+      await expect(manager.assetDigest(`${fixture.otherOrigin}/build.js`)).rejects.toThrow(
+        'périmètre',
+      );
+    });
     test('opens existing Chromium, acts and checks bounded sanitized inspection', async () => {
       expect((await manager.prepare()).ready).toBe(true);
       await manager.act(
@@ -213,7 +291,7 @@ describe.skipIf(!executablePath)(
       );
       expect(failed.status).toBe('failed');
       expect(failed.arrivalVerified).toBe(false);
-    });
+    }, 45000);
     test('arrival URL distinguishes business queries and hash routes while receipts stay redacted', async () => {
       const current = `${fixture.origin}/settings?tab=profile#details`;
       const result = await manager.act(step('navigate', 'profile', { url: current }));
@@ -376,6 +454,31 @@ describe.skipIf(!executablePath)(
       await manager.open(application);
       expect(manager.status()?.state).toBe('idle');
     });
+    test('serializes concurrent browser openings before replacing session ownership', async () => {
+      const results = await Promise.allSettled([
+        manager.open(application),
+        manager.open(application),
+      ]);
+      expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      expect(manager.status()?.state).toBe('idle');
+      await expect(manager.inspect()).resolves.toMatchObject({ url: `${fixture.origin}/` });
+    });
+    test('stop during profile preparation cancels opening before Chromium launches', async () => {
+      await manager.dispose();
+      let stopped: Promise<void> | undefined;
+      manager = new BrowserSessionManager({
+        storageRoot: path.join(directory, 'cancelled-open'),
+        workerPath,
+        executablePath,
+        headless: true,
+        onChange(state) {
+          if (state.state === 'idle' && !stopped) stopped = manager.stop();
+        },
+      });
+      await expect(manager.open(application)).rejects.toThrow('interrompue');
+      await stopped;
+      expect(manager.status()?.state).toBe('interrupted');
+    });
     test('recording transitions keep the application DOM untouched', async () => {
       const before = await manager.inspect();
       await manager.startRecording();
@@ -390,6 +493,110 @@ describe.skipIf(!executablePath)(
       const after = await manager.inspect();
       expect(after.text).toBe(before.text);
       expect(after.elements).toEqual(before.elements);
+    });
+    async function humanPage() {
+      const profiles = path.join(directory, 'private', 'browser-profiles');
+      const profile = createHash('sha256')
+        .update(JSON.stringify([application.id, application.origin, application.role ?? 'default']))
+        .digest('hex');
+      const port = (
+        await readFile(path.join(profiles, profile, 'DevToolsActivePort'), 'utf8')
+      ).split('\n')[0];
+      const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+      return browser.contexts()[0].pages()[0];
+    }
+    test('records one effect when Enter activates a button', async () => {
+      const page = await humanPage();
+      await manager.startRecording();
+      await page.locator('#go').press('Enter');
+      await manager.stopRecording();
+      expect(
+        manager
+          .status()
+          ?.recordedSteps.slice(1)
+          .map((step) => step.action),
+      ).toEqual(['press']);
+    });
+    test('keeps paused demonstration under human control after an inspection', async () => {
+      await manager.inspect();
+      const page = await humanPage();
+      await manager.startRecording();
+      await manager.pauseRecording();
+      await page.locator('#go').click();
+      await manager.resumeRecording();
+      await page.locator('#go').click();
+      await manager.stopRecording();
+      expect(
+        manager
+          .status()
+          ?.recordedSteps.slice(1)
+          .map((step) => step.action),
+      ).toEqual(['click']);
+    });
+    test('explicitly resumes a retained demonstration after returning manual control', async () => {
+      const page = await humanPage();
+      await manager.startRecording();
+      await manager.takeControl();
+      await page.locator('#go').click();
+      await manager.resumeControl();
+      expect(manager.status()).toMatchObject({
+        state: 'idle',
+        recordingActive: true,
+        recordingPaused: true,
+      });
+      await manager.inspect();
+      await manager.resumeRecording();
+      await page.locator('#go').click();
+      await manager.stopRecording();
+      expect(
+        manager
+          .status()
+          ?.recordedSteps.slice(1)
+          .map((step) => step.action),
+      ).toEqual(['click']);
+      await manager.acknowledgeRecording();
+      await expect(manager.resumeRecording()).rejects.toThrow('Aucune démonstration');
+    });
+    test('preserves an uncorroborated navigation as a manual review step', async () => {
+      const page = await humanPage();
+      await page.evaluate(() => {
+        const link = document.createElement('a');
+        link.id = 'next-route';
+        link.href = '/next';
+        link.textContent = 'Suivant';
+        link.addEventListener('click', () => link.remove());
+        document.body.prepend(link);
+      });
+      await manager.startRecording();
+      await page.locator('#next-route').click();
+      await page.waitForURL(`${fixture.origin}/next`);
+      await manager.stopRecording();
+      const recorded = manager.status()!.recordedSteps.slice(1);
+      expect(recorded).toMatchObject([{ action: 'manual', effect: 'unknown' }]);
+      expect([`${fixture.origin}/`, `${fixture.origin}/next`]).toContain(recorded[0].url);
+      expect(recorded[0].note).toContain('avant le rejeu');
+      expect(recorded[0].target).toBeUndefined();
+      expect(recorded[0].value).toBeUndefined();
+      await expect(manager.act(recorded[0])).rejects.toThrow('Étape manuelle');
+    });
+    test('accepts persisted viewport boundaries and refuses dimensions outside them', async () => {
+      for (const [width, height] of [
+        [240, 200],
+        [7680, 4320],
+      ]) {
+        await manager.act(step('viewport', 'resize', { width, height }));
+        const observation = await manager.inspect({ target: target('body') });
+        expect(observation.elements[0].rect?.width).toBeLessThanOrEqual(width);
+      }
+      for (const [width, height] of [
+        [239, 200],
+        [7681, 4320],
+        [240, 199],
+        [7680, 4321],
+      ])
+        await expect(manager.act(step('viewport', 'invalid', { width, height }))).rejects.toThrow(
+          'Dimensions',
+        );
     });
     test('hard host crash preserves the demo and running receipt without launching a browser on recovery', async () => {
       const crashRoot = path.join(directory, 'crash-private');

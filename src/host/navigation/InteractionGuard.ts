@@ -6,7 +6,9 @@ export function installInteractionGuard(config: {
 }) {
   const win = window as unknown as Record<string, any>;
   win.__keraiInteractionGuard?.stop?.();
-  let expected: { element: Element; kind: 'pointer' | 'key'; key?: string } | undefined;
+  let expected:
+    | { element: Element; kind: 'pointer' | 'key'; key?: string; remaining: number }
+    | undefined;
   const observed = (event: Event) => {
     if (!event.isTrusted || !config.origins.includes(location.origin)) return;
     const kind =
@@ -17,7 +19,7 @@ export function installInteractionGuard(config: {
       event.composedPath().includes(expected.element) &&
       (kind !== 'key' || (event as KeyboardEvent).key === expected.key)
     ) {
-      expected = undefined;
+      if (--expected.remaining <= 0) expected = undefined;
       return;
     }
     // No key value, target text, field value or document content crosses this boundary.
@@ -34,8 +36,8 @@ export function installInteractionGuard(config: {
     clear: () => {
       expected = undefined;
     },
-    expect: (element: Element, kind: 'pointer' | 'key', key?: string) => {
-      expected = { element, kind, key };
+    expect: (element: Element, kind: 'pointer' | 'key', key?: string, count = 1) => {
+      expected = { element, kind, key, remaining: Math.min(2, Math.max(1, count)) };
     },
   };
   document.addEventListener('pointerdown', observed, true);

@@ -139,9 +139,11 @@ export function LaunchDialog({
 }) {
   const agent = state.agents.find((item) => item.id === step.agentId);
   const previous = step.attempts.at(-1)?.launch;
-  const initialNavigation = previous?.omitNavigation
+  let initialNavigation = previous?.omitNavigation
     ? undefined
-    : (previous?.navigation ??
+    : ((step.attempts.at(-1)?.navigationRequest?.resolvedJourney
+        ? feature.navigation
+        : previous?.navigation) ??
       feature.navigation ??
       defaultNavigationSelection(
         agent,
@@ -149,6 +151,15 @@ export function LaunchDialog({
         feature.projects?.map((project) => project.id) ??
           state.projectCatalog?.selectedProjectIds ?? ['workspace'],
       ));
+  if (
+    initialNavigation &&
+    feature.navigation &&
+    initialNavigation.applicationId === feature.navigation.applicationId &&
+    initialNavigation.journeyId === feature.navigation.journeyId &&
+    initialNavigation.revision === feature.navigation.revision
+  ) {
+    initialNavigation = { ...initialNavigation, parameters: { ...feature.navigation.parameters } };
+  }
   const configured = feature.autopilot?.stepInputs[step.id];
   const [launch, setLaunch] = useState<RunLaunchOptions>({
     ...(feature.execution ? { permissionMode: feature.execution.permissionMode } : {}),

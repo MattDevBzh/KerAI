@@ -503,6 +503,7 @@ export function StepPanel({
         </div>
         {attempt?.navigationRequest && (
           <NavigationInterventionCard
+            data={state.navigation}
             featureId={feature.id}
             stepId={step.id}
             attempt={attempt}

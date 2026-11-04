@@ -127,6 +127,7 @@ export interface Attempt {
     observations: string;
     createdAt: string;
     navigatorFeatureId?: string;
+    resolvedJourney?: { id: string; revision: number };
   };
   navigation?: import('./navigation').NavigationContextSnapshot;
   navigationRuns?: import('./navigation').NavigationRun[];
@@ -353,6 +354,14 @@ export interface StudioState {
 export type ClientMessage =
   | { type: 'reviewBranches'; requestId: string; projectId?: string }
   | { type: 'resyncState' }
+  | {
+      type: 'resumeNavigation';
+      featureId: string;
+      stepId: string;
+      attemptId: string;
+      journeyId: string;
+      revision: number;
+    }
   | { type: 'navigationIntervention'; featureId: string; stepId: string; attemptId: string }
   | { type: 'openNavigationCapture'; featureId: string; captureId: string }
   | { type: 'navigation'; requestId: string; command: import('./navigation').NavigationCommand }

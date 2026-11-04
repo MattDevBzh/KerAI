@@ -64,6 +64,7 @@ export function navigationDefinitionHash(journey: NavigationJourney): string {
     steps,
     arrival,
     variantOf,
+    blocks,
   } = journey;
   return digest(
     canonical({
@@ -77,6 +78,7 @@ export function navigationDefinitionHash(journey: NavigationJourney): string {
       steps,
       arrival,
       variantOf,
+      ...(blocks?.length ? { blocks } : {}),
     }),
   );
 }
@@ -128,7 +130,15 @@ export class NavigationStore {
       throw new Error('Empreinte de définition invalide.');
     return journey;
   }
-  async load(): Promise<NavigationSnapshot> {
+  private enqueue<T>(action: () => Promise<T>): Promise<T> {
+    const work = this.queue.catch(() => undefined).then(action);
+    this.queue = work;
+    return work;
+  }
+  load(): Promise<NavigationSnapshot> {
+    return this.enqueue(() => this.read());
+  }
+  private async read(): Promise<NavigationSnapshot> {
     let catalog: Catalog;
     try {
       catalog = catalogSchema.parse(await this.json('catalog.json'));
@@ -154,38 +164,76 @@ export class NavigationStore {
         navigationRunSchema.parse(await this.json(`runs/${id}/manifest.json`)),
       ),
     );
+    // Preserve the last published revision while the editable head is a draft.
+    const publishedJourneys: NavigationJourney[] = [];
+    const blockRevisions: NavigationJourney[] = [];
+    const cached = new Map(journeys.map((j) => [`${j.id}:${j.revision}`, j]));
+    const readRevision = async (id: string, revision?: number) => {
+      for (const objectHash of [...(catalog.history[id] ?? [])].reverse()) {
+        const candidate = await this.object(objectHash);
+        if (
+          (revision === undefined && candidate.status === 'available') ||
+          candidate.revision === revision
+        )
+          return candidate;
+      }
+    };
+    for (const head of journeys) {
+      if (head.status === 'archived') continue;
+      const published = head.status === 'available' ? head : await readRevision(head.id);
+      if (published) {
+        publishedJourneys.push(published);
+        cached.set(`${published.id}:${published.revision}`, published);
+      }
+    }
+    const pending = [...journeys, ...publishedJourneys];
+    const visited = new Set<string>();
+    while (pending.length) {
+      const item = pending.pop()!;
+      const key = `${item.id}:${item.revision}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      if (visited.size > 5000) throw new Error('Bibliothèque de blocs trop grande.');
+      for (const ref of item.blocks ?? []) {
+        const refKey = `${ref.journeyId}:${ref.revision}`;
+        const block = cached.get(refKey) ?? (await readRevision(ref.journeyId, ref.revision));
+        if (block && !cached.has(refKey)) {
+          cached.set(refKey, block);
+          blockRevisions.push(block);
+        }
+        if (block) pending.push(block);
+      }
+    }
     this.catalog = catalog;
     this.state = {
       navigationVersion: 1,
       applications: catalog.applications,
       journeys,
+      publishedJourneys,
+      blockRevisions,
       contributions,
       runs,
     };
     return this.snapshot();
   }
   private change<T>(action: () => Promise<T>): Promise<T> {
-    const work = this.queue
-      .catch(() => undefined)
-      .then(async () => {
-        await mkdir(this.directory, { recursive: true, mode: 0o700 });
-        const lease = new WorkspaceLease(path.join(this.directory, 'catalog.json'));
-        await lease.acquire();
-        try {
-          await this.load();
-          const result = await action();
-          await this.atomic('catalog.json', catalogSchema.parse(this.catalog));
-          await this.load();
-          return result;
-        } catch (error) {
-          await this.load().catch(() => undefined);
-          throw error;
-        } finally {
-          await lease.release();
-        }
-      });
-    this.queue = work;
-    return work;
+    return this.enqueue(async () => {
+      await mkdir(this.directory, { recursive: true, mode: 0o700 });
+      const lease = new WorkspaceLease(path.join(this.directory, 'catalog.json'));
+      await lease.acquire();
+      try {
+        await this.read();
+        const result = await action();
+        await this.atomic('catalog.json', catalogSchema.parse(this.catalog));
+        await this.read();
+        return result;
+      } catch (error) {
+        await this.read().catch(() => undefined);
+        throw error;
+      } finally {
+        await lease.release();
+      }
+    });
   }
   private author(applicationId: string, actor: NavigationActor): ApplicationProfile {
     navigationActorSchema.parse(actor);
@@ -299,7 +347,7 @@ export class NavigationStore {
         !run.prerequisitesConfirmed ||
         !run.finishedAt ||
         !journey.arrival.length ||
-        !journey.steps.length ||
+        !(journey.steps.length || journey.blocks?.length) ||
         journey.steps.some(
           (step) =>
             step.action === 'manual' ||

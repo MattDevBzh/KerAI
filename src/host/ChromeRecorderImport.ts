@@ -25,9 +25,9 @@ function record(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
-  for (const key of Object.keys(value))
-    if (!allowed.includes(key))
-      throw new Error(`${label} : propriété non prise en charge « ${key} ».`);
+  const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (unknown.length)
+    throw new Error(`${label} : propriété non prise en charge « ${unknown.join(' », « ')} ».`);
 }
 function string(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.length || value.length > 4000)
@@ -57,19 +57,23 @@ function target(step: Record<string, unknown>, warnings: string[]): NavigationLo
     if (selector.startsWith('aria/')) {
       const match = /^aria\/(.+?)(?:\[role="?([a-z]+)"?\])?$/.exec(selector);
       if (!match) continue;
-      if (candidates.length > 1)
-        warnings.push(
-          'Sélecteurs alternatifs du Recorder : seule la cible sémantique retenue sera vérifiée.',
-        );
-      return match[2]
-        ? { strategy: 'role', value: match[2], name: match[1] }
-        : { strategy: 'label', value: match[1] };
+      if (match[2]) {
+        if (candidates.length > 1)
+          warnings.push(
+            'Sélecteurs alternatifs du Recorder : seule la cible sémantique retenue sera vérifiée.',
+          );
+        return { strategy: 'role', value: match[2], name: match[1] };
+      }
+      warnings.push(
+        'Nom accessible Recorder sans rôle : utiliser un sélecteur alternatif explicite ; un nom accessible ne désigne pas nécessairement un libellé de champ.',
+      );
+      continue;
     }
     if (selector.startsWith('text/')) return { strategy: 'text', value: selector.slice(5) };
     if (/^[a-zA-Z]+\//.test(selector)) continue;
     return { strategy: 'css', value: selector };
   }
-  throw new Error('Aucun sélecteur pris en charge (CSS, aria ou text).');
+  throw new Error('Aucun sélecteur pris en charge (CSS, aria avec rôle ou text).');
 }
 function assertEvents(value: unknown, warnings: string[]): NavigationCondition[] {
   if (value === undefined) return [];
@@ -112,14 +116,17 @@ export function importNavigationJSON(json: string, applicationId: string): Navig
       provenance: { mode: 'import', source: 'KerAI portable v1' },
     });
     parameterize(journey, warnings);
-    return { journey, warnings };
+    return { journey: navigationJourneySchema.parse(journey), warnings };
   }
   keys(input, ['title', 'steps', 'timeout'], 'Chrome Recorder');
+  const defaultTimeout = input.timeout === undefined ? undefined : finite(input.timeout, 'Délai');
   if (
-    input.timeout !== undefined &&
-    finite(input.timeout, 'Délai') > NAVIGATION_LIMITS.stepTimeoutMs
+    defaultTimeout !== undefined &&
+    (!Number.isInteger(defaultTimeout) ||
+      defaultTimeout < 1 ||
+      defaultTimeout > NAVIGATION_LIMITS.stepTimeoutMs)
   )
-    throw new Error('Délai Recorder supérieur à 15 secondes.');
+    throw new Error('Délai Recorder requis entre 1 et 15 000 millisecondes.');
   if (
     !Array.isArray(input.steps) ||
     !input.steps.length ||
@@ -128,137 +135,172 @@ export function importNavigationJSON(json: string, applicationId: string): Navig
     throw new Error('Importer entre 1 et 80 étapes.');
   const steps: NavigationStep[] = [];
   let pendingKey: string | undefined;
+  const incompatibilities: string[] = [];
   for (const [index, item] of input.steps.entries()) {
-    const raw = record(item, `Étape ${index + 1}`);
-    const type = string(raw.type, 'Type');
-    const common = ['type', 'timeout', 'assertedEvents'];
-    const base = {
-      id: `step-${index + 1}`,
-      timeoutMs: raw.timeout === undefined ? undefined : finite(raw.timeout, 'Délai'),
-      postconditions: assertEvents(raw.assertedEvents, warnings),
-      effect: 'unknown' as const,
-    };
-    let step: NavigationStep;
-    if (pendingKey && type !== 'keyUp')
-      throw new Error('Une touche maintenue entre plusieurs actions n’est pas prise en charge.');
-    switch (type) {
-      case 'navigate':
-        keys(raw, [...common, 'url'], type);
-        step = { ...base, action: 'navigate', url: string(raw.url, 'URL') };
-        break;
-      case 'setViewport':
-        keys(
-          raw,
-          [
-            ...common,
-            'width',
-            'height',
-            'deviceScaleFactor',
-            'isMobile',
-            'hasTouch',
-            'isLandscape',
-          ],
-          type,
-        );
-        if (
-          raw.isMobile ||
-          raw.hasTouch ||
-          raw.isLandscape ||
-          (raw.deviceScaleFactor !== undefined && raw.deviceScaleFactor !== 1)
-        )
+    try {
+      const raw = record(item, `Étape ${index + 1}`);
+      const type = string(raw.type, 'Type');
+      const common = ['type', 'timeout', 'assertedEvents'];
+      const base = {
+        id: `step-${index + 1}`,
+        timeoutMs: raw.timeout === undefined ? defaultTimeout : finite(raw.timeout, 'Délai'),
+        postconditions: assertEvents(raw.assertedEvents, warnings),
+        effect: 'unknown' as const,
+      };
+      let step: NavigationStep;
+      if (pendingKey && type !== 'keyUp')
+        throw new Error('Une touche maintenue entre plusieurs actions n’est pas prise en charge.');
+      switch (type) {
+        case 'navigate':
+          keys(raw, [...common, 'url'], type);
+          step = { ...base, action: 'navigate', url: string(raw.url, 'URL') };
+          break;
+        case 'setViewport':
+          keys(
+            raw,
+            [
+              ...common,
+              'width',
+              'height',
+              'deviceScaleFactor',
+              'isMobile',
+              'hasTouch',
+              'isLandscape',
+            ],
+            type,
+          );
+          if (
+            raw.isMobile ||
+            raw.hasTouch ||
+            raw.isLandscape ||
+            (raw.deviceScaleFactor !== undefined && raw.deviceScaleFactor !== 1)
+          )
+            throw new Error(
+              'Émulation mobile, tactile, paysage ou densité non standard non prise en charge.',
+            );
+          step = {
+            ...base,
+            action: 'viewport',
+            width: finite(raw.width, 'Largeur'),
+            height: finite(raw.height, 'Hauteur'),
+            effect: 'read',
+          };
+          break;
+        case 'click':
+        case 'doubleClick':
+        case 'doubleclick':
+          keys(
+            raw,
+            [
+              ...common,
+              'target',
+              'selectors',
+              'offsetX',
+              'offsetY',
+              'button',
+              'duration',
+              'clickCount',
+            ],
+            type,
+          );
+          if (
+            (raw.button !== undefined &&
+              !['primary', 'secondary', 'auxiliary'].includes(String(raw.button))) ||
+            (raw.duration !== undefined &&
+              (typeof raw.duration !== 'number' || raw.duration < 0 || raw.duration > 5000)) ||
+            (raw.clickCount !== undefined && raw.clickCount !== 1 && raw.clickCount !== 2)
+          )
+            throw new Error('Bouton, durée ou nombre de clics non pris en charge.');
+          if (raw.offsetX !== undefined || raw.offsetY !== undefined)
+            warnings.push(
+              `Étape ${index + 1} : le clic sera centré sur la cible unique ; les coordonnées Recorder ne sont pas reprises.`,
+            );
+          step = {
+            ...base,
+            action: type !== 'click' || raw.clickCount === 2 ? 'doubleClick' : 'click',
+            target: target(raw, warnings),
+            ...(raw.button === 'secondary'
+              ? { button: 'right' as const }
+              : raw.button === 'auxiliary'
+                ? { button: 'middle' as const }
+                : {}),
+            ...(raw.duration ? { durationMs: raw.duration as number } : {}),
+          };
+          break;
+        case 'change':
+          keys(raw, [...common, 'target', 'selectors', 'value'], type);
+          step = {
+            ...base,
+            action: 'fill',
+            target: target(raw, warnings),
+            value: {
+              literal: typeof raw.value === 'string' ? raw.value : string(raw.value, 'Valeur'),
+            },
+          };
+          break;
+        case 'keyDown':
+          keys(raw, [...common, 'target', 'key', 'selectors'], type);
+          pendingKey = string(raw.key, 'Touche');
+          if (!raw.selectors)
+            throw new Error(
+              'Touche sur focus implicite non prise en charge ; ajouter une cible explicite.',
+            );
+          step = { ...base, action: 'press', target: target(raw, warnings), key: pendingKey };
+          break;
+        case 'keyUp':
+          keys(raw, [...common, 'target', 'key'], type);
+          if (!pendingKey || raw.key !== pendingKey || base.postconditions.length)
+            throw new Error(
+              'Relâchement de touche non associé ou avec événement non pris en charge.',
+            );
+          pendingKey = undefined;
+          continue;
+        case 'scroll':
+          keys(raw, [...common, 'target', 'selectors', 'x', 'y'], type);
+          if (raw.target !== undefined && raw.target !== 'main')
+            throw new Error('Onglet de défilement non pris en charge.');
+          step = {
+            ...base,
+            action: 'scroll',
+            x: finite(raw.x, 'X'),
+            y: finite(raw.y, 'Y'),
+            target: raw.selectors ? target(raw, warnings) : undefined,
+            effect: 'read',
+          };
+          break;
+        case 'waitForElement':
+          keys(raw, [...common, 'target', 'selectors', 'visible', 'count', 'operator'], type);
+          if (
+            (raw.count !== undefined && raw.count !== 1) ||
+            (raw.operator !== undefined && raw.operator !== '==')
+          )
+            throw new Error('Seule une cible unique peut être attendue.');
+          step = {
+            ...base,
+            action: 'wait',
+            postconditions: [
+              ...base.postconditions,
+              { kind: raw.visible === false ? 'hidden' : 'visible', target: target(raw, warnings) },
+            ],
+            effect: 'read',
+          };
+          break;
+        default:
           throw new Error(
-            'Émulation mobile, tactile, paysage ou densité non standard non prise en charge.',
+            `Étape ${index + 1} : « ${type} » non pris en charge. Aucun JavaScript ou script système ne sera exécuté.`,
           );
-        step = {
-          ...base,
-          action: 'viewport',
-          width: finite(raw.width, 'Largeur'),
-          height: finite(raw.height, 'Hauteur'),
-          effect: 'read',
-        };
-        break;
-      case 'click':
-        keys(
-          raw,
-          [...common, 'target', 'selectors', 'offsetX', 'offsetY', 'button', 'duration'],
-          type,
-        );
-        if (
-          (raw.button !== undefined && raw.button !== 'primary') ||
-          (raw.duration !== undefined && raw.duration !== 0)
-        )
-          throw new Error('Seul le clic principal simple est pris en charge.');
-        if (raw.offsetX !== undefined || raw.offsetY !== undefined)
-          warnings.push(
-            `Étape ${index + 1} : le clic sera centré sur la cible unique ; les coordonnées Recorder ne sont pas reprises.`,
-          );
-        step = { ...base, action: 'click', target: target(raw, warnings) };
-        break;
-      case 'change':
-        keys(raw, [...common, 'target', 'selectors', 'value'], type);
-        step = {
-          ...base,
-          action: 'fill',
-          target: target(raw, warnings),
-          value: {
-            literal: typeof raw.value === 'string' ? raw.value : string(raw.value, 'Valeur'),
-          },
-        };
-        break;
-      case 'keyDown':
-        keys(raw, [...common, 'target', 'key', 'selectors'], type);
-        pendingKey = string(raw.key, 'Touche');
-        if (!raw.selectors)
-          throw new Error(
-            'Touche sur focus implicite non prise en charge ; ajouter une cible explicite.',
-          );
-        step = { ...base, action: 'press', target: target(raw, warnings), key: pendingKey };
-        break;
-      case 'keyUp':
-        keys(raw, [...common, 'target', 'key'], type);
-        if (!pendingKey || raw.key !== pendingKey || base.postconditions.length)
-          throw new Error(
-            'Relâchement de touche non associé ou avec événement non pris en charge.',
-          );
-        pendingKey = undefined;
-        continue;
-      case 'scroll':
-        keys(raw, [...common, 'target', 'selectors', 'x', 'y'], type);
-        if (raw.target !== undefined && raw.target !== 'main')
-          throw new Error('Onglet de défilement non pris en charge.');
-        step = {
-          ...base,
-          action: 'scroll',
-          x: finite(raw.x, 'X'),
-          y: finite(raw.y, 'Y'),
-          target: raw.selectors ? target(raw, warnings) : undefined,
-          effect: 'read',
-        };
-        break;
-      case 'waitForElement':
-        keys(raw, [...common, 'target', 'selectors', 'visible', 'count', 'operator'], type);
-        if (
-          (raw.count !== undefined && raw.count !== 1) ||
-          (raw.operator !== undefined && raw.operator !== '==')
-        )
-          throw new Error('Seule une cible unique peut être attendue.');
-        step = {
-          ...base,
-          action: 'wait',
-          postconditions: [
-            ...base.postconditions,
-            { kind: raw.visible === false ? 'hidden' : 'visible', target: target(raw, warnings) },
-          ],
-          effect: 'read',
-        };
-        break;
-      default:
-        throw new Error(
-          `Étape ${index + 1} : « ${type} » non pris en charge. Aucun JavaScript ou script système ne sera exécuté.`,
-        );
+      }
+      steps.push(navigationStepSchema.parse(step));
+    } catch (error) {
+      incompatibilities.push(`Étape ${index + 1} : ${(error as Error).message}`);
+      pendingKey = undefined;
     }
-    steps.push(navigationStepSchema.parse(step));
   }
+  if (pendingKey) incompatibilities.push('Touche jamais relâchée.');
+  if (incompatibilities.length)
+    throw new Error(
+      `Import incompatible (${incompatibilities.length}) :\n${incompatibilities.join('\n')}`,
+    );
   if (pendingKey) throw new Error('Touche jamais relâchée.');
   const journey: NavigationJourney = {
     id: randomUUID(),
@@ -283,13 +325,20 @@ export function importNavigationJSON(json: string, applicationId: string): Navig
   return { journey: navigationJourneySchema.parse(journey), warnings: [...new Set(warnings)] };
 }
 function parameterize(journey: NavigationJourney, warnings: string[]): void {
+  const literalValues = journey.steps.filter(
+    (step) => step.value && 'literal' in step.value,
+  ).length;
+  if (journey.parameters.length + literalValues > NAVIGATION_LIMITS.parameters)
+    throw new Error(
+      `Limite de ${NAVIGATION_LIMITS.parameters} paramètres dépassée après remplacement des valeurs de formulaire. Réduire les paramètres ou réutiliser ceux déjà déclarés.`,
+    );
   for (const [index, step] of journey.steps.entries()) {
     if (step.value && 'literal' in step.value) {
       let name = `value_${index + 1}`;
       while (journey.parameters.some((item) => item.name === name)) name += '_';
       const parameter: NavigationParameter = {
         name,
-        label: `Valeur de l’étape ${index + 1}`,
+        label: step.target?.name || step.target?.value || `Valeur de l’étape ${index + 1}`,
         type: 'string',
         required: true,
         sensitive: true,
@@ -313,7 +362,11 @@ export function exportNavigationJourney(value: NavigationJourney): string {
   journey.revision = 0;
   journey.status = 'draft';
   journey.provenance = { mode: 'import', source: 'KerAI portable v1' };
-  return JSON.stringify({ navigationVersion: 1, journey }, null, 2);
+  return JSON.stringify(
+    { navigationVersion: 1, journey: navigationJourneySchema.parse(journey) },
+    null,
+    2,
+  );
 }
 export class ChromeRecorderImport {
   parse(json: string, applicationId: string): NavigationImportResult {

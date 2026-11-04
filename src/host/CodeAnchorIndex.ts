@@ -28,6 +28,7 @@ const anchorSchema = z
     query: z.string().max(200),
     reason: z.string().max(4000),
     state: z.enum(['candidate', 'corroborated', 'stale']),
+    journeyIds: z.array(z.string().max(128)).max(100).optional(),
     observedAt: z.string(),
     source: z
       .object({
@@ -118,8 +119,37 @@ export class CodeAnchorIndex {
   private save(found: StoredAnchor[]) {
     return this.update((current) => [
       ...current.filter((anchor) => !found.some((other) => anchor.id === other.id)),
-      ...found,
+      ...found.map((item) => {
+        const prior = current.find((a) => a.id === item.id);
+        return {
+          ...item,
+          ...(prior?.journeyIds ? { journeyIds: prior.journeyIds } : {}),
+          state:
+            prior?.hash === item.hash && prior.state === 'corroborated'
+              ? ('corroborated' as const)
+              : item.state,
+        };
+      }),
     ]);
+  }
+  async linkJourney(id: string, journeyId: string, projects: Project[]) {
+    const anchor = this.anchors.find((item) => item.id === id);
+    const project = projects.find((p) => p.id === anchor?.projectId);
+    if (!anchor || !project) throw new Error('Indice de code hors contexte.');
+    const file = await this.resolve(project, anchor.relativePath);
+    if (sha256((await readTextFile(file, new AbortController().signal)).bytes) !== anchor.hash)
+      throw new Error('Ce fichier a changé. Relance la recherche avant de confirmer le lien.');
+    await this.update((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              state: 'corroborated',
+              journeyIds: [...new Set([...(item.journeyIds ?? []), journeyId])].slice(-100),
+            }
+          : item,
+      ),
+    );
   }
   async search(
     applicationId: string,
@@ -320,7 +350,22 @@ export class CodeAnchorIndex {
               ? { ...anchor, state: 'stale' as const }
               : anchor;
           }),
-        ...found,
+        ...found.map((item) => {
+          const prior = current.find((anchor) => anchor.id === item.id);
+          const changed =
+            prior &&
+            (prior.hash !== item.hash || prior.source?.bundleHash !== item.source?.bundleHash);
+          return {
+            ...item,
+            ...(prior?.journeyIds ? { journeyIds: prior.journeyIds } : {}),
+            state:
+              changed && prior?.journeyIds?.length
+                ? ('stale' as const)
+                : prior?.state === 'corroborated'
+                  ? ('corroborated' as const)
+                  : item.state,
+          };
+        }),
       ]);
     return {
       anchors: structuredClone(found),

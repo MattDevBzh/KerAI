@@ -218,3 +218,32 @@ it.each([false, true])(
     );
   },
 );
+
+it('prepares one linked Navigator mission after releasing the correction workspace', async () => {
+  const f = await fixture();
+  const app = f.service.navigation.snapshot().applications[0];
+  await f.service.navigation.store.saveApplication({ ...app, ownerNavigatorId: 'fs-navigator' });
+  f.adapter.run = async (_input, callbacks) => {
+    await callbacks.onNavigationRequest!({
+      reason: 'Le garage Oula a changé',
+      observations: 'La voiture reste identifiée.',
+    });
+    return { content: 'Accès à réparer', questions: [], changedFiles: [] };
+  };
+  await f.service.runStep(f.feature.id, f.step.id, '', false, {
+    ...f.launch,
+    navigation: { ...f.launch.navigation!, prepareRepair: true },
+  });
+  const attempt = f.service.engine.getStep(f.feature.id, f.step.id).attempts.at(-1)!;
+  expect(attempt.navigationRequest?.navigatorFeatureId).toBeTruthy();
+  const child = f.service.engine.getFeature(attempt.navigationRequest!.navigatorFeatureId!);
+  expect(child.navigation).toMatchObject({ applicationId: 'app', allowInteractions: false });
+  expect(child.description).toContain('La voiture reste identifiée');
+  expect(await f.service.prepareNavigationIntervention(f.feature.id, f.step.id, attempt.id)).toBe(
+    child.id,
+  );
+  expect(f.service.state.features.filter((feature) => feature.id === child.id)).toHaveLength(1);
+  await expect(
+    f.service.resumeNavigation(f.feature.id, f.step.id, attempt.id, 'missing', 1),
+  ).rejects.toThrow('publiée');
+});

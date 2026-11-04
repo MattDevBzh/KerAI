@@ -1,3 +1,10 @@
+import { runProcess } from './process';
+import {
+  navigationPlan,
+  navigationOutputs,
+  publishedJourneys,
+  navigationMaintenance,
+} from '../shared/navigationRecipes';
 import { navigationMetrics } from '../shared/navigationMetrics';
 import { NavigationEvaluationStore } from './NavigationEvaluationStore';
 import type { NavigationEvaluationCommand } from '../shared/navigationEvaluation';
@@ -41,6 +48,14 @@ export class NavigationService extends EventEmitter {
   readonly evaluation: NavigationEvaluationStore;
   private captures: NavigationCapture[] = [];
   private inspection?: BrowserInspection;
+  private focusedJourneyId?: string;
+  private preparation?: NavigationSnapshot['preparation'];
+  private activeCase?: {
+    applicationId: string;
+    journey: NavigationJourney;
+    parameters: Record<string, string>;
+  };
+  private bindings: import('../shared/navigation').ExecutionBinding[] = [];
   private revisions?: NavigationJourney[];
   private agentLease?: { attemptId: string; context: NavigationContextSnapshot };
   private activeCommand = false;
@@ -85,6 +100,13 @@ export class NavigationService extends EventEmitter {
   snapshot(): NavigationSnapshot {
     return {
       ...this.store.snapshot(),
+      focusedJourneyId: this.focusedJourneyId,
+      preparation: this.preparation,
+      bindings: structuredClone(this.bindings),
+      maintenance: navigationMaintenance({
+        ...this.store.snapshot(),
+        codeAnchors: this.anchors.snapshot(),
+      }),
       evaluation: this.evaluation.snapshot(),
       metrics: navigationMetrics(this.options.features?.() ?? []),
       browser: this.browser.status(),
@@ -177,14 +199,26 @@ export class NavigationService extends EventEmitter {
     parameters: Record<string, string>,
     options: {
       mode?: 'reach' | 'reproduce' | 'verify';
+      plan?: import('../shared/navigation').NavigationPlan;
       prerequisitesConfirmed?: boolean;
       binding?: NavigationRun['binding'];
     } = {},
   ) {
     this.assertBrowser(journey.applicationId);
-    const run = await this.browser.replay(journey, parameters, options);
+    const run = await this.browser.replay(journey, parameters, {
+      ...options,
+      plan: options.plan ?? navigationPlan(journey, this.store.snapshot()),
+    });
     await this.store.recordRun(run);
     await this.browser.clearRecoveredRuns([run.id]);
+    this.activeCase =
+      run.status === 'succeeded'
+        ? {
+            applicationId: journey.applicationId,
+            journey,
+            parameters: { ...parameters, ...run.resolvedParameters },
+          }
+        : undefined;
     this.publish();
     return run;
   }
@@ -228,9 +262,63 @@ export class NavigationService extends EventEmitter {
       { applicationId, queries, limit: 64 },
     );
   }
+  async checkEnvironment(applicationId: string, projects = this.options.projects()) {
+    const app = this.application(applicationId);
+    const selected = app.projectIds
+      .map((id) => projects.find((p) => p.id === id))
+      .filter((p): p is Project => Boolean(p));
+    const binding: import('../shared/navigation').ExecutionBinding = {
+      applicationId,
+      origin: app.origin,
+      projectIds: selected.map((p) => p.id),
+      roots: selected.map((p) => p.path),
+      verification: 'unknown',
+      reason: 'Aucune comparaison de ressource servie configurée.',
+    };
+    const project = selected.find((p) => p.id === app.environment?.projectId) ?? selected[0];
+    if (project) {
+      const commit = await runProcess('git', ['rev-parse', 'HEAD'], project.path);
+      const dirty = await runProcess('git', ['status', '--porcelain'], project.path);
+      if (!commit.code) binding.commit = commit.stdout.trim();
+      binding.worktree = project.path;
+      binding.dirty = dirty.code ? undefined : Boolean(dirty.stdout.trim());
+    }
+    try {
+      if (project && app.environment?.artifactPath && app.environment.resourceUrl) {
+        this.assertBrowser(app.id);
+        const file = await this.anchors.resolve(project, app.environment.artifactPath);
+        const info = await lstat(file);
+        if (!info.isFile() || info.size > 8 * 1024 * 1024)
+          throw new Error('Fichier de comparaison trop volumineux (8 Mio).');
+        const hash = createHash('sha256')
+          .update(await readFile(file))
+          .digest('hex');
+        const served = await this.browser.assetDigest(app.environment.resourceUrl);
+        binding.build = served.sha256;
+        binding.verification = hash === served.sha256 ? 'verified' : 'unknown';
+        binding.reason =
+          hash === served.sha256
+            ? `Ressource ${app.environment.artifactPath} identique au fichier local. Cette preuve ne couvre que cette ressource ; elle n'atteste pas tout le serveur.`
+            : 'La ressource servie diffère du fichier local. Reconstruis ou vérifie le serveur avant de tester.';
+      }
+    } catch (error) {
+      binding.reason = `Version non vérifiée : ${(error as Error).message}`;
+    }
+    this.bindings = [...this.bindings.filter((b) => b.applicationId !== applicationId), binding];
+    this.publish();
+    return binding;
+  }
   async capture(context?: NavigationContextSnapshot, attemptId?: string) {
     const application = this.activeApplication();
     const raw = await this.browser.capture();
+    const active = this.activeCase?.applicationId === application.id ? this.activeCase : undefined;
+    const selectedJourney = context?.journey ?? active?.journey;
+    const caseParameters =
+      active &&
+      active.journey.id === selectedJourney?.id &&
+      active.journey.revision === selectedJourney?.revision
+        ? active.parameters
+        : context?.selection.parameters;
     const capture: NavigationCapture = {
       ...raw,
       id: randomUUID(),
@@ -246,9 +334,27 @@ export class NavigationService extends EventEmitter {
         verification: 'unknown',
         reason: 'Observation libre ; version servie non vérifiée.',
       },
-      journeyId: context?.journey?.id,
-      revision: context?.journey?.revision,
+      journeyId: selectedJourney?.id,
+      revision: selectedJourney?.revision,
       attemptId,
+      ...(selectedJourney && caseParameters
+        ? {
+            caseKey: createHash('sha256')
+              .update(
+                JSON.stringify({
+                  app: application.id,
+                  journey: selectedJourney.id,
+                  revision: selectedJourney.revision,
+                  parameters: Object.fromEntries(
+                    Object.entries(caseParameters).sort(([a], [b]) => a.localeCompare(b)),
+                  ),
+                  role: application.role,
+                  viewport: raw.viewport,
+                }),
+              )
+              .digest('hex'),
+          }
+        : {}),
     };
     await this.previewCapture(capture);
     const task = this.receiptQueue
@@ -305,11 +411,19 @@ export class NavigationService extends EventEmitter {
     exportText?: string;
     exportName?: string;
     openPath?: string;
+    task?: { projectId: string; name: string };
+    bug?: {
+      application: ApplicationProfile;
+      title: string;
+      description: string;
+      selection: import('../shared/navigation').NavigationSelection;
+    };
     description?: { application: ApplicationProfile; title: string; description: string };
   }> {
     if (command.action === 'load') {
       await this.store.load();
-      await this.anchors.verify(this.options.projects());
+      for (const app of this.store.snapshot().applications)
+        await this.anchors.verify(this.options.projects(), { applicationId: app.id });
       this.publish();
       return {};
     }
@@ -322,6 +436,7 @@ export class NavigationService extends EventEmitter {
       }
     }
     if (['stop', 'takeControl', 'authenticate', 'closeBrowser'].includes(command.action)) {
+      this.activeCase = undefined;
       this.agentLease = undefined;
       if (command.action === 'closeBrowser') await this.browser.close();
       else if (command.action === 'takeControl' || command.action === 'authenticate')
@@ -337,6 +452,71 @@ export class NavigationService extends EventEmitter {
     try {
       const human: NavigationActor = { kind: 'human' };
       switch (command.action) {
+        case 'linkSource': {
+          const journey = this.store.snapshot().journeys.find((j) => j.id === command.journeyId);
+          const anchor = this.anchors.snapshot().find((a) => a.id === command.anchorId);
+          if (!journey || anchor?.applicationId !== journey.applicationId)
+            throw new Error('Parcours et source de contextes différents.');
+          await this.anchors.linkJourney(
+            command.anchorId,
+            journey.id,
+            this.options
+              .projects()
+              .filter((p) => this.application(journey.applicationId).projectIds.includes(p.id)),
+          );
+          break;
+        }
+        case 'environmentTask': {
+          const environment = this.application(command.applicationId).environment;
+          const name = command.task === 'start' ? environment?.startTask : environment?.buildTask;
+          if (
+            !name ||
+            !environment ||
+            !this.application(command.applicationId).projectIds.includes(environment.projectId)
+          )
+            throw new Error('Choisis une tâche du projet dans le profil.');
+          return { task: { projectId: environment.projectId, name } };
+        }
+        case 'checkEnvironment':
+          await this.checkEnvironment(command.applicationId);
+          break;
+        case 'createBug': {
+          const application = this.application(command.applicationId);
+          const journey = publishedJourneys(this.store.snapshot()).find(
+            (j) => j.id === command.journeyId && j.applicationId === application.id,
+          );
+          if (command.journeyId && !journey) throw new Error('Choisis un parcours disponible.');
+          const allowed = journey ? navigationPlan(journey, this.store.snapshot()) : undefined;
+          const names = new Set([
+            ...(allowed?.parameters.filter((p) => !p.sensitive).map((p) => p.name) ?? []),
+            ...navigationOutputs(allowed?.steps ?? []),
+          ]);
+          if (Object.keys(command.parameters).some((name) => !names.has(name)))
+            throw new Error('Paramètre inconnu ou sensible dans ce contexte.');
+          const selection: import('../shared/navigation').NavigationSelection = {
+            applicationId: application.id,
+            journeyId: journey?.id,
+            revision: journey?.revision,
+            parameters: command.parameters,
+            intent: 'reproduce',
+            allowInteractions: false,
+            prerequisitesConfirmed: false,
+          };
+          let evidence = '';
+          if (command.currentScreen) {
+            this.assertBrowser(application.id);
+            const capture = await this.capture();
+            evidence = `\nObservation initiale : capture ${capture.id}, empreinte ${capture.sha256}, adresse ${capture.url}, rôle ${application.role || 'non précisé'}, fenêtre ${JSON.stringify(capture.viewport)}. Accès ${journey ? 'documenté' : 'à compléter par le Navigateur avant une reproduction complète'}.`;
+          }
+          return {
+            bug: {
+              application,
+              title: command.title,
+              selection,
+              description: `Comportement observé :\n${command.observed}\n\nRésultat attendu :\n${command.expected}\n\nAccès : ${journey ? `${journey.title} r${journey.revision}` : 'Écran courant ; parcours à compléter'}.${evidence}`,
+            },
+          };
+        }
         case 'saveApplication': {
           if (
             command.application.projectIds.some(
@@ -350,7 +530,9 @@ export class NavigationService extends EventEmitter {
           break;
         }
         case 'saveDraft':
+          navigationPlan(command.journey, this.store.snapshot());
           await this.store.saveDraft(command.journey, command.expectedRevision, human);
+          this.focusedJourneyId = command.journey.id;
           break;
         case 'commit':
           if (!command.runId) throw new Error('Un rejeu de vérification est requis.');
@@ -370,6 +552,7 @@ export class NavigationService extends EventEmitter {
         case 'import': {
           const result = importNavigationJSON(command.json, command.applicationId);
           await this.store.saveDraft(result.journey, 0, human);
+          this.focusedJourneyId = result.journey.id;
           return {
             message:
               result.warnings?.join('\n') ||
@@ -384,15 +567,41 @@ export class NavigationService extends EventEmitter {
               description: command.description,
             },
           };
-        case 'prepare':
-          await this.browser.prepare();
-          await this.browser.open(this.application(command.applicationId));
+        case 'prepare': {
+          this.activeCase = undefined;
+          const app = this.application(command.applicationId);
+          this.preparation = {
+            applicationId: app.id,
+            ready: false,
+            message: 'Vérification du navigateur et ouverture…',
+          };
+          const diagnostic = await this.browser.prepare(app.browserExecutable);
+          this.preparation.browser = diagnostic.executablePath;
+          if (!diagnostic.ready) {
+            this.preparation.message = diagnostic.reason || 'Navigateur introuvable.';
+            throw new Error(this.preparation.message);
+          }
+          try {
+            await this.browser.open(app);
+            this.preparation.ready = true;
+            this.preparation.message =
+              'Application ouverte. Confirme la connexion et les données avant le rejeu.';
+            await this.checkEnvironment(app.id);
+          } catch (error) {
+            this.preparation.message = (error as Error).message;
+            throw error;
+          }
           break;
+        }
         case 'resumeControl':
           await this.browser.resumeControl();
           break;
         case 'replay': {
-          const journey = this.store.snapshot().journeys.find((j) => j.id === command.journeyId);
+          const journey = (
+            command.mode === 'verify'
+              ? this.store.snapshot().journeys
+              : publishedJourneys(this.store.snapshot())
+          ).find((j) => j.id === command.journeyId);
           if (!journey) throw new Error('Parcours inconnu.');
           const app = this.application(journey.applicationId);
           if (app.interactionPolicy === 'inspect' || !command.confirmInteractions)
@@ -439,6 +648,7 @@ export class NavigationService extends EventEmitter {
             updatedAt: now,
           });
           await this.store.saveDraft(journey, 0, human);
+          this.focusedJourneyId = journey.id;
           await this.browser.acknowledgeRecording();
           break;
         }

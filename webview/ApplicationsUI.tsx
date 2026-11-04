@@ -1,3 +1,9 @@
+import { NavigationBugDialog } from './NavigationBugDialog';
+import {
+  navigationPlan,
+  publishedJourneys,
+  navigationOutputs,
+} from '../src/shared/navigationRecipes';
 import { NavigationEvaluationUI } from './NavigationEvaluationUI';
 import { applicationReadiness } from './launchReadiness';
 import { useEffect, useRef, useState } from 'react';
@@ -50,6 +56,8 @@ const runLabels = {
 const actionLabels: Record<NavigationStep['action'], string> = {
   navigate: 'Ouvrir une adresse',
   click: 'Cliquer',
+  doubleClick: 'Double-cliquer',
+  resolve: 'Choisir une donnée métier',
   fill: 'Remplir',
   select: 'Choisir',
   check: 'Cocher',
@@ -106,8 +114,44 @@ export function ApplicationsUI({
   onOpenAgent?: (id: string) => void;
 }) {
   const data = state.navigation ?? empty;
-  const [applicationId, setApplicationId] = useState(data.applications[0]?.id ?? '');
-  const [journeyId, setJourneyId] = useState('');
+  const preferencesKey = `kerai-navigation:${state.workspace.path}`;
+  const [preferences, setPreferences] = useState<{
+    applicationId?: string;
+    journeyId?: string;
+    favorites?: string[];
+  }>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(preferencesKey) ?? '{}');
+      return {
+        applicationId: typeof stored?.applicationId === 'string' ? stored.applicationId : undefined,
+        journeyId: typeof stored?.journeyId === 'string' ? stored.journeyId : undefined,
+        favorites: Array.isArray(stored?.favorites)
+          ? stored.favorites.filter((id: unknown) => typeof id === 'string').slice(-100)
+          : [],
+      };
+    } catch {
+      return {};
+    }
+  });
+  const [applicationId, setApplicationId] = useState(
+    preferences.applicationId ?? data.applications[0]?.id ?? '',
+  );
+  const [journeyId, setJourneyId] = useState(preferences.journeyId ?? '');
+  const [bug, setBug] = useState<{
+    journey?: NavigationJourney;
+    parameters: Record<string, string>;
+    currentScreen: boolean;
+  } | null>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        preferencesKey,
+        JSON.stringify({ ...preferences, applicationId, journeyId }),
+      );
+    } catch {
+      /* Preferences are optional. */
+    }
+  }, [preferencesKey, preferences, applicationId, journeyId]);
   const [query, setQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
@@ -135,6 +179,8 @@ export function ApplicationsUI({
         setPending(requests.current.size > 0);
         setError(message.error ?? message.state.error ?? '');
         setNotice(message.message ?? message.state.notice ?? '');
+        if (!message.error && message.state.focusedJourneyId)
+          setJourneyId(message.state.focusedJourneyId);
         if (!message.error && !message.state.error) completed.current.get(message.requestId)?.();
         completed.current.delete(message.requestId);
       }
@@ -156,7 +202,13 @@ export function ApplicationsUI({
       .toLocaleLowerCase('fr')
       .includes(query.toLocaleLowerCase('fr')),
   );
-  const found = candidates.slice(0, 30);
+  const found = [...candidates]
+    .sort(
+      (a, b) =>
+        Number(preferences.favorites?.includes(b.id)) -
+        Number(preferences.favorites?.includes(a.id)),
+    )
+    .slice(0, 30);
   const journey = data.journeys.find(
     (item) => item.id === journeyId && item.applicationId === applicationId,
   );
@@ -234,112 +286,184 @@ export function ApplicationsUI({
           </div>
           {application && (
             <>
-              <section className="applications-profile" aria-label="Profil d’application">
-                <div>
-                  <h2>{application.name}</h2>
-                  <p>{application.startUrl ?? application.origin}</p>
-                  <div aria-label="Navigateur et skills">
-                    <strong>Navigateur : </strong>
-                    {application.ownerNavigatorId ? (
-                      <button
-                        className="text-button"
-                        onClick={() => onOpenAgent?.(application.ownerNavigatorId!)}
-                      >
-                        {state.agents.find((agent) => agent.id === application.ownerNavigatorId)
-                          ?.name ?? application.ownerNavigatorId}
-                      </button>
-                    ) : (
-                      'À choisir dans le profil'
-                    )}
-                    <p>
-                      Skills :{' '}
-                      {(
-                        state.agents.find((agent) => agent.id === application.ownerNavigatorId)
-                          ?.skills ?? []
-                      ).map((id) => {
-                        const skill = state.skills.find((item) => item.id === id);
-                        return (
-                          <button
-                            key={id}
-                            className="text-button"
-                            disabled={!skill}
-                            onClick={() => onOpenSkill?.(id)}
-                          >
-                            {skill?.name ?? `${id} (absente)`}
-                          </button>
-                        );
-                      })}
-                      {!state.agents.find((agent) => agent.id === application.ownerNavigatorId)
-                        ?.skills.length && 'Aucune skill affectée à cet agent.'}
-                    </p>
-                  </div>
-                  <p className="muted">
-                    {application.projectIds.length} dépôt(s) · Rôle :{' '}
-                    {application.role || 'à renseigner'} ·{' '}
-                    {application.interactionPolicy === 'inspect'
-                      ? 'Inspection seule'
-                      : application.interactionPolicy === 'confirm'
-                        ? 'Interactions à confirmer'
-                        : 'Interactions autorisées'}
-                  </p>
-                  <p className="applications-uncertain">
-                    Version de l’application non vérifiée — chaque rejeu conserve son attestation.
-                  </p>
-                </div>
+              <section className="applications-profile" aria-label="Prochaine action">
+                <h2>Que veux-tu faire ?</h2>
                 <div className="applications-actions">
+                  <button
+                    className="primary"
+                    disabled={pending}
+                    onClick={() =>
+                      browser?.state === 'human'
+                        ? command({ action: 'resumeControl' })
+                        : !browser || ['closed', 'interrupted'].includes(browser.state)
+                          ? command({ action: 'prepare', applicationId })
+                          : setLearn('description')
+                    }
+                  >
+                    {browser?.state === 'human'
+                      ? 'Connexion terminée · continuer'
+                      : !browser || ['closed', 'interrupted'].includes(browser.state)
+                        ? 'Préparer le navigateur'
+                        : 'Retrouver ou apprendre un écran'}
+                  </button>
                   <button onClick={() => setProfile(structuredClone(application))}>
                     Modifier le profil
                   </button>
                   <button
-                    onClick={() => command({ action: 'prepare', applicationId })}
-                    disabled={pending}
+                    disabled={pending || browser?.state !== 'idle'}
+                    onClick={() => setBug({ parameters: {}, currentScreen: true })}
                   >
-                    Préparer le navigateur
+                    Corriger ce que je vois
                   </button>
                 </div>
-              </section>
-              <section className="applications-profile" aria-label="Diagnostic de navigation">
-                <h3>Avant de naviguer</h3>
-                <p>Adresse : {application.startUrl ?? application.origin}</p>
                 <p>
-                  Projet actif :{' '}
-                  {state.projectCatalog?.projects.find(
-                    (project) => project.id === state.projectCatalog?.activeProjectId,
-                  )?.name ?? state.workspace.name}
-                  .
+                  1. Ouvrir et se connecter · 2. Choisir ou apprendre un accès · 3. Vérifier et
+                  utiliser
                 </p>
-                {applicationReadiness(state, application).length > 0 ? (
-                  <ul>
-                    {applicationReadiness(state, application).map((issue) => (
-                      <li key={issue}>{issue}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>Le profil inclut le projet actif et un agent compatible avec la navigation.</p>
+                {data.preparation?.applicationId === applicationId && (
+                  <p role="status">
+                    {data.preparation.browser
+                      ? `Navigateur : ${data.preparation.browser.split(/[\\/]/).pop()}. `
+                      : ''}
+                    {data.preparation.message}
+                  </p>
                 )}
-                <p>
-                  {browser && browser.state === 'idle'
-                    ? 'Navigateur préparé ; sa version et le serveur restent à vérifier pour chaque exécution.'
-                    : 'Utilisez « Préparer le navigateur » pour vérifier Chromium et l’accès à l’adresse. Démarrez le serveur si l’application est locale.'}
-                </p>
-                <p>
-                  {application.interactionPolicy === 'inspect'
-                    ? 'Inspection seule : les interactions sont bloquées par ce profil.'
-                    : application.interactionPolicy === 'confirm'
-                      ? 'Chaque interaction demandée par l’agent exige votre confirmation. L’autorisation de la tentative reste nécessaire.'
-                      : 'Les interactions exigent aussi l’autorisation explicite de la tentative.'}
-                </p>
-                <p>
-                  Connexion :{' '}
-                  {application.authInstructions ||
-                    'aucune consigne renseignée. Utilisez la connexion manuelle dans le navigateur.'}{' '}
-                  Les identifiants ne sont pas transmis à l’agent.
-                </p>
-                <p className="field-help">
-                  Un changement de profil, de parcours ou d’autorisation requiert une nouvelle
-                  tentative avec un contexte actualisé.
-                </p>
+                {application.environment && (
+                  <div className="applications-actions">
+                    <button
+                      disabled={pending || !application.environment.startTask}
+                      onClick={() =>
+                        command({ action: 'environmentTask', applicationId, task: 'start' })
+                      }
+                    >
+                      Démarrer l’environnement
+                    </button>
+                    <button
+                      disabled={pending || !application.environment.buildTask}
+                      onClick={() =>
+                        command({ action: 'environmentTask', applicationId, task: 'build' })
+                      }
+                    >
+                      Reconstruire l’application
+                    </button>
+                    <button
+                      disabled={pending || browser?.state !== 'idle'}
+                      onClick={() => command({ action: 'checkEnvironment', applicationId })}
+                    >
+                      Vérifier la version servie
+                    </button>
+                  </div>
+                )}
+                {data.bindings
+                  ?.filter((b) => b.applicationId === applicationId)
+                  .map((b) => (
+                    <p key={b.applicationId}>
+                      {b.reason}
+                      {b.commit &&
+                        ` · Code ${b.commit.slice(0, 8)}${b.dirty ? ' avec modifications locales' : ''}`}
+                    </p>
+                  ))}
               </section>
+              <details className="applications-profile">
+                <summary>Configuration de l’application et droits</summary>
+                <section className="applications-profile" aria-label="Profil d’application">
+                  <div>
+                    <h2>{application.name}</h2>
+                    <p>{application.startUrl ?? application.origin}</p>
+                    <div aria-label="Navigateur et skills">
+                      <strong>Navigateur : </strong>
+                      {application.ownerNavigatorId ? (
+                        <button
+                          className="text-button"
+                          onClick={() => onOpenAgent?.(application.ownerNavigatorId!)}
+                        >
+                          {state.agents.find((agent) => agent.id === application.ownerNavigatorId)
+                            ?.name ?? application.ownerNavigatorId}
+                        </button>
+                      ) : (
+                        'À choisir dans le profil'
+                      )}
+                      <p>
+                        Skills :{' '}
+                        {(
+                          state.agents.find((agent) => agent.id === application.ownerNavigatorId)
+                            ?.skills ?? []
+                        ).map((id) => {
+                          const skill = state.skills.find((item) => item.id === id);
+                          return (
+                            <button
+                              key={id}
+                              className="text-button"
+                              disabled={!skill}
+                              onClick={() => onOpenSkill?.(id)}
+                            >
+                              {skill?.name ?? `${id} (absente)`}
+                            </button>
+                          );
+                        })}
+                        {!state.agents.find((agent) => agent.id === application.ownerNavigatorId)
+                          ?.skills.length && 'Aucune skill affectée à cet agent.'}
+                      </p>
+                    </div>
+                    <p className="muted">
+                      {application.projectIds.length} dépôt(s) · Rôle :{' '}
+                      {application.role || 'à renseigner'} ·{' '}
+                      {application.interactionPolicy === 'inspect'
+                        ? 'Inspection seule'
+                        : application.interactionPolicy === 'confirm'
+                          ? 'Interactions à confirmer'
+                          : 'Interactions autorisées'}
+                    </p>
+                    <p className="applications-uncertain">
+                      Version de l’application non vérifiée — chaque rejeu conserve son attestation.
+                    </p>
+                  </div>
+                </section>
+                <section className="applications-profile" aria-label="Diagnostic de navigation">
+                  <h3>Avant de naviguer</h3>
+                  <p>Adresse : {application.startUrl ?? application.origin}</p>
+                  <p>
+                    Projet actif :{' '}
+                    {state.projectCatalog?.projects.find(
+                      (project) => project.id === state.projectCatalog?.activeProjectId,
+                    )?.name ?? state.workspace.name}
+                    .
+                  </p>
+                  {applicationReadiness(state, application).length > 0 ? (
+                    <ul>
+                      {applicationReadiness(state, application).map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>
+                      Le profil inclut le projet actif et un agent compatible avec la navigation.
+                    </p>
+                  )}
+                  <p>
+                    {browser && browser.state === 'idle'
+                      ? 'Navigateur préparé ; sa version et le serveur restent à vérifier pour chaque exécution.'
+                      : 'Utilisez « Préparer le navigateur » pour vérifier Chromium et l’accès à l’adresse. Démarrez le serveur si l’application est locale.'}
+                  </p>
+                  <p>
+                    {application.interactionPolicy === 'inspect'
+                      ? 'Inspection seule : les interactions sont bloquées par ce profil.'
+                      : application.interactionPolicy === 'confirm'
+                        ? 'Chaque interaction demandée par l’agent exige votre confirmation. L’autorisation de la tentative reste nécessaire.'
+                        : 'Les interactions exigent aussi l’autorisation explicite de la tentative.'}
+                  </p>
+                  <p>
+                    Connexion :{' '}
+                    {application.authInstructions ||
+                      'aucune consigne renseignée. Utilisez la connexion manuelle dans le navigateur.'}{' '}
+                    Les identifiants ne sont pas transmis à l’agent.
+                  </p>
+                  <p className="field-help">
+                    Un changement de profil, de parcours ou d’autorisation requiert une nouvelle
+                    tentative avec un contexte actualisé.
+                  </p>
+                </section>
+              </details>
               <BrowserControls
                 data={data}
                 applicationId={applicationId}
@@ -393,7 +517,10 @@ export function ApplicationsUI({
                         aria-pressed={journeyId === item.id}
                         onClick={() => setJourneyId(item.id)}
                       >
-                        <strong>{item.title}</strong>
+                        <strong>
+                          {preferences.favorites?.includes(item.id) ? '★ ' : ''}
+                          {item.title}
+                        </strong>
                         <span>{item.intent}</span>
                         <small>
                           Révision {item.revision}
@@ -426,6 +553,18 @@ export function ApplicationsUI({
                       journey={journey}
                       data={data}
                       command={command}
+                      onBug={(selected, parameters) =>
+                        setBug({ journey: selected, parameters, currentScreen: false })
+                      }
+                      favorite={Boolean(preferences.favorites?.includes(journey.id))}
+                      onFavorite={() =>
+                        setPreferences({
+                          ...preferences,
+                          favorites: preferences.favorites?.includes(journey.id)
+                            ? preferences.favorites.filter((id) => id !== journey.id)
+                            : [...(preferences.favorites ?? []), journey.id].slice(-100),
+                        })
+                      }
                       edit={() => setEditor(structuredClone(journey))}
                       variant={() =>
                         setEditor({
@@ -455,8 +594,39 @@ export function ApplicationsUI({
                   )}
                 </div>
               </div>
+              {(data.maintenance ?? []).some((m) =>
+                data.journeys.some(
+                  (j) => j.id === m.journeyId && j.applicationId === applicationId,
+                ),
+              ) && (
+                <section className="applications-profile" aria-label="Accès à revérifier">
+                  <h3>Accès à revérifier</h3>
+                  {(data.maintenance ?? [])
+                    .filter((m) =>
+                      data.journeys.some(
+                        (j) => j.id === m.journeyId && j.applicationId === applicationId,
+                      ),
+                    )
+                    .map((entry) => (
+                      <p key={entry.journeyId}>
+                        <button onClick={() => setJourneyId(entry.journeyId)}>
+                          {data.journeys.find((j) => j.id === entry.journeyId)?.title}
+                        </button>{' '}
+                        — {entry.reasons.join(' · ')}
+                      </p>
+                    ))}
+                  <button onClick={() => command({ action: 'load' })}>
+                    Contrôler les changements
+                  </button>
+                </section>
+              )}
               {browser && (
-                <InspectionPanel data={data} application={application} command={command} />
+                <InspectionPanel
+                  data={data}
+                  application={application}
+                  command={command}
+                  journeyId={journeyId}
+                />
               )}
               <CaptureComparison data={data} applicationId={applicationId} />
               <Metrics data={data} applicationId={applicationId} command={command} />
@@ -464,13 +634,26 @@ export function ApplicationsUI({
           )}
         </>
       )}
-      <NavigationEvaluationUI
-        snapshot={data.evaluation}
-        state={state}
-        send={command}
-        error={error}
-        busy={pending}
-      />
+      <details className="applications-inspection">
+        <summary>Évaluer la qualité, le temps et la consommation</summary>
+        <NavigationEvaluationUI
+          snapshot={data.evaluation}
+          state={state}
+          send={command}
+          error={error}
+          busy={pending}
+        />
+      </details>
+      {bug && (
+        <NavigationBugDialog
+          applicationId={applicationId}
+          {...bug}
+          error={error}
+          busy={pending}
+          onClose={() => setBug(null)}
+          onCreate={(value) => command(value, () => setBug(null))}
+        />
+      )}
       {profile && (
         <ProfileEditor
           application={profile}
@@ -499,6 +682,7 @@ export function ApplicationsUI({
       {editor && (
         <JourneyEditor
           journey={editor}
+          data={data}
           error={error}
           onClose={() => setEditor(null)}
           onSave={(updated) => {
@@ -712,6 +896,61 @@ function ProfileEditor({
           Le Navigateur est requis pour décrire et entretenir les parcours. Vous pouvez enregistrer
           le profil avant de le choisir ; la préparation manuelle du navigateur reste disponible.
         </p>
+        <details>
+          <summary>Environnement de développement et version servie</summary>
+          <p>
+            Les commandes utilisent des tâches VS Code existantes du dépôt sélectionné. La
+            comparaison porte sur un fichier construit et sa ressource réellement servie.
+          </p>
+          <label className="field">
+            <span>Dépôt de l’environnement</span>
+            <select
+              value={value.environment?.projectId ?? ''}
+              onChange={(e) =>
+                patch({
+                  environment: e.target.value
+                    ? { ...value.environment, projectId: e.target.value }
+                    : undefined,
+                })
+              }
+            >
+              <option value="">Non configuré</option>
+              {state.projectCatalog?.projects
+                .filter((p) => value.projectIds.includes(p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {value.environment && (
+            <>
+              {(['startTask', 'buildTask', 'artifactPath', 'resourceUrl'] as const).map((key) => (
+                <label className="field" key={key}>
+                  <span>
+                    {
+                      {
+                        startTask: 'Nom de la tâche de démarrage',
+                        buildTask: 'Nom de la tâche de reconstruction',
+                        artifactPath: 'Fichier construit relatif au dépôt',
+                        resourceUrl: 'Adresse de la ressource servie à comparer',
+                      }[key]
+                    }
+                  </span>
+                  <input
+                    value={value.environment?.[key] ?? ''}
+                    onChange={(e) =>
+                      patch({
+                        environment: { ...value.environment!, [key]: e.target.value || undefined },
+                      })
+                    }
+                  />
+                </label>
+              ))}
+            </>
+          )}
+        </details>
         <p className="field-help">
           L’application doit être accessible depuis ce poste. Pour une application locale, démarrez
           son serveur. KerAI n’installe aucune dépendance et ne modifie pas votre application.
@@ -957,6 +1196,11 @@ function LearnDialog({
               : 'Le contrôle vous sera donné après l’arrêt confirmé des commandes.'}
           </div>
           <div className="applications-actions">
+            {!recording && browser?.state === 'human' && (
+              <button disabled={busy} onClick={() => command({ action: 'resumeControl' })}>
+                Connexion terminée · reprendre
+              </button>
+            )}
             {!recording &&
               (!browser || browser.state === 'closed' || browser.state === 'interrupted') && (
                 <button
@@ -1048,7 +1292,13 @@ function JourneyDetail({
   command,
   edit,
   variant,
+  onBug,
+  favorite,
+  onFavorite,
 }: {
+  onBug: (journey: NavigationJourney, parameters: Record<string, string>) => void;
+  favorite: boolean;
+  onFavorite: () => void;
   journey: NavigationJourney;
   data: NavigationSnapshot;
   command: Command;
@@ -1063,7 +1313,7 @@ function JourneyDetail({
   useEffect(() => {
     setParameters(
       Object.fromEntries(
-        journey.parameters
+        (plan?.parameters ?? journey.parameters)
           .filter((parameter) => !parameter.sensitive)
           .map((parameter) => [parameter.name, parameter.defaultValue ?? '']),
       ),
@@ -1079,7 +1329,23 @@ function JourneyDetail({
   const verified = runs.find(
     (run) => run.revision === journey.revision && run.status === 'succeeded' && run.arrivalVerified,
   );
-  const assisted = journey.steps.some((step) => step.action === 'manual');
+  const published = publishedJourneys(data).find((j) => j.id === journey.id);
+  let plan: ReturnType<typeof navigationPlan> | undefined;
+  let planError = '';
+  try {
+    plan = navigationPlan(journey, data);
+  } catch (error) {
+    planError = (error as Error).message;
+  }
+  const assisted = (plan?.steps ?? journey.steps).some((step) => step.action === 'manual');
+  const outputs = navigationOutputs(plan?.steps ?? journey.steps);
+  const missing = [
+    !journey.arrival.length && 'Définir les indices d’arrivée',
+    assisted && 'Remplacer les étapes manuelles',
+    (plan?.parameters ?? journey.parameters).some((p) => p.sensitive) &&
+      'Revoir les paramètres de formulaire',
+    planError,
+  ].filter(Boolean);
   return (
     <section aria-label="Fiche de parcours">
       <div className="applications-section-heading">
@@ -1112,7 +1378,30 @@ function JourneyDetail({
       </p>
       {journey.hash && <p className="applications-hash">Révision immuable : {journey.hash}</p>}
       {journey.provenance.notes && <p>{journey.provenance.notes}</p>}
+      {journey.status === 'draft' && (
+        <div role="status">
+          <strong>Finaliser ce parcours</strong>
+          <p>
+            {missing.length
+              ? missing.join(' · ')
+              : 'Prêt pour un rejeu de vérification, puis une publication.'}
+          </p>
+          {published && (
+            <p>La version r{published.revision} reste disponible pendant cette correction.</p>
+          )}
+        </div>
+      )}
       <div className="applications-actions">
+        <button onClick={onFavorite}>
+          {favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+        </button>
+        <button
+          className="primary"
+          disabled={!published}
+          onClick={() => published && onBug(published, parameters)}
+        >
+          Utiliser pour corriger un bug
+        </button>
         <button onClick={edit}>Corriger le brouillon</button>
         <button onClick={variant}>Créer une variante</button>
         <button
@@ -1219,27 +1508,29 @@ function JourneyDetail({
             </option>
           </select>
         </label>
-        {journey.parameters.map((parameter) => (
-          <label className="field" key={parameter.name}>
-            <span>
-              {parameter.label || parameter.name}
-              {parameter.required ? ' *' : ''}
-            </span>
-            {parameter.sensitive ? (
-              <small>
-                Valeur privée : renseignez-la manuellement dans le navigateur, hors documentation.
-              </small>
-            ) : (
-              <input
-                type={parameter.type === 'number' ? 'number' : 'text'}
-                value={parameters[parameter.name] ?? ''}
-                onChange={(event) =>
-                  setParameters({ ...parameters, [parameter.name]: event.target.value })
-                }
-              />
-            )}
-          </label>
-        ))}
+        {(plan?.parameters ?? journey.parameters)
+          .filter((parameter) => !outputs.has(parameter.name))
+          .map((parameter) => (
+            <label className="field" key={parameter.name}>
+              <span>
+                {parameter.label || parameter.name}
+                {parameter.required ? ' *' : ''}
+              </span>
+              {parameter.sensitive ? (
+                <small>
+                  Valeur privée : renseignez-la manuellement dans le navigateur, hors documentation.
+                </small>
+              ) : (
+                <input
+                  type={parameter.type === 'number' ? 'number' : 'text'}
+                  value={parameters[parameter.name] ?? ''}
+                  onChange={(event) =>
+                    setParameters({ ...parameters, [parameter.name]: event.target.value })
+                  }
+                />
+              )}
+            </label>
+          ))}
         <label className="applications-check">
           <input
             type="checkbox"
@@ -1264,12 +1555,21 @@ function JourneyDetail({
           className="primary"
           disabled={
             !prerequisites ||
+            !interactions ||
+            data.applications.find((app) => app.id === journey.applicationId)?.interactionPolicy ===
+              'inspect' ||
+            data.browser?.applicationId !== journey.applicationId ||
+            data.browser?.state !== 'idle' ||
+            Boolean(planError) ||
             assisted ||
             !journey.arrival.length ||
             journey.status === 'archived' ||
-            journey.parameters.some(
+            (plan?.parameters ?? journey.parameters).some(
               (parameter) =>
-                parameter.required && !parameter.sensitive && !parameters[parameter.name]?.trim(),
+                parameter.required &&
+                !parameter.sensitive &&
+                !outputs.has(parameter.name) &&
+                !parameters[parameter.name]?.trim(),
             )
           }
           onClick={() =>
@@ -1285,6 +1585,10 @@ function JourneyDetail({
         >
           <Play size={15} /> Lancer le rejeu
         </button>
+        {!interactions && <p>Autorise les interactions de ce parcours avant le lancement.</p>}
+        {data.browser?.state !== 'idle' && (
+          <p>Ouvre le navigateur et termine la connexion avant de rejouer.</p>
+        )}
         {assisted && (
           <p className="applications-uncertain">Une étape manuelle empêche le rejeu automatique.</p>
         )}
@@ -1314,7 +1618,50 @@ function JourneyDetail({
                 : 'Version de l’application non vérifiée'}
             </p>
             <p className="field-help">{run.binding.reason}</p>
-            {run.error && <p className="applications-error">{run.error}</p>}
+            {run.error && (
+              <>
+                <p className="applications-error">{run.error}</p>
+                <div className="applications-actions">
+                  <button onClick={edit}>Corriger l’étape en échec</button>
+                  <button onClick={() => command({ action: 'inspect' })}>
+                    Inspecter l’état actuel
+                  </button>
+                  <button
+                    onClick={() =>
+                      command({
+                        action: 'describe',
+                        applicationId: journey.applicationId,
+                        title: `Réparer ${journey.title}`,
+                        description: `Réparer le parcours ${journey.id} r${journey.revision}. Échec : ${run.error}. Préserver les critères d’arrivée et les données choisies.`,
+                      })
+                    }
+                  >
+                    Confier au Navigateur
+                  </button>
+                </div>
+              </>
+            )}
+            {!!run.skippedSteps?.length && (
+              <p>{run.skippedSteps.length} étape(s) déjà satisfaites, non rejouées.</p>
+            )}
+            {run.resolvedParameters && (
+              <details>
+                <summary>Données choisies pour ce cas</summary>
+                <dl>
+                  {Object.entries(run.resolvedParameters).map(([name, value]) => (
+                    <div key={name}>
+                      <dt>{plan?.parameters.find((p) => p.name === name)?.label ?? name}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+            )}
+            {run.status === 'succeeded' && run.resolvedParameters && (
+              <button onClick={() => setParameters({ ...run.resolvedParameters })}>
+                Réutiliser ce cas exact
+              </button>
+            )}
             {run.events
               .filter((event) => event.status !== 'succeeded')
               .map((event, index) => (
@@ -1450,13 +1797,17 @@ function LocatorEditor({
 function ConditionsEditor({
   value,
   onChange,
+  title = 'Conditions d’arrivée',
+  addLabel = 'Ajouter une condition d’arrivée',
 }: {
   value: NavigationCondition[];
   onChange: (value: NavigationCondition[]) => void;
+  title?: string;
+  addLabel?: string;
 }) {
   return (
     <fieldset>
-      <legend>Conditions d’arrivée</legend>
+      <legend>{title}</legend>
       <p className="field-help">
         Combinez l’adresse avec des indices d’écran : onglet actif, texte, formulaire ou dialogue
         visible.
@@ -1520,7 +1871,7 @@ function ConditionsEditor({
           ])
         }
       >
-        Ajouter une condition d’arrivée
+        {addLabel}
       </button>
     </fieldset>
   );
@@ -1528,10 +1879,12 @@ function ConditionsEditor({
 function JourneyEditor({
   error,
   journey,
+  data,
   onClose,
   onSave,
 }: {
   journey: NavigationJourney;
+  data: NavigationSnapshot;
   error?: string;
   onClose: () => void;
   onSave: (journey: NavigationJourney) => void;
@@ -1596,154 +1949,343 @@ function JourneyEditor({
             onChange={(event) => patch({ prerequisites: event.target.value.split('\n') })}
           />
         </label>
+        <details>
+          <summary>Blocs réutilisables avant ces étapes</summary>
+          <p>
+            Les révisions choisies restent figées. Les paramètres de même nom sont partagés et
+            doivent avoir la même définition.
+          </p>
+          {publishedJourneys(data)
+            .filter((j) => j.applicationId === journey.applicationId && j.id !== journey.id)
+            .map((block) => (
+              <label className="applications-check" key={block.id}>
+                <input
+                  type="checkbox"
+                  checked={value.blocks?.some((b) => b.journeyId === block.id) ?? false}
+                  onChange={(e) =>
+                    patch({
+                      blocks: e.target.checked
+                        ? [
+                            ...(value.blocks ?? []),
+                            { journeyId: block.id, revision: block.revision },
+                          ]
+                        : value.blocks?.filter((b) => b.journeyId !== block.id),
+                    })
+                  }
+                />
+                {block.title} · r
+                {value.blocks?.find((b) => b.journeyId === block.id)?.revision ?? block.revision}
+              </label>
+            ))}
+        </details>
         <h3>Étapes éditables</h3>
+        <p>
+          Utilise {'{{paramètre}}'} dans une cible, une adresse ou une condition. Les valeurs
+          insérées sont échappées selon leur usage.
+        </p>
         {value.steps.map((step, index) => (
           <fieldset key={step.id}>
             <legend>Étape {index + 1}</legend>
-            <label className="field">
-              <span>Action</span>
-              <select
-                value={step.action}
-                onChange={(event) =>
-                  stepPatch(index, { action: event.target.value as NavigationStep['action'] })
-                }
-              >
-                {Object.entries(actionLabels).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {['click', 'fill', 'select', 'check', 'press', 'wait'].includes(step.action) && (
-              <LocatorEditor
-                value={step.target}
-                onChange={(target) => stepPatch(index, { target })}
-              />
-            )}
-            {step.action === 'navigate' && (
+            <details open={value.steps.length <= 5}>
+              <summary>
+                {step.note ||
+                  `${actionLabels[step.action]} ${step.target?.name || step.target?.value || step.url || ''}`}
+              </summary>
               <label className="field">
-                <span>Adresse</span>
-                <input
-                  type="url"
-                  value={step.url ?? ''}
-                  onChange={(event) => stepPatch(index, { url: event.target.value })}
-                />
+                <span>Action</span>
+                <select
+                  value={step.action}
+                  onChange={(event) => {
+                    const action = event.target.value as NavigationStep['action'];
+                    stepPatch(index, {
+                      action,
+                      ...([
+                        'click',
+                        'doubleClick',
+                        'resolve',
+                        'fill',
+                        'select',
+                        'check',
+                        'press',
+                      ].includes(action) && !step.target
+                        ? { target: { strategy: 'role', value: 'button', name: '' } }
+                        : {}),
+                      ...(['fill', 'select'].includes(action) && !step.value
+                        ? { value: { literal: '' } }
+                        : {}),
+                      resolver:
+                        action === 'resolve'
+                          ? {
+                              output: 'entityId',
+                              attribute: 'data-id',
+                              pick: 'unique',
+                              filters: [],
+                            }
+                          : undefined,
+                      ...(action === 'resolve' ? { target: { strategy: 'css', value: '' } } : {}),
+                      ...(action === 'check' ? { checked: step.checked ?? true } : {}),
+                      ...(action === 'scroll' ? { x: step.x ?? 0, y: step.y ?? 0 } : {}),
+                    });
+                  }}
+                >
+                  {Object.entries(actionLabels).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
               </label>
-            )}
-            {['fill', 'select'].includes(step.action) && (
-              <div className="applications-form-grid">
-                <label className="field">
-                  <span>Type de valeur</span>
-                  <select
-                    value={step.value && 'parameter' in step.value ? 'parameter' : 'literal'}
-                    onChange={(event) =>
+              {['click', 'doubleClick', 'resolve', 'fill', 'select', 'check', 'press'].includes(
+                step.action,
+              ) && (
+                <LocatorEditor
+                  value={step.target}
+                  onChange={(target) => stepPatch(index, { target })}
+                />
+              )}
+              {step.action === 'resolve' && step.resolver && (
+                <fieldset>
+                  <legend>Donnée métier à choisir</legend>
+                  <label className="field">
+                    <span>Nom réutilisable</span>
+                    <input
+                      value={step.resolver.output}
+                      onChange={(e) =>
+                        stepPatch(index, {
+                          resolver: { ...step.resolver!, output: e.target.value },
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Attribut portant l’identifiant (data-id, href…)</span>
+                    <input
+                      value={step.resolver.attribute}
+                      onChange={(e) =>
+                        stepPatch(index, {
+                          resolver: { ...step.resolver!, attribute: e.target.value },
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Choix en cas de plusieurs résultats</span>
+                    <select
+                      value={step.resolver.pick}
+                      onChange={(e) =>
+                        stepPatch(index, {
+                          resolver: {
+                            ...step.resolver!,
+                            pick: e.target.value as 'first' | 'unique',
+                          },
+                        })
+                      }
+                    >
+                      <option value="unique">Exiger un résultat unique</option>
+                      <option value="first">Choisir explicitement le premier</option>
+                    </select>
+                  </label>
+                  {step.resolver.filters.map((filter, at) => (
+                    <div key={at}>
+                      <label className="field">
+                        <span>Élément relatif au candidat {at + 1}</span>
+                        <input
+                          value={filter.selector ?? ''}
+                          onChange={(e) =>
+                            stepPatch(index, {
+                              resolver: {
+                                ...step.resolver!,
+                                filters: step.resolver!.filters.map((f, n) =>
+                                  n === at ? { ...f, selector: e.target.value || undefined } : f,
+                                ),
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Texte à retrouver {at + 1} (vide : présence)</span>
+                        <input
+                          value={filter.text ?? ''}
+                          onChange={(e) =>
+                            stepPatch(index, {
+                              resolver: {
+                                ...step.resolver!,
+                                filters: step.resolver!.filters.map((f, n) =>
+                                  n === at ? { ...f, text: e.target.value || undefined } : f,
+                                ),
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          stepPatch(index, {
+                            resolver: {
+                              ...step.resolver!,
+                              filters: step.resolver!.filters.filter((_, n) => n !== at),
+                            },
+                          })
+                        }
+                      >
+                        Retirer le filtre {at + 1}
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
                       stepPatch(index, {
-                        value:
-                          event.target.value === 'parameter' ? { parameter: '' } : { literal: '' },
+                        resolver: { ...step.resolver!, filters: [...step.resolver!.filters, {}] },
                       })
                     }
                   >
-                    <option value="literal">Valeur fixe non sensible</option>
-                    <option value="parameter">Paramètre</option>
-                  </select>
-                </label>
+                    Ajouter un filtre métier
+                  </button>
+                  <p>
+                    L’identifiant choisi est conservé dans le reçu. Réutilise-le dans la suite avec{' '}
+                    {'{{nom}}'}, notamment pour chercher une voiture dans le garage retenu.
+                  </p>
+                </fieldset>
+              )}
+              {step.action === 'wait' && (
+                <ConditionsEditor
+                  title="Conditions d’attente"
+                  addLabel="Ajouter une condition d’attente"
+                  value={step.postconditions ?? []}
+                  onChange={(postconditions) => stepPatch(index, { postconditions })}
+                />
+              )}
+              {step.action === 'navigate' && (
                 <label className="field">
-                  <span>Valeur ou nom du paramètre</span>
+                  <span>Adresse</span>
                   <input
-                    value={
-                      step.value
-                        ? 'parameter' in step.value
-                          ? step.value.parameter
-                          : step.value.literal
-                        : ''
-                    }
-                    onChange={(event) =>
-                      stepPatch(index, {
-                        value:
-                          step.value && 'parameter' in step.value
-                            ? { parameter: event.target.value }
-                            : { literal: event.target.value },
-                      })
-                    }
+                    type="url"
+                    value={step.url ?? ''}
+                    onChange={(event) => stepPatch(index, { url: event.target.value })}
                   />
                 </label>
-              </div>
-            )}
-            {step.action === 'press' && (
-              <label className="field">
-                <span>Touche</span>
-                <input
-                  value={step.key ?? ''}
-                  onChange={(event) => stepPatch(index, { key: event.target.value })}
-                />
-              </label>
-            )}
-            {step.action === 'check' && (
-              <label className="applications-check">
-                <input
-                  type="checkbox"
-                  checked={step.checked ?? true}
-                  onChange={(event) => stepPatch(index, { checked: event.target.checked })}
-                />{' '}
-                Cocher (décocher si désactivé)
-              </label>
-            )}
-            {(step.action === 'viewport' || step.action === 'scroll') && (
-              <div className="applications-form-grid">
-                {(step.action === 'viewport'
-                  ? (['width', 'height'] as const)
-                  : (['x', 'y'] as const)
-                ).map((key) => (
-                  <label className="field" key={key}>
-                    <span>{key}</span>
+              )}
+              {['fill', 'select'].includes(step.action) && (
+                <div className="applications-form-grid">
+                  <label className="field">
+                    <span>Type de valeur</span>
+                    <select
+                      value={step.value && 'parameter' in step.value ? 'parameter' : 'literal'}
+                      onChange={(event) =>
+                        stepPatch(index, {
+                          value:
+                            event.target.value === 'parameter'
+                              ? { parameter: '' }
+                              : { literal: '' },
+                        })
+                      }
+                    >
+                      <option value="literal">Valeur fixe non sensible</option>
+                      <option value="parameter">Paramètre</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Valeur ou nom du paramètre</span>
                     <input
-                      type="number"
-                      value={step[key] ?? 0}
-                      onChange={(event) => stepPatch(index, { [key]: Number(event.target.value) })}
+                      value={
+                        step.value
+                          ? 'parameter' in step.value
+                            ? step.value.parameter
+                            : step.value.literal
+                          : ''
+                      }
+                      onChange={(event) =>
+                        stepPatch(index, {
+                          value:
+                            step.value && 'parameter' in step.value
+                              ? { parameter: event.target.value }
+                              : { literal: event.target.value },
+                        })
+                      }
                     />
                   </label>
-                ))}
+                </div>
+              )}
+              {step.action === 'press' && (
+                <label className="field">
+                  <span>Touche</span>
+                  <input
+                    value={step.key ?? ''}
+                    onChange={(event) => stepPatch(index, { key: event.target.value })}
+                  />
+                </label>
+              )}
+              {step.action === 'check' && (
+                <label className="applications-check">
+                  <input
+                    type="checkbox"
+                    checked={step.checked ?? true}
+                    onChange={(event) => stepPatch(index, { checked: event.target.checked })}
+                  />{' '}
+                  Cocher (décocher si désactivé)
+                </label>
+              )}
+              {(step.action === 'viewport' || step.action === 'scroll') && (
+                <div className="applications-form-grid">
+                  {(step.action === 'viewport'
+                    ? (['width', 'height'] as const)
+                    : (['x', 'y'] as const)
+                  ).map((key) => (
+                    <label className="field" key={key}>
+                      <span>{key}</span>
+                      <input
+                        type="number"
+                        value={step[key] ?? 0}
+                        onChange={(event) =>
+                          stepPatch(index, { [key]: Number(event.target.value) })
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
+              <label className="field">
+                <span>Effet métier</span>
+                <select
+                  value={step.effect ?? 'unknown'}
+                  onChange={(event) =>
+                    stepPatch(index, { effect: event.target.value as NavigationStep['effect'] })
+                  }
+                >
+                  <option value="unknown">À vérifier</option>
+                  <option value="read">Lecture</option>
+                  <option value="write">Écriture métier</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Note ou limite détectée</span>
+                <input
+                  value={step.note ?? ''}
+                  onChange={(event) => stepPatch(index, { note: event.target.value })}
+                />
+              </label>
+              <div className="applications-actions">
+                <button type="button" disabled={!index} onClick={() => moveStep(index, -1)}>
+                  Monter l’étape {index + 1}
+                </button>
+                <button
+                  type="button"
+                  disabled={index === value.steps.length - 1}
+                  onClick={() => moveStep(index, 1)}
+                >
+                  Descendre l’étape {index + 1}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => patchJourneySteps(value.steps.filter((_, at) => at !== index))}
+                >
+                  Retirer l’étape {index + 1}
+                </button>
               </div>
-            )}
-            <label className="field">
-              <span>Effet métier</span>
-              <select
-                value={step.effect ?? 'unknown'}
-                onChange={(event) =>
-                  stepPatch(index, { effect: event.target.value as NavigationStep['effect'] })
-                }
-              >
-                <option value="unknown">À vérifier</option>
-                <option value="read">Lecture</option>
-                <option value="write">Écriture métier</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>Note ou limite détectée</span>
-              <input
-                value={step.note ?? ''}
-                onChange={(event) => stepPatch(index, { note: event.target.value })}
-              />
-            </label>
-            <div className="applications-actions">
-              <button type="button" disabled={!index} onClick={() => moveStep(index, -1)}>
-                Monter l’étape {index + 1}
-              </button>
-              <button
-                type="button"
-                disabled={index === value.steps.length - 1}
-                onClick={() => moveStep(index, 1)}
-              >
-                Descendre l’étape {index + 1}
-              </button>
-              <button
-                type="button"
-                onClick={() => patchJourneySteps(value.steps.filter((_, at) => at !== index))}
-              >
-                Retirer l’étape {index + 1}
-              </button>
-            </div>
+            </details>
           </fieldset>
         ))}
         <button
@@ -1887,7 +2429,9 @@ function InspectionPanel({
   data,
   application,
   command,
+  journeyId,
 }: {
+  journeyId?: string;
   data: NavigationSnapshot;
   application: ApplicationProfile;
   command: Command;
@@ -1935,6 +2479,29 @@ function InspectionPanel({
       )}
       <h3>Rechercher dans les sources</h3>
       <SourceSearch data={data} application={application} command={command} />
+      {journeyId && (
+        <div>
+          <h3>Mémoire écran-code de ce parcours</h3>
+          {(data.codeAnchors ?? [])
+            .filter((a) => a.applicationId === application.id)
+            .map((anchor) => (
+              <p key={anchor.id}>
+                {anchor.relativePath} ·{' '}
+                {anchor.state === 'stale'
+                  ? 'Source modifiée, à revoir'
+                  : anchor.journeyIds?.includes(journeyId)
+                    ? 'Association confirmée'
+                    : 'Candidat'}{' '}
+                <button
+                  disabled={anchor.state === 'stale' || anchor.journeyIds?.includes(journeyId)}
+                  onClick={() => command({ action: 'linkSource', anchorId: anchor.id, journeyId })}
+                >
+                  Confirmer le lien avec cet écran
+                </button>
+              </p>
+            ))}
+        </div>
+      )}
       <h3>Vérifier un fichier candidat</h3>
       <p className="field-help">
         Une ressemblance de nom n’est pas une correspondance prouvée. Ouvrez le code pour corroborer
@@ -2092,12 +2659,20 @@ export function NavigationLaunchPicker({
 }) {
   if (!data?.applications.length) return null;
   const application = data.applications.find((app) => app.id === value?.applicationId);
-  const journeys = data.journeys.filter(
-    (journey) => journey.applicationId === application?.id && journey.status === 'available',
+  const journeys = publishedJourneys(data).filter(
+    (journey) => journey.applicationId === application?.id,
   );
-  const selected = data.journeys.find(
+  const selected = journeys.find(
     (journey) => journey.id === value?.journeyId && journey.revision === value?.revision,
   );
+  let plan: ReturnType<typeof navigationPlan> | undefined;
+  let planError = '';
+  try {
+    if (selected) plan = navigationPlan(selected, data);
+  } catch (error) {
+    planError = (error as Error).message;
+  }
+  const outputs = navigationOutputs(plan?.steps ?? []);
   return (
     <fieldset className="applications-launch">
       <legend>Contexte de navigation</legend>
@@ -2162,8 +2737,9 @@ export function NavigationLaunchPicker({
               <option value="reach-state">Atteindre cet état</option>
             </select>
           </label>
-          {selected?.parameters
-            .filter((parameter) => !parameter.sensitive)
+          {planError && <p role="alert">{planError}</p>}
+          {(plan?.parameters ?? selected?.parameters ?? [])
+            .filter((parameter) => !parameter.sensitive && !outputs.has(parameter.name))
             .map((parameter) => (
               <label className="field" key={parameter.name}>
                 <span>{parameter.label || parameter.name}</span>
@@ -2178,6 +2754,12 @@ export function NavigationLaunchPicker({
                 />
               </label>
             ))}
+          {outputs.size > 0 && (
+            <p className="field-help">
+              Le parcours choisit les données correspondantes et conserve leurs identifiants pour la
+              correction : {[...outputs].join(', ')}.
+            </p>
+          )}
           <label className="applications-check">
             <input
               type="checkbox"
@@ -2195,6 +2777,14 @@ export function NavigationLaunchPicker({
               }
             />{' '}
             Prérequis de navigation vérifiés
+          </label>
+          <label className="applications-check">
+            <input
+              type="checkbox"
+              checked={value.prepareRepair ?? false}
+              onChange={(e) => onChange({ ...value, prepareRepair: e.target.checked })}
+            />{' '}
+            Préparer automatiquement une mission du Navigateur si l’accès bloque
           </label>
           <p className="field-help">
             L’aperçu hôte précise les références, le volume et les omissions. Changer le contexte
@@ -2337,8 +2927,19 @@ function CaptureComparison({
     data.captures?.filter((capture) => capture.applicationId === applicationId) ?? [];
   const [beforeId, setBeforeId] = useState('');
   const [afterId, setAfterId] = useState('');
-  const before = captures.find((capture) => capture.id === beforeId) ?? captures.at(-2);
   const after = captures.find((capture) => capture.id === afterId) ?? captures.at(-1);
+  const before =
+    captures.find((capture) => capture.id === beforeId) ??
+    (after?.caseKey
+      ? [...captures]
+          .reverse()
+          .find(
+            (capture) =>
+              capture.id !== after.id &&
+              capture.caseKey === after.caseKey &&
+              capture.createdAt <= after.createdAt,
+          )
+      : undefined);
   return (
     <details className="applications-inspection">
       <summary>Captures et comparaison avant / après ({captures.length})</summary>
@@ -2358,6 +2959,7 @@ function CaptureComparison({
               <label className="field" key={slot.label}>
                 <span>Capture {slot.label.toLowerCase()}</span>
                 <select value={slot.value} onChange={(event) => slot.set(event.target.value)}>
+                  <option value="">Choisir une capture</option>
                   {captures.map((capture) => (
                     <option value={capture.id} key={capture.id}>
                       {shortDate(capture.createdAt)} ·{' '}
@@ -2370,7 +2972,9 @@ function CaptureComparison({
           </div>
           {before &&
             after &&
-            (before.journeyId !== after.journeyId ||
+            (!before.caseKey ||
+              before.caseKey !== after.caseKey ||
+              before.journeyId !== after.journeyId ||
               before.revision !== after.revision ||
               JSON.stringify(before.viewport) !== JSON.stringify(after.viewport)) && (
               <p className="applications-uncertain">
@@ -2378,6 +2982,12 @@ function CaptureComparison({
                 démontre pas une équivalence d’exécution.
               </p>
             )}
+          {!before && (
+            <p>
+              Aucune capture antérieure du même cas. Choisis une capture explicitement pour une
+              comparaison exploratoire.
+            </p>
+          )}
           <div className="applications-comparison">
             {[
               { label: 'Avant', capture: before },
@@ -2421,7 +3031,9 @@ export function NavigationInterventionCard({
   attempt,
   disabled,
   dispatch,
+  data,
 }: {
+  data?: NavigationSnapshot;
   featureId: string;
   stepId: string;
   attempt: Attempt;
@@ -2429,7 +3041,15 @@ export function NavigationInterventionCard({
   dispatch: Dispatch;
 }) {
   const request = attempt.navigationRequest;
+  const [selectedId, setSelectedId] = useState('');
   if (!request) return null;
+  const choices = data
+    ? publishedJourneys(data).filter((j) => j.applicationId === request.applicationId)
+    : [];
+  const selected =
+    choices.find((j) => j.id === selectedId) ??
+    choices.find((j) => j.id === attempt.navigation?.journey?.id) ??
+    choices[0];
   return (
     <section className="navigation-intervention" aria-label="Contexte de navigation à compléter">
       <div>
@@ -2441,6 +3061,47 @@ export function NavigationInterventionCard({
           choisissez explicitement le parcours et sa révision dans une nouvelle tentative.
         </p>
       </div>
+      {request.resolvedJourney ? (
+        <p role="status">
+          Accès prêt : r{request.resolvedJourney.revision}. Ouvre une nouvelle tentative de cette
+          étape ; le contexte est déjà sélectionné.
+        </p>
+      ) : (
+        choices.length > 0 && (
+          <div>
+            <label className="field">
+              <span>Accès à utiliser pour reprendre</span>
+              <select value={selected?.id ?? ''} onChange={(e) => setSelectedId(e.target.value)}>
+                {choices.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.title} · r{j.revision}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>
+              La tentative d’origine et ses preuves sont conservées. La reprise utilisera la
+              révision choisie avec une nouvelle préparation.
+            </p>
+            <button
+              disabled={disabled || !selected}
+              onClick={() =>
+                selected &&
+                dispatch({
+                  type: 'resumeNavigation',
+                  featureId,
+                  stepId,
+                  attemptId: attempt.id,
+                  journeyId: selected.id,
+                  revision: selected.revision,
+                })
+              }
+            >
+              Reprendre ma correction avec cet accès
+            </button>
+          </div>
+        )
+      )}
       {request.navigatorFeatureId ? (
         <button
           className="button secondary"

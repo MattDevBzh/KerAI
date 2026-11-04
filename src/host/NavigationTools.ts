@@ -147,7 +147,12 @@ export function navigationTools(
         'Le consommateur doit rejouer la révision figée dans sa tentative. Sélectionne un autre parcours dans une nouvelle tentative.',
       );
     const journey = await service.store.revision(id, revision);
-    if (!journey || journey.applicationId !== appId || journey.status === 'archived')
+    if (
+      !journey ||
+      journey.applicationId !== appId ||
+      journey.status === 'archived' ||
+      service.store.snapshot().journeys.some((j) => j.id === id && j.status === 'archived')
+    )
       throw new Error('Parcours hors contexte ou archivé.');
     return journey;
   };
@@ -214,6 +219,10 @@ export function navigationTools(
               : 'reach',
           prerequisitesConfirmed: context.selection.prerequisitesConfirmed,
           binding: context.binding,
+          plan:
+            context.journey?.id === journey.id && context.journey.revision === revision
+              ? context.plan
+              : undefined,
         });
         await callbacks.onNavigationRun?.(run);
         return run;
@@ -257,7 +266,11 @@ export function navigationTools(
         .strict(),
       async (args) => {
         service.assertBrowser(appId);
-        return service.inspect(args, guard());
+        const observation = await service.inspect(args, guard());
+        // A fresh observation lets the agent reassess a repeated interaction.
+        // Failed inspections retain the guard; the total action budget is unchanged.
+        repeats.clear();
+        return observation;
       },
     ),
     tool(
@@ -267,7 +280,8 @@ export function navigationTools(
       async (step: NavigationStep, requestSignal) => {
         await interaction(JSON.stringify(step), requestSignal);
         guard(requestSignal);
-        const key = JSON.stringify(step);
+        const { id: _id, note: _note, effect: _effect, ...operation } = step;
+        const key = JSON.stringify(operation);
         const count = (repeats.get(key) ?? 0) + 1;
         repeats.set(key, count);
         if (count > 2)

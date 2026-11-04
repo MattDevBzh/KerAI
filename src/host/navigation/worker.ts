@@ -1,3 +1,4 @@
+import { resolveNavigationStep, resolveNavigationConditions } from '../../shared/navigationRecipes';
 import {
   chromium,
   type BrowserContext,
@@ -7,7 +8,7 @@ import {
 } from 'playwright-core';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type {
   NavigationStep,
   NavigationCondition,
@@ -192,6 +193,23 @@ async function conditions(conditions: NavigationCondition[]): Promise<boolean[]>
   }
   return results;
 }
+async function waitConditions(
+  expected: NavigationCondition[],
+  timeoutMs = 15000,
+): Promise<boolean[]> {
+  const deadline = Date.now() + Math.max(1, Math.min(timeoutMs, 15000));
+  for (;;) {
+    let observed: boolean[] = expected.map(() => false);
+    try {
+      observed = await conditions(expected);
+    } catch (error) {
+      if (!(error as Error).message.includes('Cible absente.')) throw error;
+    }
+    if (observed.every(Boolean)) return observed;
+    if (Date.now() >= deadline) fail('Délai des conditions dépassé ; état attendu non observé.');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
 async function ensureInteractionGuards() {
   if (!context) return;
   await Promise.allSettled(
@@ -227,7 +245,12 @@ async function clearInteractionExpectations() {
       ),
   );
 }
-async function action({ step, parameters }: WorkerAct) {
+async function action({ step: original, parameters }: WorkerAct) {
+  const step = resolveNavigationStep(
+    original.action === 'resolve' ? { ...original, postconditions: undefined } : original,
+    parameters,
+  );
+  const resolvedParameters: Record<string, string> = {};
   controlOwned = true;
   await ensureInteractionGuards();
   await clearInteractionExpectations();
@@ -236,6 +259,8 @@ async function action({ step, parameters }: WorkerAct) {
     ![
       'navigate',
       'click',
+      'doubleClick',
+      'resolve',
       'fill',
       'select',
       'check',
@@ -250,13 +275,21 @@ async function action({ step, parameters }: WorkerAct) {
   const page = pageFor(step.target);
   const timeout = Math.min(Math.max(step.timeoutMs ?? 10000, 1), 15000);
   const target =
-    step.target && step.action !== 'wait' ? await locate(step.target, timeout) : undefined;
+    step.target && !['wait', 'resolve'].includes(step.action)
+      ? await locate(step.target, timeout)
+      : undefined;
   if (target) await rejectSensitive(target);
-  if (target && ['click', 'check', 'select', 'press'].includes(step.action)) {
+  if (target && ['click', 'doubleClick', 'check', 'select', 'press'].includes(step.action)) {
     await target.evaluate(
       (element, action) =>
-        (window as any).__keraiInteractionGuard?.expect(element, action.kind, action.key),
+        (window as any).__keraiInteractionGuard?.expect(
+          element,
+          action.kind,
+          action.key,
+          action.count,
+        ),
       {
+        count: step.action === 'doubleClick' ? 2 : 1,
         kind: step.action === 'press' ? 'key' : 'pointer',
         key: step.key === 'Space' ? ' ' : step.key,
       },
@@ -273,8 +306,61 @@ async function action({ step, parameters }: WorkerAct) {
     }
     case 'click':
       if (!target) fail('Cible obligatoire.');
-      await target.click({ timeout });
+      await target.click({ timeout, button: step.button, delay: step.durationMs });
       break;
+    case 'doubleClick':
+      if (!target) fail('Cible obligatoire.');
+      await target.dblclick({ timeout, button: step.button, delay: step.durationMs });
+      break;
+    case 'resolve': {
+      if (!step.target || !step.resolver) fail('Sélection métier incomplète.');
+      const rule = step.resolver;
+      const frame = await frameFor(step.target);
+      if (step.target.strategy !== 'css') fail('Une collection métier exige un sélecteur CSS.');
+      const rows = frame.locator(step.target.value);
+      const count = await rows.count();
+      if (count > 100) fail('Trop de candidats métier ; préciser le filtre (100 maximum).');
+      const candidates: string[] = [];
+      for (let index = 0; index < count; index++) {
+        const row = rows.nth(index);
+        if (!(await row.isVisible())) continue;
+        await rejectSensitive(row);
+        let matches = true;
+        for (const filter of rule.filters) {
+          const field = filter.selector ? row.locator(filter.selector) : row;
+          if ((await field.count()) !== 1 || !(await field.isVisible())) {
+            matches = false;
+            break;
+          }
+          await rejectSensitive(field);
+          if (filter.text !== undefined && !(await field.innerText()).includes(filter.text)) {
+            matches = false;
+            break;
+          }
+        }
+        if (!matches) continue;
+        const identity = await row.getAttribute(rule.attribute);
+        if (!identity || identity.length > 1000) continue;
+        if (
+          rule.attribute === 'href' &&
+          (!isAllowed(new URL(identity, page.url()).href) || hasSensitiveNavigationUrl(identity))
+        )
+          continue;
+        if (Object.hasOwn(parameters, rule.output) && parameters[rule.output] !== identity)
+          continue;
+        candidates.push(identity);
+      }
+      if (!candidates.length)
+        fail('Aucune donnée métier ne correspond aux critères et au cas choisi.');
+      if (rule.pick === 'unique' && candidates.length !== 1)
+        fail(
+          'Plusieurs données métier correspondent : préciser le filtre ou choisir explicitement la première.',
+        );
+      if (candidates.filter((id) => id === candidates[0]).length !== 1)
+        fail('Identifiant métier ambigu.');
+      resolvedParameters[rule.output] = candidates[0];
+      break;
+    }
     case 'fill':
     case 'select': {
       if (!target || !step.value) fail('Cible et valeur obligatoires.');
@@ -326,10 +412,10 @@ async function action({ step, parameters }: WorkerAct) {
       if (
         !Number.isInteger(step.width) ||
         !Number.isInteger(step.height) ||
-        step.width! < 320 ||
-        step.width! > 3840 ||
-        step.height! < 240 ||
-        step.height! > 2160
+        step.width! < 240 ||
+        step.width! > 7680 ||
+        step.height! < 200 ||
+        step.height! > 4320
       )
         fail('Dimensions de viewport invalides.');
       await page.setViewportSize({ width: step.width!, height: step.height! });
@@ -362,9 +448,19 @@ async function action({ step, parameters }: WorkerAct) {
       fail('Étape manuelle : reprise humaine requise.');
   }
   guard(page);
-  const observed = await conditions(step.postconditions ?? []);
+  const observed = await waitConditions(
+    resolveNavigationConditions(original.postconditions ?? [], {
+      ...parameters,
+      ...resolvedParameters,
+    }),
+    timeout,
+  );
   if (observed.some((value) => !value)) fail('Postcondition non satisfaite.');
-  return { url: cleanUrl(page.url()), conditions: observed };
+  return {
+    url: cleanUrl(page.url()),
+    conditions: observed,
+    ...(Object.keys(resolvedParameters).length ? { resolvedParameters } : {}),
+  };
 }
 async function inspect(request: InspectionRequest): Promise<BrowserInspection> {
   controlOwned = true;
@@ -665,7 +761,26 @@ async function initializeRecorder() {
             const locator = await locate(step.target);
             await rejectSensitive(locator);
           } catch {
+            if (epoch !== recordEpoch || auth || !isAllowed(source.frame.url())) return;
             warn('Cible disparue ou ambiguë : interaction non corroborée, à revoir.');
+            // A navigation or immediate DOM update can destroy the demonstrated
+            // target before corroboration. Never silently erase a possible effect
+            // or substitute a direct navigation: preserve an unplayable review step.
+            const observedUrl = source.page.url();
+            process.send?.({
+              event: 'record',
+              generation,
+              sequence: ++recordSequence,
+              step: {
+                id: randomUUID(),
+                action: 'manual',
+                effect: 'unknown',
+                note: 'Interaction non corroborée : la cible a disparu, changé ou ne peut pas être enregistrée. Corrigez cette étape avant le rejeu.',
+                ...(isAllowed(observedUrl) && !hasSensitiveNavigationUrl(observedUrl)
+                  ? { url: cleanUrl(observedUrl) }
+                  : {}),
+              },
+            });
             return;
           }
         } else if (raw.action !== 'scroll') return;
@@ -837,6 +952,42 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
       await ensureInteractionGuards();
       return result;
     }
+    case 'assetDigest': {
+      const page = pageFor();
+      const url = new URL(payload.url, page.url());
+      if (!isAllowed(url.href) || hasSensitiveNavigationUrl(url.href))
+        fail('Ressource hors périmètre.');
+      // Same origin only: never send credentials to an arbitrary destination or follow redirects.
+      if (url.origin !== new URL(page.url()).origin)
+        fail('La ressource doit appartenir à la page ouverte.');
+      const bytes = await page.evaluate(async (url) => {
+        const response = await fetch(url, {
+          redirect: 'error',
+          cache: 'no-store',
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok || !response.body) throw new Error('Resource unavailable');
+        const reader = response.body.getReader();
+        const chunks: number[] = [];
+        try {
+          for (;;) {
+            const item = await reader.read();
+            if (item.done) break;
+            if (chunks.length + item.value.length > 8 * 1024 * 1024)
+              throw new Error('Resource too large');
+            for (const byte of item.value) chunks.push(byte);
+          }
+        } finally {
+          await reader.cancel();
+        }
+        return chunks;
+      }, url.href);
+      guard(page);
+      return {
+        sha256: createHash('sha256').update(Buffer.from(bytes)).digest('hex'),
+        bytes: bytes.length,
+      };
+    }
     case 'act':
       try {
         return await action(payload);
@@ -848,7 +999,9 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
     case 'capture':
       return capture(payload ?? {});
     case 'conditions':
-      return conditions(payload);
+      return Array.isArray(payload)
+        ? conditions(payload)
+        : waitConditions(payload.conditions, payload.timeoutMs);
     case 'human':
       controlOwned = false;
       await deactivateRecording();
@@ -873,6 +1026,9 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
         );
       const initialUrl = recordingPage.url();
       if (request.command === 'recordStart') recordSequence = 0;
+      // The demonstration belongs to the human, including its paused intervals.
+      // Managed ownership is reacquired by the next explicit agent observation/action.
+      controlOwned = false;
       recording = true;
       recordEpoch++;
       await Promise.all(

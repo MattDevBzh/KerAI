@@ -19,8 +19,13 @@ export type BrowserCapture = {
   viewport: { width: number; height: number };
   browser: string;
 };
-export type BrowserActionResult = { url: string; conditions: boolean[] };
+export type BrowserActionResult = {
+  url: string;
+  conditions: boolean[];
+  resolvedParameters?: Record<string, string>;
+};
 export type WorkerCommand =
+  | 'assetDigest'
   | 'prepare'
   | 'open'
   | 'reset'

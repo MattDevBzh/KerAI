@@ -217,6 +217,52 @@ describe('navigation schemas and import', () => {
       ).toThrow('non pris en charge');
     },
   );
+  it('preserves Recorder default timeouts and explicit per-step overrides', () => {
+    const result = importNavigationJSON(
+      JSON.stringify({
+        title: 'Délais Recorder',
+        timeout: 1200,
+        steps: [
+          { type: 'navigate', url: '/' },
+          { type: 'click', selectors: [['#next']], timeout: 3000 },
+        ],
+      }),
+      'app',
+    );
+    expect(result.journey.steps.map((step) => step.timeoutMs)).toEqual([1200, 3000]);
+  });
+  it.each([0, -1, 0.5, 15001])('rejects unsupported Recorder default timeout %s', (timeout) => {
+    expect(() =>
+      importNavigationJSON(
+        JSON.stringify({
+          title: 'Délai invalide',
+          timeout,
+          steps: [{ type: 'navigate', url: '/' }],
+        }),
+        'app',
+      ),
+    ).toThrow('Délai Recorder');
+  });
+  it('uses a Recorder fallback when an accessible name lacks a role, without inventing a field label', () => {
+    const result = importNavigationJSON(
+      JSON.stringify({
+        title: 'Continuer',
+        steps: [{ type: 'click', selectors: [['aria/Continuer'], ['#submit']] }],
+      }),
+      'app',
+    );
+    expect(result.journey.steps[0].target).toEqual({ strategy: 'css', value: '#submit' });
+    expect(result.warnings.join(' ')).toContain('sans rôle');
+    expect(() =>
+      importNavigationJSON(
+        JSON.stringify({
+          title: 'Continuer',
+          steps: [{ type: 'click', selectors: [['aria/Continuer']] }],
+        }),
+        'app',
+      ),
+    ).toThrow('aria avec rôle');
+  });
   it('rejects frame chains, held keys and unknown fields instead of silently changing behavior', () => {
     expect(() =>
       importNavigationJSON(
@@ -266,6 +312,31 @@ describe('navigation schemas and import', () => {
     expect(imported.applicationId).toBe('other-app');
     expect(imported.id).not.toBe(original.id);
     expect(imported.status).toBe('draft');
+  });
+  it('refuses imports and exports that exceed the parameter limit after removing literal values', () => {
+    const original = draft({
+      parameters: Array.from({ length: 40 }, (_, index) => ({
+        name: `value_${index}`,
+        label: `Valeur ${index}`,
+        type: 'string',
+        required: false,
+      })),
+      steps: [
+        {
+          id: 'fill',
+          action: 'fill',
+          target: { strategy: 'css', value: '#customer' },
+          value: { literal: 'PRIVATE' },
+        },
+      ],
+    });
+    expect(navigationJourneySchema.safeParse(original).success).toBe(true);
+    expect(() => exportNavigationJourney(original)).toThrow('40 paramètres');
+    expect(() =>
+      importNavigationJSON(JSON.stringify({ navigationVersion: 1, journey: original }), 'app'),
+    ).toThrow('40 paramètres');
+    expect(original.steps[0].value).toEqual({ literal: 'PRIVATE' });
+    expect(original.parameters).toHaveLength(40);
   });
 });
 describe('immutable navigation library', () => {

@@ -140,16 +140,32 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
     await editor
       .getByRole('checkbox', { name: 'Valeur sensible · exclure du rejeu automatique' })
       .uncheck();
+    // These displayed defaults and wait conditions must survive the real host,
+    // storage and Chromium replay, not just a mocked UI acknowledgement.
+    await editor.getByRole('button', { name: 'Ajouter une étape', exact: true }).click();
+    const checkedStep = editor.getByRole('group', { name: 'Étape 4', exact: true });
+    await checkedStep.getByRole('combobox', { name: 'Action', exact: true }).selectOption('check');
+    await checkedStep.getByRole('combobox', { name: 'Repérage', exact: true }).selectOption('css');
+    await checkedStep.getByLabel('Cible', { exact: true }).fill('#check');
+    await editor.getByRole('button', { name: 'Ajouter une étape', exact: true }).click();
+    const waitStep = editor.getByRole('group', { name: 'Étape 5', exact: true });
+    await waitStep.getByRole('combobox', { name: 'Action', exact: true }).selectOption('wait');
+    await waitStep.getByRole('button', { name: 'Ajouter une condition d’attente' }).click();
+    await waitStep.getByRole('combobox', { name: 'Condition 1', exact: true }).selectOption('text');
+    await waitStep.getByRole('combobox', { name: 'Repérage', exact: true }).selectOption('css');
+    await waitStep.getByLabel('Cible', { exact: true }).fill('#result');
+    await waitStep.getByLabel('Valeur attendue', { exact: true }).fill('Résultat Liffré');
     await editor.getByRole('button', { name: 'Ajouter une condition d’arrivée' }).click();
-    await editor.getByRole('combobox', { name: 'Condition 1', exact: true }).selectOption('text');
-    const condition = editor.locator('.applications-condition');
+    const arrival = editor.getByRole('group', { name: 'Conditions d’arrivée', exact: true });
+    await arrival.getByRole('combobox', { name: 'Condition 1', exact: true }).selectOption('text');
+    const condition = arrival.locator('.applications-condition');
     await condition.getByRole('combobox', { name: 'Repérage', exact: true }).selectOption('css');
     await condition.getByLabel('Cible', { exact: true }).fill('#result');
     await condition.getByLabel('Valeur attendue', { exact: true }).fill('Résultat Liffré');
     await editor.getByRole('button', { name: 'Enregistrer une nouvelle révision' }).click();
     await expect(editor).not.toBeVisible();
     const detail = page.getByRole('region', { name: 'Fiche de parcours' });
-    await detail.getByLabel('Valeur de l’étape 2', { exact: false }).fill('Liffré');
+    await detail.getByLabel('#city', { exact: false }).fill('Liffré');
     await detail.getByRole('checkbox', { name: /Le rôle, les données/ }).check();
     await detail.getByRole('checkbox', { name: /J’autorise les interactions/ }).check();
     await detail.getByRole('button', { name: 'Lancer le rejeu' }).click();
@@ -159,7 +175,7 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
     const run = service.snapshot().runs.at(-1)!;
     expect(run.arrivalVerified).toBe(true);
     expect(run.metrics.providerCalls).toBe(0);
-    expect(run.metrics.actions).toBe(4);
+    expect(run.metrics.actions).toBe(6);
     expect(run.events[0]).toMatchObject({ stepId: 'browser-reset', status: 'succeeded' });
     await page.getByRole('button', { name: 'Capturer cet état', exact: true }).click();
     await expect.poll(() => service.snapshot().captures?.length).toBe(2);
@@ -170,6 +186,10 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
     expect(published.revision).toBe(3);
     expect(published.provenance.verifiedRunId).toBe(run.id);
     await page.getByText('Captures et comparaison avant / après (2)', { exact: true }).click();
+    await expect(page.getByText(/Aucune capture antérieure du même cas/)).toBeVisible();
+    await page
+      .getByRole('combobox', { name: 'Capture avant', exact: true })
+      .selectOption(service.snapshot().captures![0].id);
     await expect(page.getByRole('img', { name: /^Avant :/ })).toBeVisible();
     await expect(page.getByRole('img', { name: /^Après :/ })).toBeVisible();
     const captures = service.snapshot().captures!;
@@ -227,6 +247,14 @@ test('UI réelle → service hôte → Chromium : importer, corriger, rejouer, p
       page.getByRole('region', { name: 'Fiche de parcours' }).locator('.applications-status-grid'),
     ).toContainText('Rejoué avec succès');
     expect(service.snapshot().journeys[0].hash).toBe(published.hash);
+    expect(service.snapshot().journeys[0].steps[3]).toMatchObject({
+      action: 'check',
+      checked: true,
+    });
+    expect(service.snapshot().journeys[0].steps[4]).toMatchObject({
+      action: 'wait',
+      postconditions: [{ kind: 'text', target: { value: '#result' }, value: 'Résultat Liffré' }],
+    });
     expect(service.snapshot().runs[0].definitionHash).toBe(run.definitionHash);
     expect(service.snapshot().captures?.length).toBe(2);
 

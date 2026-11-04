@@ -2,6 +2,8 @@ import { PullRequestReview } from './PullRequestReview';
 import { parsePullRequestUrl } from '../shared/reviews';
 import { reviewTargetSchema } from '../core/reviewSchemas';
 import { reviewTargetLabel, reviewWorkflow } from '../shared/reviews';
+
+import { publishedJourneys, navigationOutputs, navigationPlan } from '../shared/navigationRecipes';
 import { defaultNavigationSelection, isNavigator } from '../shared/navigationSelection';
 import {
   compactableSections,
@@ -1126,6 +1128,7 @@ export class StudioService extends EventEmitter {
           roots.map((root) => root.id),
         ));
     if (!selected) return;
+    await this.navigation.checkEnvironment(selected.applicationId, roots);
     await this.navigation.anchors.verify(roots, {
       applicationId: selected.applicationId,
       limit: 64,
@@ -1471,6 +1474,18 @@ export class StudioService extends EventEmitter {
     );
     const attempt = this.engine.getStep(featureId, stepId).attempts.at(-1);
     if (
+      attempt?.navigationRequest &&
+      attempt.navigation?.selection.prepareRepair &&
+      attempt.status === 'waiting_input' &&
+      !this.automation
+    ) {
+      try {
+        await this.prepareNavigationIntervention(featureId, stepId, attempt.id);
+      } catch (error) {
+        this.error(error);
+      }
+    }
+    if (
       attempt?.pair?.pendingMessages.length &&
       !['paused', 'interrupted'].includes(attempt.pair.phase)
     )
@@ -1575,6 +1590,14 @@ export class StudioService extends EventEmitter {
     };
     attempt.launch = structuredClone(input.launch!);
     if (!continued) attempt.navigation = input.navigation && structuredClone(input.navigation);
+    if (input.navigation)
+      feature.navigation = {
+        ...structuredClone(input.navigation.selection),
+        allowInteractions: false,
+        ...(input.navigation.selection.prerequisitesConfirmed !== undefined
+          ? { prerequisitesConfirmed: false }
+          : {}),
+      };
     if (feature.execution && input.launch?.permissionMode) {
       if (feature.execution.permissionMode !== input.launch.permissionMode)
         this.nativePermissionGrants.delete(
@@ -1775,6 +1798,9 @@ export class StudioService extends EventEmitter {
       },
       onNavigationRun: async (run) => {
         (attempt.navigationRuns ??= []).push(structuredClone(run));
+        if (run.status === 'succeeded' && feature.navigation && run.resolvedParameters) {
+          feature.navigation.parameters = { ...run.resolvedParameters };
+        }
         await this.persist();
       },
       onNavigationCapture: async (capture) => {
@@ -2369,6 +2395,77 @@ export class StudioService extends EventEmitter {
         complete();
       }
     }
+  }
+  async prepareNavigationIntervention(featureId: string, stepId: string, attemptId: string) {
+    const feature = this.engine.getFeature(featureId);
+    const attempt = this.engine.getStep(featureId, stepId).attempts.at(-1);
+    const request = attempt?.navigationRequest;
+    if (!request || attempt.id !== attemptId || attempt.status === 'running')
+      throw new Error('Demande de navigation inactive.');
+    if (request.navigatorFeatureId) return request.navigatorFeatureId;
+    const app = this.navigation.application(request.applicationId);
+    if (!app.ownerNavigatorId) throw new Error('Choisis le Navigateur dans le profil.');
+    const projects = (
+      feature.projects ?? this.navigation.options.projects().map((p) => ({ ...p, name: p.id }))
+    ).filter((p) => app.projectIds.includes(p.id));
+    if (!projects.some((p) => p.path === this.workspacePath))
+      throw new Error('Le projet actif doit appartenir à cette application.');
+    const created = await this.createFeature({
+      title: `Accès pour ${feature.title}`.slice(0, 200),
+      description: `${request.reason}\nObservations à vérifier :\n${request.observations}\nPréserver le cas et les critères métier de la correction ${feature.id}.`,
+      agentId: app.ownerNavigatorId,
+      projects,
+      isolated: false,
+    });
+    created.navigation = {
+      applicationId: app.id,
+      parameters: {},
+      intent: 'reach-state',
+      allowInteractions: false,
+    };
+    request.navigatorFeatureId = created.id;
+    await this.persist();
+    return created.id;
+  }
+  async resumeNavigation(
+    featureId: string,
+    stepId: string,
+    attemptId: string,
+    journeyId: string,
+    revision: number,
+  ) {
+    this.assertTrusted();
+    if (this.active) throw new Error('Attends la fin de la tentative.');
+    const feature = this.engine.getFeature(featureId);
+    const attempt = this.engine.getStep(featureId, stepId).attempts.at(-1);
+    const request = attempt?.navigationRequest;
+    if (!request || attempt.id !== attemptId || feature.archived)
+      throw new Error('Demande inactive.');
+    const journey = publishedJourneys(this.navigation.snapshot()).find(
+      (j) =>
+        j.id === journeyId && j.revision === revision && j.applicationId === request.applicationId,
+    );
+    if (!journey) throw new Error('Choisis une révision publiée actuelle.');
+    const plan = navigationPlan(journey, this.navigation.snapshot());
+    const names = new Set([
+      ...plan.parameters.filter((p) => !p.sensitive).map((p) => p.name),
+      ...navigationOutputs(plan.steps),
+    ]);
+    const preserved =
+      feature.navigation?.applicationId === request.applicationId
+        ? feature.navigation.parameters
+        : (attempt.navigation?.selection.parameters ?? {});
+    feature.navigation = {
+      applicationId: journey.applicationId,
+      journeyId,
+      revision,
+      parameters: Object.fromEntries(Object.entries(preserved).filter(([name]) => names.has(name))),
+      intent: 'reproduce',
+      allowInteractions: false,
+      prerequisitesConfirmed: false,
+    };
+    request.resolvedJourney = { id: journeyId, revision };
+    await this.persist();
   }
   private pairInput(featureId: string, stepId: string): RunInput {
     const feature = this.engine.getFeature(featureId),

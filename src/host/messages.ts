@@ -41,6 +41,16 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({ type: z.literal('navigationIntervention'), featureId: id, stepId: id, attemptId: id })
     .strict(),
+  z
+    .object({
+      type: z.literal('resumeNavigation'),
+      featureId: id,
+      stepId: id,
+      attemptId: id,
+      journeyId: id,
+      revision: z.number().int().positive(),
+    })
+    .strict(),
   ...proofMessageVariants,
   z
     .object({

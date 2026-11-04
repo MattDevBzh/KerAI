@@ -168,6 +168,30 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 describe('frozen navigation authority', () => {
+  it('never publishes an uncorroborated demonstration marker as an automatic journey', async () => {
+    const current = service.store.snapshot().journeys[0];
+    const draft = await service.store.saveDraft(
+      {
+        ...current,
+        status: 'draft',
+        steps: [...current.steps, { id: 'unconfirmed', action: 'manual', note: 'Geste à revoir.' }],
+      },
+      current.revision,
+      { kind: 'human' },
+    );
+    const run: NavigationRun = {
+      ...service.store.snapshot().runs[0],
+      id: 'unconfirmed-run',
+      revision: draft.revision,
+      definitionHash: draft.hash!,
+      events: draft.steps.map((step) => ({ stepId: step.id, status: 'succeeded', at: now })),
+    };
+    await service.store.recordRun(run);
+    await expect(
+      service.store.commit(draft.id, draft.revision, run.id, { kind: 'human' }),
+    ).rejects.toThrow('rejeu hôte');
+    expect(service.store.snapshot().journeys[0].status).toBe('draft');
+  });
   it('preserves project identities when application and workspace orders differ', () => {
     const state = service.store.snapshot();
     state.applications[0].projectIds = ['second', 'project'];
@@ -214,6 +238,64 @@ describe('frozen navigation authority', () => {
   });
 });
 describe('host tool permissions', () => {
+  it('allows the same action after a successful fresh inspection, while retaining loop protection', async () => {
+    const tools = navigationTools(service, input(), callbacks, new AbortController().signal);
+    const step = { id: 'next', action: 'click', target: { strategy: 'css', value: '#next' } };
+    vi.spyOn(service, 'inspect').mockResolvedValue({
+      url: app.origin,
+      title: 'Page suivante',
+      observedAt: now,
+      text: 'Page suivante',
+      elements: [],
+      resources: [],
+      truncated: false,
+    });
+    expect((await invoke(tools, 'studio_browser_act', step)).resultType).toBe('success');
+    expect((await invoke(tools, 'studio_browser_act', step)).resultType).toBe('success');
+    expect((await invoke(tools, 'studio_browser_act', step)).resultType).toBe('failure');
+    expect((await invoke(tools, 'studio_browser_inspect', {})).resultType).toBe('success');
+    expect((await invoke(tools, 'studio_browser_act', step)).resultType).toBe('success');
+    expect(browser.act).toHaveBeenCalledTimes(3);
+  });
+  it('keeps repetition protection across changing action IDs and failed inspections', async () => {
+    const tools = navigationTools(service, input(), callbacks, new AbortController().signal);
+    const step = { action: 'click', target: { strategy: 'css', value: '#next' } };
+    for (const id of ['first', 'second'])
+      expect((await invoke(tools, 'studio_browser_act', { ...step, id })).resultType).toBe(
+        'success',
+      );
+    vi.spyOn(service, 'inspect').mockRejectedValue(new Error('Page indisponible'));
+    expect((await invoke(tools, 'studio_browser_inspect', {})).resultType).toBe('failure');
+    const blocked = await invoke(tools, 'studio_browser_act', {
+      ...step,
+      id: 'third',
+      note: 'Suite',
+    });
+    expect(blocked.resultType).toBe('failure');
+    expect(blocked.textResultForLlm).toContain('répétée');
+    expect(browser.act).toHaveBeenCalledTimes(2);
+  });
+  it('retains the total exploration budget after fresh inspections', async () => {
+    const tools = navigationTools(service, input(), callbacks, new AbortController().signal);
+    vi.spyOn(service, 'inspect').mockResolvedValue({
+      url: app.origin,
+      title: 'Page suivante',
+      observedAt: now,
+      text: 'Page suivante',
+      elements: [],
+      resources: [],
+      truncated: false,
+    });
+    const step = { id: 'next', action: 'click', target: { strategy: 'css', value: '#next' } };
+    for (let index = 0; index < 30; index++) {
+      expect((await invoke(tools, 'studio_browser_inspect', {})).resultType).toBe('success');
+      expect((await invoke(tools, 'studio_browser_act', step)).resultType).toBe('success');
+    }
+    const blocked = await invoke(tools, 'studio_browser_act', step);
+    expect(blocked.resultType).toBe('failure');
+    expect(blocked.textResultForLlm).toContain('30 opérations');
+    expect(browser.act).toHaveBeenCalledTimes(30);
+  });
   it('stops an in-flight browser action on SDK tool cancellation and removes its listener', async () => {
     let finish: () => void = () => {};
     browser.act.mockImplementation(

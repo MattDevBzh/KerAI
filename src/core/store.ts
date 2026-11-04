@@ -128,6 +128,10 @@ const attempt = z.object({
       observations: z.string().max(4000),
       createdAt: z.string(),
       navigatorFeatureId: z.string().optional(),
+      resolvedJourney: z
+        .object({ id: z.string(), revision: z.number().int().positive() })
+        .strict()
+        .optional(),
     })
     .strict()
     .optional(),

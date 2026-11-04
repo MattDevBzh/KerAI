@@ -1,3 +1,4 @@
+import { navigationPlan, navigationOutputs, publishedJourneys } from '../shared/navigationRecipes';
 import { createHash } from 'node:crypto';
 import type {
   ApplicationProfile,
@@ -20,7 +21,7 @@ export function freezeNavigationContext(
   if (application.projectIds.some((id) => !roots.some((p) => p.id === id)))
     throw new Error('Un dépôt de cette application ne fait pas partie de la tentative.');
   const journey = selection.journeyId
-    ? state.journeys.find(
+    ? publishedJourneys(state).find(
         (j) =>
           j.id === selection.journeyId &&
           j.applicationId === application.id &&
@@ -31,22 +32,29 @@ export function freezeNavigationContext(
     throw new Error(
       'Cette révision est indisponible ou a changé. Choisis le parcours actuel et prépare une nouvelle tentative.',
     );
-  if (journey?.prerequisites.length && !selection.prerequisitesConfirmed)
+  const plan = journey ? navigationPlan(journey, state) : undefined;
+  const outputs = navigationOutputs(plan?.steps ?? []);
+  if (plan?.prerequisites.length && !selection.prerequisitesConfirmed)
     throw new Error('Confirme les prérequis du parcours avant le lancement.');
-  const declared = new Set(journey?.parameters.map((p) => p.name) ?? []);
+  const declared = new Set([...(plan?.parameters.map((p) => p.name) ?? []), ...outputs]);
   if (Object.keys(selection.parameters).some((key) => !declared.has(key)))
     throw new Error(
       'Un paramètre est absent de la définition du parcours. Ajoute-le explicitement avant le lancement.',
     );
-  for (const parameter of journey?.parameters ?? []) {
+  for (const parameter of plan?.parameters ?? []) {
     if (parameter.sensitive && selection.parameters[parameter.name])
       throw new Error(
         'Les valeurs sensibles ne sont pas transmises au contexte IA. Utilise la connexion manuelle.',
       );
-    if (parameter.required && !selection.parameters[parameter.name] && !parameter.defaultValue)
+    if (
+      parameter.required &&
+      !outputs.has(parameter.name) &&
+      !selection.parameters[parameter.name] &&
+      !parameter.defaultValue
+    )
       throw new Error(`Renseigne le paramètre ${parameter.label}.`);
   }
-  const binding: ExecutionBinding = {
+  let binding: ExecutionBinding = {
     applicationId: application.id,
     origin: application.origin,
     projectIds: [...application.projectIds],
@@ -55,13 +63,20 @@ export function freezeNavigationContext(
     reason:
       'Association déclarée. La correspondance entre le serveur déjà lancé et ces fichiers n’est pas attestée.',
   };
+  const checked = state.bindings?.find(
+    (b) =>
+      b.applicationId === application.id &&
+      JSON.stringify(b.projectIds) === JSON.stringify(binding.projectIds) &&
+      JSON.stringify(b.roots) === JSON.stringify(binding.roots),
+  );
+  if (checked) binding = structuredClone(checked);
   const content = [
     `Application : ${application.name} (${application.id}) · ${application.startUrl ?? application.origin}`,
     `Rôle déclaré : ${application.role || 'à préciser'} · Propriétaire des parcours : ${application.ownerNavigatorId || 'aucun'}`,
     `Intention : ${selection.intent}. Interactions : ${selection.allowInteractions ? 'autorisées selon le profil et les demandes humaines' : 'inspection uniquement'}.`,
-    `Version servie : non vérifiée. Dépôts autorisés : ${binding.projectIds.join(', ')}.`,
+    `Version servie : ${binding.verification === 'verified' ? 'ressource comparée' : 'non vérifiée'}. ${binding.reason} Dépôts autorisés : ${binding.projectIds.join(', ')}.`,
     journey
-      ? `Parcours ${journey.id} révision ${journey.revision}, empreinte ${journey.hash}.\n${JSON.stringify(journey)}`
+      ? `Parcours ${journey.id} révision ${journey.revision}, empreinte ${journey.hash}.\n${JSON.stringify({ ...journey, steps: plan?.steps, parameters: plan?.parameters })}`
       : 'Aucun parcours sélectionné. Cherche les candidats avant d’explorer ; une connaissance manquante se transmet au Navigateur.',
     `Pistes de code candidates (à vérifier, aucun diagnostic implicite) : ${JSON.stringify(
       (state.codeAnchors ?? [])
@@ -71,8 +86,15 @@ export function freezeNavigationContext(
             a.state !== 'stale' &&
             application.projectIds.includes(a.projectId),
         )
-        .slice(-6)
-        .map(({ projectId, relativePath, line, hash, query }) => ({
+        .sort(
+          (a, b) =>
+            Number(Boolean(b.journeyIds?.includes(journey?.id ?? ''))) -
+            Number(Boolean(a.journeyIds?.includes(journey?.id ?? ''))),
+        )
+        .slice(0, 6)
+        .map(({ projectId, relativePath, line, hash, query, state, journeyIds }) => ({
+          state,
+          journeyIds,
           projectId,
           relativePath,
           line,
@@ -92,6 +114,7 @@ export function freezeNavigationContext(
     application: structuredClone(application),
     journey: journey && structuredClone(journey),
     binding,
+    ...(plan ? { plan } : {}),
     contextText: content,
   };
   return { ...result, digest: createHash('sha256').update(JSON.stringify(result)).digest('hex') };

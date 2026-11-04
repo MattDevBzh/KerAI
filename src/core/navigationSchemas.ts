@@ -144,6 +144,8 @@ export const navigationStepSchema = z
     action: z.enum([
       'navigate',
       'click',
+      'doubleClick',
+      'resolve',
       'fill',
       'select',
       'check',
@@ -154,6 +156,19 @@ export const navigationStepSchema = z
       'manual',
     ]),
     target: navigationLocatorSchema.optional(),
+    button: z.enum(['left', 'right', 'middle']).optional(),
+    durationMs: z.number().int().min(0).max(5000).optional(),
+    resolver: z
+      .object({
+        output: id,
+        attribute: z.string().regex(/^(data-[a-z0-9-]+|href|id)$/),
+        pick: z.enum(['unique', 'first']),
+        filters: z
+          .array(z.object({ selector: text.min(1).optional(), text: text.optional() }).strict())
+          .max(10),
+      })
+      .strict()
+      .optional(),
     url: text.optional(),
     value: navigationValueSchema.optional(),
     key: text.optional(),
@@ -170,7 +185,12 @@ export const navigationStepSchema = z
   .strict()
   .superRefine((step, ctx) => {
     const invalid = (message: string) => ctx.addIssue({ code: 'custom', message });
-    if (['click', 'fill', 'select', 'check', 'press'].includes(step.action) && !step.target)
+    if (
+      ['click', 'doubleClick', 'resolve', 'fill', 'select', 'check', 'press'].includes(
+        step.action,
+      ) &&
+      !step.target
+    )
       invalid('Action sans cible.');
     if (
       step.action === 'navigate' &&
@@ -196,6 +216,9 @@ export const navigationStepSchema = z
     if (step.action === 'scroll' && step.x === undefined && step.y === undefined)
       invalid('Déplacement requis.');
     if (step.action === 'wait' && !step.postconditions?.length) invalid('Attente sans condition.');
+    if (step.action === 'resolve' && !step.resolver) invalid('Sélection métier sans règle.');
+    if (step.resolver && step.action !== 'resolve')
+      invalid('Règle métier réservée à la sélection.');
     if (step.action === 'manual' && !step.note) invalid('Étape manuelle sans explication.');
   });
 export const applicationProfileSchema = z
@@ -225,6 +248,16 @@ export const applicationProfileSchema = z
     authInstructions: text.optional(),
     interactionPolicy: z.enum(['inspect', 'confirm', 'authorized']),
     browserExecutable: text.optional(),
+    environment: z
+      .object({
+        projectId: id,
+        startTask: text.optional(),
+        buildTask: text.optional(),
+        artifactPath: text.optional(),
+        resourceUrl: applicationUrl.optional(),
+      })
+      .strict()
+      .optional(),
     createdAt: timestamp,
     updatedAt: timestamp,
   })
@@ -272,7 +305,7 @@ export const navigationJourneySchema = z
     intent: text.min(1),
     tags: z.array(text).max(40),
     prerequisites: z.array(text.min(1)).max(40),
-    parameters: z.array(navigationParameterSchema).max(40),
+    parameters: z.array(navigationParameterSchema).max(NAVIGATION_LIMITS.parameters),
     steps: z.array(navigationStepSchema).max(NAVIGATION_LIMITS.steps),
     arrival: z.array(navigationConditionSchema).max(30),
     status: z.enum(['draft', 'available', 'archived']),
@@ -286,6 +319,10 @@ export const navigationJourneySchema = z
       })
       .strict(),
     variantOf: id.optional(),
+    blocks: z
+      .array(z.object({ journeyId: id, revision: z.number().int().positive() }).strict())
+      .max(20)
+      .optional(),
     createdAt: timestamp,
     updatedAt: timestamp,
   })
@@ -296,12 +333,21 @@ export const navigationJourneySchema = z
     const parameters = new Set(journey.parameters.map((parameter) => parameter.name));
     if (parameters.size !== journey.parameters.length)
       ctx.addIssue({ code: 'custom', message: 'Paramètres dupliqués.' });
+    const outputs = new Set(
+      journey.steps.flatMap((step) => (step.resolver ? [step.resolver.output] : [])),
+    );
     for (const step of journey.steps)
-      if (step.value && 'parameter' in step.value && !parameters.has(step.value.parameter))
+      if (
+        step.value &&
+        'parameter' in step.value &&
+        !parameters.has(step.value.parameter) &&
+        !outputs.has(step.value.parameter) &&
+        !journey.blocks?.length
+      )
         ctx.addIssue({ code: 'custom', message: `Paramètre inconnu : ${step.value.parameter}` });
     if (
       journey.status === 'available' &&
-      (!journey.steps.length ||
+      (!(journey.steps.length || journey.blocks?.length) ||
         !journey.arrival.length ||
         journey.steps.some((step) => step.action === 'manual'))
     )
@@ -349,6 +395,8 @@ export const navigationRunSchema = z
       .max(200),
     evidencePaths: z.array(text).max(80),
     error: text.optional(),
+    resolvedParameters: z.record(id, text).optional(),
+    skippedSteps: z.array(text).max(80).optional(),
     metrics: z
       .object({
         actions: z.number().int().min(0),
@@ -381,12 +429,34 @@ export const navigationSelectionSchema = z
     intent: z.enum(['reach-state', 'reproduce']),
     allowInteractions: z.boolean(),
     prerequisitesConfirmed: z.boolean().optional(),
+    prepareRepair: z.boolean().optional(),
   })
   .strict();
 const command = <T extends string>(action: T) => z.object({ action: z.literal(action) }).strict();
 export const navigationCommandSchema = z.discriminatedUnion('action', [
   ...navigationEvaluationCommandSchema.options,
   command('load'),
+  z
+    .object({
+      action: z.literal('environmentTask'),
+      applicationId: id,
+      task: z.enum(['start', 'build']),
+    })
+    .strict(),
+  z.object({ action: z.literal('checkEnvironment'), applicationId: id }).strict(),
+  z
+    .object({
+      action: z.literal('createBug'),
+      applicationId: id,
+      journeyId: id.optional(),
+      parameters: z.record(id, text),
+      title: text.min(1),
+      observed: text.min(1),
+      expected: text.min(1),
+      currentScreen: z.boolean(),
+    })
+    .strict(),
+  z.object({ action: z.literal('linkSource'), anchorId: id, journeyId: id }).strict(),
   command('authenticate'),
   command('resumeControl'),
   command('exportMetrics'),
@@ -506,6 +576,25 @@ export const navigationContextSnapshotSchema = z
     binding: executionBindingSchema.optional(),
     contextText: z.string().max(NAVIGATION_LIMITS.contextChars),
     digest: hash,
+    plan: z
+      .object({
+        steps: z.array(navigationStepSchema).max(80),
+        parameters: z.array(navigationParameterSchema).max(40),
+        prerequisites: z.array(text).max(320),
+        dependencies: z
+          .array(
+            z
+              .object({
+                journeyId: id,
+                revision: z.number().int().positive(),
+                hash: hash.optional(),
+              })
+              .strict(),
+          )
+          .max(80),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export const navigationCaptureSchema = z
@@ -527,6 +616,7 @@ export const navigationCaptureSchema = z
     journeyId: id.optional(),
     revision: z.number().int().min(1).optional(),
     attemptId: id.optional(),
+    caseKey: hash.optional(),
     viewport: z
       .object({ width: z.number().int().positive(), height: z.number().int().positive() })
       .strict()

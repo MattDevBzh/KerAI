@@ -28,6 +28,8 @@ export type NavigationStep = {
   action:
     | 'navigate'
     | 'click'
+    | 'doubleClick'
+    | 'resolve'
     | 'fill'
     | 'select'
     | 'check'
@@ -37,6 +39,15 @@ export type NavigationStep = {
     | 'wait'
     | 'manual';
   target?: NavigationLocator;
+  button?: 'left' | 'right' | 'middle';
+  durationMs?: number;
+  /** Resolve one visible business entity, then reuse its identity through {{name}}. */
+  resolver?: {
+    output: string;
+    attribute: string;
+    pick: 'unique' | 'first';
+    filters: { selector?: string; text?: string }[];
+  };
   url?: string;
   value?: NavigationValue;
   key?: string;
@@ -64,6 +75,13 @@ export interface ApplicationProfile {
   authInstructions?: string;
   interactionPolicy: 'inspect' | 'confirm' | 'authorized';
   browserExecutable?: string;
+  environment?: {
+    projectId: string;
+    startTask?: string;
+    buildTask?: string;
+    artifactPath?: string;
+    resourceUrl?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -97,6 +115,7 @@ export interface NavigationJourney {
     verifiedRunId?: string;
   };
   variantOf?: string;
+  blocks?: { journeyId: string; revision: number }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +152,8 @@ export interface NavigationRun {
   }[];
   evidencePaths: string[];
   error?: string;
+  resolvedParameters?: Record<string, string>;
+  skippedSteps?: string[];
   metrics: { actions: number; durationMs: number; outputChars: number; providerCalls: number };
 }
 export interface NavigationContribution {
@@ -182,6 +203,12 @@ export interface NavigationSnapshot {
   navigationVersion: 1;
   applications: ApplicationProfile[];
   journeys: NavigationJourney[];
+  publishedJourneys?: NavigationJourney[];
+  blockRevisions?: NavigationJourney[];
+  focusedJourneyId?: string;
+  bindings?: ExecutionBinding[];
+  maintenance?: { journeyId: string; reasons: string[] }[];
+  preparation?: { applicationId: string; browser?: string; ready: boolean; message: string };
   contributions: NavigationContribution[];
   runs: NavigationRun[];
   browser?: BrowserSessionState;
@@ -212,6 +239,19 @@ export interface NavigationContextPacket {
 export type NavigationCommand =
   | import('./navigationEvaluation').NavigationEvaluationCommand
   | { action: 'load' | 'authenticate' | 'resumeControl' | 'exportMetrics' }
+  | { action: 'environmentTask'; applicationId: string; task: 'start' | 'build' }
+  | { action: 'checkEnvironment'; applicationId: string }
+  | {
+      action: 'createBug';
+      applicationId: string;
+      journeyId?: string;
+      parameters: Record<string, string>;
+      title: string;
+      observed: string;
+      expected: string;
+      currentScreen: boolean;
+    }
+  | { action: 'linkSource'; anchorId: string; journeyId: string }
   | { action: 'history'; journeyId: string }
   | { action: 'sourceSearch'; query: string; projectId?: string; directory?: string }
   | { action: 'resolveContribution'; id: string; status: 'accepted' | 'dismissed' }
@@ -248,6 +288,7 @@ export type NavigationCommand =
 export const NAVIGATION_LIMITS = {
   importBytes: 2 * 1024 * 1024,
   steps: 80,
+  parameters: 40,
   stringChars: 4000,
   depth: 20,
   searchChars: 6000,
@@ -264,6 +305,7 @@ export interface NavigationSelection {
   intent: 'reach-state' | 'reproduce';
   allowInteractions: boolean;
   prerequisitesConfirmed?: boolean;
+  prepareRepair?: boolean;
 }
 export interface NavigationContextSnapshot {
   selection: NavigationSelection;
@@ -272,6 +314,14 @@ export interface NavigationContextSnapshot {
   binding?: ExecutionBinding;
   contextText: string;
   digest: string;
+  plan?: NavigationPlan;
+}
+
+export interface NavigationPlan {
+  steps: NavigationStep[];
+  parameters: NavigationParameter[];
+  prerequisites: string[];
+  dependencies: { journeyId: string; revision: number; hash?: string }[];
 }
 
 export interface NavigationCapture {
@@ -289,6 +339,7 @@ export interface NavigationCapture {
   journeyId?: string;
   revision?: number;
   attemptId?: string;
+  caseKey?: string;
   viewport?: { width: number; height: number };
 }
 export interface CodeAnchor {
@@ -301,6 +352,7 @@ export interface CodeAnchor {
   query: string;
   reason: string;
   state: 'candidate' | 'corroborated' | 'stale';
+  journeyIds?: string[];
   observedAt: string;
 }
 

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { navigate } from './ui-navigation-helpers';
 import { demoState } from '../webview/demo';
+import { navigationStepSchema } from '../src/core/navigationSchemas';
 import type {
   NavigationCommand,
   NavigationJourney,
@@ -141,6 +142,7 @@ async function hosted(page: Page, initial = navigation) {
             nav.browser.recordingPaused = true;
             nav.browser.state = 'human';
           }
+          if (command.action === 'resumeControl' && nav.browser) nav.browser.state = 'idle';
           if (command.action === 'recordResume' && nav.browser) {
             nav.browser.recordingPaused = false;
             nav.browser.state = 'recording';
@@ -234,6 +236,7 @@ test('bibliothèque search, independent statuses and immutable replay contract',
   await expect(detail.getByText('Brouillon', { exact: true })).toBeVisible();
   await expect(detail.getByRole('button', { name: 'Rendre disponible' })).toBeDisabled();
   await expect(detail.getByRole('button', { name: 'Lancer le rejeu' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Préparer le navigateur', exact: true }).click();
   await detail.getByLabel('Référence client').fill('synthetic-001');
   await detail.getByRole('checkbox', { name: /Le rôle, les données/ }).check();
   await detail.getByRole('checkbox', { name: /J’autorise les interactions/ }).check();
@@ -381,6 +384,7 @@ test('profile, contributions and responsive light keyboard remain available', as
   await page.keyboard.press('Enter');
   await dialog.getByLabel('Rôle de connexion', { exact: true }).fill('Administrateur test');
   await dialog.getByRole('button', { name: 'Enregistrer le profil' }).click();
+  await page.getByText('Configuration de l’application et droits', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'Profil d’application' })).toContainText(
     'Administrateur test',
   );
@@ -466,3 +470,87 @@ test('published revision keeps its verified receipt and provider metrics expose 
   await page.getByRole('button', { name: 'Exporter les mesures agrégées' }).click();
   await expect.poll(() => commands(page)).toContainEqual({ action: 'exportMetrics' });
 });
+
+test('editing a check action persists the displayed checked state', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: /Facturation du client/ }).click();
+  await page.getByRole('button', { name: 'Corriger le brouillon' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Corriger le parcours' });
+  await dialog.getByRole('button', { name: 'Ajouter une étape', exact: true }).click();
+  const step = dialog.getByRole('group', { name: 'Étape 3', exact: true });
+  await step.getByRole('combobox', { name: 'Action', exact: true }).selectOption('check');
+  await expect(
+    step.getByRole('checkbox', { name: 'Cocher (décocher si désactivé)' }),
+  ).toBeChecked();
+  await dialog.getByRole('button', { name: 'Enregistrer une nouvelle révision' }).click();
+  const saved = (await commands(page)).find((command) => command.action === 'saveDraft');
+  expect(saved).toBeDefined();
+  if (saved?.action !== 'saveDraft') throw new Error('Missing save command');
+  expect(navigationStepSchema.safeParse(saved.journey.steps[2]).success).toBe(true);
+  expect(saved.journey.steps[2]).toMatchObject({ action: 'check', checked: true });
+});
+
+test('a wait step can declare its own condition before saving', async ({ page }) => {
+  await hosted(page);
+  await page.getByRole('button', { name: /Facturation du client/ }).click();
+  await page.getByRole('button', { name: 'Corriger le brouillon' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Corriger le parcours' });
+  await dialog.getByRole('button', { name: 'Ajouter une étape', exact: true }).click();
+  const step = dialog.getByRole('group', { name: 'Étape 3', exact: true });
+  await step.getByRole('combobox', { name: 'Action', exact: true }).selectOption('wait');
+  await step.getByRole('button', { name: 'Ajouter une condition d’attente' }).click();
+  await step.getByLabel('Nom accessible', { exact: true }).fill('Facturation chargée');
+  await dialog.getByRole('button', { name: 'Enregistrer une nouvelle révision' }).click();
+  const saved = (await commands(page)).find((command) => command.action === 'saveDraft');
+  if (saved?.action !== 'saveDraft') throw new Error('Missing save command');
+  expect(navigationStepSchema.safeParse(saved.journey.steps[2]).success).toBe(true);
+  expect(saved.journey.steps[2]).toMatchObject({
+    action: 'wait',
+    postconditions: [{ kind: 'visible', target: { name: 'Facturation chargée' } }],
+  });
+});
+
+test('a demonstration can explicitly resume after manual control without leaving its dialog', async ({
+  page,
+}) => {
+  const data = structuredClone(navigation);
+  data.browser = {
+    id: 'browser',
+    applicationId: 'app',
+    state: 'human',
+    generation: 1,
+    recordedSteps: [],
+    recordingActive: false,
+    recordingPaused: true,
+    warnings: [],
+  };
+  await hosted(page, data);
+  await page.getByRole('button', { name: 'Montrer', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Montrer un parcours' });
+  await expect(dialog.getByRole('button', { name: 'Démarrer la démonstration' })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Connexion terminée · reprendre' }).click();
+  await dialog.getByRole('button', { name: 'Démarrer la démonstration' }).click();
+  await expect(dialog.getByRole('status')).toContainText('À toi');
+  await expect.poll(() => commands(page)).toContainEqual({ action: 'resumeControl' });
+  await expect
+    .poll(() => commands(page))
+    .toContainEqual({ action: 'recordStart', applicationId: 'app' });
+});
+
+for (const action of ['fill', 'select', 'scroll'] as const) {
+  test(`editing a ${action} action persists its displayed default value`, async ({ page }) => {
+    await hosted(page);
+    await page.getByRole('button', { name: /Facturation du client/ }).click();
+    await page.getByRole('button', { name: 'Corriger le brouillon' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Corriger le parcours' });
+    const step = dialog.getByRole('group', { name: 'Étape 1', exact: true });
+    await step.getByRole('combobox', { name: 'Action', exact: true }).selectOption(action);
+    await dialog.getByRole('button', { name: 'Enregistrer une nouvelle révision' }).click();
+    const saved = (await commands(page)).find((command) => command.action === 'saveDraft');
+    if (saved?.action !== 'saveDraft') throw new Error('Missing save command');
+    expect(navigationStepSchema.safeParse(saved.journey.steps[0]).success).toBe(true);
+    expect(saved.journey.steps[0]).toMatchObject(
+      action === 'scroll' ? { action, x: 0, y: 0 } : { action, value: { literal: '' } },
+    );
+  });
+}

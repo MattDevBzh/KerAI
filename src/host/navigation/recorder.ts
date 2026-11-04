@@ -9,6 +9,8 @@ export function installRecorder(config: {
   win[key]?.stop?.();
   let active = false;
   let sequence = 0;
+  let keyboardActivation = false;
+  let keyboardActivationTimer: ReturnType<typeof setTimeout> | undefined;
   const allowed = () => active && config.origins.includes(location.origin);
   const sensitive = (element: Element) =>
     element.closest(
@@ -43,6 +45,12 @@ export function installRecorder(config: {
   };
   const click = (event: MouseEvent) => {
     if (!allowed() || !event.isTrusted) return;
+    // Enter can dispatch a native click (including implicit form submission) in
+    // the same task. Replaying both would execute the demonstrated effect twice.
+    if (event.detail === 0 && keyboardActivation) {
+      keyboardActivation = false;
+      return;
+    }
     const element = (event.target as Element)?.closest('button,a,[role="button"],[data-testid]');
     if (!element || sensitive(element) || ['INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName))
       return;
@@ -77,7 +85,14 @@ export function installRecorder(config: {
     const element = event.target as Element;
     if (!element || sensitive(element)) return;
     const locator = target(element);
-    if (locator) emit({ action: 'press', target: locator, key: event.key, effect: 'unknown' });
+    if (locator) {
+      if (event.key === 'Enter') {
+        keyboardActivation = true;
+        clearTimeout(keyboardActivationTimer);
+        keyboardActivationTimer = setTimeout(() => (keyboardActivation = false), 0);
+      }
+      emit({ action: 'press', target: locator, key: event.key, effect: 'unknown' });
+    }
   };
   let scrollTimer: ReturnType<typeof setTimeout> | undefined;
   const scroll = (event: Event) => {
@@ -120,6 +135,8 @@ export function installRecorder(config: {
   const stop = () => {
     active = false;
     clearTimeout(scrollTimer);
+    clearTimeout(keyboardActivationTimer);
+    keyboardActivation = false;
     document.removeEventListener('click', click, true);
     document.removeEventListener('change', change, true);
     document.removeEventListener('keydown', keydown, true);

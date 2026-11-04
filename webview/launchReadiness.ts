@@ -95,6 +95,22 @@ export function launchReadiness(
       message:
         'Cet agent ne possède pas la capacité navigation. Retirez ce contexte ou choisissez un agent compatible dans l’équipe.',
     });
+  if (launch.navigation) {
+    const app = state.navigation?.applications.find(
+      (a) => a.id === launch.navigation!.applicationId,
+    );
+    const browser = state.navigation?.browser;
+    if (!browser || browser.applicationId !== app?.id || browser.state !== 'idle')
+      issues.push({
+        message:
+          'Ouvre le navigateur dans Applications et termine la connexion avant de lancer cet agent.',
+      });
+    if (launch.navigation.allowInteractions && app?.interactionPolicy === 'inspect')
+      issues.push({
+        message:
+          'Le profil de l’application autorise seulement l’inspection. Modifie-le ou retire l’autorisation d’interagir.',
+      });
+  }
   return issues;
 }
 

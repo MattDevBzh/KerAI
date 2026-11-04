@@ -6,6 +6,7 @@ import type {
   NavigationSnapshot,
 } from '../shared/navigation';
 import { NAVIGATION_LIMITS } from '../shared/navigation';
+import { publishedJourneys } from '../shared/navigationRecipes';
 import { navigationDefinitionHash } from './NavigationStore';
 const normalize = (text: string) =>
   text
@@ -25,7 +26,16 @@ export function searchNavigation(
         .filter(Boolean),
     ),
   ].slice(0, 30);
-  const ranked = snapshot.journeys
+  const library = [
+    ...snapshot.journeys,
+    ...publishedJourneys(snapshot).filter(
+      (published) =>
+        !snapshot.journeys.some(
+          (current) => current.id === published.id && current.revision === published.revision,
+        ),
+    ),
+  ];
+  const ranked = library
     .filter(
       (journey) =>
         (!applicationId || journey.applicationId === applicationId) &&
