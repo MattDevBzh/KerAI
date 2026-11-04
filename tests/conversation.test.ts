@@ -341,6 +341,11 @@ it('starts with the previewed read-only plan, applies preferences, preserves com
 
 it('steers a running solo conversation exactly once, keeps mode changes separate from permissions and waits for a confirmed stop', async () => {
   const f = await fixture();
+  let confirmStop!: () => void;
+  let abortRequested = false;
+  const stopConfirmed = new Promise<void>((resolve) => {
+    confirmStop = resolve;
+  });
   f.run(
     async (_input, callbacks, signal) =>
       new Promise<RunResult>((_resolve, reject) => {
@@ -351,39 +356,51 @@ it('steers a running solo conversation exactly once, keeps mode changes separate
           at: new Date().toISOString(),
           complete: false,
         });
-        signal.addEventListener('abort', () => setTimeout(() => reject(new Error('Stopped')), 30), {
-          once: true,
-        });
+        signal.addEventListener(
+          'abort',
+          () => {
+            abortRequested = true;
+            void stopConfirmed.then(() => reject(new Error('Stopped')));
+          },
+          { once: true },
+        );
       }),
   );
   const { completed: running } = await f.startRunning();
-  const pair = f.step.attempts[0].pair!;
-  await expect(f.action('message', { content: 'Pendant le travail solo' })).rejects.toThrow(
-    'Passe en pair',
-  );
-  await f.action('pair');
-  expect(pair.mode).toBe('solo');
-  expect(pair.requestedMode).toBe('pair');
-  f.adapter.sendMessage = vi.fn(async (_id, content) => {
-    expect(content).toBe('Préserve mon fichier.');
-    f.callbacks.onNativeMessageReceived?.('sent-1');
-    return 'sent-1';
-  });
-  const command = await f.action('message', { content: 'Préserve mon fichier.' });
-  await f.service.pairAction(command);
-  expect(f.adapter.sendMessage).toHaveBeenCalledTimes(1);
-  expect(pair.pendingMessages).toEqual([]);
-  expect(pair.messages.find((m) => m.requestId === command.requestId)?.delivery).toBe('received');
-  await f.service.setPermissionMode(f.feature.id, 'allow-all');
-  expect(f.adapter.setPermissionMode).toHaveBeenCalledWith('same-native-session', 'allow-all');
-  await f.action('pause');
-  expect(pair.busy).toBe(true);
-  expect(pair.phase).toBe('working');
-  await running;
-  expect(pair).toMatchObject({ mode: 'pair', busy: false, phase: 'paused' });
-  expect(f.feature.execution?.permissionMode).toBe('allow-all');
-  expect(pair.messages.find((m) => m.id === 'native:message')?.status).toBe('interrupted');
-  expect(f.inputs).toHaveLength(1);
+  try {
+    const pair = f.step.attempts[0].pair!;
+    await expect(f.action('message', { content: 'Pendant le travail solo' })).rejects.toThrow(
+      'Passe en pair',
+    );
+    await f.action('pair');
+    expect(pair.mode).toBe('solo');
+    expect(pair.requestedMode).toBe('pair');
+    f.adapter.sendMessage = vi.fn(async (_id, content) => {
+      expect(content).toBe('Préserve mon fichier.');
+      f.callbacks.onNativeMessageReceived?.('sent-1');
+      return 'sent-1';
+    });
+    const command = await f.action('message', { content: 'Préserve mon fichier.' });
+    await f.service.pairAction(command);
+    expect(f.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    expect(pair.pendingMessages).toEqual([]);
+    expect(pair.messages.find((m) => m.requestId === command.requestId)?.delivery).toBe('received');
+    await f.service.setPermissionMode(f.feature.id, 'allow-all');
+    expect(f.adapter.setPermissionMode).toHaveBeenCalledWith('same-native-session', 'allow-all');
+    await f.action('pause');
+    expect(abortRequested).toBe(true);
+    expect(pair.busy).toBe(true);
+    expect(pair.phase).toBe('working');
+    // Acknowledge explicitly: Windows persistence may take longer than an arbitrary timer.
+    confirmStop();
+    await running;
+    expect(pair).toMatchObject({ mode: 'pair', busy: false, phase: 'paused' });
+    expect(f.feature.execution?.permissionMode).toBe('allow-all');
+    expect(pair.messages.find((m) => m.id === 'native:message')?.status).toBe('interrupted');
+    expect(f.inputs).toHaveLength(1);
+  } finally {
+    confirmStop();
+  }
 });
 
 it('queues messages when live steering is unavailable and sends only new context after the checkpoint', async () => {
