@@ -913,7 +913,7 @@ async function dispatch(request: WorkerRequest): Promise<unknown> {
       trace(phase, 'started');
       context = await chromium.launchPersistentContext(options.profilePath, {
         executablePath,
-        timeout: 15000,
+        timeout: 30000,
         headless: options.headless,
         viewport: { width: 1280, height: 800 },
         acceptDownloads: false,

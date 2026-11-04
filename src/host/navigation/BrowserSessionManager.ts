@@ -330,8 +330,8 @@ export class BrowserSessionManager {
             executablePath: application.browserExecutable ?? this.options.executablePath,
             headless: this.options.headless ?? false,
           },
-          // Leave room for launch (15s), setup and navigation (15s) to return their own diagnosis.
-          45000,
+          // Preserve the 30s launch allowance, plus setup and navigation (15s), before transport timeout.
+          60000,
         );
         requireOpening();
         this.state.url = result.url;
