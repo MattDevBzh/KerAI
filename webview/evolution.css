@@ -1882,3 +1882,21 @@
   display: grid;
   gap: 10px;
 }
+
+.document-import {
+  margin: 12px 0;
+}
+.document-import > small {
+  display: block;
+  margin-top: 6px;
+}
+.document-import textarea {
+  width: 100%;
+}
+.document-import section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}

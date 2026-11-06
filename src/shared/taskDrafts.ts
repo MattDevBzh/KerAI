@@ -6,7 +6,7 @@ export interface TaskDraft {
   revision: number;
   title: string;
   description: string;
-  starter: 'bugfix' | 'feature' | 'code-review' | 'custom';
+  starter: import('./sessionStarters').SessionStarterId;
   projectIds: string[];
   isolated: boolean;
   permissionMode: NativePermissionMode;

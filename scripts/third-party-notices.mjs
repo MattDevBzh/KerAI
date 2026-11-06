@@ -8,7 +8,12 @@ const tree = JSON.parse(
   }),
 );
 const seen = new Set();
-const sections = [];
+const sections = [
+  '## Caveat — handwritten HQ font\n\nCopyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat).\nDistributed under the SIL Open Font License 1.1. The unmodified variable font and full license\nare bundled in `dist/webview/fonts/Caveat.ttf` and `dist/webview/fonts/Caveat-OFL.txt`.\nSource: https://github.com/google/fonts/tree/main/ofl/caveat.\n',
+  '## DejaVu Sans — PDF export fonts\n\nThe unmodified regular and bold fonts are bundled in `resources/fonts`.\nTheir full copyright and license notice follows and is also included as `LICENSE-DejaVu.txt`.\n\n```text\n' +
+    (await readFile('resources/fonts/LICENSE-DejaVu.txt', 'utf8')) +
+    '\n```\n',
+];
 async function visit(node) {
   for (const [name, dependency] of Object.entries(node.dependencies ?? {})) {
     const key = `${name}@${dependency.version}`;

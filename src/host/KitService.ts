@@ -56,8 +56,28 @@ const PRESETS: KitMetadata[] = [
     name: 'Documentation technique',
     version: '1.0.0',
     description:
-      'Recherche code et web, plan validé, rédaction et relecture des sources. Exports Markdown, Word, PowerPoint et HTML.',
+      'Recherche code et web, plan validé, rédaction et relecture des sources. Exports Markdown, Word, PowerPoint, HTML, PDF et texte.',
   },
+  {
+    id: 'presentation',
+    name: 'Présentation et préparation',
+    version: '1.0.0',
+    description:
+      'Depuis un document : cadrage, sources et trame, support adapté à l’auditoire, guide personnel du présentateur et validation globale.',
+  },
+  {
+    id: 'code-audit',
+    name: 'Audit de code et restitution',
+    version: '1.0.0',
+    description:
+      'Directives affinées, plan, audit statique avec couverture et preuves, guide personnel, restitution pour un auditoire distinct et validation globale.',
+  },
+];
+const specialistFamilies = [
+  { id: 'devops', prefixes: ['fs-devops-', 'devops-'] },
+  { id: 'documentation', prefixes: ['fs-doc-', 'doc-'] },
+  { id: 'presentation', prefixes: ['fs-present-', 'presentation-'] },
+  { id: 'code-audit', prefixes: ['fs-audit-', 'audit-'] },
 ];
 const splitMarkdown = (content: string) => {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/.exec(content);
@@ -318,20 +338,13 @@ export class KitService {
     );
     const data = await isolated.load();
     const roots = kitNodes(data)
-      .filter((n) =>
-        kitId === 'documentation'
-          ? n.id === 'documentation' || n.id.startsWith('fs-doc-') || n.id.startsWith('doc-')
-          : kitId === 'devops'
-            ? n.id === 'devops' || n.id.startsWith('fs-devops-') || n.id.startsWith('devops-')
-            : !(
-                n.id === 'devops' ||
-                n.id.startsWith('fs-devops-') ||
-                n.id.startsWith('devops-') ||
-                n.id === 'documentation' ||
-                n.id.startsWith('fs-doc-') ||
-                n.id.startsWith('doc-')
-              ),
-      )
+      .filter((node) => {
+        const family = specialistFamilies.find(
+          (group) =>
+            node.id === group.id || group.prefixes.some((prefix) => node.id.startsWith(prefix)),
+        );
+        return kitId === 'copilot' ? !family : family?.id === kitId;
+      })
       .map((n) => n.ref);
     const builder = new KitService(isolated);
     const bundle = await builder.compose(metadata, roots);

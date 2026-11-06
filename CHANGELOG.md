@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.39.0 — 2026-11-06
+
+- Kit Présentation et préparation : cadrage des deux profils, analyse sourcée, support pour l’auditoire, guide personnel du présentateur et validation globale en cinq étapes.
+- Kit Audit de code et restitution : directives et critères affinés, plan de couverture, dossier brut avec preuves, deux restitutions adaptées et validation globale en six étapes. Les conclusions et leurs limites restent identiques entre les versions.
+- Import TXT, Markdown, PDF texte, Word DOCX et HTML dans la création de session et le contexte de lancement : extraction locale, aperçu, références de pages/paragraphes, empreinte du fichier et ajout explicite sans remplacer le contexte existant.
+- Exports PDF et texte brut ajoutés à Markdown, Word, PowerPoint et HTML. PDF paginé avec polices embarquées ; aucun nouvel appel IA pour exporter.
+- Deux nouvelles entrées dans Nouvelle session et deux kits installables au niveau utilisateur, avec toutes leurs dépendances et préservation des personnalisations existantes.
+- Parcours en lecture seule avec validation humaine à chaque étape. Sources partielles, scans sans OCR, tests non exécutés et rendu non vérifié restent explicitement signalés.
+
 ## 1.38.1 — 2026-11-05
 
 - Navigateur sous Windows : dossier de profil local plus court, isolation par projet et application conservée, migration des profils existants sur le même disque sans perdre leurs connexions.

@@ -1,3 +1,4 @@
+import { DocumentImport } from './DocumentImport';
 import { useTaskDraft } from './useTaskDraft';
 import { savedTaskDraft } from './bridge';
 import { sessionStarters, type SessionStarterId } from '../src/shared/sessionStarters';
@@ -347,6 +348,12 @@ function CreateForm({
             onChange={(event) => setDescription(event.target.value)}
           />
         </label>
+        <DocumentImport
+          value={description}
+          onChange={setDescription}
+          maxLength={origin ? 30000 : 500000}
+          disabled={Boolean(pending)}
+        />
         <ImagePicker draft={imageDraft} disabled={Boolean(pending) || imageDraft.loading} />
         {!origin && (
           <fieldset className="session-starters" disabled={Boolean(pending) || imageDraft.loading}>

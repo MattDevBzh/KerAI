@@ -249,6 +249,8 @@ async function smokeRun(): Promise<void> {
   assert.ok(api.getState()?.workflows.some((workflow) => workflow.id === 'quality-feature'));
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-visual-tests'));
   assert.equal(api.getState()?.workflows.find((w) => w.id === 'documentation')?.steps.length, 4);
+  assert.equal(api.getState()?.workflows.find((w) => w.id === 'presentation')?.steps.length, 5);
+  assert.equal(api.getState()?.workflows.find((w) => w.id === 'code-audit')?.steps.length, 6);
   assert.equal(api.getState()?.agents.filter((a) => a.id.startsWith('fs-doc-')).length, 4);
   assert.equal(
     api.getState()?.workflows.find((workflow) => workflow.id === 'devops')?.steps.length,

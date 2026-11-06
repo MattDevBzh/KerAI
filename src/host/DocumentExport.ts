@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { exportPdf } from './PdfDocument';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
@@ -271,12 +273,25 @@ export async function exportDocument(
   content: string,
   format: DocumentFormat,
   title: string,
+  resourcesPath = join(__dirname, '../resources'),
 ): Promise<Buffer> {
   if (Buffer.byteLength(content) > 2_000_000)
     throw Error('Le document dépasse la limite d’export de 2 Mo de texte.');
   if (format === 'md') return Buffer.from(content, 'utf8');
   const tree = unified().use(remarkParse).use(remarkGfm).parse(content) as Root;
   resolveReferences(tree);
+  if (format === 'txt') return Buffer.from(tree.children.map(text).join('\n\n'), 'utf8');
+  if (format === 'pdf')
+    return exportPdf(
+      tree.children.map((node) => ({
+        text: text(node),
+        heading: node.type === 'heading' ? node.depth : undefined,
+        code: node.type === 'code',
+      })),
+      title,
+      resourcesPath,
+    );
+
   if (format === 'html')
     return Buffer.from(
       `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escape(title)}</title><style>body{font:17px/1.65 system-ui,sans-serif;color:#172b46;background:#fafbfd;margin:0}main{max-width:900px;margin:auto;padding:48px 24px}h1,h2,h3{line-height:1.25;color:#142e52}h1{border-bottom:5px solid #edb84b;padding-bottom:20px}h2{margin-top:2em}a{color:#005caf;overflow-wrap:anywhere}pre{background:#eaf0f6;padding:18px;overflow:auto}code{font-size:.88em}table{border-collapse:collapse;width:100%}td{border:1px solid #cbd5e1;padding:9px;vertical-align:top}tr:first-child{font-weight:bold;background:#eaf0f6}.table-scroll{overflow:auto}blockquote{border-left:4px solid #edb84b;margin-left:0;padding-left:20px}@media print{body{background:white}main{padding:0}a{color:inherit}pre{white-space:pre-wrap}h1,h2,h3{break-after:avoid}}</style></head><body><main>${html(tree)}</main></body></html>`,

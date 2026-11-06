@@ -210,6 +210,20 @@ export class AgentRegistry {
         'documentation/skills',
         'documentation/workflows',
       ],
+      [
+        this.defaultsPath,
+        'bundled',
+        'presentation/agents',
+        'presentation/skills',
+        'presentation/workflows',
+      ],
+      [
+        this.defaultsPath,
+        'bundled',
+        'code-audit/agents',
+        'code-audit/skills',
+        'code-audit/workflows',
+      ],
       [this.userPath, 'user', 'agents', 'skills', 'feature-studio/workflows'],
       [
         this.workspacePath,
@@ -345,6 +359,12 @@ export class AgentRegistry {
       ['documentation/agents', 'agents'],
       ['documentation/workflows', 'feature-studio/workflows'],
       ['documentation/skills', 'skills'],
+      ['presentation/agents', 'agents'],
+      ['presentation/workflows', 'feature-studio/workflows'],
+      ['presentation/skills', 'skills'],
+      ['code-audit/agents', 'agents'],
+      ['code-audit/workflows', 'feature-studio/workflows'],
+      ['code-audit/skills', 'skills'],
     ] as const)
       for (const file of await files(this.defaultsPath, folder))
         entries.push({ source: file, target: join(target, relative(folder, file)) });

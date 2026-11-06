@@ -72,10 +72,12 @@ def verify(vsix, root, extract=None, match_build=False):
         for marker in ('saveProofClaim', 'exportProofDossier', 'exportAgentReport'):
             assert marker.encode() in host and marker.encode() in ui, f'{marker} missing'
         assert b'proof-dossier' in ui and b'image-picker' in ui
-        for path in (root / 'defaults/documentation').rglob('*'):
-            if path.is_file():
-                assert archive.read('extension/' + path.relative_to(root).as_posix()) == path.read_bytes()
-        for guide in ('IMAGES-DOCUMENTATION.md', 'DOSSIER-PREUVES.md'):
+        for folder in ('defaults/documentation', 'defaults/presentation', 'defaults/code-audit', 'resources/fonts'):
+            for path in (root / folder).rglob('*'):
+                if path.is_file():
+                    assert archive.read('extension/' + path.relative_to(root).as_posix()) == path.read_bytes()
+        assert any('pdf.worker' in name and name.endswith('.js') for name in names), 'PDF extraction worker missing'
+        for guide in ('IMAGES-DOCUMENTATION.md', 'DOSSIER-PREUVES.md', 'PRESENTATION-AUDIT-KITS.md'):
             assert archive.read('extension/docs/' + guide) == (root / 'docs' / guide).read_bytes()
         assert b'native-context-panel' in ui, 'Loaded context panel missing from webview'
         assert b'session-conversation' in ui, 'Step conversation missing from webview'

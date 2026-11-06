@@ -2,7 +2,7 @@
   "name": "feature-studio",
   "displayName": "Feature Studio",
   "description": "Le cockpit visuel de vos features et sessions GitHub Copilot CLI.",
-  "version": "1.38.1",
+  "version": "1.39.0",
   "publisher": "MattDevBzh",
   "license": "MIT",
   "repository": {
@@ -11,7 +11,7 @@
   },
   "engines": {
     "vscode": "^1.110.0",
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "categories": [
     "AI",
@@ -265,7 +265,7 @@
     "test:ui": "playwright test",
     "test:extension": "node scripts/test-extension.mjs",
     "check": "npm run typecheck && npm test && npm run build",
-    "package": "vsce package --no-dependencies --out releases/feature-studio-1.38.1.vsix",
+    "package": "vsce package --no-dependencies --out releases/feature-studio-1.39.0.vsix",
     "vscode:prepublish": "npm run build",
     "format": "prettier --write \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"webview/*.{ts,tsx,css,html}\" \"tests/*.ts\" \"scripts/*.{mjs,js}\" \"*.{json,ts}\" \".github/workflows/*.yml\" \".vscode/*.json\"",
@@ -280,10 +280,14 @@
   },
   "dependencies": {
     "@github/copilot-sdk": "1.0.20",
+    "@pdf-lib/fontkit": "1.1.1",
     "docx": "9.13.0",
+    "fflate": "0.8.2",
     "ignore": "7.0.5",
     "image-size": "2.0.4",
     "lucide-react": "^0.468.0",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.5.438",
     "playwright-core": "1.64.0",
     "pngjs": "7.0.0",
     "pptxgenjs": "4.0.1",

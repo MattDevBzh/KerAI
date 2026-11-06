@@ -1,3 +1,4 @@
+import { requiresEditorialApproval } from '../shared/documentation';
 import { proofDossier } from '../shared/proofs';
 import { stepResolved } from '../shared/optionalSteps';
 import { isPairWork } from '../shared/pair';
@@ -111,10 +112,7 @@ export function approvalBlockers(
     blockers.push(
       'Une conclusion du dossier de preuves est contredite. Corrige-la ou révise son appréciation avec ses justificatifs.',
     );
-  if (
-    actor !== 'human' &&
-    (feature.workflowId === 'documentation' || step.agentId.startsWith('fs-doc-'))
-  )
+  if (actor !== 'human' && requiresEditorialApproval(feature, step))
     blockers.push('La documentation nécessite une validation humaine à chaque étape.');
   if (feature.parent && actor !== 'human')
     blockers.push('Chaque étape de la sous-équipe nécessite une validation humaine.');

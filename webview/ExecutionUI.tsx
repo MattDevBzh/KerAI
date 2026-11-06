@@ -1,3 +1,4 @@
+import { DocumentImport } from './DocumentImport';
 import { defaultNavigationSelection } from '../src/shared/navigationSelection';
 import { ContextCompactionPanel } from './ContextCompactionPanel';
 import { NavigationLaunchPicker } from './ApplicationsUI';
@@ -489,6 +490,16 @@ export function LaunchDialog({
                 </p>
               </fieldset>
             )}
+          <DocumentImport
+            value={launch.initialContext}
+            maxLength={60000}
+            onChange={(initialContext) =>
+              update({
+                initialContext,
+                contextBlocks: { ...launch.contextBlocks, 'initial-context': { enabled: true } },
+              })
+            }
+          />
           <McpPicker
             state={state}
             selected={launch.mcpServerIds}

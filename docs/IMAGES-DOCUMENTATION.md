@@ -31,10 +31,12 @@ Le chercheur et le relecteur utilisent `web_fetch` pour consulter les pages et d
 
 ## Emporter les documents
 
-Dans **Livrable**, choisis **Markdown**, **Word**, **PowerPoint** ou **HTML**, puis **Télécharger**. L’export porte sur la tentative et la révision affichées. Un brouillon non enregistré doit être enregistré ou abandonné ; un livrable en cours de production ne s’exporte pas. Le dialogue de VS Code laisse choisir le fichier de destination. Télécharger ne valide pas l’étape et ne publie rien.
+Dans **Livrable**, choisis **Markdown**, **Word**, **PowerPoint**, **HTML**, **PDF** ou **Texte**, puis **Télécharger**. L’export porte sur la tentative et la révision affichées. Un brouillon non enregistré doit être enregistré ou abandonné ; un livrable en cours de production ne s’exporte pas. Le dialogue de VS Code laisse choisir le fichier de destination. Télécharger ne valide pas l’étape et ne publie rien.
 
 Le Markdown est la version exacte du texte conservé. Word traduit les titres, paragraphes, listes, tableaux et liens. PowerPoint produit des sections et des pages de continuation ; les tableaux deviennent du texte. Prévois une idée par section et des puces courtes pour une présentation lisible. HTML est un document autonome sans script et sans chargement d’image externe. Les blocs Mermaid restent du code, et les images Markdown deviennent des références textuelles.
 
-Limites d’export : 2 Mo de texte et 200 diapositives. La relecture humaine du fichier reste utile avant diffusion, surtout pour les contenus longs ou spécialisés. Les quatre fichiers sont produits localement, sans nouvel appel au modèle.
+Limites d’export : 2 Mo de texte, 200 diapositives ou 500 pages PDF. La relecture humaine du fichier reste utile avant diffusion, surtout pour les contenus longs ou spécialisés. Les six formats sont produits localement, sans nouvel appel au modèle.
 
 Le [dossier de preuves](DOSSIER-PREUVES.md) permet de vérifier les sources derrière les conclusions avant de les reprendre dans la documentation.
+
+Le PDF utilise des pages A4 numérotées et des polices embarquées ; les symboles non couverts sont conservés sous forme de code Unicode avec une note. Le texte brut conserve le contenu et les références sans la syntaxe Markdown. Les nouveaux [kits de présentation et d’audit](PRESENTATION-AUDIT-KITS.md) proposent des livrables distincts pour le demandeur et son auditoire.

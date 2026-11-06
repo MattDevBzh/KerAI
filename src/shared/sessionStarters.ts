@@ -16,6 +16,16 @@ export const sessionStarters = [
     description: 'Une relecture indépendante des modifications existantes.',
   },
   {
+    id: 'presentation',
+    label: 'Préparer une présentation',
+    description: 'Du document au support et au guide personnel du présentateur.',
+  },
+  {
+    id: 'code-audit',
+    label: 'Auditer un projet',
+    description: 'Cadrer, planifier, auditer et adapter la restitution à deux publics.',
+  },
+  {
     id: 'custom',
     label: 'Composer mon équipe',
     description: 'Créer une session vide et choisir les interventions sur sa fiche.',

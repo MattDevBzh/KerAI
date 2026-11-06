@@ -8,7 +8,7 @@ export const taskDraftSchema = z
     revision: z.number().int().nonnegative(),
     title: z.string().max(200),
     description: z.string().max(500000),
-    starter: z.enum(['bugfix', 'feature', 'code-review', 'custom']),
+    starter: z.enum(['bugfix', 'feature', 'code-review', 'presentation', 'code-audit', 'custom']),
     projectIds: z.array(z.string().min(1).max(150)).max(30),
     isolated: z.boolean(),
     permissionMode: nativePermissionModeSchema,

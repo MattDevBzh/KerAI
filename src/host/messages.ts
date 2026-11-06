@@ -1,3 +1,4 @@
+import { DOCUMENT_FORMATS } from '../shared/documentation';
 import { instructionCommand } from '../core/instructions';
 import { taskDraftMessages } from '../core/taskDrafts';
 import { reviewTargetSchema } from '../core/reviewSchemas';
@@ -451,7 +452,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('exportAgentReport'),
-      format: z.enum(['md', 'docx', 'pptx', 'html']).optional(),
+      format: z.enum(DOCUMENT_FORMATS).optional(),
       ...step,
       requestId: id,
       attemptId: id,

@@ -112,7 +112,7 @@ async function hosted(page: Page) {
   });
   await page.goto('/');
   await navigate(page, 'Kits');
-  await expect(page.locator('.kit-card')).toHaveCount(3);
+  await expect(page.locator('.kit-card')).toHaveCount(5);
   return { root, kits, registry, exported, imported };
 }
 
@@ -221,4 +221,31 @@ test('documentation : quatre rôles et ressources installables sans écraser le 
   await expect(page.getByText('Recherche code et web', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Installer ce kit', exact: true })).toBeEnabled();
   await page.screenshot({ path: 'docs/screenshots/kit-documentation.png', fullPage: true });
+});
+
+test('les deux nouveaux kits exposent leurs rôles et leurs dépendances communes', async ({
+  page,
+}) => {
+  await hosted(page);
+  for (const [name, count, method] of [
+    ['Présentation et préparation', 5, 'presentation-method'],
+    ['Audit de code et restitution', 6, 'audit-method'],
+  ] as const) {
+    const card = page
+      .locator('.kit-card')
+      .filter({ has: page.getByRole('heading', { name, exact: true }) });
+    await expect(card).toContainText(`${count} agents`);
+    expect(
+      await card
+        .locator('.kit-team img')
+        .evaluateAll(
+          (images) => new Set(images.map((image) => (image as HTMLImageElement).src)).size,
+        ),
+    ).toBe(count);
+    await card.getByRole('button', { name: 'Voir le kit' }).click();
+    await expect(page.getByRole('button', { name: 'Installer ce kit' })).toBeEnabled();
+    await page.getByText('Voir tous les fichiers', { exact: true }).click();
+    await expect(page.locator('.kit-files')).toContainText(`skills/${method}/SKILL.md`);
+    await page.getByRole('button', { name: 'Retour', exact: true }).click();
+  }
 });

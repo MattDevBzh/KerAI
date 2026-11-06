@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { demoState } from '../webview/demo';
 import { StateEncoder } from '../src/shared/stateTransfer';
 import { navigate } from './ui-navigation-helpers';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 /** Requires `npm run build`; serves the packaged bundle, independently of Vite's dev server. */
 test('built webview loads lazy pages under CSP and applies 1000-session state and deltas', async ({
@@ -43,7 +44,7 @@ test('built webview loads lazy pages under CSP and applies 1000-session state an
   const encoder = new StateEncoder();
   const initial = encoder.encode(state);
   const nonce = randomBytes(16).toString('hex');
-  const csp = `default-src 'none'; script-src 'nonce-${nonce}' 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'self'; form-action 'none'`;
+  const csp = `default-src 'none'; script-src 'nonce-${nonce}' 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; worker-src blob:; connect-src 'none'; base-uri 'self'; form-action 'none'`;
   const fixture = JSON.stringify({
     initial,
     discussion: {
@@ -99,6 +100,7 @@ test('built webview loads lazy pages under CSP and applies 1000-session state an
     .replace(/<script type="module"/g, `<script nonce="${nonce}" type="module"`);
   const types: Record<string, string> = {
     js: 'text/javascript',
+    mjs: 'text/javascript',
     css: 'text/css',
     png: 'image/png',
     svg: 'image/svg+xml',
@@ -229,6 +231,21 @@ test('built webview loads lazy pages under CSP and applies 1000-session state an
       false,
     );
     await page.screenshot({ path: info.outputPath('built-sessions-390.png') });
+    // PDF extraction must work in the delivered bundle with no network fetch or unsafe-eval.
+    await page.getByRole('button', { name: 'Nouvelle session', exact: true }).click();
+    const pdf = await PDFDocument.create();
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    pdf.addPage().drawText('Preuve PDF locale sous CSP', { x: 50, y: 700, font });
+    await page.getByLabel('Document source à importer').setInputFiles({
+      name: 'source.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(await pdf.save()),
+    });
+    await expect(page.getByRole('region', { name: 'Document extrait' })).toBeVisible();
+    await page.getByText('Vérifier le texte extrait', { exact: true }).click();
+    await expect(page.getByLabel('Texte extrait du document')).toHaveValue(
+      /Preuve PDF locale sous CSP/,
+    );
     const violations = await page.evaluate(() => Reflect.get(window, 'builtCspViolations'));
 
     const metrics = await page.evaluate(

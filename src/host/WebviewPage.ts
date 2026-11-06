@@ -19,7 +19,7 @@ export async function setWebviewPage(
   const base = target.webview.asWebviewUri(webviewRoot).toString() + '/';
   const nonce = randomBytes(20).toString('hex');
   let html = await readFile(path.join(context.extensionPath, 'dist/webview/index.html'), 'utf8');
-  const csp = `default-src 'none'; img-src ${target.webview.cspSource} data:; style-src ${target.webview.cspSource} 'unsafe-inline'; font-src ${target.webview.cspSource}; script-src 'nonce-${nonce}' ${target.webview.cspSource}; connect-src 'none'; base-uri ${target.webview.cspSource}; form-action 'none';`;
+  const csp = `default-src 'none'; img-src ${target.webview.cspSource} data:; style-src ${target.webview.cspSource} 'unsafe-inline'; font-src ${target.webview.cspSource}; script-src 'nonce-${nonce}' ${target.webview.cspSource}; worker-src blob:; connect-src 'none'; base-uri ${target.webview.cspSource}; form-action 'none';`;
   html = html
     .replace(
       /<html\b/,

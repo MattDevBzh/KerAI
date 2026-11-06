@@ -244,9 +244,15 @@ export function KitsUI({
                 >
                   <div className="kit-card-cover">
                     <span className="kit-card-tag">
-                      {item.metadata.id === 'devops'
-                        ? 'INFRASTRUCTURE & CI/CD'
-                        : 'CONCEPTION & DÉVELOPPEMENT'}
+                      {(
+                        {
+                          copilot: 'CONCEPTION & DÉVELOPPEMENT',
+                          devops: 'INFRASTRUCTURE & CI/CD',
+                          documentation: 'DOCUMENTATION TECHNIQUE',
+                          presentation: 'PRÉSENTATION & TRANSMISSION',
+                          'code-audit': 'AUDIT & RESTITUTION',
+                        } as Record<string, string>
+                      )[item.metadata.id] ?? 'ÉQUIPE PERSONNALISÉE'}
                     </span>
                     <div className="kit-team">
                       {item.nodes

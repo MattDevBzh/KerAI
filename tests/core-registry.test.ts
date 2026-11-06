@@ -161,11 +161,11 @@ describe('agent, skill and workflow registry', () => {
       'Personal rules',
     );
     expect(await readdir(root, { recursive: true })).toEqual(before);
-    expect((await registry.load()).agents).toHaveLength(25);
+    expect((await registry.load()).agents).toHaveLength(36);
     expect((await registry.load()).agents.every((agent) => agent.source === 'user')).toBe(true);
     const other = new AgentRegistry(join(root, 'another-project'), resolve('defaults'), userPath);
-    expect((await other.load()).agents).toHaveLength(25);
-    expect((await other.load()).skills).toHaveLength(23);
+    expect((await other.load()).agents).toHaveLength(36);
+    expect((await other.load()).skills).toHaveLength(36);
     expect((await other.load()).workflows.map((w) => w.id)).toEqual(
       expect.arrayContaining(['code-review', 'feature', 'single']),
     );

@@ -1156,6 +1156,7 @@ export async function activate(context: vscode.ExtensionContext) {
           report.content,
           format,
           current.engine.getFeature(message.featureId).title,
+          path.join(context.extensionPath, 'resources'),
         );
         const destination = await vscode.window.showSaveDialog({
           title: 'Télécharger le compte rendu de l’agent',

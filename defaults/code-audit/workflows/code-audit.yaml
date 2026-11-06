@@ -1,0 +1,112 @@
+{
+  "id": "code-audit",
+  "name": "Audit de code et restitution",
+  "description": "Directives, plan, audit brut, guide personnel, restitution ciblée et validation globale. Audit statique avec couverture des fichiers et constats traçables.",
+  "icon": "shield-check",
+  "steps": [
+    {
+      "id": "brief",
+      "name": "Cadrage de l’audit",
+      "description": "Appliquer audit-brief. Rendre le contrat : objectifs, questions d’audit, critères d’acceptation numérotés C01…, inventaire préliminaire, inclusion/exclusion, profondeur, contraintes, livrables et profils encore à préciser. Aucun audit avant validation du cadrage. Un périmètre « tout le projet » doit préciser les fichiers générés, dépendances, binaires et sous-projets.",
+      "agentId": "fs-audit-brief",
+      "inheritAgent": true,
+      "policy": "read-only",
+      "model": "",
+      "skills": [],
+      "maxAttempts": 0,
+      "artifact": "audit-brief.md",
+      "dependsOn": [],
+      "askBeforeRun": true
+    },
+    {
+      "id": "plan",
+      "name": "Plan et couverture de l’audit",
+      "description": "Appliquer audit-plan. Rendre un plan vérifiable et la couverture initiale (non lue), plus les accès manquants. Ne pas rédiger les conclusions de l’audit avant les lectures. Attendre la validation du plan.",
+      "agentId": "fs-audit-plan",
+      "inheritAgent": true,
+      "policy": "read-only",
+      "model": "",
+      "skills": [],
+      "maxAttempts": 0,
+      "artifact": "audit-plan.md",
+      "dependsOn": [
+        "brief"
+      ],
+      "askBeforeRun": true
+    },
+    {
+      "id": "inspect",
+      "name": "Audit et dossier brut",
+      "description": "Appliquer audit-inspect. En cas d’interruption, rendre un état de reprise précis, les constats déjà étayés et les fichiers restants. « 0 constat » n’est favorable que si la couverture demandée est accomplie ; sinon le verdict est incomplet. Conserver le dossier brut comme référence commune des deux rédactions.",
+      "agentId": "fs-audit-inspect",
+      "inheritAgent": true,
+      "policy": "read-only",
+      "model": "",
+      "skills": [],
+      "maxAttempts": 0,
+      "artifact": "audit-inspect.md",
+      "dependsOn": [
+        "brief",
+        "plan"
+      ],
+      "askBeforeRun": true
+    },
+    {
+      "id": "personal",
+      "name": "Explications pour le demandeur",
+      "description": "Appliquer audit-personal. Livrer un document autonome exportable dans le ou les formats retenus. Inclure une correspondance exhaustive des Axxx du brut ; si le guide approfondit seulement certains points, conserver la liste complète et indiquer où trouver les autres. Ne pas ajouter de nouveaux constats sans retour à l’étape Audit.",
+      "agentId": "fs-audit-personal",
+      "inheritAgent": true,
+      "policy": "read-only",
+      "model": "",
+      "skills": [],
+      "maxAttempts": 0,
+      "artifact": "audit-personal.md",
+      "dependsOn": [
+        "brief",
+        "plan",
+        "inspect"
+      ],
+      "askBeforeRun": true
+    },
+    {
+      "id": "audience",
+      "name": "Restitution pour l’auditoire",
+      "description": "Appliquer audit-audience. Livrer le document pour cet auditoire, distinct du guide personnel. Plusieurs exports d’un même document sont possibles via l’application. Toute nouvelle conclusion repart vers l’audit ; ne pas la glisser dans la synthèse sans preuve.",
+      "agentId": "fs-audit-audience",
+      "inheritAgent": true,
+      "policy": "read-only",
+      "model": "",
+      "skills": [],
+      "maxAttempts": 0,
+      "artifact": "audit-audience.md",
+      "dependsOn": [
+        "brief",
+        "plan",
+        "inspect",
+        "personal"
+      ],
+      "askBeforeRun": true
+    },
+    {
+      "id": "review",
+      "name": "Validation globale de l’audit",
+      "description": "Appliquer audit-review. Inclure les nombres de constats par priorité, la couverture prévue/réalisée, une matrice brut/guide personnel/restitution, les écarts à corriger avec l’étape responsable, et les contrôles réellement réalisés. Ne jamais annoncer tests, compilation ou validation visuelle des exports non effectués. En cas d’écart, renvoyer vers l’étape concernée puis demander une nouvelle relecture. L’acceptation finale reste humaine et n’est ni une correction du code ni une autorisation de mise en production.",
+      "agentId": "fs-audit-review",
+      "inheritAgent": true,
+      "policy": "read-only",
+      "model": "",
+      "skills": [],
+      "maxAttempts": 0,
+      "artifact": "audit-review.md",
+      "dependsOn": [
+        "brief",
+        "plan",
+        "inspect",
+        "personal",
+        "audience"
+      ],
+      "askBeforeRun": true
+    }
+  ]
+}

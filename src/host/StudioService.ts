@@ -1,3 +1,4 @@
+import { requiresEditorialApproval } from '../shared/documentation';
 import { startupDiagnostics } from './StartupDiagnostics';
 import { selectionContext } from './CodeSelection';
 import { instructionCommand } from '../core/instructions';
@@ -3591,8 +3592,7 @@ export class StudioService extends EventEmitter {
         if (
           feature.parent ||
           step.subplan ||
-          feature.workflowId === 'documentation' ||
-          step.agentId.startsWith('fs-doc-') ||
+          requiresEditorialApproval(feature, step) ||
           pilot.checkpoints.includes(step.id)
         )
           notes.push('Validation humaine après cette étape.');
