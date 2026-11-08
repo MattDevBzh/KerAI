@@ -31,6 +31,7 @@ import { applySessionBatch } from './host/SessionBatch';
 import { handleSessionReview } from './host/SessionReviewController';
 import { StudioHub } from './host/StudioHub';
 import { StudioService } from './host/StudioService';
+import { CatalogueDeletionService } from './host/CatalogueDeletionService';
 import { setWebviewPage } from './host/WebviewPage';
 import { WorkspaceLease } from './host/WorkspaceLease';
 import { parseMessage } from './host/messages';
@@ -630,6 +631,29 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const notice = (message: string) => send({ type: 'notice', message });
   let sessionBatchRunning = false;
+  const catalogueDeletions = new WeakMap<StudioService, CatalogueDeletionService>();
+  const deletionService = (owner: StudioService) => {
+    let removal = catalogueDeletions.get(owner);
+    if (!removal) {
+      removal = new CatalogueDeletionService(owner.registry, async () => {
+        await hub.waitForProjects();
+        for (const project of catalog.state.projects) await hub.entry(project.id);
+        const entries = [...hub.entries.values()];
+        const stored = await Promise.all(entries.map((entry) => entry.service.store.load()));
+        return {
+          registries: entries.map((entry) => entry.service.registry),
+          features: entries.flatMap((entry, index) =>
+            [...entry.service.state.features, ...stored[index].features].map((feature) => ({
+              ...feature,
+              title: `${entry.project?.name ?? 'Projet'} — ${feature.title}`,
+            })),
+          ),
+        };
+      });
+      catalogueDeletions.set(owner, removal);
+    }
+    return removal;
+  };
   const dispatch = async (
     raw: unknown,
     surface: 'cockpit' | 'control' = 'cockpit',
@@ -2016,10 +2040,11 @@ export async function activate(context: vscode.ExtensionContext) {
       case 'saveSkill': {
         try {
           current.assertConfigurable();
-          const result =
+          const result = await current.withWorkspaceMutation('Enregistrement du profil', () =>
             message.type === 'saveAgent'
-              ? await current.registry.saveAgent(message.agent, message.options)
-              : await current.registry.saveSkill(message.id, message.content, message.options);
+              ? current.registry.saveAgent(message.agent, message.options)
+              : current.registry.saveSkill(message.id, message.content, message.options),
+          );
           await hub.refreshProfiles();
           await quests.record(studioQuestFacts(current.snapshot()));
           await discussions.refreshProfiles().catch(report);
@@ -2131,6 +2156,114 @@ export async function activate(context: vscode.ExtensionContext) {
         if (result.conflicts.length) output.show(true);
         return;
       }
+      case 'catalogueDeletePreview':
+      case 'catalogueDeleteApply': {
+        try {
+          current.assertTrusted();
+          const removal = deletionService(current);
+          if (message.type === 'catalogueDeletePreview') {
+            send({
+              type: 'catalogueDeleteResult',
+              requestId: message.requestId,
+              preview: await removal.preview(message.target),
+            });
+          } else {
+            const result = await current.withWorkspaceMutation('Suppression dans l’atelier', () =>
+              removal.apply(message.token, current.workspacePath),
+            );
+            await hub.refreshProfiles();
+            await discussions.refreshProfiles().catch(report);
+            send({ type: 'catalogueDeleteResult', requestId: message.requestId, message: result });
+            notice(result);
+          }
+        } catch (error) {
+          send({
+            type: 'catalogueDeleteResult',
+            requestId: message.requestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return;
+      }
+      case 'workshopHistory':
+      case 'workshopExport':
+      case 'workshopImport':
+      case 'workshopRestorePreview':
+      case 'workshopApply': {
+        try {
+          current.assertTrusted();
+          if (message.type === 'workshopHistory') {
+            send({
+              type: 'workshopResult',
+              requestId: message.requestId,
+              history: await current.workshop.history(),
+            });
+          } else if (message.type === 'workshopExport') {
+            const destination = await vscode.window.showSaveDialog({
+              defaultUri: vscode.Uri.file(path.join(current.workspacePath, 'kerai-atelier.zip')),
+              filters: { 'Atelier KerAI lisible': ['zip'] },
+              title: 'Exporter tout l’atelier pour une révision externe',
+            });
+            if (!destination)
+              send({ type: 'workshopResult', requestId: message.requestId, cancelled: true });
+            else {
+              await current.withWorkspaceMutation('Export de l’atelier', async () => {
+                const archive = await current.workshop.exportArchive();
+                await writeFile(destination.fsPath, archive);
+              });
+              send({
+                type: 'workshopResult',
+                requestId: message.requestId,
+                message: `Atelier exporté : ${destination.fsPath}. Le ZIP contient les fichiers lisibles et les consignes de révision.`,
+              });
+            }
+          } else if (message.type === 'workshopImport') {
+            const selected = await vscode.window.showOpenDialog({
+              canSelectMany: false,
+              canSelectFolders: false,
+              filters: { 'Atelier KerAI révisé': ['zip'] },
+              title: 'Comparer un atelier révisé',
+            });
+            if (!selected?.[0])
+              send({ type: 'workshopResult', requestId: message.requestId, cancelled: true });
+            else
+              send({
+                type: 'workshopResult',
+                requestId: message.requestId,
+                preview: await current.workshop.readArchive(selected[0].fsPath),
+              });
+          } else if (message.type === 'workshopRestorePreview') {
+            send({
+              type: 'workshopResult',
+              requestId: message.requestId,
+              preview: await current.workshop.previewRestore(message.id),
+            });
+          } else if (message.type === 'workshopApply') {
+            const result = await current.withWorkspaceMutation('Mise à jour de l’atelier', () =>
+              deletionService(current).withProtectedAgents(
+                current.workshop.removedAgentIds(message.token),
+                current.workspacePath,
+                () => current.workshop.apply(message.token),
+              ),
+            );
+            await hub.refreshProfiles();
+            await discussions.refreshProfiles().catch(report);
+            send({
+              type: 'workshopResult',
+              requestId: message.requestId,
+              message: result,
+              history: await current.workshop.history(),
+            });
+          }
+        } catch (error) {
+          send({
+            type: 'workshopResult',
+            requestId: message.requestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return;
+      }
       case 'kitCatalog':
       case 'kitPreview':
       case 'kitCompose':
@@ -2207,7 +2340,9 @@ export async function activate(context: vscode.ExtensionContext) {
             }
           } else {
             current.assertConfigurable();
-            const result = await current.kits.install(message.token);
+            const result = await current.withWorkspaceMutation('Installation du kit', () =>
+              current.kits.install(message.token),
+            );
             await current.refresh();
             await recordQuest('kitImport', current.kits.bundle(message.token).metadata.id);
             await quests.record(studioQuestFacts(current.snapshot()));
@@ -2306,7 +2441,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       case 'saveWorkflow': {
-        current.assertTrusted();
+        current.assertConfigurable();
         message.workflow.steps = inheritTeamProfiles(message.workflow.steps, current.state.agents);
         if (
           configurationSteps(message.workflow.steps).some(
@@ -2319,7 +2454,9 @@ export async function activate(context: vscode.ExtensionContext) {
         const isNew = !current.state.workflows.some(
           (workflow) => workflow.id === message.workflow.id,
         );
-        await current.registry.saveWorkflow(message.workflow);
+        await current.withWorkspaceMutation('Enregistrement de l’équipe', () =>
+          current.registry.saveWorkflow(message.workflow),
+        );
         await current.refresh();
         if (isNew) await recordQuest('workflowsCreated', message.workflow.id);
         notice(

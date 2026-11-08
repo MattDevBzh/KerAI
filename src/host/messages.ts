@@ -22,6 +22,8 @@ import { REWARD_IDS } from '../shared/rewards';
 import { DRAGON_BALL_CODE } from '../shared/dragonBall';
 import { workflowSchema } from '../core/workflow';
 import { kitMessageVariants } from '../core/kitSchemas';
+import { workshopMessageVariants } from '../core/workshopSchemas';
+import { catalogueDeleteMessageVariants } from '../core/catalogueDeletionSchemas';
 import { ROAST_LEVELS } from '../shared/roast';
 import {
   launchSchema,
@@ -92,6 +94,8 @@ export const messageSchema = z.discriminatedUnion('type', [
     .strict(),
   ...discussionMessageVariants,
   ...kitMessageVariants,
+  ...workshopMessageVariants,
+  ...catalogueDeleteMessageVariants,
   z
     .object({
       type: z.enum(['addProjects', 'openDedicatedWindow', 'createWindowsShortcut']),

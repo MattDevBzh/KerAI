@@ -4,6 +4,29 @@
   padding: 34px 36px 60px;
   min-width: 0;
 }
+.kit-card-body > .catalogue-delete {
+  float: right;
+  margin: 0 0 8px 8px;
+}
+.kit-saved-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.kit-saved-row > .kit-saved {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .kit-saved-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .kit-saved-row > .catalogue-delete {
+    align-self: flex-end;
+  }
+}
 .kits-heading {
   display: flex;
   gap: 26px;

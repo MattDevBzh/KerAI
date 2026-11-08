@@ -264,6 +264,11 @@
   position: relative;
   min-width: 0;
   display: flex;
+  flex-direction: column;
+}
+.agent-library-item > .catalogue-delete {
+  align-self: flex-end;
+  margin: 6px 0;
 }
 .agent-library-item > .library-card {
   width: 100%;

@@ -33,6 +33,8 @@ import { kitNodes, resolveKitSelection } from '../src/shared/kits';
 import { subscribe } from './bridge';
 import './kits.css';
 import { AgentImage } from './Avatar';
+import { WorkshopUI } from './WorkshopUI';
+import { CatalogueDeleteButton } from './CatalogueDeleteButton';
 
 const kinds: KitKind[] = ['workflow', 'agent', 'skill'];
 const labels: Record<KitKind, string> = { workflow: 'Parcours', agent: 'Agents', skill: 'Skills' };
@@ -229,6 +231,7 @@ export function KitsUI({
       )}
       {mode === 'library' && (
         <>
+          <WorkshopUI dispatch={dispatch} />
           <div className="kit-library-intro">
             <Package size={19} />
             <h2>Kits prédéfinis</h2>
@@ -271,6 +274,16 @@ export function KitsUI({
                     </div>
                   </div>
                   <div className="kit-card-body">
+                    <CatalogueDeleteButton
+                      target={{
+                        kind: 'kit',
+                        id: item.storageId ?? item.metadata.id,
+                        source: item.source,
+                      }}
+                      label={`le kit ${item.metadata.name}`}
+                      dispatch={dispatch}
+                      onDeleted={() => request({ type: 'kitCatalog' })}
+                    />
                     <div className="kit-title-row">
                       <h2>{item.metadata.name}</h2>
                       <span className={`kit-pill ${item.installed ? 'installed' : ''}`}>
@@ -315,24 +328,36 @@ export function KitsUI({
                 {catalog
                   .filter((k) => k.source === 'saved')
                   .map((item) => (
-                    <button
-                      className="kit-saved"
-                      key={item.storageId ?? item.metadata.id}
-                      disabled={busy || !!item.error}
-                      onClick={() => openPreview(item)}
-                    >
-                      <Package size={21} />
-                      <span>
-                        <strong>{item.metadata.name}</strong>
-                        <small>
-                          {item.metadata.version} · {item.error ?? `${item.nodes.length} éléments`}
-                        </small>
-                      </span>
-                      <span>
-                        {item.error ? 'À réparer' : item.installed ? 'Installé' : 'Consulter'}
-                      </span>
-                      <ArrowRight size={16} />
-                    </button>
+                    <div className="kit-saved-row" key={item.storageId ?? item.metadata.id}>
+                      <button
+                        className="kit-saved"
+                        disabled={busy || !!item.error}
+                        onClick={() => openPreview(item)}
+                      >
+                        <Package size={21} />
+                        <span>
+                          <strong>{item.metadata.name}</strong>
+                          <small>
+                            {item.metadata.version} ·{' '}
+                            {item.error ?? `${item.nodes.length} éléments`}
+                          </small>
+                        </span>
+                        <span>
+                          {item.error ? 'À réparer' : item.installed ? 'Installé' : 'Consulter'}
+                        </span>
+                        <ArrowRight size={16} />
+                      </button>
+                      <CatalogueDeleteButton
+                        target={{
+                          kind: 'kit',
+                          id: item.storageId ?? item.metadata.id,
+                          source: item.source,
+                        }}
+                        label={`le kit ${item.metadata.name}`}
+                        dispatch={dispatch}
+                        onDeleted={() => request({ type: 'kitCatalog' })}
+                      />
+                    </div>
                   ))}
               </div>
             </section>

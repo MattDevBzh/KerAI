@@ -35,6 +35,10 @@ def verify(vsix, root, extract=None, match_build=False):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
         assert b'reviewBranchesResult' in host and b'reviewBranchesResult' in ui, 'Dedicated review routing missing'
+        for marker in ('workshopExport', 'workshopRestorePreview', 'catalogueDeletePreview', 'catalogueDeleteApply'):
+            assert marker.encode() in host and marker.encode() in ui, f'{marker} missing'
+        workshop_guide = Path('docs/REVISION-ATELIER.md')
+        assert archive.read('extension/' + workshop_guide.as_posix()) == (root / workshop_guide).read_bytes()
         assert b'studio_review_pr' in host and b'studio_git_read' in host, 'Review readers missing'
         assert b'autopilot-journal' in ui, 'Autopilot journal missing'
         assert b'renewCorrectionLoop' in host and b'renewCorrectionLoop' in ui, 'Correction loop renewal missing'

@@ -143,6 +143,8 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       'featureFinalizationResult',
       'profileSaveResult',
       'kitResult',
+      'workshopResult',
+      'catalogueDeleteResult',
       'themeState',
       'zoomState',
       'livingHqState',

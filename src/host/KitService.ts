@@ -367,8 +367,15 @@ export class KitService {
   }
   async catalog(): Promise<KitCatalogItem[]> {
     const result: KitCatalogItem[] = [];
+    const removedKits = await this.registry.removedIds('kit');
+    const removedAgents = await this.registry.removedIds('agent');
     const add = async (bundle: KitBundle, source: KitCatalogItem['source'], storageId?: string) => {
       const nodes = validateKit(bundle).nodes;
+      if (
+        removedKits.has(`${source}-${storageId ?? bundle.metadata.id}`) ||
+        nodes.some((node) => node.kind === 'agent' && removedAgents.has(node.id))
+      )
+        return;
       const preview = await this.describe(bundle, '');
       result.push({
         metadata: bundle.metadata,
@@ -532,6 +539,9 @@ export class KitService {
           'Les fichiers ont changé pendant l’installation. Recommence depuis un nouvel aperçu.',
         );
       await this.remember(bundle);
+      await this.registry.restoreCatalogueItems(
+        validateKit(bundle).nodes.map((node) => ({ kind: node.kind, id: node.id })),
+      );
     } catch (error) {
       for (const file of created.reverse()) {
         try {

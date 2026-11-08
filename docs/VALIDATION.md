@@ -1,5 +1,14 @@
 # Validation et limites
 
+## Révision externe et suppression de l’atelier — v1.40.0, 8 novembre 2026
+
+- Suite complète locale : **1 227 tests de logique/intégration réussis, 11 conditionnels ignorés**, avec types et construction réussis. Après l’ajout du cas de suppression d’un identifiant long, les **17 tests de révision et de suppression** passent ensemble ; les types et le format sont revérifiés.
+- **14 scénarios d’interface réussis** couvrent les nouveaux parcours et les bibliothèques Kits et Profils. La révision utilise le vrai service d’archives : export, différence, application, redémarrage, restauration et conflit local. La suppression est refusée pour une session archivée non terminée, puis acceptée après sa terminaison. Les captures grand écran et 390 px ont été inspectées.
+- Les tests de fichiers vérifient les portées masquées, ressources binaires et liens relatifs, associations MCP conservées localement, suppressions explicites, sauvegarde persistante, échec partiel avec remise en état, reprise après interruption, chemins interdits et liens symboliques. La suppression contrôle les projets enregistrés, compositions en attente et historiques d’équipes ; les profils partagés entre kits sont conservés.
+- Le paquet est construit dans une copie isolée contenant uniquement les fichiers prévus pour la livraison. Les **318 fichiers compilés et 133 ressources publiques**, les messages de révision/suppression et le guide sont vérifiés. Le paquet extrait passe le chargement et les contrôles dans VS Code Insiders sur macOS, avec navigateur embarqué et données isolées, sans prompt payant.
+- La CI du commit livré rejoue la suite complète sous Linux et les scénarios de révision/suppression sous Windows. La publication exige les deux validations, le chargement du paquet extrait et le contrôle des fichiers téléchargés. Le résultat est lié dans la [release v1.40.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.40.0).
+- La qualité des changements proposés par une IA externe n’est pas évaluée par ces tests. Le réimport de révision nécessite le compte et le projet d’origine ; les kits portables restent disponibles pour les transferts entre machines. Les définitions retirées de l’atelier ne sont pas effacées des historiques de sessions terminées ni des anciennes sauvegardes.
+
 ## Parcours quotidien et ouverture progressive — v1.38.0, 4 novembre 2026
 
 Les quinze lots sont décrits dans le [périmètre livré](features/daily-session-flow/IMPLEMENTATION.md). **1 184 tests de logique**, **353 scénarios d’interface**, les types, le format, la construction et le paquet extrait dans VS Code sur macOS passent. Les onze tests conditionnels locaux sont repris par leurs environnements CLI/Windows en CI.

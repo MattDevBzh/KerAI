@@ -397,6 +397,8 @@ export type ClientMessage =
   | import('./projects').ProjectClientMessage
   | import('./collaboration').CollaborationClientMessage
   | import('./kits').KitClientMessage
+  | import('./workshop').WorkshopClientMessage
+  | import('./catalogueDeletion').CatalogueDeleteMessage
   | DevOpsClientMessage
   | {
       type: 'saveFeatureTeam';
@@ -706,6 +708,8 @@ export type HostMessage =
       error?: string;
     }
   | import('./kits').KitHostMessage
+  | import('./workshop').WorkshopHostMessage
+  | import('./catalogueDeletion').CatalogueDeleteResult
   | { type: 'livingHqState'; enabled: boolean; requestId?: string; error?: string }
   | {
       type: 'sessionLayoutState';

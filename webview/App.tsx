@@ -30,6 +30,7 @@ import { emptyQuestState, type QuestState } from '../src/shared/quests';
 import { normalizeRoastLevel, roastLabel } from '../src/shared/roast';
 import { allFeatures, featurePath } from '../src/shared/subplans';
 import { orderedAgents } from '../src/shared/team';
+import { CatalogueDeleteButton } from './CatalogueDeleteButton';
 import type { AgentProfile, ClientMessage, SkillInfo, StudioState } from '../src/shared/types';
 import { AccountCreditsBadge } from './AccountCreditsBadge';
 import { AgentFavorite } from './AgentFavorite';
@@ -475,6 +476,33 @@ export default function App() {
           },
           '*',
         );
+      }
+      if (message.type.startsWith('catalogueDelete') && 'requestId' in message) {
+        window.postMessage(
+          {
+            type: 'catalogueDeleteResult',
+            requestId: message.requestId,
+            error: 'La suppression de l’atelier nécessite l’extension VS Code.',
+          },
+          '*',
+        );
+        return;
+      }
+      if (message.type.startsWith('workshop') && 'requestId' in message) {
+        window.postMessage(
+          {
+            type: 'workshopResult',
+            requestId: message.requestId,
+            ...(message.type === 'workshopHistory'
+              ? { history: [] }
+              : {
+                  error:
+                    'L’export, la comparaison et la restauration de l’atelier nécessitent l’extension VS Code.',
+                }),
+          },
+          '*',
+        );
+        return;
       }
       if (message.type.startsWith('kit') && 'requestId' in message) {
         window.postMessage(
@@ -1142,6 +1170,11 @@ export default function App() {
                         <span>{a.model || 'Modèle automatique'}</span>
                       </div>
                     </button>
+                    <CatalogueDeleteButton
+                      target={{ kind: 'agent', id: a.id }}
+                      label={`l’agent ${a.nickname || a.name}`}
+                      dispatch={dispatch}
+                    />
                   </div>
                 ))}
               </div>

@@ -134,6 +134,7 @@ import { reportDiscussionSource } from './DiscussionContext';
 import { CHECKPOINT_LIMITS, FeatureWorkspace } from './FeatureWorkspace';
 import { ImageInputError, validateImages } from './Images';
 import { KitService } from './KitService';
+import { WorkshopService } from './WorkshopService';
 import {
   backupProjectChanges,
   inspectProjectChanges,
@@ -277,6 +278,7 @@ export class StudioService extends EventEmitter {
   devopsProjectKey?: () => string | undefined;
   readonly registry: AgentRegistry;
   readonly kits: KitService;
+  readonly workshop: WorkshopService;
   readonly workspaces: FeatureWorkspace;
   readonly navigation: NavigationService;
   navigationProjects?: () => { id: string; path: string }[];
@@ -316,6 +318,7 @@ export class StudioService extends EventEmitter {
     super();
     this.registry = new AgentRegistry(workspacePath, defaultsPath);
     this.kits = new KitService(this.registry);
+    this.workshop = new WorkshopService(this.registry);
     this.workspaces = new FeatureWorkspace(workspacePath, join(store.rootPath, 'workspaces'));
     this.navigation = new NavigationService({
       storageRoot: join(store.rootPath, 'navigation'),
@@ -3372,6 +3375,7 @@ export class StudioService extends EventEmitter {
   }
   assertConfigurable(featureId?: string): void {
     this.assertTrusted();
+    this.globalGuard?.();
     if (featureId) {
       const f = this.engine.getFeature(featureId);
       if (f.pendingTeam) throw new Error('Une composition attend la fin de l’appel en cours.');

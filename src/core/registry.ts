@@ -34,6 +34,11 @@ const agentMetadata = z.object({
   roastLevel: z.enum(ROAST_LEVELS).optional(),
 });
 const skillMetadata = z.object({ name: z.string().min(1), description: z.string() });
+export {
+  agentMetadata as agentMetadataSchema,
+  skillMetadata as skillMetadataSchema,
+  markdown as parseProfileMarkdown,
+};
 export interface RegistryData {
   agents: AgentProfile[];
   skills: SkillInfo[];
@@ -187,7 +192,30 @@ export class AgentRegistry {
     readonly userPath: string = resolve(process.env.COPILOT_HOME || join(homedir(), '.copilot')),
   ) {}
 
+  async removedIds(kind: 'agent' | 'skill' | 'workflow' | 'kit'): Promise<Set<string>> {
+    const directory = `feature-studio/removed-${kind}s`;
+    return new Set(
+      (await files(this.userPath, directory))
+        .filter((file) => file.endsWith('.json'))
+        .map((file) => identifier.parse(basename(file, '.json'))),
+    );
+  }
+
+  async restoreCatalogueItems(items: { kind: 'agent' | 'skill' | 'workflow'; id: string }[]) {
+    for (const item of items) {
+      const path = await safePath(
+        this.userPath,
+        `feature-studio/removed-${item.kind}s/${identifier.parse(item.id)}.json`,
+      );
+      await unlink(path).catch((error) => {
+        if (error.code !== 'ENOENT') throw error;
+      });
+    }
+  }
+
   async load(): Promise<RegistryData> {
+    const removedAgents = await this.removedIds('agent'),
+      removedSkills = await this.removedIds('skill');
     const agents = new Map<string, AgentProfile>(),
       skills = new Map<string, SkillInfo>(),
       workflows = new Map<string, Workflow>();
@@ -240,6 +268,7 @@ export class AgentRegistry {
               content = await catalogueRead(path),
               { metadata, body } = markdown(content);
             const id = identifier.parse(basename(file, '.agent.md'));
+            if (removedAgents.has(id)) continue;
             const fields = z.record(z.string(), z.unknown()).parse(metadata);
             const meta = agentMetadata.parse({ ...fields, name: fields.name ?? id });
             if (!body) throw new Error('Instructions vides.');
@@ -267,6 +296,7 @@ export class AgentRegistry {
               { metadata, body } = markdown(content);
             const meta = skillMetadata.parse(metadata),
               id = identifier.parse(basename(dirname(file)));
+            if (removedSkills.has(id)) continue;
             if (!body) throw new Error('Skill vide.');
             const version = { ...meta, id, content, source, path, revision: revision(content) };
             skills.set(id, {
@@ -336,6 +366,8 @@ export class AgentRegistry {
   }
 
   async installKit(excludedTargets: string[] = []): Promise<InstallationReport> {
+    const removedAgents = await this.removedIds('agent'),
+      removedSkills = await this.removedIds('skill');
     const excluded = new Set(excludedTargets.map((target) => target.replaceAll('\\', '/')));
     const manifest = z
       .object({ files: z.array(z.object({ source: z.string(), target: z.string() })) })
@@ -377,6 +409,14 @@ export class AgentRegistry {
     };
     for (const entry of entries) {
       if (excluded.has(entry.target.replaceAll('\\', '/'))) continue;
+      const portableTarget = entry.target.replaceAll('\\', '/');
+      if (
+        portableTarget.startsWith('agents/') &&
+        removedAgents.has(basename(portableTarget, '.agent.md'))
+      )
+        continue;
+      if (portableTarget.startsWith('skills/') && removedSkills.has(portableTarget.split('/')[1]))
+        continue;
       const source = await safePath(this.defaultsPath, entry.source);
       const original = await readFile(source);
       const content = entry.target.endsWith('.md')
@@ -539,6 +579,7 @@ export class AgentRegistry {
       await writeFile(temporary, value, { flag: 'wx', mode: 0o600 });
       await assertRevision();
       await rename(temporary, path);
+      await this.restoreCatalogueItems([{ kind, id }]);
       return { scope: options.scope, path, revision: revision(value) };
     } finally {
       await unlink(temporary).catch(() => {});

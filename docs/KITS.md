@@ -2,6 +2,8 @@
 
 Un kit rassemble des parcours, des agents, des skills et leurs ressources. L’écran **Kits** sert à installer une équipe fournie, importer un fichier local ou composer sa propre sélection. Ces opérations ne lancent ni agent ni script.
 
+Pour faire améliorer tout le catalogue par une IA externe puis réintégrer ses changements, utiliser **Réviser tout l’atelier** dans ce même écran : export ZIP lisible, comparaison avec les fichiers actuels, application avec sauvegarde et restauration depuis l’historique. [Guide de révision de l’atelier](REVISION-ATELIER.md).
+
 ## Les deux kits fournis
 
 | Kit | Parcours | Agents | Skills |
@@ -39,6 +41,14 @@ L’installation cible `~/.copilot`, `%USERPROFILE%\.copilot` sous Windows, ou `
 Un conflit bloque l’installation entière ; aucun fichier différent n’est écrasé. Les fichiers identiques sont conservés. Le host revérifie la destination à l’installation et les contenus après copie. En cas d’échec, il retire les nouveaux fichiers dont les octets correspondent encore à sa copie. Les fichiers édités entre-temps restent préservés. Les autres fenêtres doivent actualiser leur catalogue pour voir les nouveaux profils.
 
 L’aperçu conserve le contenu exact de l’import ou de la composition ; l’installation ne relit pas silencieusement un autre fichier. Il garde jusqu’à huit aperçus par instance du service : si un aperçu a expiré, prépare-le à nouveau. Un fichier invalide dans les kits enregistrés est signalé **À réparer**, sans rendre les deux kits fournis indisponibles.
+
+## Supprimer un kit ou un agent
+
+Les bibliothèques **Agents** et **Kits** proposent **Supprimer**, puis un aperçu avant **Supprimer définitivement**. L’aperçu énumère les agents, skills et équipes dépendantes retirés. Les ressources partagées avec un autre kit ou encore utilisées par des profils conservés restent en place. Les versions éditables des agents concernés sont retirées des portées personnelle et projet des projets enregistrés ; les profils fournis sont exclus durablement du catalogue sans modifier les fichiers de l’extension.
+
+La suppression est bloquée si un agent concerné figure dans une session **non terminée**, même archivée, dans un sous-plan, dans une composition en attente ou dans l’historique d’une équipe encore active. Les sessions des projets enregistrés sont vérifiées, y compris leur stockage persistant. Un projet inaccessible bloque la vérification. La condition est revérifiée juste avant suppression ; les sessions terminées gardent leurs comptes rendus et historiques. Les projets qui ne sont pas enregistrés dans ce compte ne peuvent pas être inspectés.
+
+Un agent retiré ne réapparaît pas au redémarrage ou lors de l’installation automatique des ressources d’un autre profil. Une création explicite du même identifiant ou un nouvel import de kit peut le recréer. La suppression d’un agent peut retirer du catalogue les kits qui le contiennent ; elle ne réécrit pas les archives et sauvegardes historiques. La révision externe ne permet pas de contourner la protection des agents utilisés.
 
 ## Format et limites
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.40.0 — 2026-11-08
+
+- Révision externe de tout l’atelier depuis Kits : archive ZIP lisible, inventaire, consignes pour l’IA et séparation des profils fournis, personnels et propres au projet.
+- Réimportation avec comparaison des ajouts, modifications et suppressions explicites, détection des changements locaux concurrents, contrôles de dépendances et sauvegarde préalable.
+- Historique des imports et restauration après redémarrage, avec protection des modifications ultérieures et journal des opérations interrompues. Aucun appel Copilot pour ces opérations.
+- Suppression définitive des agents et kits depuis leurs bibliothèques : aperçu des éléments retirés, conservation des ressources partagées et retrait des équipes dépendantes.
+- Blocage si un agent concerné appartient à une session non terminée dans un projet enregistré, y compris une session archivée ou une composition en attente. Les historiques des sessions terminées sont conservés.
+- Les profils fournis retirés ne réapparaissent pas au redémarrage ; les fichiers personnels et de projet concernés sont supprimés. Les changements de catalogue sont réservés pendant l’opération.
+
 ## 1.39.0 — 2026-11-06
 
 - Kit Présentation et préparation : cadrage des deux profils, analyse sourcée, support pour l’auditoire, guide personnel du présentateur et validation globale en cinq étapes.
