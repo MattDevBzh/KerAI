@@ -557,3 +557,16 @@ html[data-studio-theme-effective='auto']
 .pr-administration h4 {
   overflow-wrap: anywhere;
 }
+
+.pr-session-context {
+  margin-block: 18px;
+  padding-block: 12px;
+  border-block: 1px solid var(--vscode-panel-border);
+}
+.pr-session-context pre {
+  max-height: 360px;
+  overflow: auto;
+}
+.pr-session-context label {
+  overflow-wrap: anywhere;
+}

@@ -1,3 +1,4 @@
+import { prSessionContext } from './host/PrSessionContext';
 import { writePrAdministration } from './host/PrAdministrationWriter';
 import { writePullRequest } from './host/PullRequestWriter';
 import { clearCatalogueCache } from './core/registry';
@@ -349,6 +350,8 @@ export async function activate(context: vscode.ExtensionContext) {
             await next.refresh();
             return result;
           }),
+        getPrSessionContext: ({ featureId, devops }) =>
+          prSessionContext(deliveryOwner(featureId).feature, devops),
         generatePrAdministration: async (input) => {
           const { feature } = deliveryOwner(input.featureId);
           const registry = await next.registry.load();

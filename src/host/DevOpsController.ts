@@ -103,7 +103,12 @@ export interface DevOpsControllerOptions {
     signal: AbortSignal;
     devops: DevOpsState;
   }) => Promise<Pick<PrGeneration, 'title' | 'description' | 'model' | 'usage'>>;
+  getPrSessionContext?: (input: {
+    featureId: string;
+    devops: DevOpsState;
+  }) => import('../shared/prSessionContext').PrSessionContextCatalog;
   generatePrAdministration?: (input: {
+    sessionContext?: import('../shared/prSessionContext').PrSessionContextSnapshot;
     featureId: string;
     administration: PrAdministrationSettings;
     snapshot: PrAdminSnapshot;
@@ -156,6 +161,13 @@ export class DevOpsController {
               session: this.state.deliverySession,
             }
           : undefined,
+      context: options.getPrSessionContext
+        ? () =>
+            options.getPrSessionContext!({
+              featureId: this.state.deliverySession!.featureId,
+              devops: this.getState(),
+            })
+        : undefined,
       api: (signal) => this.api().administration(signal),
       delivery: () => this.delivery,
       ensureCommit: (head) => this.ensureTargetCommit(head),
@@ -668,6 +680,7 @@ export class DevOpsController {
       if (message.type.startsWith('delivery') && message.type !== 'deliverySelectSession')
         await this.assertSession();
       switch (message.type) {
+        case 'deliveryPrAdminLoadContext':
         case 'deliveryPrAdminSettings':
         case 'deliveryPrAdminPreview':
         case 'deliveryPrAdminApply':

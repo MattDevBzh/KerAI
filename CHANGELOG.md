@@ -7,6 +7,7 @@
 - Comparaison du code commité et preuves de session, rédaction annulable, proposition conservée séparément des corrections manuelles.
 - Champs Azure DevOps : branche cible, titre, description, ticket, relecteurs facultatifs ou obligatoires, brouillon ou PR prête à relire.
 - Vérification du commit publié, détection d’une PR déjà ouverte, recontrôle après confirmation et récupération après perte de réponse Azure.
+- Sélection du contexte depuis la session : documents importés, échanges, comptes rendus, consignes et décisions, avec recherche, lecture des textes exacts, conservation des choix et contrôle des sources modifiées.
 - Agent Pull Request Administrator et mission par session : instructions, règles et contexte, choix des propositions autorisées (commentaires, titre, description).
 - Aperçu modifiable et sélection explicite avant publication : commentaires rattachés aux blocs vérifiés du diff Azure, statut des nouveaux fils configurable (« by design » par défaut, « won’t fix » disponible).
 - Suivi des annotations créées par KerAI, mise à jour sans doublon des fils intacts, conservation des réponses humaines et des statuts modifiés. Recontrôle des commits et des champs, arrêt et reprise prudente après publication partielle ou réponse réseau perdue.

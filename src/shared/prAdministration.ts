@@ -1,5 +1,6 @@
 export type PrThreadStatus = 'byDesign' | 'wontFix' | 'active' | 'closed';
 export interface PrAdministrationSettings {
+  sessionContext?: import('./prSessionContext').PrSessionContextSelection[];
   agentId: string;
   instructions: string;
   context: string;
@@ -71,10 +72,12 @@ export interface PrAdminPreview {
   annotatedBlocks: number;
   threadStatus: PrThreadStatus;
   completed: string[];
+  sessionContext?: import('./prSessionContext').PrSessionContextSnapshot;
 }
 export interface PrAdministrationState {
   settings: PrAdministrationSettings;
   generating?: boolean;
+  contextCatalog?: import('./prSessionContext').PrSessionContextCatalog;
   preview?: PrAdminPreview;
   result?: string;
   error?: string;
@@ -95,6 +98,7 @@ export interface PrAdministrationRecord {
 }
 export type PrAdministrationMessage =
   | { type: 'deliveryPrAdminSettings'; settings: PrAdministrationSettings }
+  | { type: 'deliveryPrAdminLoadContext' }
   | { type: 'deliveryPrAdminPreview'; pullRequestId: number }
   | { type: 'deliveryPrAdminCancel' }
   | { type: 'deliveryPrAdminApply'; previewId: string; changes: { id: string; content: string }[] };

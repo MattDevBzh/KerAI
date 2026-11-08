@@ -648,7 +648,13 @@ async function smokeRun(): Promise<void> {
   };
   await api.dispatch({ type: 'deliverySavePrSettings', settings: prSettings });
   assert.deepEqual(api.getDevOpsState()?.prSettings, prSettings);
+  await api.dispatch({ type: 'deliveryPrAdminLoadContext' });
+  const prContext = api.getDevOpsState()?.prAdministration?.contextCatalog;
+  assert.equal(prContext?.featureId, isolated.id);
+  assert.ok(prContext?.items.length);
+  const prContextItem = prContext.items[0];
   const prAdministration = {
+    sessionContext: [{ id: prContextItem.id, digest: prContextItem.digest }],
     agentId: 'fs-devops-pr-admin',
     instructions: 'Explain SEC-01',
     context: 'SEC-01: access controls',

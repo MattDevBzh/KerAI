@@ -2,6 +2,17 @@ import { z } from 'zod';
 const id = z.string().min(1).max(150);
 export const prAdministrationSettingsSchema = z
   .object({
+    sessionContext: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[a-f0-9]{64}$/),
+            digest: z.string().regex(/^[a-f0-9]{64}$/),
+          })
+          .strict(),
+      )
+      .max(40)
+      .optional(),
     agentId: id,
     instructions: z.string().max(12000),
     context: z.string().max(50000),
@@ -58,6 +69,7 @@ export const prAdministrationRecordsSchema = z.record(
     .strict(),
 );
 export const prAdministrationMessageVariants = [
+  z.object({ type: z.literal('deliveryPrAdminLoadContext') }).strict(),
   z
     .object({
       type: z.literal('deliveryPrAdminSettings'),

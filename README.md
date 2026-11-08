@@ -14,7 +14,7 @@ Cette version conserve la connexion au démarrage, les améliorations ergonomiqu
 
 ![La bibliothèque des kits : développement, DevOps, documentation, présentation et audit](docs/images/kits-library.png)
 
-La livraison permet aussi d’accompagner une PR existante avec un agent choisi par session : consignes et règles, propositions de commentaires sur le code, titre et description, aperçu modifiable et publication sélective. Les discussions reprises par un humain sont conservées. Voir le [guide de livraison](docs/devops-delivery.md).
+La livraison permet aussi d’accompagner une PR existante avec un agent choisi par session : consignes et règles, sélection de documents, échanges et comptes rendus depuis la session, propositions de commentaires sur le code, titre et description, aperçu modifiable et publication sélective. Les discussions reprises par un humain sont conservées. Voir le [guide de livraison](docs/devops-delivery.md).
 
 ## Commencer
 

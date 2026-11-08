@@ -545,6 +545,21 @@ it('administrator uses the selected model with rules and no tool access', async 
       history: [],
     },
     administration: { ...defaultPrAdministrationSettings, context: 'SEC-01' },
+    sessionContext: {
+      summary: 'Résumé exact de la session',
+      sources: [
+        {
+          id: 'source',
+          digest: 'digest',
+          kind: 'document',
+          label: 'Règles.md',
+          origin: 'Spécification',
+          content: 'SEC-42 : droits obligatoires',
+        },
+      ],
+      fingerprint: 'snapshot',
+      warnings: [],
+    },
     snapshot: initial,
     blocks: [],
   });
@@ -555,4 +570,117 @@ it('administrator uses the selected model with rules and no tool access', async 
     settings: { mcpServers: [], hooks: [] },
   });
   expect(run.mock.calls[0][0].preparedPrompt).toContain('SEC-01');
+  expect(run.mock.calls[0][0].preparedPrompt).toContain('SEC-42 : droits obligatoires');
+  expect(run.mock.calls[0][0].preparedPrompt).toContain('Résumé exact de la session');
+});
+
+it('sends only chosen session sources, accepts their rule identifiers and persists the selection', async () => {
+  const f = await fixture();
+  const catalog = {
+    featureId: 'session',
+    title: 'Session',
+    summary: 'Résumé automatique',
+    warnings: [],
+    items: [
+      {
+        id: '1'.repeat(64),
+        digest: 'a'.repeat(64),
+        kind: 'document' as const,
+        label: 'Règles.md',
+        origin: 'Session',
+        content: 'SEC-DOC : contrôle des accès',
+      },
+      {
+        id: '2'.repeat(64),
+        digest: 'b'.repeat(64),
+        kind: 'exchange' as const,
+        label: 'Échange privé',
+        origin: 'Session',
+        content: 'UNSELECTED_CONTEXT',
+      },
+    ],
+  };
+  f.options.context = () => structuredClone(catalog);
+  await f.service.handle({ type: 'deliveryPrAdminLoadContext' });
+  expect(f.service.getState()!.contextCatalog?.items).toHaveLength(2);
+  const source = catalog.items[0];
+  await f.service.handle({
+    type: 'deliveryPrAdminSettings',
+    settings: {
+      ...f.service.getState()!.settings,
+      context: '',
+      sessionContext: [{ id: source.id, digest: source.digest }],
+    },
+  });
+  const generate = f.options.generate;
+  f.options.generate = vi.fn(async (input) => {
+    expect(input.sessionContext?.sources).toEqual([source]);
+    const result = await generate(input);
+    result.proposal.comments[0].rule = 'SEC-DOC';
+    return result;
+  });
+  await f.prepare();
+  expect(f.service.getState()!.preview!.sessionContext?.sources).toEqual([source]);
+  await f.apply();
+  expect(f.api.createThread).toHaveBeenCalledTimes(1);
+  expect(f.service.records['repo:session'].settings.sessionContext).toEqual([
+    { id: source.id, digest: source.digest },
+  ]);
+});
+it.each(['generation', 'confirmation'] as const)(
+  'rejects a changed selected source during %s without publishing',
+  async (phase) => {
+    const f = await fixture();
+    const source = {
+      id: '1'.repeat(64),
+      digest: 'a'.repeat(64),
+      kind: 'document' as const,
+      label: 'Règles.md',
+      origin: 'Session',
+      content: 'SEC-01',
+    };
+    f.options.context = () => ({
+      featureId: 'session',
+      title: 'Session',
+      summary: 'Résumé',
+      warnings: [],
+      items: [structuredClone(source)],
+    });
+    await f.service.handle({
+      type: 'deliveryPrAdminSettings',
+      settings: {
+        ...f.service.getState()!.settings,
+        sessionContext: [{ id: source.id, digest: source.digest }],
+      },
+    });
+    if (phase === 'generation') {
+      const generate = f.options.generate;
+      f.options.generate = async (input) => {
+        const result = await generate(input);
+        source.digest = 'b'.repeat(64);
+        return result;
+      };
+      await expect(f.prepare()).rejects.toThrow('source de contexte a changé');
+    } else {
+      await f.prepare();
+      f.options.confirm = async () => {
+        source.digest = 'b'.repeat(64);
+        return true;
+      };
+      await expect(f.apply()).rejects.toThrow('source de contexte a changé');
+    }
+    expect(f.api.createThread).not.toHaveBeenCalled();
+  },
+);
+it('rejects an unrelated session catalogue and forged context before calling the model', async () => {
+  const f = await fixture();
+  f.options.context = () => ({
+    featureId: 'other-session',
+    title: 'Other',
+    summary: 'Other context',
+    items: [],
+    warnings: [],
+  });
+  await expect(f.prepare()).rejects.toThrow('autre session');
+  expect(f.options.generate).not.toHaveBeenCalled();
 });

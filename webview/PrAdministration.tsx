@@ -1,3 +1,5 @@
+import { PR_CONTEXT_MAX_SELECTED } from '../src/shared/prSessionContext';
+import { PrSessionContextPicker } from './PrSessionContextPicker';
 import { useState } from 'react';
 import type { AgentProfile } from '../src/shared/types';
 import type { DevOpsClientMessage, DevOpsState } from '../src/shared/devops';
@@ -34,6 +36,20 @@ export function PrAdministration({
   const changed = JSON.stringify(settings) !== JSON.stringify(saved);
   const available = agents.some((agent) => agent.id === settings.agentId);
   const busy = state.busy || !!administration?.generating;
+  const contextItems = administration?.contextCatalog?.items;
+  const selectedContext = settings.sessionContext ?? [];
+  const contextInvalid =
+    !!contextItems &&
+    (selectedContext.some(
+      (selection) =>
+        !contextItems.some((item) => item.id === selection.id && item.digest === selection.digest),
+    ) ||
+      selectedContext.reduce(
+        (size, selection) =>
+          size + (contextItems.find((item) => item.id === selection.id)?.content.length ?? 0),
+        0,
+      ) > PR_CONTEXT_MAX_SELECTED);
+
   return (
     <details
       className="devops-card pr-administration"
@@ -79,6 +95,13 @@ export function PrAdministration({
             onChange={(e) => setSettings({ ...settings, context: e.target.value })}
           />
         </label>
+        <PrSessionContextPicker
+          catalog={administration?.contextCatalog}
+          selected={settings.sessionContext ?? []}
+          busy={!!busy}
+          load={() => dispatch({ type: 'deliveryPrAdminLoadContext' })}
+          onChange={(sessionContext) => setSettings({ ...settings, sessionContext })}
+        />
         <div className="devops-actions">
           {(['comments', 'title', 'description'] as const).map((field) => (
             <label key={field}>
@@ -121,6 +144,7 @@ export function PrAdministration({
         </p>
         <button
           disabled={
+            contextInvalid ||
             !available ||
             !state.config ||
             (!settings.comments && !settings.title && !settings.description)
@@ -151,6 +175,7 @@ export function PrAdministration({
           disabled={
             busy ||
             changed ||
+            contextInvalid ||
             !available ||
             !state.authenticated ||
             !Number.isSafeInteger(prId) ||
@@ -173,7 +198,7 @@ export function PrAdministration({
         <AdministrationPreview
           key={administration.preview.id}
           preview={administration.preview}
-          busy={busy || changed || prId !== administration.preview.snapshot.id}
+          busy={busy || changed || contextInvalid || prId !== administration.preview.snapshot.id}
           dispatch={dispatch}
         />
       )}
@@ -215,6 +240,24 @@ function AdministrationPreview({
         · version {preview.snapshot.sourceHead.slice(0, 12)}
       </p>
       <p>{preview.summary}</p>
+      {preview.sessionContext && (
+        <details>
+          <summary>
+            Contexte de session transmis à l’agent ({preview.sessionContext.sources.length} sources
+            choisies)
+          </summary>
+          <h4>Résumé automatique</h4>
+          <pre className="devops-text">{preview.sessionContext.summary}</pre>
+          {preview.sessionContext.sources.map((source) => (
+            <article key={source.id}>
+              <h4>{source.label}</h4>
+              <p>{source.origin}</p>
+              <pre className="devops-text">{source.content}</pre>
+            </article>
+          ))}
+        </details>
+      )}
+
       <p>
         {preview.annotatedBlocks} / {preview.blockCount} blocs avec une annotation proposée ·{' '}
         {preview.model || 'agent sélectionné'}.

@@ -1,3 +1,4 @@
+import type { PrSessionContextCatalog } from '../src/shared/prSessionContext';
 import { test, expect, type Page } from '@playwright/test';
 import { demoState } from '../webview/demo';
 import { defaultPrAdministrationSettings } from '../src/shared/prAdministration';
@@ -52,14 +53,50 @@ async function open(page: Page) {
       diffTruncated: false,
     },
   };
+  const catalog: PrSessionContextCatalog = {
+    featureId: feature.id,
+    title: feature.title,
+    summary: 'Résumé automatique déjà inclus',
+    warnings: [],
+    items: [
+      {
+        id: '1'.repeat(64),
+        digest: 'a'.repeat(64),
+        kind: 'document',
+        label: 'Règles sécurité.md',
+        origin: 'Spécification · tentative 1',
+        content: 'SEC-42 : vérifier chaque accès.',
+      },
+      {
+        id: '2'.repeat(64),
+        digest: 'b'.repeat(64),
+        kind: 'exchange',
+        label: 'Message humain',
+        origin: 'Développement · tentative 2',
+        content: 'Décision : préserver la compatibilité.',
+      },
+      {
+        id: '3'.repeat(64),
+        digest: 'c'.repeat(64),
+        kind: 'report',
+        label: 'Compte rendu historique',
+        origin: 'Spécification · tentative 1',
+        content: 'Ancien rapport non sélectionné.',
+      },
+    ],
+  };
   await page.addInitScript(
-    ({ state, devops }) => {
+    ({ state, devops, catalog }) => {
       let active = devops,
         serial = 0;
       const messages: ClientMessage[] = [];
       const publish = () => window.postMessage({ type: 'devopsState', state: active }, '*');
       Object.assign(window, {
         adminMessages: messages,
+        changePrContext: () => {
+          catalog.items[0].digest = 'd'.repeat(64);
+          catalog.items[0].content = 'SEC-42 : règle actualisée.';
+        },
         acquireVsCodeApi: () => ({
           getState: () => ({}),
           setState: () => {},
@@ -71,8 +108,16 @@ async function open(page: Page) {
                 publish();
                 window.postMessage({ type: 'navigate', view: 'delivery' }, '*');
               }, 0);
+            if (message.type === 'deliveryPrAdminLoadContext') {
+              active.prAdministration!.contextCatalog = structuredClone(catalog);
+              publish();
+            }
             if (message.type === 'deliveryPrAdminSettings') {
-              active.prAdministration = { settings: message.settings };
+              active.prAdministration = {
+                ...active.prAdministration,
+                settings: message.settings,
+                preview: undefined,
+              };
               publish();
             }
             if (message.type === 'deliveryPrAdminPreview') {
@@ -80,6 +125,16 @@ async function open(page: Page) {
                 id: 'preview-' + ++serial,
                 featureId: active.deliverySession!.featureId,
                 summary: 'Explications associées aux règles fournies.',
+                sessionContext: {
+                  summary: catalog.summary,
+                  sources: catalog.items.filter((item) =>
+                    active.prAdministration!.settings.sessionContext?.some(
+                      (selection) => selection.id === item.id,
+                    ),
+                  ),
+                  fingerprint: 'e'.repeat(64),
+                  warnings: [],
+                },
                 snapshot: {
                   ...active.existingPr!,
                   description: active.existingPr!.description ?? '',
@@ -151,7 +206,7 @@ async function open(page: Page) {
         }),
       });
     },
-    { state, devops },
+    { state, devops, catalog },
   );
   await page.goto('/');
   await expect(
@@ -228,4 +283,69 @@ test('mobile review fits, and a changed PR selection disables publication of the
     path: test.info().outputPath('pr-administration-mobile.png'),
     fullPage: true,
   });
+});
+
+test('chooses session documents and exchanges, previews exact texts, and explicitly refreshes a changed source', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  await page
+    .getByRole('button', { name: 'Charger les sources de la session', exact: true })
+    .click();
+  const picker = page.getByRole('region', { name: 'Contexte issu de la session' });
+  await picker
+    .getByRole('combobox', { name: 'Type de source', exact: true })
+    .selectOption('document');
+  await picker.getByRole('checkbox', { name: 'Règles sécurité.md', exact: true }).check();
+  await picker.getByText('Lire le texte à transmettre', { exact: true }).click();
+  await expect(picker).toContainText('SEC-42 : vérifier chaque accès.');
+  await picker
+    .getByRole('combobox', { name: 'Type de source', exact: true })
+    .selectOption('exchange');
+  await picker.getByRole('checkbox', { name: 'Message humain', exact: true }).check();
+  await expect(picker).toContainText('2 / 40 éléments sélectionnés');
+  await page.getByRole('button', { name: 'Enregistrer la mission de PR', exact: true }).click();
+  expect(
+    (await messages(page)).filter((m) => m.type === 'deliveryPrAdminSettings').at(-1),
+  ).toMatchObject({
+    settings: {
+      sessionContext: [
+        { id: '1'.repeat(64), digest: 'a'.repeat(64) },
+        { id: '2'.repeat(64), digest: 'b'.repeat(64) },
+      ],
+    },
+  });
+  await page.getByRole('button', { name: 'Préparer les interventions', exact: true }).click();
+  const preview = page.getByRole('region', { name: 'Aperçu des interventions' });
+  await preview
+    .getByText('Contexte de session transmis à l’agent (2 sources choisies)', { exact: true })
+    .click();
+  await expect(preview).toContainText('SEC-42 : vérifier chaque accès.');
+  await expect(preview).toContainText('Décision : préserver la compatibilité.');
+  await expect(preview).not.toContainText('Ancien rapport non sélectionné.');
+  await page.evaluate(() => Reflect.get(window, 'changePrContext')());
+  await picker
+    .getByRole('button', { name: 'Actualiser les sources de la session', exact: true })
+    .click();
+  await expect(picker.getByRole('alert')).toContainText('Une source a changé');
+  await expect(
+    page.getByRole('button', { name: 'Préparer les interventions', exact: true }),
+  ).toBeDisabled();
+  await picker
+    .getByRole('combobox', { name: 'Type de source', exact: true })
+    .selectOption('document');
+  await picker.getByRole('checkbox', { name: 'Règles sécurité.md', exact: true }).check();
+  await page.getByRole('button', { name: 'Enregistrer la mission de PR', exact: true }).click();
+  expect(
+    (await messages(page)).filter((m) => m.type === 'deliveryPrAdminSettings').at(-1),
+  ).toMatchObject({
+    settings: {
+      sessionContext: expect.arrayContaining([{ id: '1'.repeat(64), digest: 'd'.repeat(64) }]),
+    },
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: test.info().outputPath('pr-context-mobile.png'), fullPage: true });
 });

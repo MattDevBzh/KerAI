@@ -1,3 +1,5 @@
+import { selectPrSessionContext } from './PrSessionContext';
+import type { PrSessionContextCatalog, PrSessionContextSnapshot } from '../shared/prSessionContext';
 import { randomUUID } from 'node:crypto';
 import type { DeliveryService } from './DeliveryService';
 import type { PrAdministrationApi, PrAdminThread } from './PrAdministrationApi';
@@ -21,7 +23,9 @@ export interface PrAdministrationOptions {
   api: (signal?: AbortSignal) => PrAdministrationApi;
   delivery: () => DeliveryService;
   ensureCommit: (head: string) => Promise<void>;
+  context?: () => PrSessionContextCatalog;
   generate: (input: {
+    sessionContext?: PrSessionContextSnapshot;
     settings: PrAdministrationSettings;
     snapshot: PrAdminSnapshot;
     blocks: PrDiffBlock[];
@@ -142,9 +146,18 @@ export class PrAdministrationService {
     this.state ??= { settings: structuredClone(this.record().settings) };
     this.state.error = undefined;
     try {
+      if (message.type === 'deliveryPrAdminLoadContext') {
+        if (!this.options.context)
+          throw new Error('Le contexte de cette session est indisponible.');
+        this.state.contextCatalog = this.options.context();
+        return;
+      }
       if (message.type === 'deliveryPrAdminSettings') {
+        this.contextSnapshot(message.settings);
         this.record().settings = structuredClone(message.settings);
+        const catalog = this.state.contextCatalog;
         this.reset();
+        this.state!.contextCatalog = catalog;
         await this.options.save();
         return;
       }
@@ -174,6 +187,23 @@ export class PrAdministrationService {
       throw error;
     }
   }
+  private contextSnapshot(settings = this.record().settings) {
+    if (!this.options.context) {
+      if (settings.sessionContext?.length)
+        throw new Error('Le contexte de cette session est indisponible.');
+      return undefined;
+    }
+    const catalog = this.options.context();
+    if (catalog.featureId !== this.scope().session.featureId)
+      throw new Error('Le contexte appartient à une autre session.');
+    return selectPrSessionContext(catalog, settings.sessionContext);
+  }
+  private assertContext(expected?: PrSessionContextSnapshot) {
+    if (expected && this.contextSnapshot()?.fingerprint !== expected.fingerprint)
+      throw new Error(
+        'Le contexte de la session a changé. Prépare un nouvel aperçu avant publication.',
+      );
+  }
   private async prepare(id: number, signal: AbortSignal) {
     const api = this.options.api(signal),
       snapshot = await this.snapshot(id, api),
@@ -193,7 +223,15 @@ export class PrAdministrationService {
       warnings.push('Azure a limité la liste des fichiers. Le périmètre est partiel.');
     const threads = await this.reconcile(api, snapshot);
     if (signal.aborted) throw new Error('Préparation arrêtée.');
-    const generated = await this.options.generate({ settings, snapshot, blocks, signal });
+    const sessionContext = this.contextSnapshot(settings);
+    const generated = await this.options.generate({
+      settings,
+      snapshot,
+      blocks,
+      signal,
+      sessionContext,
+    });
+    this.assertContext(sessionContext);
     if (signal.aborted) throw new Error('Préparation arrêtée.');
     const proposal = prAdminProposalSchema.parse(generated.proposal);
     if (
@@ -226,7 +264,7 @@ export class PrAdministrationService {
         throw new Error('L’agent a désigné un bloc absent du diff vérifié. Aucune publication.');
       if (
         item.rule &&
-        !`${settings.instructions}\n${settings.context}`
+        !`${settings.instructions}\n${settings.context}\n${sessionContext?.summary ?? ''}\n${sessionContext?.sources.map((source) => source.content).join('\n') ?? ''}`
           .toLocaleLowerCase()
           .includes(item.rule.toLocaleLowerCase())
       )
@@ -276,7 +314,8 @@ export class PrAdministrationService {
       summary: proposal.summary,
       model: generated.model,
       actions,
-      warnings,
+      warnings: [...warnings, ...(sessionContext?.warnings ?? [])],
+      sessionContext,
       blockCount: blocks.length,
       annotatedBlocks: annotated.size,
       threadStatus: settings.threadStatus,
@@ -310,6 +349,7 @@ export class PrAdministrationService {
       this.state!.result = 'Les actions sélectionnées sont déjà publiées.';
       return;
     }
+    this.assertContext(preview.sessionContext);
     const api = this.options.api();
     let current = await this.snapshot(preview.snapshot.id, api);
     if (!sameSnapshot(current, preview.snapshot))
@@ -327,11 +367,13 @@ export class PrAdministrationService {
       ),
     ].join('\n\n');
     if (!(await this.options.confirm('Publier ces interventions sur la PR ?', detail))) return;
+    this.assertContext(preview.sessionContext);
     current = await this.snapshot(current.id, api);
     if (!sameSnapshot(current, preview.snapshot))
       throw new Error('La PR a changé depuis la confirmation. Relis un nouvel aperçu.');
     const actorId = await api.actorId();
     for (const action of selected) {
+      this.assertContext(preview.sessionContext);
       current = await this.snapshot(current.id, api);
       if (!sameSnapshot(current, preview.snapshot))
         throw new Error(
