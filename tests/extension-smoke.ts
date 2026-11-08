@@ -258,7 +258,7 @@ async function smokeRun(): Promise<void> {
   );
   assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-devops-validate'));
   const devopsAgents = api.getState()!.agents.filter((agent) => agent.id.startsWith('fs-devops-'));
-  assert.equal(new Set(devopsAgents.map((agent) => agent.avatar)).size, 6);
+  assert.equal(new Set(devopsAgents.map((agent) => agent.avatar)).size, 7);
   for (const agent of devopsAgents) {
     for (const asset of ['idle.png', 'working.gif', 'approved.png'])
       assert.ok(
@@ -630,6 +630,36 @@ async function smokeRun(): Promise<void> {
     undefined,
   );
   assert.ok(isolated.worktree);
+  await api.dispatch({ type: 'openSessionDelivery', featureId: isolated.id });
+  assert.equal(api.getDevOpsState()?.error, undefined);
+  assert.equal(api.getDevOpsState()?.deliverySession?.path, isolated.worktree.path);
+  assert.equal(api.getDevOpsState()?.snapshot?.branch, isolated.worktree.branch);
+  assert.equal(
+    api.getDevOpsState()?.snapshot?.files.some((entry) => entry.path === 'story.txt'),
+    false,
+    'Session delivery excludes dirty files in the source checkout',
+  );
+  const prSettings = {
+    agentId: 'fs-devops-pr',
+    target: 'main',
+    instructions: 'Smoke PR convention',
+    isDraft: true,
+    reviewers: [],
+  };
+  await api.dispatch({ type: 'deliverySavePrSettings', settings: prSettings });
+  assert.deepEqual(api.getDevOpsState()?.prSettings, prSettings);
+  const prAdministration = {
+    agentId: 'fs-devops-pr-admin',
+    instructions: 'Explain SEC-01',
+    context: 'SEC-01: access controls',
+    threadStatus: 'wontFix' as const,
+    comments: true,
+    title: false,
+    description: false,
+  };
+  assert.ok(api.getState()?.agents.some((agent) => agent.id === 'fs-devops-pr-admin'));
+  await api.dispatch({ type: 'deliveryPrAdminSettings', settings: prAdministration });
+  assert.deepEqual(api.getDevOpsState()?.prAdministration?.settings, prAdministration);
   const file = join(isolated.worktree.path, 'story.txt');
   assert.equal(await readFile(file, 'utf8'), 'Committed feature context\n');
   assert.equal(await readFile(join(source, 'story.txt'), 'utf8'), 'Human unstaged source\n');
@@ -782,6 +812,9 @@ async function smokeRun(): Promise<void> {
     'ADO config survives cockpit reload',
   );
   assert.equal(api.getDevOpsState()?.authenticated, false);
+  assert.equal(api.getDevOpsState()?.deliverySession?.path, isolated.worktree.path);
+  assert.deepEqual(api.getDevOpsState()?.prSettings, prSettings);
+  assert.deepEqual(api.getDevOpsState()?.prAdministration?.settings, prAdministration);
   const reloadedAgent = api.getState()?.agents.find((agent) => agent.id === 'smoke-agent');
   assert.equal(reloadedAgent?.source, 'workspace');
   assert.equal(reloadedAgent?.nickname, 'Capitaine Projet');

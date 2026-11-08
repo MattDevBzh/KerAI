@@ -1,3 +1,6 @@
+import { PrAdministration } from './PrAdministration';
+import { PullRequestPreparation } from './PullRequestPreparation';
+import type { AgentProfile } from '../src/shared/types';
 import { useEffect, useState, useRef } from 'react';
 import { isHosted, savedDeliveryDraft, saveDeliveryDraft } from './bridge';
 import {
@@ -21,6 +24,7 @@ import './devops.css';
 import { devOpsPlainText } from '../src/shared/devopsText';
 export interface DevOpsUIProps {
   state?: DevOpsState;
+  agents?: AgentProfile[];
   features: DeliveryFeature[];
   draftScope?: string;
   dispatch: (message: DevOpsClientMessage) => void;
@@ -413,11 +417,12 @@ export function TicketCard({
 }
 
 export function DevOpsUI(props: DevOpsUIProps) {
-  const draftKey = `${props.draftScope ?? props.state?.snapshot?.remoteUrl ?? 'workspace'}:${deliveryScope(props.state)}`;
+  const draftKey = `${props.draftScope ?? props.state?.snapshot?.remoteUrl ?? 'workspace'}:${deliveryScope(props.state)}${props.state?.deliverySession ? ':' + props.state.deliverySession.featureId : ''}`;
   return <DevOpsContent key={draftKey} {...props} draftKey={draftKey} />;
 }
 function DevOpsContent({
   state,
+  agents = [],
   features,
   dispatch,
   onOpenFeature,
@@ -443,7 +448,8 @@ function DevOpsContent({
   const [initialDraft] = useState<DeliveryDraft>(() => {
     const saved = savedDeliveryDraft(draftKey);
     if (saved) return saved;
-    const suggested = suggestedDeliveryFeature(features, state);
+    const suggested =
+      state?.deliverySession?.featureId ?? suggestedDeliveryFeature(features, state);
     const feature = features.find((item) => item.id === suggested);
     return {
       selected: [],
@@ -451,11 +457,16 @@ function DevOpsContent({
       commitTitle: '',
       prTitle: '',
       description: '',
-      target: 'main',
+      target: state?.prSettings?.target ?? 'main',
+      isDraft: state?.prSettings?.isDraft ?? true,
+      reviewers: state?.prSettings?.reviewers ?? [],
       ticketId: '',
-      featureId: '',
+      featureId: suggested,
       remote: state?.config?.remote ?? 'origin',
-      ...(feature && state ? prepareSessionPullRequest(feature, state) : {}),
+      ...(feature && state && !state.deliverySession
+        ? prepareSessionPullRequest(feature, state)
+        : {}),
+      ...(state?.deliverySession ? { ticketId: deliveryTicket(suggested, state) } : {}),
     };
   });
   const [config, setConfig] = useState<DevOpsConfig>({
@@ -473,7 +484,9 @@ function DevOpsContent({
     [description, setDescription] = useState(initialDraft.description),
     [ticketId, setTicketId] = useState(initialDraft.ticketId),
     [featureId, setFeatureId] = useState(initialDraft.featureId),
-    [remote, setRemote] = useState(initialDraft.remote);
+    [remote, setRemote] = useState(initialDraft.remote),
+    [isDraft, setIsDraft] = useState(initialDraft.isDraft ?? true),
+    [reviewers, setReviewers] = useState(initialDraft.reviewers ?? []);
   useEffect(() => {
     if (state?.config) {
       setConfig(state.config);
@@ -495,6 +508,8 @@ function DevOpsContent({
   }, [state?.preview]);
   useEffect(() => {
     saveDeliveryDraft(draftKey, {
+      isDraft,
+      reviewers,
       selected,
       intent,
       commitTitle: title,
@@ -507,6 +522,8 @@ function DevOpsContent({
     });
   }, [
     draftKey,
+    isDraft,
+    reviewers,
     selected,
     intent,
     title,
@@ -537,7 +554,9 @@ function DevOpsContent({
         [...selected].sort().join('\0') !== [...state.preview.paths].sort().join('\0')
       : state.preview.kind === 'push'
         ? remote !== state.preview.remote
-        : prTitle !== state.preview.title ||
+        : isDraft !== (state.preview.isDraft ?? true) ||
+          JSON.stringify(reviewers) !== JSON.stringify(state.preview.reviewers ?? []) ||
+          prTitle !== state.preview.title ||
           description !== state.preview.description ||
           target !== state.preview.target ||
           (ticketId ? Number(ticketId) : undefined) !== state.preview.ticketId ||
@@ -564,9 +583,9 @@ function DevOpsContent({
     (item) => item.id !== featureId && description.includes(`(${item.id})`),
   );
   const branchMismatch = Boolean(
-    chosenFeature?.branch &&
+    (state.deliverySession?.branch ?? chosenFeature?.branch) &&
       state.snapshot?.branch &&
-      chosenFeature.branch !== state.snapshot.branch,
+      (state.deliverySession?.branch ?? chosenFeature?.branch) !== state.snapshot.branch,
   );
   const inputConfig = (key: keyof DevOpsConfig, label: string) => (
     <label>
@@ -586,14 +605,20 @@ function DevOpsContent({
       intent,
     });
   return (
-    <div className="devops-panel">
+    <div className={`devops-panel ${state.deliverySession ? 'delivery-with-session' : ''}`}>
       <header>
         <div>
-          <h1>{mode === 'dashboard' ? 'Azure DevOps' : 'Agent de livraison'}</h1>
+          <h1>
+            {mode === 'dashboard'
+              ? 'Azure DevOps'
+              : state.deliverySession
+                ? `Préparer la PR · ${state.deliverySession.title}`
+                : 'Agent de livraison'}
+          </h1>
           <p>
             {mode === 'dashboard'
               ? 'Tes tickets, tes PR et leurs liens avec les features.'
-              : 'Prépare un commit, publie ta branche, puis ouvre une PR. Sans consommation IA.'}
+              : 'Prépare le code à livrer, fais rédiger la PR par ton agent, puis relis et publie.'}
           </p>
         </div>
         <button
@@ -617,58 +642,55 @@ function DevOpsContent({
           {n}
         </p>
       ))}
+      <details className="devops-card" open={!state.config}>
+        <summary>Configuration et connexion {state.account ? `· ${state.account}` : ''}</summary>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send({ type: 'devopsConfigure', config });
+          }}
+        >
+          <div className="devops-fields">
+            {inputConfig('organization', 'Organisation')}
+            {inputConfig('project', 'Projet')}
+            {inputConfig('repository', 'Dépôt')}
+            {inputConfig('remote', 'Remote Git')}
+          </div>
+          <p>
+            Exemple : https://dev.azure.com/<strong>organisation</strong>/<strong>projet</strong>
+            /_git/<strong>dépôt</strong>. Ces champs sont configurables ici.
+          </p>
+          <div className="devops-actions">
+            <button disabled={busy} type="submit">
+              Enregistrer la configuration
+            </button>
+            <button
+              disabled={busy || !state.config}
+              type="button"
+              onClick={() => send({ type: 'devopsAuthenticate' })}
+            >
+              {state.authenticated ? 'Remplacer le jeton' : 'Connecter Azure DevOps'}
+            </button>
+            {state.authenticated && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => send({ type: 'devopsDisconnect' })}
+              >
+                Déconnecter
+              </button>
+            )}
+          </div>
+          <p>
+            Le jeton est saisi dans une fenêtre sécurisée VS Code et conservé dans SecretStorage.
+            Lecture : Work Items et Code ; Build et Test Management pour le kit DevOps ; Identity en
+            lecture pour rechercher les relecteurs. Écriture Code uniquement pour créer des PR. Les
+            identifiants Git du push restent ceux de ton environnement.
+          </p>
+        </form>
+      </details>
       {mode === 'dashboard' ? (
         <>
-          <details className="devops-card" open={!state.config}>
-            <summary>
-              Configuration et connexion {state.account ? `· ${state.account}` : ''}
-            </summary>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                send({ type: 'devopsConfigure', config });
-              }}
-            >
-              <div className="devops-fields">
-                {inputConfig('organization', 'Organisation')}
-                {inputConfig('project', 'Projet')}
-                {inputConfig('repository', 'Dépôt')}
-                {inputConfig('remote', 'Remote Git')}
-              </div>
-              <p>
-                Exemple : https://dev.azure.com/<strong>organisation</strong>/
-                <strong>projet</strong>/_git/<strong>dépôt</strong>. Ces champs sont configurables
-                ici.
-              </p>
-              <div className="devops-actions">
-                <button disabled={busy} type="submit">
-                  Enregistrer la configuration
-                </button>
-                <button
-                  disabled={busy || !state.config}
-                  type="button"
-                  onClick={() => send({ type: 'devopsAuthenticate' })}
-                >
-                  {state.authenticated ? 'Remplacer le jeton' : 'Connecter Azure DevOps'}
-                </button>
-                {state.authenticated && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => send({ type: 'devopsDisconnect' })}
-                  >
-                    Déconnecter
-                  </button>
-                )}
-              </div>
-              <p>
-                Le jeton est saisi dans une fenêtre sécurisée VS Code et conservé dans
-                SecretStorage. Lecture : Work Items et Code ; Build et Test Management pour le kit
-                DevOps. Écriture Code uniquement pour créer des PR. Les identifiants Git du push
-                restent ceux de ton environnement.
-              </p>
-            </form>
-          </details>
           <section className="devops-card">
             <h2>À faire</h2>
             <ul>
@@ -760,10 +782,27 @@ function DevOpsContent({
         <>
           <section className="devops-card delivery-session-context">
             <h2>Votre livraison, étape par étape</h2>
+            {state.deliverySession && (
+              <p>
+                Espace de session : <code>{state.deliverySession.path}</code>{' '}
+                <button disabled={busy} onClick={() => send({ type: 'deliverySelectSession' })}>
+                  Livrer le dossier du projet
+                </button>
+              </p>
+            )}
+            {state.existingPr && (
+              <p role="status">
+                Une PR existe pour {state.existingPr.sourceBranch.replace('refs/heads/', '')} →{' '}
+                {state.existingPr.targetBranch.replace('refs/heads/', '')} :{' '}
+                <a href={state.existingPr.url} target="_blank" rel="noreferrer">
+                  Ouvrir la PR #{state.existingPr.id} · {state.existingPr.title}
+                </a>
+              </p>
+            )}
             <ol className="delivery-stages">
               <li>Commit local</li>
               <li>Publication de la branche</li>
-              <li>PR brouillon après relecture</li>
+              <li>Préparation et création de la PR</li>
             </ol>
             <p>
               Le brouillon et vos choix sont conservés dans ce projet. Après un échec, préparez un
@@ -792,48 +831,56 @@ function DevOpsContent({
               </div>
             </dl>
           </section>
-          <section className="devops-card">
-            <h2>Conversation</h2>
-            <div className="delivery-conversation" aria-live="polite">
-              {!state.history.length && (
-                <p>
-                  Je t’accompagne pour livrer tes changements. Commence par sélectionner les
-                  fichiers du commit ; tes autres fichiers indexés seront conservés.
-                </p>
-              )}
-              {state.history.map((entry) => (
-                <article className={entry.role} key={entry.id}>
-                  <strong>{entry.role === 'user' ? 'Toi' : 'Livraison'}</strong>
-                  <p>{entry.text}</p>
-                </article>
-              ))}
-            </div>
-            <form
-              className="devops-actions"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (chat.trim()) {
-                  send({ type: 'deliveryChat', text: chat });
-                  setChat('');
-                }
-              }}
-            >
-              <input
-                aria-label="Message à l’agent de livraison"
-                placeholder="Aide-moi à préparer mon commit…"
-                value={chat}
-                maxLength={4000}
-                onChange={(e) => setChat(e.target.value)}
-              />
-              <button disabled={busy || !chat.trim()}>Envoyer</button>
-            </form>
-            <p>
-              Profil éditable : <code>fs-delivery</code> dans le catalogue Agents. Les échanges
-              restent locaux et n’autorisent aucune action Git.
-            </p>
-          </section>
-          <section className="devops-card">
-            <h2>1. Préparer le commit</h2>
+          {state.deliverySession && (
+            <PrAdministration state={state} agents={agents} dispatch={send} />
+          )}
+          {!state.deliverySession && (
+            <section className="devops-card">
+              <h2>Conversation</h2>
+              <div className="delivery-conversation" aria-live="polite">
+                {!state.history.length && (
+                  <p>
+                    Je t’accompagne pour livrer tes changements. Commence par sélectionner les
+                    fichiers du commit ; tes autres fichiers indexés seront conservés.
+                  </p>
+                )}
+                {state.history.map((entry) => (
+                  <article className={entry.role} key={entry.id}>
+                    <strong>{entry.role === 'user' ? 'Toi' : 'Livraison'}</strong>
+                    <p>{entry.text}</p>
+                  </article>
+                ))}
+              </div>
+              <form
+                className="devops-actions"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (chat.trim()) {
+                    send({ type: 'deliveryChat', text: chat });
+                    setChat('');
+                  }
+                }}
+              >
+                <input
+                  aria-label="Message à l’agent de livraison"
+                  placeholder="Aide-moi à préparer mon commit…"
+                  value={chat}
+                  maxLength={4000}
+                  onChange={(e) => setChat(e.target.value)}
+                />
+                <button disabled={busy || !chat.trim()}>Envoyer</button>
+              </form>
+              <p>
+                Profil éditable : <code>fs-delivery</code> dans le catalogue Agents. Les échanges
+                restent locaux et n’autorisent aucune action Git.
+              </p>
+            </section>
+          )}
+          <details
+            className="devops-card"
+            open={!state.deliverySession || !!state.snapshot?.files.length}
+          >
+            <summary>1. Préparer le commit</summary>
             <p>
               Branche courante : <strong>{state.snapshot?.branch ?? 'à inspecter'}</strong> ·{' '}
               {state.snapshot?.head.slice(0, 12)}
@@ -933,7 +980,7 @@ function DevOpsContent({
               directement. La validation crée un commit local après confirmation VS Code ; le push
               reste séparé. La génération du titre est locale, sans consommation de crédits.
             </p>
-          </section>
+          </details>
           <div className="devops-columns">
             <section className="devops-card">
               <h2>2. Publier la branche</h2>
@@ -958,7 +1005,11 @@ function DevOpsContent({
               </p>
               <label>
                 Session associée
-                <select value={featureId} onChange={(e) => chooseFeature(e.target.value)}>
+                <select
+                  value={featureId}
+                  disabled={busy || !!state.deliverySession}
+                  onChange={(e) => chooseFeature(e.target.value)}
+                >
                   <option value="">Aucune</option>
                   {features.map((f) => (
                     <option value={f.id} key={f.id}>
@@ -968,18 +1019,20 @@ function DevOpsContent({
                 </select>
               </label>
               <div className="devops-actions">
-                <button
-                  disabled={busy || !chosenFeature}
-                  onClick={() => {
-                    if (!chosenFeature) return;
-                    const generated = prepareSessionPullRequest(chosenFeature, state);
-                    setPrTitle(generated.prTitle);
-                    setDescription(generated.description);
-                    setTicketId(generated.ticketId);
-                  }}
-                >
-                  Préremplir depuis cette session
-                </button>
+                {!state.deliverySession && (
+                  <button
+                    disabled={busy || !chosenFeature}
+                    onClick={() => {
+                      if (!chosenFeature) return;
+                      const generated = prepareSessionPullRequest(chosenFeature, state);
+                      setPrTitle(generated.prTitle);
+                      setDescription(generated.description);
+                      setTicketId(generated.ticketId);
+                    }}
+                  >
+                    Préremplir depuis cette session
+                  </button>
+                )}
                 {chosenFeature && (
                   <button onClick={() => onOpenFeature(chosenFeature.id)}>Relire la session</button>
                 )}
@@ -1005,22 +1058,40 @@ function DevOpsContent({
                 Branche cible
                 <input value={target} onChange={(e) => setTarget(e.target.value)} />
               </label>
-              <label>
-                Titre de la PR
-                <input
-                  value={prTitle}
-                  onChange={(e) => setPrTitle(e.target.value)}
-                  maxLength={200}
-                />
-              </label>
-              <label>
-                Description
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  maxLength={20000}
-                />
-              </label>
+              <PullRequestPreparation
+                state={state}
+                agents={agents}
+                featureId={featureId}
+                target={target}
+                title={prTitle}
+                description={description}
+                apply={(nextTitle, nextDescription) => {
+                  setPrTitle(nextTitle);
+                  setDescription(nextDescription);
+                }}
+                dispatch={send}
+                reviewers={reviewers}
+                setReviewers={setReviewers}
+                isDraft={isDraft}
+                setIsDraft={setIsDraft}
+              >
+                <label>
+                  Titre de la PR
+                  <input
+                    value={prTitle}
+                    onChange={(e) => setPrTitle(e.target.value)}
+                    maxLength={200}
+                  />
+                </label>
+                <label>
+                  Description
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    maxLength={20000}
+                  />
+                </label>
+              </PullRequestPreparation>
               <label>
                 Ticket associé
                 <select value={ticketId} onChange={(e) => setTicketId(e.target.value)}>
@@ -1048,10 +1119,19 @@ function DevOpsContent({
                 </pre>
               </details>
               <button
-                disabled={busy || !state.authenticated || !prTitle.trim() || !target}
+                disabled={
+                  busy ||
+                  !state.authenticated ||
+                  !prTitle.trim() ||
+                  !target ||
+                  branchMismatch ||
+                  (!!state.deliverySession && !!state.snapshot?.files.length)
+                }
                 onClick={() =>
                   send({
                     type: 'deliveryPreviewPr',
+                    isDraft,
+                    reviewers,
                     title: prTitle,
                     description,
                     target,
@@ -1060,7 +1140,7 @@ function DevOpsContent({
                   })
                 }
               >
-                Préparer la PR brouillon
+                {isDraft ? 'Préparer la PR brouillon' : 'Préparer la PR prête à relire'}
               </button>
             </section>
           </div>
@@ -1072,7 +1152,9 @@ function DevOpsContent({
                   ? 'Commit local'
                   : state.preview.kind === 'push'
                     ? 'Publication de branche'
-                    : 'PR brouillon'}
+                    : state.preview.isDraft === false
+                      ? 'PR prête à relire'
+                      : 'PR brouillon'}
               </h2>
               <strong>{state.preview.title}</strong>
               <p>
@@ -1159,7 +1241,7 @@ function DevOpsContent({
           )}
         </>
       )}
-      {busy && <p role="status">Opération en cours…</p>}
+      {busy && !state.prGenerating && <p role="status">Opération en cours…</p>}
     </div>
   );
 }

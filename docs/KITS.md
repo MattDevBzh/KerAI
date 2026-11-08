@@ -6,10 +6,10 @@ Pour faire améliorer tout le catalogue par une IA externe puis réintégrer ses
 
 ## Les deux kits fournis
 
-| Kit | Parcours | Agents | Skills |
-| --- | --- | --- | --- |
-| Atelier Copilot | Feature complète, relecture, session libre, recette visuelle | Neuf profils Feature Studio et quatre profils du kit original | Sept méthodes du kit Copilot 2.0.0 |
-| DevOps | Challenge → plan → modifications → relecture → guide → vérification | Six spécialistes avec avatars distincts | Huit méthodes, dont Azure DevOps et l’adaptation de Microsoft azure-validate |
+| Kit             | Parcours                                                            | Agents                                                        | Skills                                                                       |
+| --------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Atelier Copilot | Feature complète, relecture, session libre, recette visuelle        | Neuf profils Feature Studio et quatre profils du kit original | Sept méthodes du kit Copilot 2.0.0                                           |
+| DevOps          | Challenge → plan → modifications → relecture → guide → vérification | Sept profils, dont un rédacteur de PR                         | Huit méthodes, dont Azure DevOps et l’adaptation de Microsoft azure-validate |
 
 Les profils embarqués sont disponibles dès l’installation de l’extension. **Voir le kit → Installer ce kit** les rend aussi accessibles dans le catalogue utilisateur Copilot. Les profils déjà personnalisés dans un projet ou dans le catalogue personnel gardent leur priorité. Une session existante conserve la définition de son parcours.
 
@@ -30,13 +30,13 @@ L’export ne modifie pas les profils source. Il retire les chemins d’origine 
 
 L’installation cible `~/.copilot`, `%USERPROFILE%\.copilot` sous Windows, ou `COPILOT_HOME` si VS Code a été lancé avec cette variable :
 
-| Contenu | Chemin relatif |
-| --- | --- |
-| Agents | `agents/<id>.agent.md` |
-| Skills et ressources propres | `skills/<id>/…` |
-| Parcours | `feature-studio/workflows/<id>.yaml` |
-| Ressources communes du kit d’origine | `feature-studio/kit/…` |
-| Copies des kits personnels | `feature-studio/kits/*.fskit.json` |
+| Contenu                              | Chemin relatif                       |
+| ------------------------------------ | ------------------------------------ |
+| Agents                               | `agents/<id>.agent.md`               |
+| Skills et ressources propres         | `skills/<id>/…`                      |
+| Parcours                             | `feature-studio/workflows/<id>.yaml` |
+| Ressources communes du kit d’origine | `feature-studio/kit/…`               |
+| Copies des kits personnels           | `feature-studio/kits/*.fskit.json`   |
 
 Un conflit bloque l’installation entière ; aucun fichier différent n’est écrasé. Les fichiers identiques sont conservés. Le host revérifie la destination à l’installation et les contenus après copie. En cas d’échec, il retire les nouveaux fichiers dont les octets correspondent encore à sa copie. Les fichiers édités entre-temps restent préservés. Les autres fenêtres doivent actualiser leur catalogue pour voir les nouveaux profils.
 
@@ -59,3 +59,5 @@ Le host valide la structure, les profils, les dépendances, les liens locaux et 
 Les empreintes vérifient l’intégrité du fichier, pas l’identité de son auteur. Quelques formats de secrets connus sont refusés ; ce contrôle n’est pas exhaustif. Relis les instructions et scripts d’un kit reçu avant d’autoriser leur utilisation. L’installation copie des ressources : elle ne les exécute pas et n’active aucune connexion.
 
 Les avatars sont des identifiants intégrés à Feature Studio v1 ; le format ne transporte pas de nouveaux avatars arbitraires. Le format portable ne remplace pas le manifeste historique du kit Copilot. La commande historique d’installation reste disponible pour compatibilité ; l’écran Kits permet de choisir séparément les deux équipes.
+
+Le kit DevOps inclut huit profils, dont le **Rédacteur de PR** pour la création et le **Pull Request Administrator** pour préparer des interventions sur une PR existante. Leur modèle se règle dans le catalogue Agents ; les instructions d’accompagnement et le contexte se règlent par session dans Livraison.

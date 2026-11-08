@@ -121,7 +121,7 @@ test('kits : bibliothèque, six avatars distincts et aperçu complet du kit pré
 }) => {
   await hosted(page);
   const card = page.locator('.kit-card.devops');
-  await expect(card).toContainText('6 agents');
+  await expect(card).toContainText('8 agents');
   await expect(card).toContainText('8 skills');
   const avatars = card.locator('.kit-team img');
   await expect(avatars).toHaveCount(6);

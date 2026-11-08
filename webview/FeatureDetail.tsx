@@ -422,6 +422,28 @@ export function FeatureDetail({
               }}
             />
           )}
+          {!feature.reviewTarget &&
+            feature.steps.length > 0 &&
+            feature.steps.every(stepResolved) && (
+              <div className="devops-actions">
+                {(feature.projects?.length ? feature.projects : [undefined]).map((project) => (
+                  <button
+                    key={project?.id ?? 'primary'}
+                    className="primary"
+                    disabled={busy || detailDirty}
+                    onClick={() =>
+                      dispatch({
+                        type: 'openSessionDelivery',
+                        featureId: feature.id,
+                        ...(project ? { projectId: project.id } : {}),
+                      })
+                    }
+                  >
+                    Préparer la PR{(feature.projects?.length ?? 0) > 1 ? ` · ${project!.name}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
         </SessionModule>
         <SessionModule id="work">
           <PinnedInstructions feature={feature} state={state} dispatch={dispatch} />

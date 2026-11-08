@@ -47,9 +47,9 @@ const PRESETS: KitMetadata[] = [
   {
     id: 'devops',
     name: 'DevOps',
-    version: '1.0.0',
+    version: '1.1.0',
     description:
-      'Du challenge au test vérifié. Six spécialistes, des preuves et un test hors production maîtrisé.',
+      'Du challenge au test vérifié, à la préparation et à l’accompagnement de PR. Des spécialistes, des preuves et un test hors production maîtrisé.',
   },
   {
     id: 'documentation',

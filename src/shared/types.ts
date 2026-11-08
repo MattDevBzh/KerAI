@@ -355,6 +355,7 @@ export interface StudioState {
   };
 }
 export type ClientMessage =
+  | { type: 'openSessionDelivery'; featureId: string; projectId?: string }
   | { type: 'quoteEditorSelection'; featureId: string; stepId: string; attemptId: string }
   | {
       type: 'pinInstruction';
@@ -766,6 +767,7 @@ export type HostMessage =
         | 'reviews'
         | 'devops-prs'
         | 'devops-tickets'
+        | 'delivery'
         | 'devops';
       featureId?: string;
       stepId?: string;

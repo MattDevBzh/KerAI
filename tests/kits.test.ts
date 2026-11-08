@@ -71,7 +71,7 @@ describe('portable kit dependency and file contracts', () => {
       'code-audit',
     ]);
     expect(catalog[0].nodes.filter((n) => n.kind === 'agent')).toHaveLength(15);
-    expect(catalog[1].nodes.filter((n) => n.kind === 'agent')).toHaveLength(6);
+    expect(catalog[1].nodes.filter((n) => n.kind === 'agent')).toHaveLength(8);
     expect(catalog[1].nodes.filter((n) => n.kind === 'skill')).toHaveLength(8);
     expect(catalog.every((k) => !k.installed)).toBe(true);
     const copilot = await f.kits.preset('copilot');

@@ -932,6 +932,9 @@ export class StudioService extends EventEmitter {
   withWorkspaceMutation<T>(label: string, action: () => Promise<T>): Promise<T> {
     return this.workspaceAction(undefined, label, action);
   }
+  withFeatureMutation<T>(featureId: string, label: string, action: () => Promise<T>): Promise<T> {
+    return this.workspaceAction(featureId, label, action);
+  }
   /** Reserve before the first await; another window also must acquire the target lease. */
   private async workspaceAction<T>(
     featureId: string | undefined,

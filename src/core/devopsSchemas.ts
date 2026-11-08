@@ -1,3 +1,5 @@
+import { prAdministrationMessageVariants } from './prAdministrationSchemas';
+import { pullRequestSettingsSchema, prReviewersSchema } from './pullRequestSchemas';
 import { ticketFiltersSchema, ticketDevelopmentPlanSchema } from './devopsTicketSchemas';
 import { z } from 'zod';
 export const devOpsConfigSchema = z
@@ -22,6 +24,25 @@ const ticketId = z.number().int().positive(),
   featureId = z.string().min(1).max(150),
   fingerprint = z.string().regex(/^[a-f0-9]{64}$/);
 export const devOpsMessageVariants = [
+  ...prAdministrationMessageVariants,
+  z.object({ type: z.literal('deliverySelectSession'), featureId: featureId.optional() }).strict(),
+  z
+    .object({ type: z.literal('deliverySavePrSettings'), settings: pullRequestSettingsSchema })
+    .strict(),
+  z
+    .object({
+      type: z.literal('deliveryGeneratePr'),
+      featureId,
+      target: z.string().min(1).max(200),
+    })
+    .strict(),
+  z.object({ type: z.literal('deliveryCancelGeneration') }).strict(),
+  z
+    .object({
+      type: z.literal('deliverySearchReviewers'),
+      query: z.string().trim().min(2).max(200),
+    })
+    .strict(),
   z
     .object({
       type: z.enum(['devopsRefresh', 'devopsAuthenticate', 'devopsDisconnect', 'deliveryInspect']),
@@ -96,6 +117,8 @@ export const devOpsMessageVariants = [
   z
     .object({
       type: z.literal('deliveryPreviewPr'),
+      isDraft: z.boolean().optional(),
+      reviewers: prReviewersSchema.optional(),
       title: z.string().trim().min(1).max(200),
       description: z.string().max(20000),
       target: z.string().min(1).max(200),

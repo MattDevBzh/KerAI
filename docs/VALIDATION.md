@@ -1,5 +1,15 @@
 # Validation et limites
 
+## Création et accompagnement de PR par session — v1.42.0, 8 novembre 2026
+
+- **1 267 tests de logique/intégration réussis, 11 conditionnels ignorés** dans la passe complète locale, avec types et construction réussis.
+- **369 scénarios d’interface réussis** dans la passe complète. Les vues grand écran et 390 px, les missions par session, les propositions modifiables et la sélection explicite sont vérifiées ; les captures PR sont inspectées. Un sélecteur de test de champ a été corrigé avant cette passe complète.
+- Les **33 tests dédiés à la création et à l’administration de PR** couvrent un vrai dépôt/worktree Git, l’exclusion des données sensibles et des changements locaux non commités, les branches et diff périmés, l’annulation, les réglages par dépôt/session et leur reprise, les réponses réseau perdues et les corps envoyés à Azure simulé.
+- Les annotations vérifient les ajouts/suppressions et la base commune Azure, les identifiants de blocs et règles fournis, les actions autorisées, la protection des réponses humaines (même depuis le même compte), des changements de texte/statut/position et des suppressions. Les relances, les mises à jour de ses propres annotations, la reprise après redémarrage, le changement de compte et les publications partielles sont testés.
+- Le contrôle du VSIX vérifie les messages de création/administration et les deux profils fournis. Le test dans VS Code couvre l’ouverture depuis la session, le bon worktree, l’exclusion du dossier principal modifié et la reprise des réglages de création et d’administration après fermeture.
+- La publication exige les validations Linux et Windows, puis le contrôle et le chargement du paquet publié. Résultat du commit livré : [release v1.42.0](https://github.com/MattDevBzh/KerAI/releases/tag/v1.42.0).
+- Aucun prompt payant ni aucune PR réelle ne sont créés par les tests. La qualité rédactionnelle du modèle, l’application des règles, les droits du compte Azure et ses politiques réelles restent à qualifier sur le projet de l’utilisateur. Les contrôles avant écriture ne constituent pas une transaction Azure : les actions réussies restent publiées lorsqu’une action suivante échoue.
+
 ## Révision externe et suppression de l’atelier — v1.40.0, 8 novembre 2026
 
 - Suite complète locale : **1 227 tests de logique/intégration réussis, 11 conditionnels ignorés**, avec types et construction réussis. Après l’ajout du cas de suppression d’un identifiant long, les **17 tests de révision et de suppression** passent ensemble ; les types et le format sont revérifiés.

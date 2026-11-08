@@ -42,6 +42,9 @@ const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
   ...taskDraftMessages,
   z
+    .object({ type: z.literal('openSessionDelivery'), featureId: id, projectId: id.optional() })
+    .strict(),
+  z
     .object({
       type: z.literal('prepareSessionGit'),
       requestId: z.string().uuid(),

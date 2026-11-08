@@ -1,3 +1,4 @@
+import { PrAdministrationApi } from './PrAdministrationApi';
 import { parsePullRequestUrl } from '../shared/reviews';
 import { randomUUID } from 'node:crypto';
 import { ticketQuery } from './TicketQuery';
@@ -131,13 +132,14 @@ export class AzureDevOps {
     url: string,
     body?: unknown,
     signal?: AbortSignal,
+    method?: 'PATCH',
   ): Promise<{ data: Record<string, unknown>; continuation?: string }> {
     const token = await this.secrets.get(this.key());
     if (!token) throw new Error('Connecte Azure DevOps avec un jeton personnel depuis le menu.');
     let response: Response;
     try {
       response = await this.http(url, {
-        method: body === undefined ? 'GET' : 'POST',
+        method: method ?? (body === undefined ? 'GET' : 'POST'),
         headers: {
           Authorization: `Basic ${Buffer.from(':' + token).toString('base64')}`,
           'Content-Type': 'application/json',
@@ -156,7 +158,7 @@ export class AzureDevOps {
     if (!response.ok) {
       if (response.status === 401 || response.status === 403)
         throw new Error(
-          'Azure DevOps refuse l’accès. Vérifie le jeton, son expiration et les droits de lecture du service demandé (Code, Build, Test Management ou Work Items). L’écriture Code est nécessaire uniquement pour créer une PR.',
+          'Azure DevOps refuse l’accès. Vérifie le jeton, son expiration et les droits de lecture du service demandé (Code, Build, Test Management ou Work Items). L’écriture Code est nécessaire pour gérer les PR ; les commentaires nécessitent aussi les droits de discussion. Identity en lecture permet la recherche de relecteurs.',
         );
       if (response.status === 404)
         throw new Error(
@@ -715,7 +717,50 @@ export class AzureDevOps {
       .parse(result.data.value)
       .find((r) => r.name === `refs/heads/${branch}`)?.objectId;
   }
+  administration(signal?: AbortSignal) {
+    return new PrAdministrationApi(
+      async (suffix, body, method) =>
+        (await this.request(this.repo() + suffix, body, signal, method)).data,
+      (id) => `${this.base()}/_git/${encodeURIComponent(this.config.repository)}/pullrequest/${id}`,
+      async () => {
+        const result = await this.request(
+          `https://dev.azure.com/${encodeURIComponent(this.config.organization)}/_apis/connectionData?api-version=7.1-preview.1`,
+          undefined,
+          signal,
+        );
+        return z.string().min(1).parse(object.parse(result.data.authenticatedUser).id);
+      },
+    );
+  }
+  async findOpenPullRequests(branch: string, target: string) {
+    const result = await this.request(
+      `${this.repo()}/pullrequests?searchCriteria.status=active&searchCriteria.sourceRefName=${encodeURIComponent('refs/heads/' + branch)}&searchCriteria.targetRefName=${encodeURIComponent('refs/heads/' + target)}&$top=100&api-version=7.1`,
+    );
+    return z
+      .array(z.record(z.string(), z.unknown()))
+      .parse(result.data.value)
+      .map((item) => this.pr(item));
+  }
+  async searchReviewers(query: string) {
+    const result = await this.request(
+      `https://vssps.dev.azure.com/${encodeURIComponent(this.config.organization)}/_apis/identities?searchFilter=General&filterValue=${encodeURIComponent(query)}&queryMembership=None&api-version=7.1`,
+    );
+    return z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          providerDisplayName: z.string(),
+          isActive: z.boolean().optional(),
+        }),
+      )
+      .parse(result.data.value)
+      .filter((item) => item.isActive !== false)
+      .slice(0, 30)
+      .map((item) => ({ id: item.id, name: item.providerDisplayName, required: false }));
+  }
   async createPullRequest(input: {
+    isDraft?: boolean;
+    reviewers?: import('../shared/pullRequestPreparation').PrReviewer[];
     branch: string;
     target: string;
     title: string;
@@ -727,7 +772,10 @@ export class AzureDevOps {
       targetRefName: `refs/heads/${input.target}`,
       title: input.title,
       description: input.description,
-      isDraft: true,
+      isDraft: input.isDraft ?? true,
+      ...(input.reviewers?.length
+        ? { reviewers: input.reviewers.map((r) => ({ id: r.id, isRequired: r.required })) }
+        : {}),
       ...(input.ticketId ? { workItemRefs: [{ id: String(input.ticketId) }] } : {}),
     });
     return this.pr(response.data);

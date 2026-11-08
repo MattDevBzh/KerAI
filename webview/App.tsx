@@ -321,6 +321,7 @@ export default function App() {
           message.view === 'devops-prs' ||
             message.view === 'devops-tickets' ||
             message.view === 'devops' ||
+            message.view === 'delivery' ||
             message.view === 'reviews'
             ? message.view
             : 'sessions',
@@ -381,6 +382,10 @@ export default function App() {
         'deleteFeature',
         'previewObservation',
         'runObservation',
+        'openSessionDelivery',
+        'deliveryGeneratePr',
+        'deliveryPrAdminPreview',
+        'deliveryPrAdminApply',
         'deliveryExecute',
         'deliveryCommit',
         'devopsCreateFeature',
@@ -968,11 +973,12 @@ export default function App() {
             view === 'delivery') && (
             <div hidden={view !== 'devops' && view !== 'delivery'}>
               <DevOpsUI
+                agents={state.agents}
                 draftScope={state.workspace.path}
                 key={state.projectCatalog?.activeProjectId ?? 'default'}
                 state={devops}
                 visible={view === 'devops' || view === 'delivery'}
-                features={state.features}
+                features={allFeatures(state.features)}
                 dispatch={dispatch}
                 mode={view === 'delivery' ? 'delivery' : 'dashboard'}
                 onOpenFeature={(id) => {

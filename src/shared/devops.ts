@@ -94,6 +94,8 @@ export interface DeliverySnapshot {
   diffTruncated: boolean;
 }
 export interface DeliveryPreview {
+  isDraft?: boolean;
+  reviewers?: import('./pullRequestPreparation').PrReviewer[];
   /** Remote target commit used for the displayed PR comparison. */
   targetHead?: string;
   diff?: string;
@@ -117,6 +119,13 @@ export interface DeliveryChatEntry {
   at: string;
 }
 export interface DevOpsState {
+  prAdministration?: import('./prAdministration').PrAdministrationState;
+  deliverySession?: import('./pullRequestPreparation').DeliverySession;
+  prSettings?: import('./pullRequestPreparation').PullRequestSettings;
+  prGenerating?: boolean;
+  prGeneration?: import('./pullRequestPreparation').PrGeneration;
+  reviewerResults?: import('./pullRequestPreparation').PrReviewer[];
+  existingPr?: DevOpsPullRequest;
   ticketFilters?: TicketFilters;
   ticketMetadata?: TicketMetadata;
   ticketSearch?: TicketSearch;
@@ -140,6 +149,15 @@ export interface DevOpsState {
   truncated?: boolean;
 }
 export type DevOpsClientMessage =
+  | import('./prAdministration').PrAdministrationMessage
+  | { type: 'deliverySelectSession'; featureId?: string }
+  | {
+      type: 'deliverySavePrSettings';
+      settings: import('./pullRequestPreparation').PullRequestSettings;
+    }
+  | { type: 'deliveryGeneratePr'; featureId: string; target: string }
+  | { type: 'deliveryCancelGeneration' }
+  | { type: 'deliverySearchReviewers'; query: string }
   | { type: 'devopsRefresh' | 'devopsAuthenticate' | 'devopsDisconnect' | 'deliveryInspect' }
   | { type: 'devopsConfigure'; config: DevOpsConfig }
   | { type: 'devopsLoadTicket'; ticketId: number }
@@ -166,6 +184,8 @@ export type DevOpsClientMessage =
   | { type: 'deliveryPreviewPush'; remote: string }
   | {
       type: 'deliveryPreviewPr';
+      isDraft?: boolean;
+      reviewers?: import('./pullRequestPreparation').PrReviewer[];
       title: string;
       description: string;
       target: string;

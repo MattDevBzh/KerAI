@@ -61,6 +61,7 @@ async function fixture() {
         rev: 1,
         fields: { 'System.Title': 'Ticket historique', 'System.TeamProject': 'project' },
       });
+    if (value.includes('/pullrequests?')) return response({ value: [] });
     if (value.includes('/comments?')) return response({ comments: [] });
     throw new Error('Unexpected HTTP fixture: ' + value);
   });

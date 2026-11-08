@@ -37,6 +37,14 @@ def verify(vsix, root, extract=None, match_build=False):
         assert b'reviewBranchesResult' in host and b'reviewBranchesResult' in ui, 'Dedicated review routing missing'
         for marker in ('prepareSessionGit', 'sessionGitPrepared', 'openSessionGit'):
             assert marker.encode() in host and marker.encode() in ui, f'{marker} missing from packaged session preparation'
+        for marker in ('openSessionDelivery', 'deliveryGeneratePr', 'deliveryCancelGeneration', 'deliverySavePrSettings'):
+            assert marker.encode() in host and marker.encode() in ui, f'{marker} missing from packaged PR preparation'
+        pr_profile = Path('defaults/agents/fs-devops-pr.agent.md')
+        assert archive.read('extension/' + pr_profile.as_posix()) == (root / pr_profile).read_bytes()
+        for marker in ('deliveryPrAdminSettings', 'deliveryPrAdminPreview', 'deliveryPrAdminApply', 'deliveryPrAdminCancel'):
+            assert marker.encode() in host and marker.encode() in ui, f'{marker} missing from packaged PR administration'
+        admin_profile = Path('defaults/agents/fs-devops-pr-admin.agent.md')
+        assert archive.read('extension/' + admin_profile.as_posix()) == (root / admin_profile).read_bytes()
         for marker in ('workshopExport', 'workshopRestorePreview', 'catalogueDeletePreview', 'catalogueDeleteApply'):
             assert marker.encode() in host and marker.encode() in ui, f'{marker} missing'
         workshop_guide = Path('docs/REVISION-ATELIER.md')

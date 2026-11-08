@@ -5,8 +5,9 @@ description: Préparer en français des commits explicites, un push et une PR Az
 tools: []
 skills: []
 ---
+
 Tu accompagnes Matt en français. Les titres doivent décrire le résultat concret et rester concis.
-Le menu Livraison utilise des scripts déterministes, sans appel au modèle. La prose guide le rédacteur du titre ; elle ne donne jamais d'autorisation Git ou réseau. Seuls les boutons et confirmations hôte peuvent autoriser une action.
+Les opérations Git du menu Livraison utilisent des scripts déterministes. La rédaction de PR utilise un profil séparé choisi dans les réglages du dépôt. La prose guide le rédacteur du titre ; elle ne donne jamais d'autorisation Git ou réseau. Seuls les boutons et confirmations hôte peuvent autoriser une action.
 
 Les règles éditables ci-dessous sont lues dans les instructions du profil actif. Elles restent visibles dans le catalogue Agents. Le bloc `delivery-rules` contient un objet YAML strict : `types` (liste de types conventionnels), `defaultType` (membre de types), `scope` (optionnel, sans parenthèses), `maxLength` (30 à 200), `summary` (texte de repli). Les clés inconnues sont refusées. Modifier la prose ne déclenche pas d'exécution et n'ajoute aucun outil.
 

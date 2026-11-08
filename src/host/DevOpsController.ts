@@ -1,4 +1,19 @@
-import { pullRequestDiff } from './DevOpsDelivery';
+import { PrAdministrationService } from './PrAdministrationService';
+import { prAdministrationRecordsSchema } from '../core/prAdministrationSchemas';
+import type {
+  PrAdministrationSettings,
+  PrAdminSnapshot,
+  PrDiffBlock,
+  PrAdminModelProposal,
+} from '../shared/prAdministration';
+import { pullRequestDiff, pullRequestWritingDiff } from './DevOpsDelivery';
+import {
+  defaultPullRequestSettings,
+  type DeliverySession,
+  type PullRequestSettings,
+  type PrGeneration,
+} from '../shared/pullRequestPreparation';
+import { pullRequestSettingsSchema } from '../core/pullRequestSchemas';
 import { ticketFiltersSchema, ticketSourceSnapshotSchema } from '../core/devopsTicketSchemas';
 import {
   defaultTicketFilters,
@@ -47,6 +62,9 @@ const linkSchema = z
 const storedSchema = z
   .object({
     version: z.literal(1),
+    prAdministration: prAdministrationRecordsSchema.optional(),
+    deliveryFeatureId: z.string().max(150).optional(),
+    prSettingsByRepository: z.record(z.string().max(700), pullRequestSettingsSchema).optional(),
     ticketFiltersByProject: z.record(z.string().max(500), ticketFiltersSchema).optional(),
     config: devOpsConfigSchema.optional(),
     links: z.array(linkSchema).max(2000),
@@ -74,6 +92,26 @@ export interface DevOpsControllerOptions {
   guard: () => void;
   /** Must reserve the shared StudioService workspace operation before awaiting work. */
   withMutation: <T>(label: string, work: () => Promise<T>) => Promise<T>;
+  resolveDeliverySession?: (id: string) => Promise<DeliverySession>;
+  withSessionMutation?: <T>(id: string, label: string, work: () => Promise<T>) => Promise<T>;
+  generatePr?: (input: {
+    featureId: string;
+    settings: PullRequestSettings;
+    diff: string;
+    target: string;
+    workspacePath: string;
+    signal: AbortSignal;
+    devops: DevOpsState;
+  }) => Promise<Pick<PrGeneration, 'title' | 'description' | 'model' | 'usage'>>;
+  generatePrAdministration?: (input: {
+    featureId: string;
+    administration: PrAdministrationSettings;
+    snapshot: PrAdminSnapshot;
+    blocks: PrDiffBlock[];
+    workspacePath: string;
+    signal: AbortSignal;
+    devops: DevOpsState;
+  }) => Promise<{ proposal: PrAdminModelProposal; model?: string }>;
   getAgentInstructions: () => Promise<string>;
   createFeature: (
     ticket: DevOpsTicket,
@@ -99,6 +137,9 @@ export class DevOpsController {
     history: [],
   };
   private ticketFiltersByProject: Record<string, TicketFilters> = {};
+  private prSettingsByRepository: Record<string, PullRequestSettings> = {};
+  private generationAbort?: AbortController;
+  private administration: PrAdministrationService;
   private ticketCursor?: number;
   private delivery: DeliveryService;
   private disposed = false;
@@ -107,9 +148,37 @@ export class DevOpsController {
   private finishOperation?: () => void;
   constructor(private options: DevOpsControllerOptions) {
     this.delivery = options.delivery ?? new DeliveryService(options.root);
+    this.administration = new PrAdministrationService({
+      scope: () =>
+        this.state.config && this.state.deliverySession
+          ? {
+              key: `${projectKey(this.state.config)}:${this.state.deliverySession.featureId}`,
+              session: this.state.deliverySession,
+            }
+          : undefined,
+      api: (signal) => this.api().administration(signal),
+      delivery: () => this.delivery,
+      ensureCommit: (head) => this.ensureTargetCommit(head),
+      generate: async ({ settings, ...input }) => {
+        if (!this.options.generatePrAdministration)
+          throw new Error('Agent d’administration de PR indisponible.');
+        return this.options.generatePrAdministration({
+          ...input,
+          administration: settings,
+          featureId: this.state.deliverySession!.featureId,
+          workspacePath: this.delivery.root,
+          devops: this.getState(),
+        });
+      },
+      save: () => this.save(),
+      publish: () => this.publish(),
+      mutate: (label, work) => this.withDeliveryMutation(label, work),
+      confirm: (title, detail) => this.options.confirm(title, detail),
+    });
   }
   getState(): DevOpsState {
     this.syncTicketLinks();
+    this.state.prAdministration = this.administration.getState();
     return structuredClone(this.state);
   }
   private publish() {
@@ -117,6 +186,8 @@ export class DevOpsController {
   }
   async dispose() {
     this.disposed = true;
+    this.generationAbort?.abort();
+    this.administration.cancel();
     await Promise.all([this.operation, this.initialization]);
   }
   private file() {
@@ -135,7 +206,10 @@ export class DevOpsController {
       temporary,
       JSON.stringify({
         version: 1,
+        prAdministration: this.administration.records,
+        deliveryFeatureId: this.state.deliverySession?.featureId,
         ticketFiltersByProject: this.ticketFiltersByProject,
+        prSettingsByRepository: this.prSettingsByRepository,
         config: this.state.config,
         links: this.state.links,
         history: this.state.history,
@@ -211,9 +285,13 @@ export class DevOpsController {
   private async initializeState(inspect: boolean) {
     try {
       let prunedLinks = false;
+      let deliveryFeatureId: string | undefined;
       try {
         const stored = storedSchema.parse(JSON.parse(await readFile(this.file(), 'utf8')));
+        this.administration.records = stored.prAdministration ?? {};
+        deliveryFeatureId = stored.deliveryFeatureId;
         this.state.config = stored.config;
+        this.prSettingsByRepository = stored.prSettingsByRepository ?? {};
         this.ticketFiltersByProject = stored.ticketFiltersByProject ?? {};
         this.restoreTicketFilters();
         this.state.links = stored.links.filter(
@@ -240,11 +318,108 @@ export class DevOpsController {
           await this.save();
         }
       }
+      this.restorePrSettings();
       if (this.state.config) this.state.authenticated = await this.api().hasCredential();
+      if (deliveryFeatureId) {
+        try {
+          await this.selectSession(deliveryFeatureId);
+        } catch {
+          this.state.notices.push(
+            'L’ancienne session de livraison n’est plus accessible. Rouvre la préparation depuis une session.',
+          );
+        }
+      }
     } catch (error) {
       this.state.error = (error as Error).message;
     }
     this.publish();
+  }
+  private restorePrSettings() {
+    this.state.prSettings = structuredClone(
+      this.state.config
+        ? (this.prSettingsByRepository[projectKey(this.state.config)] ?? defaultPullRequestSettings)
+        : defaultPullRequestSettings,
+    );
+  }
+  private async selectSession(id?: string) {
+    const session = id ? await this.options.resolveDeliverySession?.(id) : undefined;
+    if (id && !session) throw new Error('Cette session ne peut pas être livrée depuis ce projet.');
+    const delivery = session
+      ? new DeliveryService(session.path)
+      : (this.options.delivery ?? new DeliveryService(this.options.root));
+    const snapshot = await delivery.inspect(this.state.config?.remote ?? 'origin');
+    if (session && snapshot.branch !== session.branch)
+      throw new Error(
+        'La branche de la session a changé. Vérifie son espace de travail dans ton outil Git.',
+      );
+    this.delivery = delivery;
+    this.state.deliverySession = session;
+    this.state.snapshot = snapshot;
+    this.state.preview = undefined;
+    this.state.prGeneration = undefined;
+    this.state.existingPr = undefined;
+    this.administration.reset();
+  }
+  private async assertSession() {
+    const selected = this.state.deliverySession;
+    if (!selected) return;
+    const current = await this.options.resolveDeliverySession?.(selected.featureId);
+    if (!current || current.path !== selected.path || current.branch !== selected.branch)
+      throw new Error('L’espace de la session a changé. Rouvre la préparation depuis la session.');
+    const snapshot = await this.delivery.inspect(this.state.config?.remote ?? 'origin');
+    if (snapshot.branch !== selected.branch)
+      throw new Error(
+        'La branche courante ne correspond plus à la session. Vérifie ton outil Git.',
+      );
+  }
+  private withDeliveryMutation<T>(label: string, work: () => Promise<T>): Promise<T> {
+    const id = this.state.deliverySession?.featureId;
+    if (id) {
+      if (!this.options.withSessionMutation)
+        throw new Error('La réservation de cet espace est indisponible.');
+      return this.options.withSessionMutation(id, label, work);
+    }
+    return this.options.withMutation(label, work);
+  }
+  private async ensureTargetCommit(head: string) {
+    if (!/^[a-f0-9]{40}$/i.test(head)) throw new Error('Commit cible invalide.');
+    if ((await this.delivery.run(['cat-file', '-e', `${head}^{commit}`])).code === 0) return;
+    const config = this.state.config!;
+    const url = `https://dev.azure.com/${encodeURIComponent(config.organization)}/${encodeURIComponent(config.project)}/_git/${encodeURIComponent(config.repository)}`;
+    const fetched = await this.delivery.run([
+      'fetch',
+      '--no-tags',
+      '--no-recurse-submodules',
+      '--no-write-fetch-head',
+      '--refmap=',
+      '--',
+      url,
+      head,
+    ]);
+    if (fetched.code !== 0)
+      throw new Error(
+        'Impossible de récupérer le commit cible. Vérifie tes identifiants Git et récupère la branche cible dans ton outil Git.',
+      );
+  }
+  private async findExistingPr(branch: string, target: string) {
+    const prs = await this.api().findOpenPullRequests(branch, target);
+    const pr = prs.find(
+      (p) =>
+        p.status === 'active' &&
+        p.sourceBranch === `refs/heads/${branch}` &&
+        p.targetBranch === `refs/heads/${target}`,
+    );
+    this.state.existingPr = pr;
+    if (pr) {
+      this.state.pullRequests = [
+        pr,
+        ...this.state.pullRequests.filter((item) => item.id !== pr.id),
+      ];
+      this.state.preview = undefined;
+      if (this.state.deliverySession)
+        this.associatePullRequest(pr.id, this.state.deliverySession.featureId);
+    }
+    return pr;
   }
   private ticket(id: number) {
     const ticket =
@@ -360,6 +535,14 @@ export class DevOpsController {
     }
   }
   async removeDeletedFeature(featureId: string): Promise<void> {
+    for (const key of Object.keys(this.administration.records))
+      if (key.endsWith(':' + featureId)) delete this.administration.records[key];
+    if (this.state.deliverySession?.featureId === featureId) {
+      this.state.deliverySession = undefined;
+      this.state.snapshot = undefined;
+      this.delivery = this.options.delivery ?? new DeliveryService(this.options.root);
+      this.administration.reset();
+    }
     this.state.links = this.state.links.filter((link) => link.featureId !== featureId);
     if (this.state.preview?.featureId === featureId) this.state.preview = undefined;
     await this.save();
@@ -452,6 +635,14 @@ export class DevOpsController {
   async handle(input: DevOpsClientMessage): Promise<void> {
     if (this.disposed) throw new Error('Le menu de livraison est fermé.');
     const message = devOpsMessageSchema.parse(input);
+    if (message.type === 'deliveryPrAdminCancel') {
+      this.administration.cancel();
+      return;
+    }
+    if (message.type === 'deliveryCancelGeneration') {
+      this.generationAbort?.abort();
+      return;
+    }
     try {
       if (this.state.busy || this.initialization)
         throw new Error('Attends la fin de l’opération de livraison en cours.');
@@ -474,9 +665,98 @@ export class DevOpsController {
     this.publish();
     let openFeatureId: string | undefined;
     try {
+      if (message.type.startsWith('delivery') && message.type !== 'deliverySelectSession')
+        await this.assertSession();
       switch (message.type) {
+        case 'deliveryPrAdminSettings':
+        case 'deliveryPrAdminPreview':
+        case 'deliveryPrAdminApply':
+          await this.administration.handle(message);
+          break;
+        case 'deliverySelectSession':
+          await this.selectSession(message.featureId);
+          break;
+        case 'deliverySavePrSettings':
+          if (!this.state.config)
+            throw new Error('Configure Azure DevOps avant les réglages de PR.');
+          await this.delivery.validateBranch(message.settings.target);
+          this.prSettingsByRepository[projectKey(this.state.config)] = structuredClone(
+            message.settings,
+          );
+          this.restorePrSettings();
+          break;
+        case 'deliverySearchReviewers':
+          this.state.reviewerResults = await this.api().searchReviewers(message.query);
+          break;
+        case 'deliveryGeneratePr': {
+          if (
+            !this.options.generatePr ||
+            !this.state.deliverySession ||
+            this.state.deliverySession.featureId !== message.featureId
+          )
+            throw new Error('Ouvre la préparation de PR depuis la session à livrer.');
+          this.state.prGeneration = undefined;
+          this.state.prGenerating = true;
+          this.publish();
+          this.generationAbort = new AbortController();
+          const signal = this.generationAbort.signal;
+          try {
+            await this.withDeliveryMutation('Rédaction de la PR', async () => {
+              await this.delivery.validateBranch(message.target);
+              const snapshot = await this.delivery.inspect(this.state.config?.remote ?? 'origin');
+              this.state.snapshot = snapshot;
+              if (snapshot.files.length)
+                throw new Error(
+                  'Des fichiers ne sont pas commités. Termine le commit dans cet écran ou dans ton outil Git avant la rédaction.',
+                );
+              if (snapshot.branch === message.target)
+                throw new Error('Choisis une branche cible différente de la branche de session.');
+              if (await this.findExistingPr(snapshot.branch, message.target)) return;
+              const targetHead = await this.api().branchHead(message.target);
+              if (!targetHead) throw new Error('Branche cible absente du dépôt Azure DevOps.');
+              await this.ensureTargetCommit(targetHead);
+              const diff = await pullRequestWritingDiff(this.delivery, targetHead, snapshot.head);
+              if (signal.aborted) throw new Error('Rédaction arrêtée.');
+              const generated = await this.options.generatePr!({
+                featureId: message.featureId,
+                settings: structuredClone(this.state.prSettings ?? defaultPullRequestSettings),
+                target: message.target,
+                diff,
+                workspacePath: this.delivery.root,
+                signal,
+                devops: this.getState(),
+              });
+              if (signal.aborted) throw new Error('Rédaction arrêtée. Ton brouillon est conservé.');
+              const latest = await this.delivery.inspect(this.state.config?.remote ?? 'origin');
+              if (
+                latest.fingerprint !== snapshot.fingerprint ||
+                (await this.api().branchHead(message.target)) !== targetHead
+              )
+                throw new Error(
+                  'Le code a changé pendant la rédaction. Relance-la pour comparer la bonne version.',
+                );
+              this.state.prGeneration = {
+                id: randomUUID(),
+                featureId: message.featureId,
+                ...generated,
+                head: snapshot.head,
+                target: message.target,
+                targetHead,
+                agentId: this.state.prSettings!.agentId,
+              };
+            });
+          } finally {
+            this.generationAbort = undefined;
+            this.state.prGenerating = false;
+          }
+          break;
+        }
         case 'devopsConfigure':
           this.state.config = message.config;
+          this.restorePrSettings();
+          this.administration.reset();
+          this.state.prGeneration = undefined;
+          this.state.existingPr = undefined;
           this.state.preview = undefined;
           this.clearDashboard();
           this.state.authenticated = await this.api().hasCredential();
@@ -499,6 +779,7 @@ export class DevOpsController {
         }
         case 'devopsDisconnect':
           await this.api().disconnect();
+          this.administration.reset();
           this.state.authenticated = false;
           this.clearDashboard();
           this.state.preview = undefined;
@@ -648,7 +929,7 @@ export class DevOpsController {
           else
             this.chat(
               'assistant',
-              'Je peux préparer un commit, publier ta branche et créer une PR Azure DevOps. Tout se fait par opérations Git déterministes, sans appel IA. Utilise la sélection et les formulaires ci-dessous ; une demande en conversation ne déclenche jamais une publication.',
+              'Je peux préparer un commit, publier ta branche et créer une PR Azure DevOps. Les opérations Git sont déterministes. Pour faire rédiger une PR par un agent IA, ouvre sa préparation depuis la fin de session. Utilise la sélection et les formulaires ci-dessous ; une demande en conversation ne déclenche jamais une publication.',
             );
           break;
         }
@@ -678,8 +959,17 @@ export class DevOpsController {
           break;
         }
         case 'deliveryPreviewPr': {
+          if (
+            this.state.deliverySession &&
+            message.featureId !== this.state.deliverySession.featureId
+          )
+            throw new Error('La session associée a changé. Rouvre sa préparation de PR.');
           await this.delivery.validateBranch(message.target);
           const snapshot = await this.delivery.inspect(this.state.config?.remote ?? 'origin');
+          if (this.state.deliverySession && snapshot.files.length)
+            throw new Error(
+              'Termine le commit des fichiers de cette session avant de créer la PR.',
+            );
           if (snapshot.branch === message.target)
             throw new Error('Les branches source et cible doivent être différentes.');
           if (message.ticketId) {
@@ -711,6 +1001,7 @@ export class DevOpsController {
             );
           const targetHead = await this.api().branchHead(message.target);
           if (!targetHead) throw new Error('Branche cible absente du dépôt configuré.');
+          if (await this.findExistingPr(snapshot.branch, message.target)) break;
           const comparison = await pullRequestDiff(this.delivery, targetHead, snapshot.head);
           this.state.snapshot = snapshot;
           this.state.preview = {
@@ -726,6 +1017,8 @@ export class DevOpsController {
             target: message.target,
             ticketId: message.ticketId,
             featureId: message.featureId,
+            isDraft: message.isDraft ?? true,
+            reviewers: message.reviewers ?? [],
           };
           break;
         }
@@ -739,7 +1032,7 @@ export class DevOpsController {
               previous.fingerprint !== message.fingerprint)
           )
             throw new Error('Aperçu périmé. Prépare un nouvel aperçu.');
-          await this.options.withMutation(
+          await this.withDeliveryMutation(
             `Livraison : ${message.type === 'deliveryCommit' ? 'commit' : message.kind}`,
             async () => {
               let preview = previous;
@@ -769,6 +1062,9 @@ export class DevOpsController {
                   ? `Cible : ${preview.target}${preview.targetHead ? ` · ${preview.targetHead}` : ''}`
                   : '',
                 preview.kind === 'pr' ? `Azure DevOps : ${projectKey(this.state.config!)}` : '',
+                preview.kind === 'pr'
+                  ? `Statut : ${preview.isDraft === false ? 'Prête à relire' : 'Brouillon'}\nRelecteurs : ${(preview.reviewers ?? []).map((r) => r.name + (r.required ? ' (obligatoire)' : '')).join(', ') || 'aucun'}`
+                  : '',
                 preview.description ?? '',
                 preview.paths.length
                   ? `Fichiers complets sélectionnés :\n${preview.paths.join('\n')}`
@@ -782,11 +1078,14 @@ export class DevOpsController {
                     ? 'Créer ce commit local ?'
                     : preview.kind === 'push'
                       ? 'Publier cette branche ?'
-                      : 'Créer cette PR brouillon Azure DevOps ?',
+                      : preview.isDraft === false
+                        ? 'Créer cette PR prête à relire Azure DevOps ?'
+                        : 'Créer cette PR brouillon Azure DevOps ?',
                   detail,
                 ))
               )
                 return;
+              await this.assertSession();
               if (preview.kind === 'commit') {
                 const sha = await this.delivery.commit(preview);
                 this.chat(
@@ -812,17 +1111,40 @@ export class DevOpsController {
                   throw new Error(
                     'La branche cible a changé depuis la comparaison. Prépare un nouvel aperçu et relis le diff avant de créer la PR.',
                   );
-                const pr = await this.api().createPullRequest({
-                  branch: preview.branch,
-                  target: preview.target!,
-                  title: preview.title,
-                  description: preview.description ?? '',
-                  ticketId: preview.ticketId,
-                });
+                if (await this.findExistingPr(preview.branch, preview.target!)) return;
+                let pr;
+                try {
+                  pr = await this.api().createPullRequest({
+                    branch: preview.branch,
+                    target: preview.target!,
+                    title: preview.title,
+                    description: preview.description ?? '',
+                    ticketId: preview.ticketId,
+                    isDraft: preview.isDraft,
+                    reviewers: preview.reviewers,
+                  });
+                } catch (error) {
+                  // A lost POST response can still mean Azure created the PR. Reconcile before retry.
+                  const existing = await this.findExistingPr(preview.branch, preview.target!).catch(
+                    () => undefined,
+                  );
+                  if (existing) {
+                    this.chat(
+                      'assistant',
+                      `Une PR existe pour ces branches : ${existing.url}. Vérifie-la avant de poursuivre.`,
+                    );
+                    return;
+                  }
+                  throw error;
+                }
+                this.state.existingPr = pr;
                 this.state.pullRequests.unshift(pr);
                 if (preview.featureId)
                   this.associatePullRequest(pr.id, preview.featureId, preview.ticketId);
-                this.chat('assistant', `PR brouillon #${pr.id} créée : ${pr.url}`);
+                this.chat(
+                  'assistant',
+                  `PR ${pr.isDraft ? 'brouillon ' : ''}#${pr.id} créée : ${pr.url}`,
+                );
               }
               this.state.preview = undefined;
               await this.save();

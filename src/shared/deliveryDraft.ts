@@ -4,6 +4,8 @@ import { proofDossier } from './proofs';
 
 export type DeliveryFeature = Pick<Feature, 'id' | 'title'> & Partial<Feature>;
 export interface DeliveryDraft {
+  isDraft?: boolean;
+  reviewers?: import('./pullRequestPreparation').PrReviewer[];
   selected: string[];
   intent: string;
   commitTitle: string;

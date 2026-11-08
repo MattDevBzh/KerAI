@@ -1,3 +1,5 @@
+import { writePrAdministration } from './host/PrAdministrationWriter';
+import { writePullRequest } from './host/PullRequestWriter';
 import { clearCatalogueCache } from './core/registry';
 import { startupDiagnostics } from './host/StartupDiagnostics';
 import { selectionContext } from './host/CodeSelection';
@@ -303,6 +305,14 @@ export async function activate(context: vscode.ExtensionContext) {
           next.state.notices.push(`Nettoyage à reprendre : ${(error as Error).message}`),
         );
       next.on('errorNotice', (message) => report(new Error(message)));
+      const deliveryOwner = (id: string) => {
+        const owner = [next, ...[...hub.entries.values()].map((entry) => entry.service)].find(
+          (candidate) => allFeatures(candidate.state.features).some((feature) => feature.id === id),
+        );
+        if (!owner) throw new Error('Session introuvable. Rouvre-la depuis le catalogue.');
+        const feature = allFeatures(owner.state.features).find((item) => item.id === id)!;
+        return { owner, feature };
+      };
       const controller = new DevOpsController({
         assertReadable: () => next.assertTrusted(),
         root,
@@ -314,6 +324,63 @@ export async function activate(context: vscode.ExtensionContext) {
         guard: () => {
           next.globalGuard?.();
           next.assertConfigurable();
+        },
+        resolveDeliverySession: async (id) => {
+          const { owner, feature } = deliveryOwner(id);
+          const project = feature.projects?.find((item) => item.path === root);
+          if (!project && owner.workspacePath !== root)
+            throw new Error('Ce dépôt ne fait pas partie de la session.');
+          const directory = project
+            ? await owner.projectPath(id, project.id)
+            : await owner.featurePath(id);
+          return {
+            featureId: id,
+            title: feature.title,
+            path: directory,
+            branch:
+              project && feature.projects![0].id !== project.id
+                ? project.branch
+                : (feature.worktree?.branch ?? feature.branch),
+          };
+        },
+        withSessionMutation: (id, label, work) =>
+          deliveryOwner(id).owner.withFeatureMutation(id, label, async () => {
+            const result = await work();
+            await next.refresh();
+            return result;
+          }),
+        generatePrAdministration: async (input) => {
+          const { feature } = deliveryOwner(input.featureId);
+          const registry = await next.registry.load();
+          const agent = registry.agents.find((item) => item.id === input.administration.agentId);
+          if (!agent)
+            throw new Error(
+              'Cet agent n’est plus disponible. Choisis un profil pour cette session.',
+            );
+          return writePrAdministration({
+            ...input,
+            feature,
+            agent,
+            adapter: next.adapter,
+            settings: structuredClone(next.state.settings),
+          });
+        },
+        generatePr: async (input) => {
+          const { feature } = deliveryOwner(input.featureId);
+          const registry = await next.registry.load();
+          const agent = registry.agents.find((item) => item.id === input.settings.agentId);
+          if (!agent)
+            throw new Error(
+              'L’agent de rédaction a été supprimé. Choisis-en un dans les réglages de PR.',
+            );
+          return writePullRequest({
+            ...input,
+            feature,
+            agent,
+            adapter: next.adapter,
+            settings: structuredClone(next.state.settings),
+            instructions: input.settings.instructions,
+          });
         },
         withMutation: (label, work) =>
           next.withWorkspaceMutation(label, async () => {
@@ -328,7 +395,12 @@ export async function activate(context: vscode.ExtensionContext) {
               (document) =>
                 document.isDirty &&
                 document.uri.scheme === 'file' &&
-                (document.uri.fsPath === root || document.uri.fsPath.startsWith(root + path.sep)),
+                [controller.getState().deliverySession?.path ?? root].some(
+                  (directory) =>
+                    directory &&
+                    (document.uri.fsPath === directory ||
+                      document.uri.fsPath.startsWith(directory + path.sep)),
+                ),
             )
           )
             throw new Error(
@@ -346,7 +418,7 @@ export async function activate(context: vscode.ExtensionContext) {
           const token = await vscode.window.showInputBox({
             title: 'Connexion Azure DevOps',
             prompt:
-              'Lecture : Code, Work Items, Build et Test Management selon tes besoins. Écriture Code uniquement pour créer des PR. Stocké dans SecretStorage.',
+              'Lecture : Identity pour les relecteurs, Code, Work Items, Build et Test Management selon tes besoins. Écriture Code uniquement pour créer des PR. Stocké dans SecretStorage.',
             password: true,
             ignoreFocusOut: true,
           });
@@ -365,7 +437,7 @@ export async function activate(context: vscode.ExtensionContext) {
         features: () => [
           ...new Map(
             [next, ...[...hub.entries.values()].map((entry) => entry.service)]
-              .flatMap((owner) => owner.state.features)
+              .flatMap((owner) => allFeatures(owner.state.features))
               .map((feature) => [feature.id, feature]),
           ).values(),
         ],
@@ -1416,6 +1488,40 @@ export async function activate(context: vscode.ExtensionContext) {
       send({ type: 'devopsState', state: devops.getState() });
       return;
     }
+    if (message.type === 'openSessionDelivery') {
+      const owner = await ensure(message.featureId);
+      const feature = allFeatures(owner.state.features).find(
+        (item) => item.id === message.featureId,
+      );
+      if (!feature || feature.reviewTarget)
+        throw new Error('Cette session ne peut pas créer de PR.');
+      const project = message.projectId
+        ? feature.projects?.find((item) => item.id === message.projectId)
+        : feature.projects?.[0];
+      if (message.projectId && !project) throw new Error('Projet absent de cette session.');
+      if (project) {
+        const entry = await hub.activateProject(project.id);
+        service = entry.service;
+        devops = entry.devops;
+      }
+      await devops!.handle({ type: 'deliverySelectSession', featureId: message.featureId });
+      const prepared = devops!.getState();
+      if (prepared.error || prepared.deliverySession?.featureId !== message.featureId)
+        throw new Error(
+          prepared.error ?? 'La préparation de cette session n’a pas pu être ouverte.',
+        );
+      hub.publish();
+      send({ type: 'devopsState', state: devops!.getState() });
+      send({ type: 'navigate', view: 'delivery' });
+      return;
+    }
+    // Delivery stays on its selected repository even for a session spanning several projects.
+    const deliveryMessage = devOpsMessageSchema.safeParse(message);
+    if (deliveryMessage.success && message.type.startsWith('delivery')) {
+      await ensure();
+      await devops!.handle(deliveryMessage.data);
+      return;
+    }
     const requestOwner =
       message.type === 'answerHumanRequest'
         ? hub.snapshot()?.humanRequests?.find((request) => request.id === message.requestId)
@@ -1431,7 +1537,6 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
     await current.recordHumanAction(message);
-    const deliveryMessage = devOpsMessageSchema.safeParse(message);
     if (deliveryMessage.success) {
       await devops!.handle(deliveryMessage.data);
       return;
