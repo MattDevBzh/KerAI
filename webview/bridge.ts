@@ -1,6 +1,7 @@
 import { StateReceiver } from '../src/shared/stateTransfer';
 import type { ClientMessage, HostMessage } from '../src/shared/types';
 interface PersistedView {
+  sessionGitDefaults?: Record<string, { remote?: string; baseRef?: string }>;
   sessionViews?: Record<string, { tab?: string; scroll?: number; follow?: boolean }>;
   taskDraft?: import('../src/shared/taskDrafts').TaskDraft;
   taskDrafts?: import('../src/shared/taskDrafts').TaskDraft[];
@@ -118,6 +119,7 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       'discussionReportOpened',
       'featureCreateResult',
       'reviewBranchesResult',
+      'sessionGitPrepared',
       'workflowDeleteResult',
       'projectResult',
       'featureTeamResult',
@@ -211,4 +213,14 @@ export function saveSessionView(
     [id]: { ...persistedView.sessionViews?.[id], ...value },
   };
   persistView({ sessionViews: Object.fromEntries(Object.entries(views).slice(-200)) });
+}
+
+export function sessionGitDefaults(projectId: string) {
+  return persistedView.sessionGitDefaults?.[projectId];
+}
+export function saveSessionGitDefaults(
+  projectId: string,
+  value: { remote?: string; baseRef?: string },
+) {
+  persistView({ sessionGitDefaults: { ...persistedView.sessionGitDefaults, [projectId]: value } });
 }

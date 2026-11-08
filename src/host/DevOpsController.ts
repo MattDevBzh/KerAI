@@ -584,6 +584,7 @@ export class DevOpsController {
           if (!target) throw new Error('Choisis un dépôt local proposé dans la préparation.');
           if (
             plan.isolated &&
+            !plan.gitChoice &&
             (!target.canIsolate ||
               !plan.branchName ||
               !target.branches.some(

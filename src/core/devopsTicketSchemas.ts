@@ -1,3 +1,4 @@
+import { sessionGitChoiceSchema } from './gitPreparationSchema';
 import { z } from 'zod';
 const value = z
   .string()
@@ -23,6 +24,7 @@ export const ticketFiltersSchema = z
 export const ticketDevelopmentPlanSchema = z
   .object({
     requestId: z.string().uuid(),
+    gitChoice: sessionGitChoiceSchema.optional(),
     sourceProjectKey: value.min(1),
     snapshotId: z.string().uuid(),
     targetProjectId: value.min(1),

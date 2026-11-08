@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.41.0 — 2026-11-08
+
+- Préparation Git commune aux sessions et aux tickets : fetch distant, choix de la base et nom de branche modifiable.
+- Création dans un worktree isolé ou dans le dossier courant, avec protection des changements locaux et des fichiers ignorés.
+- Réessai sans perte de saisie, consentement explicite pour une base distante non actualisée et contrôle du commit de départ avant lancement.
+
 ## 1.40.0 — 2026-11-08
 
 - Révision externe de tout l’atelier depuis Kits : archive ZIP lisible, inventaire, consignes pour l’IA et séparation des profils fournis, personnels et propres au projet.

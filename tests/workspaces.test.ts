@@ -806,3 +806,113 @@ describe('targeted restore with durable recovery', () => {
     expect((await readdir(root)).some((file) => file.endsWith('.tmp'))).toBe(false);
   });
 });
+
+describe('session Git preparation', () => {
+  it('fetches the remote base with a safe refspec, leaves dirty source intact and checks out the exact selected commit', async () => {
+    const f = await fixture();
+    const upstream = path.join(f.root, 'upstream');
+    await git(f.root, 'clone', f.source, upstream);
+    await git(upstream, 'config', 'user.name', 'Fixture');
+    await git(upstream, 'config', 'user.email', 'fixture@example.invalid');
+    await writeFile(path.join(upstream, 'tracked.txt'), 'Remote newest\n');
+    await git(upstream, 'add', '.');
+    await git(upstream, 'commit', '-m', 'Advance server');
+    await git(f.source, 'remote', 'add', 'origin', upstream);
+    await git(f.source, 'config', 'remote.origin.fetch', '+refs/heads/*:refs/heads/*');
+    const localHead = (await git(f.source, 'rev-parse', 'HEAD')).trim();
+    await writeFile(path.join(f.source, 'tracked.txt'), 'Staged');
+    await git(f.source, 'add', '.');
+    await writeFile(path.join(f.source, 'tracked.txt'), 'Unstaged');
+    await writeFile(path.join(f.source, 'new.txt'), 'Untracked');
+    const index = await readFile(path.join(f.source, '.git/index'));
+    const preparation = await f.manager.prepareGit();
+    expect(preparation.fetchError).toBeUndefined();
+    expect(preparation.defaultRef).toBe('refs/remotes/origin/main');
+    expect(preparation.dirtyCount).toBe(2);
+    const base = preparation.branches.find((b) => b.ref === preparation.defaultRef)!;
+    expect(base.commit).not.toBe(localHead);
+    const choice = {
+      preparationId: preparation.id,
+      baseRef: base.ref,
+      baseCommit: base.commit,
+      branchName: 'codex/fetched',
+      allowCached: false,
+    };
+    await f.manager.validateGitChoice(choice);
+    const worktree = await f.manager.createWorktree(f.feature, choice);
+    expect(await readFile(path.join(worktree.path, 'tracked.txt'), 'utf8')).toBe('Remote newest\n');
+    expect((await git(f.source, 'rev-parse', 'HEAD')).trim()).toBe(localHead);
+    expect(await readFile(path.join(f.source, '.git/index'))).toEqual(index);
+    expect(await readFile(path.join(f.source, 'tracked.txt'), 'utf8')).toBe('Unstaged');
+  });
+
+  it('requires explicit cached consent after fetch failure and rejects expired or moved choices', async () => {
+    const f = await fixture();
+    await git(f.source, 'remote', 'add', 'origin', path.join(f.root, 'missing'));
+    const p = await f.manager.prepareGit();
+    expect(p.fetchError).toBeTruthy();
+    const base = p.branches[0];
+    const choice = {
+      preparationId: p.id,
+      baseRef: base.ref,
+      baseCommit: base.commit,
+      branchName: 'codex/cached',
+      allowCached: false,
+    };
+    await expect(f.manager.validateGitChoice(choice)).rejects.toThrow('échoué');
+    choice.allowCached = true;
+    await f.manager.validateGitChoice(choice);
+    await expect(
+      f.manager.validateGitChoice({ ...choice, preparationId: randomUUID() }),
+    ).rejects.toThrow('expiré');
+    await writeFile(path.join(f.source, 'tracked.txt'), 'Moved');
+    await git(f.source, 'add', '.');
+    await git(f.source, 'commit', '-m', 'Moved');
+    await expect(f.manager.validateGitChoice(choice)).rejects.toThrow('changé');
+  });
+
+  it('blocks dirty current checkout, retries after cleanup and creates the chosen branch', async () => {
+    const f = await fixture();
+    const p = await f.manager.prepareGit();
+    const base = p.branches[0];
+    const choice = {
+      preparationId: p.id,
+      baseRef: base.ref,
+      baseCommit: base.commit,
+      branchName: 'codex/current',
+      allowCached: false,
+    };
+    await writeFile(path.join(f.source, 'human.txt'), 'Keep');
+    await expect(f.manager.createCurrentBranch(choice)).rejects.toThrow('1 fichier');
+    expect((await git(f.source, 'branch', '--show-current')).trim()).toBe('main');
+    await rm(path.join(f.source, 'human.txt'));
+    await f.manager.createCurrentBranch(choice);
+    expect((await git(f.source, 'branch', '--show-current')).trim()).toBe('codex/current');
+    await expect(f.manager.validateGitChoice(choice)).rejects.toThrow('existe déjà');
+  });
+
+  it('protects ignored files and refuses a current checkout during a merge', async () => {
+    const f = await fixture();
+    await git(f.source, 'checkout', '-b', 'base');
+    await writeFile(path.join(f.source, 'local.env'), 'committed server config');
+    await git(f.source, 'add', '.');
+    await git(f.source, 'commit', '-m', 'Config on base');
+    await git(f.source, 'checkout', 'main');
+    await writeFile(path.join(f.source, '.git/info/exclude'), 'local.env\n');
+    await writeFile(path.join(f.source, 'local.env'), 'private local config');
+    const p = await f.manager.prepareGit();
+    const base = p.branches.find((b) => b.name === 'base')!;
+    const choice = {
+      preparationId: p.id,
+      baseRef: base.ref,
+      baseCommit: base.commit,
+      branchName: 'codex/protected',
+      allowCached: false,
+    };
+    await expect(f.manager.createCurrentBranch(choice)).rejects.toThrow();
+    expect(await readFile(path.join(f.source, 'local.env'), 'utf8')).toBe('private local config');
+    expect((await git(f.source, 'branch', '--show-current')).trim()).toBe('main');
+    await writeFile(path.join(f.source, '.git/MERGE_HEAD'), base.commit);
+    await expect(f.manager.createCurrentBranch(choice)).rejects.toThrow('opération Git');
+  });
+});

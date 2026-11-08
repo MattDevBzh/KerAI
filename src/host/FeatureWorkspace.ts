@@ -1,3 +1,4 @@
+import type { GitPreparation, SessionGitChoice } from '../shared/gitPreparation';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, type Stats } from 'node:fs';
 import {
@@ -388,6 +389,168 @@ export class FeatureWorkspace {
     }
     return target;
   }
+  private preparations = new Map<string, GitPreparation>();
+  private lastFetch = new Map<string, string>();
+
+  async prepareGit(remote?: string): Promise<GitPreparation> {
+    return this.serial(async () => {
+      const repository = await this.inspectRepository();
+      const remotes = machineText(await this.checkedGit(repository.root, ['remote']))
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      const selected = remote ?? (remotes.includes('origin') ? 'origin' : remotes[0]);
+      if (
+        selected &&
+        (!remotes.includes(selected) || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/.test(selected))
+      )
+        throw new Error('Serveur distant indisponible ou nom non pris en charge.');
+      let fetchError: string | undefined;
+      if (selected) {
+        try {
+          const hooks = await this.privatePath('empty-fetch-hooks');
+          await mkdir(hooks, { recursive: true, mode: 0o700 });
+          if ((await readdir(hooks)).length) throw new Error('Dossier de hooks non vide.');
+          // Explicit destination: never let a configured refspec update a local working branch.
+          await this.checkedGit(
+            repository.root,
+            [
+              'fetch',
+              '--prune',
+              '--no-tags',
+              '--refmap=',
+              '--no-recurse-submodules',
+              '--',
+              selected,
+              `+refs/heads/*:refs/remotes/${selected}/*`,
+            ],
+            [`core.hooksPath=${hooks}`, 'maintenance.auto=false', 'gc.auto=0'],
+          );
+          this.lastFetch.set(selected, new Date().toISOString());
+        } catch (error) {
+          fetchError = redact((error as Error).message);
+        }
+      }
+      const branches = (await this.branchChoices()).filter(
+        (b) =>
+          !b.ref.startsWith('refs/remotes/') ||
+          (selected && b.ref.startsWith(`refs/remotes/${selected}/`)),
+      );
+      const remoteHead = selected
+        ? await this.git(repository.root, ['symbolic-ref', `refs/remotes/${selected}/HEAD`])
+        : undefined;
+      const preferred = remoteHead?.code === 0 ? machineText(remoteHead.stdout).trim() : undefined;
+      const defaultRef = [
+        preferred,
+        `refs/remotes/${selected}/main`,
+        `refs/remotes/${selected}/develop`,
+        ...branches
+          .filter((b) => selected && b.ref.startsWith(`refs/remotes/${selected}/`))
+          .map((b) => b.ref),
+        `refs/heads/${repository.branch}`,
+      ].find((ref) => branches.some((b) => b.ref === ref));
+      const preparation: GitPreparation = {
+        id: randomUUID(),
+        ...repository,
+        remotes,
+        remote: selected,
+        fetchedAt: selected ? this.lastFetch.get(selected) : undefined,
+        fetchError,
+        defaultRef,
+        branches,
+      };
+      this.preparations.set(preparation.id, preparation);
+      if (this.preparations.size > 20)
+        this.preparations.delete(this.preparations.keys().next().value!);
+      return structuredClone(preparation);
+    });
+  }
+
+  async validateGitChoice(choice: SessionGitChoice, current = false): Promise<void> {
+    const preparation = this.preparations.get(choice.preparationId);
+    if (
+      !preparation ||
+      !preparation.branches.some((b) => b.ref === choice.baseRef && b.commit === choice.baseCommit)
+    )
+      throw new Error('La préparation Git a expiré. Clique sur Actualiser les branches.');
+    if (preparation.fetchError && !choice.allowCached)
+      throw new Error(
+        'La récupération a échoué. Réessaie ou accepte explicitement la version connue.',
+      );
+    const repository = await this.inspectRepository();
+    if (current) {
+      if (repository.branch !== preparation.branch || repository.head !== preparation.head)
+        throw new Error('La branche courante a changé. Actualise la préparation Git.');
+      if (repository.dirtyCount)
+        throw new Error(
+          `${repository.dirtyCount} fichier(s) modifié(s) ou nouveau(x) empêchent le changement de branche. Ouvre Git, puis revérifie.`,
+        );
+      for (const marker of [
+        'MERGE_HEAD',
+        'CHERRY_PICK_HEAD',
+        'REVERT_HEAD',
+        'rebase-merge',
+        'rebase-apply',
+        'sequencer',
+      ]) {
+        const file = machineText(
+          await this.checkedGit(repository.root, ['rev-parse', '--git-path', marker]),
+        ).trim();
+        try {
+          await lstat(path.resolve(repository.root, file));
+        } catch (error) {
+          if (absent(error)) continue;
+          throw error;
+        }
+        throw new Error(
+          'Une opération Git est en cours. Termine-la dans ton outil Git avant de créer la branche.',
+        );
+      }
+    }
+    if (
+      !choice.branchName ||
+      choice.branchName.startsWith('-') ||
+      /[\x00-\x20]/.test(choice.branchName) ||
+      choice.branchName.includes('@{')
+    )
+      throw new Error('Nom de branche invalide.');
+    await this.checkedGit(repository.root, ['check-ref-format', '--branch', choice.branchName]);
+    const branches = await this.branchChoices();
+    if (!branches.some((b) => b.ref === choice.baseRef && b.commit === choice.baseCommit))
+      throw new Error('La branche de départ a changé. Actualise la préparation Git.');
+    if (
+      branches.some(
+        (b) =>
+          b.ref === `refs/heads/${choice.branchName}` ||
+          preparation.remotes.some(
+            (remote) => b.ref === `refs/remotes/${remote}/${choice.branchName}`,
+          ),
+      )
+    )
+      throw new Error(
+        'Cette branche existe déjà. Choisis un autre nom ou reprends le travail existant depuis ton outil Git.',
+      );
+  }
+
+  async createCurrentBranch(choice: SessionGitChoice): Promise<void> {
+    return this.serial(async () => {
+      await this.validateGitChoice(choice, true);
+      const root = await this.source();
+      const hooks = await this.privatePath('empty-checkout-hooks');
+      await mkdir(hooks, { recursive: true, mode: 0o700 });
+      if ((await readdir(hooks)).length) throw new Error('Dossier de hooks non vide.');
+      // --no-overwrite-ignore also protects ignored local configuration files.
+      await this.checkedGit(
+        root,
+        ['checkout', '--no-overwrite-ignore', '-b', choice.branchName, choice.baseCommit, '--'],
+        [`core.hooksPath=${hooks}`],
+      );
+      const identity = await this.identity(root);
+      if (identity.branch !== choice.branchName || identity.head !== choice.baseCommit)
+        throw new Error('La branche a changé pendant sa création. Vérifie ton outil Git.');
+    });
+  }
+
   async branchChoices(): Promise<{ name: string; ref: string; commit: string }[]> {
     const repository = await this.inspectRepository();
     const raw = machineText(
@@ -455,7 +618,7 @@ export class FeatureWorkspace {
         const selected = (await this.branchChoices()).find((item) => item.ref === choice.baseRef);
         if (!selected || selected.commit !== choice.baseCommit)
           throw new Error(
-            'La branche de départ a changé depuis la préparation. Rouvre le ticket pour actualiser son aperçu.',
+            'La branche de départ a changé depuis la préparation. Actualise la préparation Git.',
           );
         baseCommit = machineText(
           await this.checkedGit(repository.root, [

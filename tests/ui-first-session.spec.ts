@@ -24,6 +24,36 @@ async function open(page: Page, state = fixture()) {
         },
         postMessage(message: ClientMessage) {
           messages.push(message);
+          if (message.type === 'prepareSessionGit')
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'sessionGitPrepared',
+                    requestId: message.requestId,
+                    preparation: {
+                      id: message.requestId,
+                      branch: 'main',
+                      head: 'a'.repeat(40),
+                      dirtyCount: 0,
+                      remotes: ['origin'],
+                      remote: 'origin',
+                      fetchedAt: '2026-11-08T12:00:00Z',
+                      defaultRef: 'refs/remotes/origin/main',
+                      branches: [
+                        {
+                          name: 'origin/main',
+                          ref: 'refs/remotes/origin/main',
+                          commit: 'b'.repeat(40),
+                        },
+                      ],
+                      ...Reflect.get(window, 'gitPreparationPatch'),
+                    },
+                  },
+                  '*',
+                ),
+              0,
+            );
           if (message.type === 'saveTaskDraft')
             drafts = [
               ...drafts.filter((d) => d.id !== message.draft.id),
@@ -244,4 +274,67 @@ test('clearing a saved task keeps the empty edit and still allows explicit aband
     .poll(async () => (await messages(page)).filter((m) => m.type === 'deleteTaskDraft').length)
     .toBe(1);
   await expect(page.getByRole('region', { name: 'Brouillons de tâches' })).toHaveCount(0);
+});
+
+test('Git preparation requires cached consent, preserves the branch name on retry and sends its exact base', async ({
+  page,
+}) => {
+  await open(page);
+  await page.evaluate(() =>
+    Reflect.set(window, 'gitPreparationPatch', {
+      fetchError: 'Serveur indisponible',
+      dirtyCount: 2,
+    }),
+  );
+  await page.getByRole('button', { name: 'Préparer ma première session' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Qu’allons-nous faire ?').fill('Nouvelle recherche');
+  await dialog.getByLabel('Nouvelle branche', { exact: true }).fill('feature/recherche');
+  await expect(
+    dialog.getByRole('button', { name: 'Créer la session', exact: true }),
+  ).toBeDisabled();
+  await dialog.getByLabel('Partir de la dernière version connue').check();
+  await expect(dialog.getByRole('button', { name: 'Créer la session', exact: true })).toBeEnabled();
+  await page.evaluate(() => Reflect.set(window, 'gitPreparationPatch', { dirtyCount: 2 }));
+  await dialog.getByRole('button', { name: 'Actualiser les branches' }).click();
+  await expect(dialog.getByLabel('Nouvelle branche', { exact: true })).toHaveValue(
+    'feature/recherche',
+  );
+  await dialog.getByRole('button', { name: 'Créer la session', exact: true }).click();
+  expect((await messages(page)).find((m) => m.type === 'createFeature')).toMatchObject({
+    isolated: true,
+    gitChoice: {
+      baseRef: 'refs/remotes/origin/main',
+      baseCommit: 'b'.repeat(40),
+      branchName: 'feature/recherche',
+      allowCached: false,
+    },
+  });
+});
+
+test('current-folder branch creation blocks local changes and continues after rechecking', async ({
+  page,
+}, info) => {
+  await open(page);
+  await page.evaluate(() => Reflect.set(window, 'gitPreparationPatch', { dirtyCount: 1 }));
+  await page.getByRole('button', { name: 'Préparer ma première session' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Qu’allons-nous faire ?').fill('Correction');
+  await dialog.getByRole('radio', { name: 'Dossier courant' }).check();
+  await dialog.getByLabel('Travail dans le dossier courant').selectOption('new');
+  await dialog
+    .locator('.session-git-preparation')
+    .screenshot({ path: info.outputPath('git-preparation.png') });
+  await expect(
+    dialog.getByRole('button', { name: 'Créer la session', exact: true }),
+  ).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Ouvrir Git', exact: true }).click();
+  expect((await messages(page)).some((m) => m.type === 'openSessionGit')).toBe(true);
+  await page.evaluate(() => Reflect.set(window, 'gitPreparationPatch', { dirtyCount: 0 }));
+  await dialog.getByRole('button', { name: 'Actualiser les branches' }).click();
+  await dialog.getByRole('button', { name: 'Créer la session', exact: true }).click();
+  expect((await messages(page)).find((m) => m.type === 'createFeature')).toMatchObject({
+    isolated: false,
+    gitChoice: { branchName: 'codex/correction' },
+  });
 });

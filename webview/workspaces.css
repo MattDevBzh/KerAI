@@ -830,3 +830,27 @@
   font-size: 10px;
   color: var(--lavender);
 }
+
+.session-git-preparation {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.session-git-preparation .field,
+.session-git-preparation select,
+.session-git-preparation input {
+  min-width: 0;
+  max-width: 100%;
+}
+.session-git-preparation p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.session-git-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -210,6 +210,29 @@ export async function installTicketsHost(page: Page, initial = ticketsState) {
           setState() {},
           postMessage(message: ClientMessage) {
             messages.push(message);
+            if (message.type === 'prepareSessionGit') {
+              const target = targets.find((t) => t.id === message.projectId)!;
+              setTimeout(
+                () =>
+                  window.postMessage(
+                    {
+                      type: 'sessionGitPrepared',
+                      requestId: message.requestId,
+                      preparation: {
+                        id: message.requestId,
+                        branch: target.branch,
+                        head: target.branches[0].commit,
+                        dirtyCount: target.dirtyCount ?? 0,
+                        remotes: [],
+                        branches: target.branches,
+                        defaultRef: `refs/heads/${target.branch}`,
+                      },
+                    },
+                    '*',
+                  ),
+                0,
+              );
+            }
             if (message.type === 'ready')
               setTimeout(() => {
                 window.postMessage({ type: 'state', state }, '*');

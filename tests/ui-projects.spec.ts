@@ -30,6 +30,27 @@ async function hosted(page: Page, empty = false) {
         setState() {},
         postMessage(message: ClientMessage) {
           messages.push(message);
+          if (message.type === 'prepareSessionGit')
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'sessionGitPrepared',
+                    requestId: message.requestId,
+                    preparation: {
+                      id: message.requestId,
+                      branch: 'main',
+                      head: 'a'.repeat(40),
+                      dirtyCount: 0,
+                      remotes: [],
+                      defaultRef: 'refs/heads/main',
+                      branches: [{ name: 'main', ref: 'refs/heads/main', commit: 'a'.repeat(40) }],
+                    },
+                  },
+                  '*',
+                ),
+              0,
+            );
           if (message.type === 'ready') setTimeout(publish, 0);
           if (message.type === 'activateProject') {
             data.projectCatalog!.activeProjectId = message.projectId;

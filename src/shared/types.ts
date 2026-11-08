@@ -367,6 +367,8 @@ export type ClientMessage =
       requestId: string;
     }
   | import('./taskDrafts').TaskDraftCommand
+  | { type: 'prepareSessionGit'; requestId: string; projectId?: string; remote?: string }
+  | { type: 'openSessionGit'; projectId?: string }
   | { type: 'reviewBranches'; requestId: string; projectId?: string }
   | { type: 'resyncState' }
   | {
@@ -429,6 +431,7 @@ export type ClientMessage =
     }
   | {
       type: 'createFeature';
+      gitChoice?: import('./gitPreparation').SessionGitChoice;
       start?: { pair: boolean; progression: import('./sessionProgression').SessionProgression };
       reviewTarget?: import('./reviews').ReviewTarget;
       images?: import('./images').ImageAttachment[];
@@ -629,6 +632,12 @@ export type ClientMessage =
   | { type: 'saveMemory'; entry: MemoryEntry }
   | { type: 'deleteMemory'; id: string };
 export type HostMessage =
+  | {
+      type: 'sessionGitPrepared';
+      requestId: string;
+      preparation?: import('./gitPreparation').GitPreparation;
+      error?: string;
+    }
   | { type: 'startup'; stage: string; error?: string }
   | {
       type: 'sessionQuote';

@@ -413,6 +413,7 @@ export async function activate(context: vscode.ExtensionContext) {
           if (existing) return existing.id;
           const projects = catalog.resolve([plan.targetProjectId]);
           const target = await hub.entry(plan.targetProjectId);
+          if (plan.gitChoice && !plan.isolated) assertSavedEditors(target.service.workspacePath);
           const feature = await target.service.createFeature({
             requestId: plan.requestId,
             title: plan.title,
@@ -420,7 +421,8 @@ export async function activate(context: vscode.ExtensionContext) {
             isolated: plan.isolated,
             projects,
             ticketSource: source,
-            expectedCurrentBranch: plan.isolated ? undefined : targetInfo.branch,
+            gitChoice: plan.gitChoice,
+            expectedCurrentBranch: plan.isolated || plan.gitChoice ? undefined : targetInfo.branch,
             worktreeChoice: plan.isolated
               ? {
                   baseRef: plan.baseRef!,
@@ -1205,6 +1207,37 @@ export async function activate(context: vscode.ExtensionContext) {
       }
       return;
     }
+    if (message.type === 'prepareSessionGit' || message.type === 'openSessionGit') {
+      try {
+        await bootstrap();
+        const projects = catalog.resolve(
+          message.projectId ? [message.projectId] : catalog.state.selectedProjectIds.slice(0, 1),
+        );
+        const entry = await hub.entry(projects[0]?.id);
+        if (message.type === 'openSessionGit') {
+          await vscode.commands.executeCommand(
+            'revealInExplorer',
+            vscode.Uri.file(entry.service.workspacePath),
+          );
+          await vscode.commands.executeCommand('workbench.view.scm');
+        } else {
+          const preparation = await entry.service.withWorkspaceMutation(
+            'Actualisation des branches Git',
+            () => entry.service.workspaces.prepareGit(message.remote),
+          );
+          send({ type: 'sessionGitPrepared', requestId: message.requestId, preparation });
+        }
+      } catch (error) {
+        if (message.type === 'prepareSessionGit')
+          send({
+            type: 'sessionGitPrepared',
+            requestId: message.requestId,
+            error: redact((error as Error).message),
+          });
+        else void vscode.window.showErrorMessage(redact((error as Error).message));
+      }
+      return;
+    }
     if (message.type === 'reviewBranches') {
       try {
         await bootstrap();
@@ -1243,6 +1276,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const entry = await hub.select(projects.map((project) => project.id));
         service = entry.service;
         devops = entry.devops;
+        if (message.gitChoice && !message.isolated) assertSavedEditors(service.workspacePath);
         const created = await service.createFeature({ ...message, projects });
         if (message.requestId)
           send({
@@ -3005,4 +3039,18 @@ export async function deactivate(): Promise<void> {
   service = undefined;
   await lease?.release();
   if (shuttingDown) await shuttingDown;
+}
+
+function assertSavedEditors(root: string) {
+  if (
+    vscode.workspace.textDocuments.some(
+      (document) =>
+        document.isDirty &&
+        document.uri.scheme === 'file' &&
+        (document.uri.fsPath === root || document.uri.fsPath.startsWith(root + path.sep)),
+    )
+  )
+    throw new Error(
+      'Enregistre ou ferme les fichiers modifiés dans l’éditeur avant de changer de branche.',
+    );
 }

@@ -35,6 +35,8 @@ def verify(vsix, root, extract=None, match_build=False):
             for label, bundle in (('host', host), ('webview', ui)):
                 assert marker.encode() in bundle, f'{marker} missing from {label}'
         assert b'reviewBranchesResult' in host and b'reviewBranchesResult' in ui, 'Dedicated review routing missing'
+        for marker in ('prepareSessionGit', 'sessionGitPrepared', 'openSessionGit'):
+            assert marker.encode() in host and marker.encode() in ui, f'{marker} missing from packaged session preparation'
         for marker in ('workshopExport', 'workshopRestorePreview', 'catalogueDeletePreview', 'catalogueDeleteApply'):
             assert marker.encode() in host and marker.encode() in ui, f'{marker} missing'
         workshop_guide = Path('docs/REVISION-ATELIER.md')

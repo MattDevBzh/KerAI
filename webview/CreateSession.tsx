@@ -1,3 +1,4 @@
+import { SessionGitPreparation, type GitSelection } from './SessionGitPreparation';
 import { DocumentImport } from './DocumentImport';
 import { useTaskDraft } from './useTaskDraft';
 import { savedTaskDraft } from './bridge';
@@ -76,6 +77,7 @@ function CreateForm({
         },
       });
   }, [title, description, criteria, team]);
+  const [gitSelection, setGitSelection] = useState<GitSelection>({ ready: false });
   const [startNow, setStartNow] = useState(false);
   const [pairMode, setPairMode] = useState(draftSeed?.pair ?? false);
   const [progression, setProgression] = useState<'guided' | 'balanced'>(
@@ -174,7 +176,9 @@ function CreateForm({
   );
   const multiple = (ids?.length ?? 0) > 1;
   const missing = Boolean(state.projectCatalog && !ids?.length);
+  const needsGitPreparation = !multiple && Boolean(state.workspace.canIsolate);
   const busy =
+    (needsGitPreparation && !gitSelection.ready) ||
     Boolean(state.workspaceOperation) ||
     hasActiveRun(state) ||
     projectPending ||
@@ -200,6 +204,9 @@ function CreateForm({
           if (title.trim() && !busy && !missing && !invalidProposal && !invalidStarter) {
             const request: Extract<ClientMessage, { type: 'createFeature' }> = {
               type: 'createFeature',
+              ...(needsGitPreparation && gitSelection.choice
+                ? { gitChoice: gitSelection.choice }
+                : {}),
               ...(startNow ? { start: { pair: pairMode, progression } } : {}),
               ...(imageDraft.images.length ? { images: imageDraft.images } : {}),
               ...(origin
@@ -523,6 +530,27 @@ function CreateForm({
             )}
           </section>
         )}
+        {multiple ? (
+          <p className="muted">
+            Cette session travaille dans les dossiers sélectionnés. L’isolation en worktree est
+            disponible avec un seul projet.
+          </p>
+        ) : (
+          <WorkspaceChoice
+            state={state}
+            isolated={isolated && Boolean(state.workspace.canIsolate)}
+            onChange={setIsolated}
+          />
+        )}
+        {needsGitPreparation && (
+          <SessionGitPreparation
+            projectId={ids[0]}
+            title={title}
+            isolated={isolated}
+            disabled={Boolean(pending)}
+            onChange={setGitSelection}
+          />
+        )}
         <details className="creation-options">
           <summary>Options de travail</summary>
           <p className="muted">
@@ -538,18 +566,6 @@ function CreateForm({
             onChange={setPermissionMode}
             disabled={Boolean(pending) || imageDraft.loading}
           />
-          {multiple ? (
-            <p className="muted">
-              Cette session travaille dans les dossiers sélectionnés. L’isolation en worktree est
-              disponible avec un seul projet.
-            </p>
-          ) : (
-            <WorkspaceChoice
-              state={state}
-              isolated={isolated && Boolean(state.workspace.canIsolate)}
-              onChange={setIsolated}
-            />
-          )}
         </details>
         <p className="creation-summary" role="status">
           {permissionMode === 'manual'

@@ -1,3 +1,4 @@
+import { SessionGitPreparation, type GitSelection } from './SessionGitPreparation';
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight,
@@ -14,7 +15,6 @@ import {
 import type { DevOpsState, DevOpsTicket, Feature } from '../src/shared/types';
 import {
   defaultTicketFilters,
-  ticketBranchName,
   ticketContext,
   ticketLinkProjectKey,
   ticketProjectKey,
@@ -724,11 +724,7 @@ function TicketPreparationForm({
   const [targetId, setTargetId] = useState(preparation.targets[0]?.id ?? '');
   const target = preparation.targets.find((item) => item.id === targetId);
   const [isolated, setIsolated] = useState(Boolean(target?.canIsolate));
-  const initialBranch =
-    target?.branches.find((branch) => branch.ref === `refs/heads/${target.branch}`) ??
-    target?.branches[0];
-  const [baseRef, setBaseRef] = useState(initialBranch?.ref ?? '');
-  const [branchName, setBranchName] = useState(ticketBranchName(ticket));
+  const [gitSelection, setGitSelection] = useState<GitSelection>({ ready: false });
   const [instructions, setInstructions] = useState('');
   const [commentIds, setCommentIds] = useState<number[]>([]);
   const [pending, setPending] = useState(false);
@@ -737,13 +733,12 @@ function TicketPreparationForm({
   useEffect(() => {
     if (result) setPending(false);
   }, [result]);
-  const branch = target?.branches.find((item) => item.ref === baseRef);
   const disabled = state.busy || pending;
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        if (disabled || !target) return;
+        if (disabled || !target || (target.canIsolate && !gitSelection.ready)) return;
         setPending(true);
         dispatch({
           type: 'devopsCreateFeature',
@@ -755,7 +750,7 @@ function TicketPreparationForm({
             targetProjectId: target.id,
             title,
             isolated,
-            ...(isolated ? { baseRef, baseCommit: branch?.commit, branchName } : {}),
+            ...(gitSelection.choice ? { gitChoice: gitSelection.choice } : {}),
             commentIds,
             instructions,
           },
@@ -795,12 +790,6 @@ function TicketPreparationForm({
                 const next = preparation.targets.find((item) => item.id === event.target.value)!;
                 setTargetId(next.id);
                 setIsolated(next.canIsolate);
-                setBaseRef(
-                  (
-                    next.branches.find((branch) => branch.ref === `refs/heads/${next.branch}`) ??
-                    next.branches[0]
-                  )?.ref ?? '',
-                );
               }}
             >
               {preparation.targets.map((item) => (
@@ -836,51 +825,17 @@ function TicketPreparationForm({
               Dossier courant
             </label>
           </fieldset>
-          {isolated ? (
-            <>
-              <label>
-                Branche de départ
-                <select
-                  required
-                  value={baseRef}
-                  disabled={disabled}
-                  onChange={(event) => setBaseRef(event.target.value)}
-                >
-                  {target?.branches.map((branch) => (
-                    <option key={branch.ref} value={branch.ref}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-                <small>
-                  Commit sélectionné : {branch?.commit.slice(0, 12)} · références déjà présentes
-                  localement
-                </small>
-              </label>
-              <label>
-                Nouvelle branche
-                <input
-                  required
-                  maxLength={200}
-                  value={branchName}
-                  disabled={disabled}
-                  onChange={(event) => setBranchName(event.target.value)}
-                />
-              </label>
-              <p className="devops-notice">
-                Un dossier et une branche dédiés seront créés à partir de ce commit. Les changements
-                non commités restent dans le dossier source.
-              </p>
-            </>
+          {target?.canIsolate ? (
+            <SessionGitPreparation
+              key={target.id}
+              projectId={target.id}
+              title={`ticket-${ticket.id}-${ticket.title}`}
+              isolated={isolated}
+              disabled={disabled}
+              onChange={setGitSelection}
+            />
           ) : (
-            <p className="devops-notice">
-              La session utilisera les fichiers et les changements présents dans {target?.name}, sur
-              la branche {target?.branch}.
-              {target?.dirtyCount !== undefined
-                ? ` ${target.dirtyCount} fichier(s) modifié(s) ou non suivi(s).`
-                : ''}
-              {target?.isolationReason ? ` Worktree indisponible : ${target.isolationReason}` : ''}
-            </p>
+            <p>{target?.isolationReason} La session utilise le dossier courant.</p>
           )}
           <label>
             Consignes complémentaires
@@ -966,7 +921,7 @@ function TicketPreparationForm({
             className="primary"
             type="submit"
             disabled={
-              disabled || !title.trim() || !target || (isolated && (!branch || !branchName.trim()))
+              disabled || !title.trim() || !target || (target.canIsolate && !gitSelection.ready)
             }
           >
             {pending ? <LoaderCircle size={16} className="ticket-spinner" /> : <Code2 size={16} />}{' '}

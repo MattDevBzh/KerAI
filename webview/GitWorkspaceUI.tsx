@@ -94,8 +94,8 @@ export function WorkspaceChoice({
       <p className="workspace-choice-note">
         {isolated ? (
           <>
-            <ShieldCheck size={13} /> Départ du dernier commit de la branche courante uniquement.
-            Les changements non commités restent dans le dossier source ; ils ne sont pas copiés.
+            <ShieldCheck size={13} /> Départ du commit de la branche sélectionnée. Les changements
+            non commités restent dans le dossier source ; ils ne sont pas copiés.
           </>
         ) : (
           <>

@@ -58,6 +58,7 @@ export interface TicketPreparation {
   targets: TicketTarget[];
 }
 export interface TicketDevelopmentPlan {
+  gitChoice?: import('./gitPreparation').SessionGitChoice;
   requestId: string;
   sourceProjectKey: string;
   snapshotId: string;

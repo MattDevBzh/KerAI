@@ -643,3 +643,59 @@ it('refuses current-folder creation if its branch changed after the ticket prepa
   expect(f.service.engine.features).toHaveLength(0);
   expect(f.inputs).toEqual([]);
 });
+
+it('prepares a named current branch, saves the session before execution and retries a failed save without another checkout', async () => {
+  const f = await fixture();
+  const preparation = await f.service.workspaces.prepareGit();
+  const base = preparation.branches[0];
+  const input = {
+    title: 'Prepared current',
+    description: '',
+    isolated: false,
+    requestId: randomUUID(),
+    gitChoice: {
+      preparationId: preparation.id,
+      baseRef: base.ref,
+      baseCommit: base.commit,
+      branchName: 'codex/prepared-current',
+      allowCached: false,
+    },
+  };
+  const save = vi.spyOn(f.service, 'persist').mockRejectedValueOnce(new Error('Disk full'));
+  await expect(f.service.createFeature(input)).rejects.toThrow('Disk full');
+  expect(f.inputs).toHaveLength(0);
+  const session = await f.service.createFeature(input);
+  expect(session.branch).toBe('codex/prepared-current');
+  expect(
+    f.service.engine.features.filter((item) => item.creationRequestId === input.requestId),
+  ).toHaveLength(1);
+  expect(
+    (await f.service.store.load()).features.find((item) => item.id === session.id)?.branch,
+  ).toBe(session.branch);
+  expect((await git(f.workspace, 'branch', '--show-current')).trim()).toBe(session.branch);
+  save.mockRestore();
+});
+
+it('does not publish a session or invoke an agent when current branch preparation is blocked', async () => {
+  const f = await fixture();
+  const p = await f.service.workspaces.prepareGit();
+  const base = p.branches[0];
+  await writeFile(join(f.workspace, 'human.txt'), 'Keep');
+  await expect(
+    f.service.createFeature({
+      title: 'Blocked',
+      description: '',
+      isolated: false,
+      gitChoice: {
+        preparationId: p.id,
+        baseRef: base.ref,
+        baseCommit: base.commit,
+        branchName: 'codex/blocked',
+        allowCached: false,
+      },
+    }),
+  ).rejects.toThrow('fichier');
+  expect(f.service.engine.features).toHaveLength(0);
+  expect(f.inputs).toHaveLength(0);
+  expect((await git(f.workspace, 'branch', '--show-current')).trim()).toBe('fixture');
+});

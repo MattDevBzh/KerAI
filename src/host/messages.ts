@@ -1,3 +1,4 @@
+import { sessionGitChoiceSchema } from '../core/gitPreparationSchema';
 import { DOCUMENT_FORMATS } from '../shared/documentation';
 import { instructionCommand } from '../core/instructions';
 import { taskDraftMessages } from '../core/taskDrafts';
@@ -40,6 +41,15 @@ const id = z.string().min(1).max(150),
 const step = { featureId: id, stepId: id };
 export const messageSchema = z.discriminatedUnion('type', [
   ...taskDraftMessages,
+  z
+    .object({
+      type: z.literal('prepareSessionGit'),
+      requestId: z.string().uuid(),
+      projectId: id.optional(),
+      remote: z.string().min(1).max(100).optional(),
+    })
+    .strict(),
+  z.object({ type: z.literal('openSessionGit'), projectId: id.optional() }).strict(),
   instructionCommand,
   z
     .object({ type: z.literal('quoteEditorSelection'), featureId: id, stepId: id, attemptId: id })
@@ -204,6 +214,7 @@ export const messageSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('createFeature'),
+      gitChoice: sessionGitChoiceSchema.optional(),
       start: z
         .object({ pair: z.boolean(), progression: z.enum(['guided', 'balanced']) })
         .strict()

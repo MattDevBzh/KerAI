@@ -40,6 +40,36 @@ async function hosted(page: Page, state = fresh()) {
         setState: (v: object) => (saved = v),
         postMessage: (m: ClientMessage) => {
           messages.push(m);
+          if (m.type === 'prepareSessionGit')
+            setTimeout(
+              () =>
+                window.postMessage(
+                  {
+                    type: 'sessionGitPrepared',
+                    requestId: m.requestId,
+                    preparation: {
+                      id: m.requestId,
+                      branch: 'main',
+                      head: 'a'.repeat(40),
+                      dirtyCount: 0,
+                      remotes: ['origin'],
+                      remote: 'origin',
+                      fetchedAt: '2026-11-08T12:00:00Z',
+                      defaultRef: 'refs/remotes/origin/main',
+                      branches: [
+                        {
+                          name: 'origin/main',
+                          ref: 'refs/remotes/origin/main',
+                          commit: 'b'.repeat(40),
+                        },
+                      ],
+                      ...Reflect.get(window, 'gitPreparationPatch'),
+                    },
+                  },
+                  '*',
+                ),
+              0,
+            );
           if (m.type === 'saveAutopilot' && m.requestId)
             setTimeout(
               () => window.postMessage({ type: 'autopilotSaved', requestId: m.requestId }, '*'),

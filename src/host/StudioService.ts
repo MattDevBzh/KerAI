@@ -620,6 +620,7 @@ export class StudioService extends EventEmitter {
     }
   }
   async createFeature(input: {
+    gitChoice?: import('../shared/gitPreparation').SessionGitChoice;
     reviewTarget?: import('../shared/reviews').ReviewTarget;
     images?: import('../shared/images').ImageAttachment[];
     permissionMode?: NativePermissionMode;
@@ -711,6 +712,13 @@ export class StudioService extends EventEmitter {
       const criteria = input.criteria
         ? discussionFeaturePlanSchema.shape.criteria.parse(input.criteria)
         : [];
+      if (input.gitChoice) {
+        if (input.reviewTarget || (input.projects?.length ?? 0) > 1)
+          throw new Error(
+            'La création de branche nécessite une session de développement à un seul projet.',
+          );
+        await this.workspaces.validateGitChoice(input.gitChoice, !input.isolated);
+      }
       const info = await gitInfo(this.workspacePath);
       this.assertTrusted();
       this.state.workspace.branch = info.branch;
@@ -766,8 +774,17 @@ export class StudioService extends EventEmitter {
       }
       feature.budget = structuredClone(this.state.settings.budgetDefaults ?? defaultBudget);
       if (input.isolated) {
-        feature.worktree = await this.workspaces.createWorktree(feature, input.worktreeChoice);
+        feature.worktree = await this.workspaces.createWorktree(
+          feature,
+          input.gitChoice ?? input.worktreeChoice,
+        );
         feature.branch = feature.worktree.branch;
+      }
+      if (input.gitChoice && !input.isolated) {
+        await this.workspaces.createCurrentBranch(input.gitChoice);
+        feature.branch = input.gitChoice.branchName;
+        if (feature.projects?.[0]) feature.projects[0].branch = feature.branch;
+        this.state.workspace.branch = feature.branch;
       }
       this.engine.features.push(feature);
       await this.persist();
