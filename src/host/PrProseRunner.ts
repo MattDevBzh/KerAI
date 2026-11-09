@@ -48,6 +48,7 @@ export async function runPrProse(input: {
   const result = await input.adapter.run(
     {
       mode: 'discussion',
+      observation: true,
       feature,
       step: feature.steps[0],
       attempt,

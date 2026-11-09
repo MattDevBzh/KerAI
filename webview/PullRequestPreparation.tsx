@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AgentProfile } from '../src/shared/types';
 import type { DevOpsClientMessage, DevOpsState } from '../src/shared/devops';
 import { defaultPullRequestSettings, type PrReviewer } from '../src/shared/pullRequestPreparation';
+import { DevOpsActionError } from './DevOpsActionError';
 
 export function PullRequestPreparation({
   children,
@@ -32,25 +33,57 @@ export function PullRequestPreparation({
   isDraft: boolean;
   setIsDraft: (value: boolean) => void;
 }) {
-  const [settings, setSettings] = useState(state.prSettings ?? defaultPullRequestSettings);
+  const saved = state.prSettings ?? defaultPullRequestSettings;
+  const [settings, setSettings] = useState(saved);
+  const previousSaved = useRef(saved);
+  useEffect(() => {
+    const previous = previousSaved.current;
+    previousSaved.current = saved;
+    setSettings((current) =>
+      JSON.stringify(current) === JSON.stringify(previous) ? saved : current,
+    );
+  }, [saved]);
   const [query, setQuery] = useState('');
   const attempted = useRef(false),
     received = useRef(''),
     baseline = useRef<string | undefined>(undefined);
-  const busy = state.busy;
+  const busy = state.busy || !!state.prGenerating;
   const settingsChanged =
     JSON.stringify(settings) !== JSON.stringify(state.prSettings ?? defaultPullRequestSettings);
-  const available = agents.some((agent) => agent.id === state.prSettings?.agentId);
-  const canGenerate =
-    !!state.deliverySession &&
-    !!featureId &&
-    !!target &&
-    state.authenticated &&
-    !!state.snapshot &&
-    !state.snapshot.files.length &&
-    !busy &&
-    !settingsChanged &&
-    available;
+  const available = agents.some((agent) => agent.id === settings.agentId);
+  const existing =
+    state.existingPr?.sourceBranch === `refs/heads/${state.snapshot?.branch}` &&
+    state.existingPr.targetBranch === `refs/heads/${target.trim()}`
+      ? state.existingPr
+      : undefined;
+  const settingsBlocker = !state.config
+    ? 'Configure d’abord le dépôt Azure DevOps.'
+    : !available
+      ? 'L’agent de rédaction est indisponible. Choisis un profil disponible dans les réglages de PR.'
+      : !settings.target.trim()
+        ? 'Renseigne une branche cible par défaut avant d’enregistrer.'
+        : undefined;
+  const generationBlocker = busy
+    ? 'Une opération est en cours. Attends sa fin ou arrête la rédaction.'
+    : (settingsBlocker ??
+      (!state.deliverySession || !featureId
+        ? 'Ouvre la préparation depuis la session pour rédiger à partir de sa branche.'
+        : !state.authenticated
+          ? 'Connecte Azure DevOps pour comparer la branche cible et rechercher les relecteurs.'
+          : !state.snapshot
+            ? 'Actualise les fichiers du dépôt avant de lancer la rédaction.'
+            : state.snapshot.files.length
+              ? 'Termine le commit des fichiers ci-dessus avant de lancer la rédaction.'
+              : !target.trim()
+                ? 'Renseigne la branche cible de cette PR.'
+                : target.trim() === state.snapshot.branch
+                  ? 'Choisis une branche cible différente de la branche de session.'
+                  : existing
+                    ? `La PR #${existing.id} existe déjà pour ces branches. Utilise « Intervenir sur une PR » pour la mettre à jour.`
+                    : settingsChanged
+                      ? 'Enregistre tes réglages avant de lancer la rédaction.'
+                      : undefined));
+  const canGenerate = !generationBlocker;
   function generate() {
     attempted.current = true;
     baseline.current = `${title}\0${description}`;
@@ -63,10 +96,10 @@ export function PullRequestPreparation({
       !title &&
       !description &&
       canGenerate &&
-      !state.existingPr
+      !existing
     )
       generate();
-  }, [canGenerate, title, description, state.prGeneration, state.existingPr]);
+  }, [canGenerate, title, description, state.prGeneration, existing]);
   const generation = state.prGeneration;
   const current =
     generation?.featureId === featureId &&
@@ -147,38 +180,31 @@ export function PullRequestPreparation({
           Utiliser les relecteurs de cette PR par défaut
         </button>
         <button
-          disabled={
-            busy ||
-            !state.config ||
-            !settings.target ||
-            !agents.some((agent) => agent.id === settings.agentId)
-          }
+          disabled={busy || !!settingsBlocker}
+          aria-describedby="pr-settings-blocker"
           onClick={() => dispatch({ type: 'deliverySavePrSettings', settings })}
         >
           Enregistrer les réglages de PR
         </button>
+        {settingsBlocker && <p id="pr-settings-blocker">{settingsBlocker}</p>}
+        <DevOpsActionError state={state} actions={['deliverySavePrSettings']} />
       </details>
       <section aria-label="Rédaction de la PR">
         <h3>Rédaction avec ton agent</h3>
-        {!state.deliverySession && (
-          <p>Ouvre la préparation depuis la session pour rédiger à partir de sa branche.</p>
+        {generationBlocker && !state.prGenerating && (
+          <p id="pr-generation-blocker">{generationBlocker}</p>
         )}
-        {!!state.snapshot?.files.length && (
-          <p>
-            Termine le commit des fichiers ci-dessus pour que l’agent décrive le code qui sera
-            réellement livré.
-          </p>
-        )}
-        {!state.authenticated && (
-          <p>Connecte Azure DevOps pour comparer la branche cible et rechercher les relecteurs.</p>
-        )}
-        {settingsChanged && <p>Enregistre tes réglages avant de lancer la rédaction.</p>}
         <p>
           La rédaction utilise le diff commité et les preuves de la session. Elle consomme les
           crédits du fournisseur choisi.
         </p>
         <div className="devops-actions">
-          <button disabled={!canGenerate} onClick={generate}>
+          <button
+            className="delivery-primary"
+            disabled={!canGenerate}
+            aria-describedby="pr-generation-blocker"
+            onClick={generate}
+          >
             {generation || title || description ? 'Régénérer avec l’agent' : 'Générer avec l’agent'}
           </button>
           {state.prGenerating && (
@@ -187,7 +213,10 @@ export function PullRequestPreparation({
             </button>
           )}
         </div>
-        {state.prGenerating && <p role="status">L’agent rédige le titre et la description…</p>}
+        {state.prGenerating && (
+          <p role="status">{state.prProgress ?? 'L’agent rédige le titre et la description…'}</p>
+        )}
+        <DevOpsActionError state={state} actions={['deliveryGeneratePr']} />
         {generation && (
           <details
             className="devops-card"
@@ -232,6 +261,10 @@ export function PullRequestPreparation({
           Rechercher dans Azure DevOps
         </button>
         <p>La recherche nécessite le droit Identity en lecture sur ton jeton Azure DevOps.</p>
+        {query.trim().length < 2 && (
+          <p>Saisis au moins deux caractères pour rechercher un relecteur.</p>
+        )}
+        <DevOpsActionError state={state} actions={['deliverySearchReviewers']} />
         {state.reviewerResults
           ?.filter((item) => !reviewers.some((selected) => selected.id === item.id))
           .map((item) => (

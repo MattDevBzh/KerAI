@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, writeFile, readFile, rm, unlink, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, unlink, symlink, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -9,6 +9,7 @@ import {
   parseDeliveryRules,
   suggestCommitTitle,
 } from '../src/host/DeliveryService';
+import { deliveryGitError } from '../src/host/DeliveryGitErrors';
 const exec = promisify(execFile);
 const roots: string[] = [];
 async function fixture() {
@@ -29,6 +30,37 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 describe('delivery private index commits', () => {
+  it('explains missing Git identity and leaves the branch unchanged', async () => {
+    const { root, git, service } = await fixture();
+    await writeFile(path.join(root, 'selected.txt'), 'changed\n');
+    await git('config', 'user.name', '');
+    const { preview } = await service.previewCommit(['selected.txt'], '', 'fix: selected');
+    await expect(service.commit(preview)).rejects.toThrow('user.name et user.email');
+    expect((await git('rev-parse', 'HEAD')).trim()).toBe(preview.head);
+    expect((await service.inspect()).files.map((file) => file.path)).toContain('selected.txt');
+  });
+  it('explains an existing index lock without deleting it or creating a commit', async () => {
+    const { root, git, service } = await fixture();
+    await writeFile(path.join(root, 'selected.txt'), 'changed\n');
+    const { preview } = await service.previewCommit(['selected.txt'], '', 'fix: selected');
+    await writeFile(path.join(root, '.git', 'index.lock'), 'other process');
+    await expect(service.commit(preview)).rejects.toThrow('index Git est verrouillé');
+    expect((await git('rev-parse', 'HEAD')).trim()).toBe(preview.head);
+    expect(await readFile(path.join(root, '.git', 'index.lock'), 'utf8')).toBe('other process');
+  });
+  it('keeps a commit preview valid when an editor only refreshes Git index timestamps', async () => {
+    const { root, git, service } = await fixture();
+    await writeFile(path.join(root, 'selected.txt'), 'changed\n');
+    const { preview } = await service.previewCommit(['selected.txt'], '', 'fix: selected');
+    const indexBefore = await readFile(path.join(root, '.git', 'index'));
+    const later = new Date(Date.now() + 5000);
+    await utimes(path.join(root, 'other.txt'), later, later);
+    await git('update-index', '--refresh').catch(() => undefined); // selected.txt still needs a commit.
+    expect(await readFile(path.join(root, '.git', 'index'))).not.toEqual(indexBefore);
+    expect((await service.inspect()).fingerprint).toBe(preview.fingerprint);
+    await service.commit(preview);
+    expect(await git('show', 'HEAD:selected.txt')).toBe('changed\n');
+  });
   it('inspects root and nested changes with the real Git path syntax without changing the index', async () => {
     const { root, service } = await fixture();
     await writeFile(path.join(root, 'selected.txt'), 'changed\n');
@@ -138,14 +170,36 @@ describe('delivery private index commits', () => {
     const calls: string[][] = [];
     const wrapped = new DeliveryService(root, async (args, options) => {
       calls.push(args);
-      if (args.includes('push')) return { code: 0, stdout: '', stderr: '' };
+      // Keep the reviewed HTTPS destination in the preview; replace only the transport in this fixture.
+      if (args.includes('push'))
+        return service.run(
+          args.map((arg) => (arg === preview.remote ? remote : arg)),
+          options,
+        );
       return service.run(args, options);
     });
     await wrapped.push(preview);
     const call = calls.find((a) => a.includes('push'))!;
     expect(call).toContain(`${preview.head}:refs/heads/main`);
     expect(call.join(' ')).not.toContain('--force');
+    expect(
+      (await exec('git', ['--git-dir', remote, 'rev-parse', 'refs/heads/main'])).stdout.trim(),
+    ).toBe(preview.head);
   });
+});
+it('explains Git authentication and push rejections while hiding credentials in diagnostics', () => {
+  const error = deliveryGitError(['-c', 'push.followTags=false', 'push'], {
+    code: 128,
+    stderr:
+      'fatal: Authentication failed for https://user:private-token@example.com/repo.git\nAuthorization: Basic dXNlcjpwYXNz',
+  });
+  expect(error.message).toContain('ne connecte pas automatiquement Git');
+  expect(error.message).toContain('Étape : push');
+  expect(error.message).not.toContain('private-token');
+  expect(error.message).not.toContain('dXNlcjpwYXNz');
+  expect(
+    deliveryGitError(['push'], { code: 1, stderr: '[rejected] main (non-fast-forward)' }).message,
+  ).toContain('intègre-les');
 });
 describe('editable deterministic title rules', () => {
   it('uses fenced catalogue body rules and never executes prose', () => {

@@ -88,7 +88,9 @@ test('menus Azure DevOps et livraison fonctionnent sans session, configuration l
   await expect(page.locator('input[type=password]')).toHaveCount(0);
   await navigate(page, 'Livraison');
   await expect(page.getByRole('heading', { name: 'Agent de livraison' })).toBeVisible();
-  await expect(page.getByText('codex/my-feature', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('#delivery-commit').getByText('codex/my-feature', { exact: true }),
+  ).toBeVisible();
   await page.getByText('Nouveaux fichiers', { exact: true }).click();
   await expect(page.getByText('new content', { exact: true })).toBeVisible();
 });

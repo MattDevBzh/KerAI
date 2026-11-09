@@ -36,7 +36,17 @@ La sélection porte sur **le fichier complet dans son état de travail actuel**,
 
 Les hooks, filtres externes et la signature Git ne sont pas exécutés par ce mode déterministe. Si un projet exige ces mécanismes, utiliser son processus de livraison dans le terminal. Un échec exceptionnel après mise à jour de HEAD mais avant remplacement de l’index est signalé explicitement ; le fichier `index.lock` reste disponible pour récupération et il ne faut pas relancer le commit.
 
-L’empreinte couvre HEAD, branche, statut, contenu de l’index, contenus/modes des fichiers modifiés et destination du remote. Un changement impose un nouvel aperçu. Les fichiers spéciaux, conflits et sous-modules sont bloqués ; les chemins sortant du dépôt et les inventaires trop volumineux sont refusés. Limites : 2 000 fichiers inspectés, 200 sélectionnés, 8 Mo/fichier et 64 Mo au total ; les diff affichés sont tronqués à 100 000 caractères.
+L’empreinte couvre HEAD, branche, statut, entrées et indicateurs de l’index, contenus/modes des fichiers modifiés et destination du remote. Un changement de contenu ou de sélection indexée impose un nouvel aperçu. Une simple actualisation des dates et caches de l’index par l’éditeur ne l’invalide pas. Les fichiers spéciaux, conflits et sous-modules sont bloqués ; les chemins sortant du dépôt et les inventaires trop volumineux sont refusés. Limites : 2 000 fichiers inspectés, 200 sélectionnés, 8 Mo/fichier et 64 Mo au total ; les diff affichés sont tronqués à 100 000 caractères.
+
+### Comprendre le résultat d’une action
+
+La progression **Commit local → Publier la branche → Pull request** permet d’atteindre chaque étape. Les réglages avancés restent repliables et la création de PR est initialement repliée quand des fichiers attendent leur commit ou qu’une PR existe déjà. Les aperçus de commit, push et PR apparaissent dans leur propre étape.
+
+La validation indique explicitement l’attente de confirmation dans VS Code, puis l’exécution, la réussite, l’annulation ou l’échec. Le commit créé et le commit envoyé sont identifiés par leur SHA ; ces résultats restent visibles dans la fenêtre. Le push rappelle que les fichiers non commités ne seront pas envoyés. Une annulation conserve l’aperçu et ne crée aucun commit.
+
+Les erreurs Git distinguent notamment l’identité auteur manquante, un index verrouillé, l’authentification et une branche distante en avance. Le détail Git est borné et les identifiants reconnus sont masqués. Le jeton de connexion Azure DevOps et les identifiants utilisés par Git sont distincts : reconnecter Azure dans KerAI ne répare pas automatiquement un échec de fetch ou de push. Les erreurs de droits Azure conservent le statut HTTP et le message utile du serveur, sans renvoyer le jeton.
+
+Un bouton de préparation indisponible explique le prérequis manquant près du formulaire. Les étapes de récupération Git, rédaction et vérification sont affichées pendant la préparation ; les erreurs et les brouillons restent consultables. **Actualiser** peut réinspecter le dépôt même si sa branche ne correspond plus à la session ; les écritures restent bloquées tant que cette incohérence persiste.
 
 ## Profil et conversation
 
@@ -102,6 +112,10 @@ L’agent reçoit les blocs du diff publié, identifiés et positionnés par Ker
 Les fils créés sont suivis localement par session et par PR. Une relance reconnaît une annotation identique et peut mettre à jour son propre texte si personne n’a repris le fil. KerAI ne modifie pas un commentaire humain, ne répond pas automatiquement aux humains et ne réinitialise pas le statut d’un fil existant. Une réponse, un changement de texte/statut ou un déplacement ambigu impose une intervention manuelle.
 
 Les commits source/cible, la base commune, l’itération et les champs sont revérifiés après rédaction et avant les écritures. Les PR de forks, d’une autre branche ou inactives sont refusées. Les publications se font une à une : un échec ou un changement concurrent arrête la suite sans annuler les opérations réussies. Un ajout dont le résultat reste incertain n’est pas réémis ; vérifie la PR dans Azure. Le suivi local doit être conservé pour reconnaître les annotations lors des prochaines interventions.
+
+Un refus HTTP explicite de publication permet de corriger la cause et de réessayer, tandis qu’une coupure réseau ou une erreur serveur ambiguë garde la protection contre les doublons. Un échec d’enregistrement local avant l’envoi ne bloque pas les tentatives suivantes. Les fils automatiques Azure sans statut et les commentaires supprimés sans contenu sont acceptés en lecture ; une mission limitée au titre ou à la description ne lit pas les discussions. Si aucun bloc ne peut être annoté, une mission de commentaires seule explique cette limite avant d’appeler l’agent.
+
+Le format des fils automatiques est illustré dans [Pull Request Threads — List, API 7.1](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/list?view=azure-devops-rest-7.1).
 
 Limites : 400 fichiers, 100 blocs textuels, 100 000 caractères, 50 propositions ; chemins sensibles et renommages exclus avec avertissement, description modifiée limitée à 4 000 caractères. Une annotation explicative ne vaut pas audit de sécurité. Les permissions Azure doivent autoriser la modification de PR et les discussions. Les tests automatisés emploient Azure et un agent simulés ; la recette du modèle et des droits réels reste à effectuer sur ton projet.
 

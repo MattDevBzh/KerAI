@@ -570,3 +570,187 @@ html[data-studio-theme-effective='auto']
 .pr-session-context label {
   overflow-wrap: anywhere;
 }
+
+.delivery-workspace {
+  max-width: 1100px;
+  gap: 18px;
+}
+.delivery-workspace .delivery-session-context {
+  border-top: 3px solid var(--lavender);
+  background: linear-gradient(
+    130deg,
+    color-mix(in srgb, var(--lavender) 8%, var(--panel)),
+    var(--panel) 65%
+  );
+  padding: 26px;
+}
+.delivery-eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.delivery-session-context h2 {
+  font-size: 24px;
+  margin: 8px 0 18px;
+}
+.delivery-workspace .delivery-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 20px 0;
+  list-style: none;
+}
+.delivery-workspace .delivery-stages li {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.delivery-stages a {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 16px 12px;
+  color: inherit;
+  text-decoration: none;
+  height: 100%;
+  box-sizing: border-box;
+}
+.delivery-stage-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+.delivery-stages .done .delivery-stage-icon {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, var(--panel));
+}
+.delivery-stages strong {
+  font-size: 13px;
+}
+.delivery-stage-number {
+  color: var(--muted);
+  font-size: 11px;
+  margin-right: 3px;
+}
+.delivery-stages small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.delivery-step {
+  scroll-margin-top: 20px;
+}
+.delivery-step > h2,
+.delivery-step > summary {
+  margin-top: 0;
+  font-size: 17px;
+}
+.delivery-workspace .devops-columns {
+  grid-template-columns: minmax(0, 1fr);
+}
+.delivery-workspace .delivery-primary {
+  background: var(--coral);
+  color: var(--on-accent);
+  border-color: var(--coral);
+  font-weight: 600;
+  padding: 10px 16px;
+}
+.delivery-workspace :is(button, a, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.delivery-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+.delivery-warning {
+  border-left: 3px solid var(--apricot);
+  padding: 10px 14px;
+  background: var(--panel-soft);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+}
+.delivery-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--panel-soft);
+  margin-block: 12px;
+}
+.delivery-feedback > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.delivery-feedback p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+.delivery-feedback strong {
+  font-size: 13px;
+}
+.delivery-feedback.success {
+  border-color: var(--green);
+}
+.delivery-feedback.success > svg {
+  color: var(--green);
+}
+.delivery-feedback.error {
+  border-color: var(--error);
+  background: var(--error-bg);
+}
+.delivery-feedback.error > svg {
+  color: var(--error);
+}
+.delivery-feedback.running > svg {
+  color: var(--lavender);
+}
+.delivery-workspace .delivery-preview {
+  margin-top: 20px;
+}
+.delivery-workspace .devops-error {
+  white-space: pre-wrap;
+}
+.delivery-workspace .delivery-files label {
+  padding: 12px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.delivery-workspace .delivery-files label:has(input:checked) {
+  background: color-mix(in srgb, var(--lavender) 9%, var(--panel));
+}
+.delivery-workspace .delivery-files {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 16px 0;
+}
+@container studio (max-width: 650px) {
+  .delivery-workspace .delivery-stages {
+    grid-template-columns: 1fr;
+  }
+  .delivery-workspace .delivery-session-context {
+    padding: 18px;
+  }
+  .delivery-session-context h2 {
+    font-size: 20px;
+  }
+  .delivery-workspace .delivery-files label {
+    flex-wrap: wrap;
+  }
+  .delivery-workspace .devops-actions > button {
+    flex: 1 1 auto;
+  }
+}

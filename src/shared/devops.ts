@@ -119,10 +119,23 @@ export interface DeliveryChatEntry {
   at: string;
 }
 export interface DevOpsState {
+  deliveryProgress?: { kind: DeliveryPreview['kind']; message: string };
+  deliveryResults?: Partial<
+    Record<
+      DeliveryPreview['kind'],
+      {
+        status: 'success' | 'cancelled' | 'error';
+        message: string;
+        head?: string;
+        branch?: string;
+      }
+    >
+  >;
   prAdministration?: import('./prAdministration').PrAdministrationState;
   deliverySession?: import('./pullRequestPreparation').DeliverySession;
   prSettings?: import('./pullRequestPreparation').PullRequestSettings;
   prGenerating?: boolean;
+  prProgress?: string;
   prGeneration?: import('./pullRequestPreparation').PrGeneration;
   reviewerResults?: import('./pullRequestPreparation').PrReviewer[];
   existingPr?: DevOpsPullRequest;
@@ -138,6 +151,7 @@ export interface DevOpsState {
   account?: string;
   busy: boolean;
   error?: string;
+  errorAction?: DevOpsClientMessage['type'];
   notices: string[];
   tickets: DevOpsTicket[];
   pullRequests: DevOpsPullRequest[];

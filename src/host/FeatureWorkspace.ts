@@ -1,4 +1,5 @@
 import type { GitPreparation, SessionGitChoice } from '../shared/gitPreparation';
+import { deliveryGitError } from './DeliveryGitErrors';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, type Stats } from 'node:fs';
 import {
@@ -280,6 +281,8 @@ export class FeatureWorkspace {
   }
   private async checkedGit(root: string, args: string[], config: string[] = []): Promise<Buffer> {
     const result = await this.git(root, args, config);
+    if (result.code !== 0 && args[0] === 'fetch')
+      throw deliveryGitError(args, { code: result.code, stderr: machineText(result.stderr) });
     if (result.code !== 0)
       throw new Error(`Git : ${redact(machineText(result.stderr).trim()).slice(0, 2000)}`);
     return result.stdout;

@@ -93,6 +93,10 @@ async function open(page: Page) {
       const publish = () => window.postMessage({ type: 'devopsState', state: active }, '*');
       Object.assign(window, {
         adminMessages: messages,
+        updateAdmin: (patch: Partial<DevOpsState>) => {
+          active = { ...active, ...patch };
+          publish();
+        },
         changePrContext: () => {
           catalog.items[0].digest = 'd'.repeat(64);
           catalog.items[0].content = 'SEC-42 : règle actualisée.';
@@ -348,4 +352,53 @@ test('chooses session documents and exchanges, previews exact texts, and explici
     true,
   );
   await page.screenshot({ path: test.info().outputPath('pr-context-mobile.png'), fullPage: true });
+});
+
+test('explains disabled actions, allows clearing a suggested PR, and surfaces host errors beside preparation', async ({
+  page,
+}) => {
+  await open(page);
+  const admin = page.locator('.pr-administration');
+  await admin.getByLabel('Numéro de la PR à accompagner').fill('');
+  await expect(admin.getByLabel('Numéro de la PR à accompagner')).toHaveValue('');
+  await expect(
+    admin.getByRole('button', { name: 'Préparer les interventions', exact: true }),
+  ).toBeDisabled();
+  await expect(admin).toContainText('Renseigne un numéro de PR entier et positif');
+  await admin.getByLabel('Numéro de la PR à accompagner').fill('42');
+  await page.evaluate(() => Reflect.get(window, 'updateAdmin')({ authenticated: false }));
+  await expect(admin).toContainText('Connecte Azure DevOps dans la section');
+  await page.evaluate(() =>
+    Reflect.get(
+      window,
+      'updateAdmin',
+    )({
+      authenticated: true,
+      error: 'Le dépôt a changé. Rouvre la session.',
+      errorAction: 'deliveryPrAdminPreview',
+    }),
+  );
+  await expect(admin.getByRole('alert')).toContainText('Le dépôt a changé');
+  await admin.getByLabel('Proposer des commentaires', { exact: true }).uncheck();
+  await expect(
+    admin.getByText('Coche au moins un type de proposition', { exact: false }).first(),
+  ).toBeVisible();
+});
+
+test('loads settings that arrive later without overwriting edits already typed', async ({
+  page,
+}) => {
+  await open(page);
+  const instructions = page.getByLabel('Instructions pour cette intervention');
+  await page.evaluate(
+    (settings) => Reflect.get(window, 'updateAdmin')({ prAdministration: { settings } }),
+    { ...defaultPrAdministrationSettings, instructions: 'Mission chargée' },
+  );
+  await expect(instructions).toHaveValue('Mission chargée');
+  await instructions.fill('Mon brouillon');
+  await page.evaluate(
+    (settings) => Reflect.get(window, 'updateAdmin')({ prAdministration: { settings } }),
+    { ...defaultPrAdministrationSettings, instructions: 'Mission distante' },
+  );
+  await expect(instructions).toHaveValue('Mon brouillon');
 });

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.42.1 — 2026-11-09
+
+- Correction du commit refusé lorsque VS Code actualise les métadonnées de l’index Git sans changer les fichiers ; les modifications réelles continuent d’invalider l’aperçu.
+- Messages explicites pour les erreurs de commit, fetch, push et PR : identité Git absente, verrou, authentification, droits, conflit et délai réseau. Confirmation en attente, annulation, résultat et commit concerné restent visibles.
+- Écran de livraison réorganisé autour de Commit → Push → PR, avec aperçus près des actions, explication des blocages, avertissement sur les fichiers non commités et détails avancés repliés.
+- Administration de PR compatible avec les fils système et commentaires supprimés d’Azure ; contrôles des PR inactives et des comparaisons indisponibles avant génération.
+- Reprise après refus explicite de publication, protection des publications au résultat incertain et des discussions humaines, actualisation du contexte modifié et progression de l’agent.
+
 ## 1.42.0 — 2026-11-08
 
 - Bouton « Préparer la PR » à la fin d’une session, avec choix du dépôt pour les sessions multi-projets et livraison depuis le bon worktree.

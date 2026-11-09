@@ -18,6 +18,7 @@ import {
   type PrAdminModelProposal,
 } from '../src/shared/prAdministration';
 import { demoState } from '../webview/demo';
+import { AzureDevOpsHttpError } from '../src/host/DevOpsErrors';
 import type { AgentAdapter, RunInput } from '../src/shared/types';
 const exec = promisify(execFile),
   roots: string[] = [];
@@ -186,6 +187,88 @@ async function fixture() {
   };
 }
 describe('PR administration diff and publication', () => {
+  it('does not require thread or identity permissions for a title-only mission', async () => {
+    const f = await fixture();
+    await f.service.handle({
+      type: 'deliveryPrAdminSettings',
+      settings: {
+        ...defaultPrAdministrationSettings,
+        comments: false,
+        title: true,
+      },
+    });
+    f.options.generate = async () => ({
+      proposal: { summary: 'Titre', title: 'Nouveau titre', comments: [] },
+    });
+    f.api.threads.mockRejectedValue(new Error('Discussion access denied'));
+    f.api.actorId.mockRejectedValue(new Error('Identity access denied'));
+    await f.prepare();
+    await f.apply();
+    expect(f.remote.snapshot.title).toBe('Nouveau titre');
+    expect(f.api.threads).not.toHaveBeenCalled();
+    expect(f.api.actorId).not.toHaveBeenCalled();
+  });
+  it('explains an empty annotatable diff before spending a model call', async () => {
+    const f = await fixture();
+    f.changes.splice(0, 1);
+    await expect(f.prepare()).rejects.toThrow('Aucun bloc de code');
+    expect(f.options.generate).not.toHaveBeenCalled();
+    expect(f.service.getState()).toMatchObject({
+      generating: false,
+      error: expect.stringContaining('Active les propositions'),
+    });
+    expect(f.service.getState()!.progress).toBeUndefined();
+  });
+  it('allows retry after an explicit Azure rejection without creating a permanent uncertain annotation', async () => {
+    const f = await fixture();
+    f.api.createThread.mockRejectedValueOnce(new AzureDevOpsHttpError(403, 'Droits insuffisants'));
+    await f.prepare();
+    await expect(f.apply()).rejects.toThrow('Droits insuffisants');
+    expect(f.service.records['repo:session'].annotations['42']).toEqual([]);
+    await f.apply();
+    expect(f.remote.threads).toHaveLength(1);
+    expect(f.service.getState()!.preview!.completed).toHaveLength(1);
+  });
+  it('does not strand an annotation when saving its intent fails before the request', async () => {
+    const f = await fixture();
+    await f.prepare();
+    vi.mocked(f.options.save).mockRejectedValueOnce(new Error('Disque plein'));
+    await expect(f.apply()).rejects.toThrow('Disque plein');
+    expect(f.api.createThread).not.toHaveBeenCalled();
+    expect(f.service.records['repo:session'].annotations['42']).toEqual([]);
+    await f.apply();
+    expect(f.remote.threads).toHaveLength(1);
+  });
+  it('records a confirmed field update even if the other field changes concurrently', async () => {
+    const f = await fixture();
+    await f.service.handle({
+      type: 'deliveryPrAdminSettings',
+      settings: {
+        ...defaultPrAdministrationSettings,
+        comments: false,
+        title: true,
+        description: true,
+      },
+    });
+    f.options.generate = async () => ({
+      proposal: {
+        summary: 'Champs',
+        title: 'Nouveau titre',
+        description: 'Proposition',
+        comments: [],
+      },
+    });
+    f.api.updateField.mockImplementationOnce(async () => {
+      f.remote.snapshot.title = 'Nouveau titre';
+      f.remote.snapshot.description = 'Modification humaine simultanée';
+    });
+    await f.prepare();
+    await expect(f.apply()).rejects.toThrow('Un autre champ');
+    expect(f.service.getState()!.preview!.completed).toEqual(['title']);
+    expect(f.service.getState()!.result).toContain('1 intervention');
+    expect(f.api.updateField).toHaveBeenCalledTimes(1);
+    expect(f.remote.snapshot.description).toBe('Modification humaine simultanée');
+  });
   it('anchors added and deleted hunks from the committed PR, excludes secrets and ignores dirty local files', async () => {
     const f = await fixture();
     await writeFile(path.join(f.root, 'app.ts'), 'DIRTY LOCAL DATA');
@@ -436,6 +519,47 @@ describe('PR administration diff and publication', () => {
     expect(repeated.blocks).toHaveLength(2);
     expect(new Set(repeated.blocks.map((b) => b.stableKey)).size).toBe(2);
   });
+});
+
+it('reads Azure system threads without status and deleted comment bodies without losing human threads', async () => {
+  const api = new PrAdministrationApi(
+    async () => ({
+      value: [
+        {
+          id: 1,
+          comments: [{ id: 1, content: 'Merge attempt', author: { id: 'system' } }],
+          threadContext: null,
+        },
+        {
+          id: 2,
+          status: null,
+          comments: [{ id: 1, content: null, author: null, isDeleted: true }],
+          isDeleted: true,
+        },
+        {
+          id: 3,
+          status: 'active',
+          comments: [{ id: 1, content: 'Human review', author: { id: 'human' } }],
+        },
+      ],
+    }),
+    () => initial.url,
+    async () => 'actor',
+  );
+  const threads = await api.threads(initial);
+  expect(threads.map((thread) => thread.status)).toEqual(['unknown', 'unknown', 'active']);
+  expect(threads[2].comments[0].content).toBe('Human review');
+});
+it.each([
+  [{ status: 'completed' }, 'plus active'],
+  [{ status: 'active', lastMergeSourceCommit: null }, 'pas encore calculé'],
+])('explains unavailable PR snapshots before parsing missing commits', async (pr, message) => {
+  const api = new PrAdministrationApi(
+    async (route) => (route.includes('/iterations?') ? { value: [] } : pr),
+    () => initial.url,
+    async () => 'actor',
+  );
+  await expect(api.snapshot(42)).rejects.toThrow(message);
 });
 
 it('Azure adapter verifies current refs and merge base, and writes only the selected fields and verified line context', async () => {

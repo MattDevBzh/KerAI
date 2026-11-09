@@ -47,6 +47,10 @@ async function openSession(page: Page, dirty = false) {
       const publish = () => window.postMessage({ type: 'devopsState', state: active }, '*');
       Object.assign(window, {
         prMessages: messages,
+        updatePr: (patch: Partial<DevOpsState>) => {
+          active = { ...active, ...patch };
+          publish();
+        },
         finishPr: () => {
           active = {
             ...active,
@@ -201,6 +205,7 @@ test('à 390px le code non commité bloque la rédaction, les réglages restent 
   expect((await messages(page)).some((message) => message.type === 'deliveryGeneratePr')).toBe(
     false,
   );
+  await page.locator('#delivery-pr > summary').click();
   await page.getByText('Réglages de PR pour ce dépôt', { exact: true }).click();
   await page.getByLabel('Consignes et modèle de description').fill('Décrire les tests observés');
   await page.getByRole('button', { name: 'Enregistrer les réglages de PR' }).click();
@@ -220,4 +225,105 @@ test('à 390px le code non commité bloque la rédaction, les réglages restent 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+});
+
+test('shows failed commit and confirmation states near their action, with the exact pushed commit and local files warning', async ({
+  page,
+}) => {
+  await openSession(page, true);
+  await page.evaluate(() =>
+    Reflect.get(
+      window,
+      'updatePr',
+    )({
+      busy: true,
+      deliveryProgress: { kind: 'commit', message: 'Confirme dans la boîte de dialogue VS Code.' },
+    }),
+  );
+  await expect(page.locator('.delivery-feedback')).toContainText('boîte de dialogue VS Code');
+  await page.evaluate(() =>
+    Reflect.get(
+      window,
+      'updatePr',
+    )({
+      busy: false,
+      deliveryProgress: undefined,
+      deliveryResults: { commit: { status: 'error', message: 'Configure ton identité Git.' } },
+    }),
+  );
+  await expect(page.locator('.delivery-feedback.error')).toContainText(
+    'Configure ton identité Git',
+  );
+  await expect(page.locator('#delivery-push')).toContainText('1 fichier(s) ne sont pas commités');
+  await expect(page.locator('#delivery-push')).toContainText('aaaaaaaaaaaa');
+  await expect(page.locator('#delivery-push')).toContainText('Corrige d’abord l’erreur du commit');
+  await page.screenshot({
+    path: test.info().outputPath('delivery-commit-feedback.png'),
+    fullPage: true,
+  });
+});
+
+test('explains a missing agent and displays generation errors next to retry without erasing the draft', async ({
+  page,
+}) => {
+  await openSession(page);
+  await finish(page);
+  const title = page.getByLabel('Titre de la PR', { exact: true });
+  await title.fill('Mon titre conservé');
+  await page.evaluate(() =>
+    Reflect.get(
+      window,
+      'updatePr',
+    )({ error: 'Git ne parvient pas à s’authentifier.', errorAction: 'deliveryGeneratePr' }),
+  );
+  await expect(
+    page.getByRole('region', { name: 'Rédaction de la PR' }).getByRole('alert'),
+  ).toContainText('s’authentifier');
+  await expect(title).toHaveValue('Mon titre conservé');
+  await page.evaluate((settings) => Reflect.get(window, 'updatePr')({ prSettings: settings }), {
+    ...defaultPullRequestSettings,
+    agentId: 'missing-agent',
+    target: 'develop',
+  });
+  await expect(
+    page.getByRole('button', { name: 'Régénérer avec l’agent', exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByRole('region', { name: 'Rédaction de la PR' })).toContainText(
+    'agent de rédaction est indisponible',
+  );
+});
+
+test('explains an existing PR for the selected target and allows drafting for another target', async ({
+  page,
+}) => {
+  await openSession(page);
+  await finish(page);
+  await page.evaluate(() =>
+    Reflect.get(
+      window,
+      'updatePr',
+    )({
+      existingPr: {
+        id: 42,
+        title: 'Existing',
+        status: 'active',
+        isDraft: true,
+        sourceBranch: 'refs/heads/codex/pr-session',
+        targetBranch: 'refs/heads/develop',
+        url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/42',
+        repository: 'repo',
+        createdBy: 'Matt',
+        reviewers: [],
+      },
+    }),
+  );
+  const writing = page.getByRole('region', { name: 'Rédaction de la PR' });
+  await expect(writing).toContainText('La PR #42 existe déjà pour ces branches');
+  await expect(
+    writing.getByRole('button', { name: 'Régénérer avec l’agent', exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel('Branche cible', { exact: true }).fill('release');
+  await expect(
+    writing.getByRole('button', { name: 'Régénérer avec l’agent', exact: true }),
+  ).toBeEnabled();
 });

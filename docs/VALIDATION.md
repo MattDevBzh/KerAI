@@ -1,5 +1,14 @@
 # Validation et limites
 
+## Fiabilité du commit et des parcours PR — v1.42.1, 9 novembre 2026
+
+- **1 291 tests de logique/intégration réussis, 11 conditionnels ignorés** dans la passe complète locale, avec types et construction réussis. Après les derniers ajustements, les **124 tests ciblés** de livraison, récupération, contrôleur, API et préparation/administration de PR passent ensemble.
+- **19 scénarios d’interface ciblés réussis** : étapes de livraison, confirmation en attente, erreurs et résultats, push du commit annoncé, raisons des blocages, reprise du formulaire et parcours PR. Les captures grand écran et 390 px sont inspectées ; aucun débordement horizontal dans les vues testées.
+- Le test de régression du commit échoue avant la correction, puis passe après une actualisation réelle des métadonnées de l’index Git. Un push vers un dépôt local vérifie que la branche distante reçoit exactement le commit de l’aperçu.
+- Les erreurs reconnues de Git et Azure, le masquage des secrets, les fils système sans statut, les commentaires supprimés, les publications partiellement réussies et les réessais après refus explicite sont vérifiés. Les réponses incertaines restent protégées contre les doublons.
+- La publication exige les validations Linux et Windows, le contrôle du paquet extrait et le chargement dans VS Code. Le résultat du commit livré est lié dans la [release v1.42.1](https://github.com/MattDevBzh/KerAI/releases/tag/v1.42.1).
+- Aucun prompt payant ni aucune PR réelle ne sont créés. Les droits et politiques du compte Azure réel, ainsi que les réponses de son modèle, restent à qualifier par l’utilisateur.
+
 ## Création et accompagnement de PR par session — v1.42.0, 8 novembre 2026
 
 - **1 275 tests de logique/intégration réussis, 11 conditionnels ignorés** dans la passe complète locale, avec types et construction réussis.

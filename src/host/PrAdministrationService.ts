@@ -1,4 +1,5 @@
 import { selectPrSessionContext } from './PrSessionContext';
+import { AzureDevOpsHttpError, devOpsErrorMessage } from './DevOpsErrors';
 import type { PrSessionContextCatalog, PrSessionContextSnapshot } from '../shared/prSessionContext';
 import { randomUUID } from 'node:crypto';
 import type { DeliveryService } from './DeliveryService';
@@ -92,6 +93,10 @@ export class PrAdministrationService {
   cancel() {
     this.abort?.abort();
   }
+  private progress(message: string) {
+    this.state!.progress = message;
+    this.options.publish();
+  }
   private scope() {
     const scope = this.options.scope();
     if (!scope) throw new Error('Ouvre la livraison depuis la session associée à la PR.');
@@ -121,14 +126,14 @@ export class PrAdministrationService {
     let changed = false;
     for (const receipt of receipts) {
       if (receipt.threadId) continue;
-      const matches = threads.filter((thread) =>
-        thread.comments.some(
-          (comment) =>
-            comment.author?.id === receipt.actorId &&
-            comment.content === receipt.body &&
-            comment.content.includes(marker(receipt)),
-        ),
-      );
+      const matches = threads.filter((thread) => {
+        const comment = rootComment(thread);
+        return (
+          comment?.author?.id === receipt.actorId &&
+          comment.content === receipt.body &&
+          comment.content.includes(marker(receipt))
+        );
+      });
       if (matches.length === 1) {
         const thread = matches[0],
           comment = rootComment(thread)!;
@@ -175,6 +180,7 @@ export class PrAdministrationService {
           );
         } finally {
           this.state.generating = false;
+          this.state.progress = undefined;
           this.abort = undefined;
         }
       } else {
@@ -183,8 +189,10 @@ export class PrAdministrationService {
         );
       }
     } catch (error) {
-      this.state.error = (error as Error).message;
+      this.state.error = devOpsErrorMessage(error);
       throw error;
+    } finally {
+      this.state.progress = undefined;
     }
   }
   private contextSnapshot(settings = this.record().settings) {
@@ -196,6 +204,7 @@ export class PrAdministrationService {
     const catalog = this.options.context();
     if (catalog.featureId !== this.scope().session.featureId)
       throw new Error('Le contexte appartient à une autre session.');
+    this.state!.contextCatalog = catalog;
     return selectPrSessionContext(catalog, settings.sessionContext);
   }
   private assertContext(expected?: PrSessionContextSnapshot) {
@@ -205,11 +214,13 @@ export class PrAdministrationService {
       );
   }
   private async prepare(id: number, signal: AbortSignal) {
+    this.progress('Lecture de la PR et vérification des branches dans Azure…');
     const api = this.options.api(signal),
       snapshot = await this.snapshot(id, api),
       settings = structuredClone(this.record().settings);
     if (!settings.comments && !settings.title && !settings.description)
       throw new Error('Autorise au moins un type de proposition pour cet agent.');
+    this.progress('Récupération de l’historique et comparaison des fichiers de la PR…');
     const changes = await api.changes(snapshot);
     await this.options.ensureCommit(snapshot.targetHead);
     await this.options.ensureCommit(snapshot.sourceHead);
@@ -221,9 +232,15 @@ export class PrAdministrationService {
     );
     if (changes.partial)
       warnings.push('Azure a limité la liste des fichiers. Le périmètre est partiel.');
-    const threads = await this.reconcile(api, snapshot);
+    if (!blocks.length && settings.comments && !settings.title && !settings.description)
+      throw new Error(
+        `Aucun bloc de code ne peut être annoté dans cette PR. ${warnings.slice(0, 3).join(' ')} Active les propositions de titre ou de description, ou ajoute les commentaires dans Azure.`,
+      );
+    this.progress('Lecture du contexte et des commentaires existants…');
+    const threads = settings.comments ? await this.reconcile(api, snapshot) : [];
     if (signal.aborted) throw new Error('Préparation arrêtée.');
     const sessionContext = this.contextSnapshot(settings);
+    this.progress('L’agent prépare les interventions…');
     const generated = await this.options.generate({
       settings,
       snapshot,
@@ -233,6 +250,7 @@ export class PrAdministrationService {
     });
     this.assertContext(sessionContext);
     if (signal.aborted) throw new Error('Préparation arrêtée.');
+    this.progress('Vérification des propositions et de la version de la PR…');
     const proposal = prAdminProposalSchema.parse(generated.proposal);
     if (
       (proposal.comments.length && !settings.comments) ||
@@ -371,8 +389,9 @@ export class PrAdministrationService {
     current = await this.snapshot(current.id, api);
     if (!sameSnapshot(current, preview.snapshot))
       throw new Error('La PR a changé depuis la confirmation. Relis un nouvel aperçu.');
-    const actorId = await api.actorId();
+    const actorId = selected.some((action) => action.kind === 'comment') ? await api.actorId() : '';
     for (const action of selected) {
+      this.progress(`Publication des interventions : ${preview.completed.length} déjà publiée(s)…`);
       this.assertContext(preview.sessionContext);
       current = await this.snapshot(current.id, api);
       if (!sameSnapshot(current, preview.snapshot))
@@ -397,10 +416,13 @@ export class PrAdministrationService {
         // Preserve a concurrent edit to the other field: stop subsequent writes rather than adopting it.
         const other = action.kind === 'title' ? 'description' : 'title';
         preview.snapshot = { ...current, [action.kind]: action.content };
-        if (after[other] !== current[other])
+        if (after[other] !== current[other]) {
+          preview.completed.push(action.id);
+          this.state!.result = `${preview.completed.length} intervention(s) publiée(s).`;
           throw new Error(
             'Un autre champ a été modifié pendant la publication. Les actions restantes sont arrêtées.',
           );
+        }
       }
       preview.completed.push(action.id);
       this.state!.result = `${preview.completed.length} intervention(s) publiée(s).`;
@@ -475,7 +497,12 @@ export class PrAdministrationService {
     receipt = { key: action.key!, nonce: randomUUID(), actorId, body: '', status, uncertain: true };
     receipt.body = fullBody(action.content, receipt);
     receipts.push(receipt);
-    await this.options.save(); // Durable intent exists before the external write, including when the reply is lost.
+    try {
+      await this.options.save(); // Durable intent must exist before the external write.
+    } catch (error) {
+      receipts.splice(receipts.indexOf(receipt), 1);
+      throw error;
+    }
     try {
       const thread = await api.createThread(snapshot, action.block!, receipt.body, status),
         comment = rootComment(thread);
@@ -487,6 +514,18 @@ export class PrAdministrationService {
       receipt.uncertain = false;
       await this.options.save();
     } catch (error) {
+      // A definite rejection created nothing. Keep ambiguous network/server failures protected.
+      if (!receipt.threadId && error instanceof AzureDevOpsHttpError && error.rejectedWrite) {
+        const index = receipts.indexOf(receipt);
+        receipts.splice(index, 1);
+        try {
+          await this.options.save();
+        } catch (saveError) {
+          receipts.splice(index, 0, receipt);
+          throw saveError;
+        }
+        throw error;
+      }
       await this.reconcile(api, snapshot).catch(() => undefined);
       if (!receipt.threadId) throw error;
     }

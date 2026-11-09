@@ -77,6 +77,7 @@ export interface PrAdminPreview {
 export interface PrAdministrationState {
   settings: PrAdministrationSettings;
   generating?: boolean;
+  progress?: string;
   contextCatalog?: import('./prSessionContext').PrSessionContextCatalog;
   preview?: PrAdminPreview;
   result?: string;

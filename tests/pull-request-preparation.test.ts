@@ -169,6 +169,13 @@ describe('session PR preparation', () => {
     await f.controller.handle({ type: 'deliveryExecute', kind: 'commit', fingerprint });
     expect(f.controller.getState().error).toBeUndefined();
     expect(await f.git(f.workspace, 'log', '-1', '--format=%s')).toBe('fix: session');
+    expect(f.controller.getState().deliveryResults?.commit).toMatchObject({
+      status: 'success',
+      head: await f.git(f.workspace, 'rev-parse', 'HEAD'),
+    });
+    expect(f.controller.getState().snapshot?.head).toBe(
+      f.controller.getState().deliveryResults?.commit?.head,
+    );
     expect(await f.git(f.source, 'log', '-1', '--format=%s')).toBe('base');
     await f.controller.dispose();
     const restored = new DevOpsController(f.options);

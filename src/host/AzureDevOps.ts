@@ -1,4 +1,6 @@
 import { PrAdministrationApi } from './PrAdministrationApi';
+import { AzureDevOpsHttpError } from './DevOpsErrors';
+import { redact } from './process';
 import { parsePullRequestUrl } from '../shared/reviews';
 import { randomUUID } from 'node:crypto';
 import { ticketQuery } from './TicketQuery';
@@ -13,6 +15,27 @@ export interface SecretStore {
   delete(key: string): PromiseLike<void>;
 }
 const object = z.record(z.string(), z.unknown());
+async function responseText(response: Response, limit: number) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Réponse Azure DevOps vide.');
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        throw new Error('Réponse Azure DevOps trop volumineuse.');
+      }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString('utf8');
+  } finally {
+    reader.releaseLock();
+  }
+}
 const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 100000) : '');
 const optionalStr = (value: unknown, maxLength = 1000): string | undefined =>
   typeof value === 'string' ? value.slice(0, maxLength).trim() || undefined : undefined;
@@ -136,6 +159,12 @@ export class AzureDevOps {
   ): Promise<{ data: Record<string, unknown>; continuation?: string }> {
     const token = await this.secrets.get(this.key());
     if (!token) throw new Error('Connecte Azure DevOps avec un jeton personnel depuis le menu.');
+    const networkError = () =>
+      new Error(
+        signal?.aborted
+          ? 'Opération Azure DevOps arrêtée à ta demande.'
+          : 'Azure DevOps est inaccessible ou le délai de 20 secondes a expiré. Vérifie la connexion puis réessaie.',
+      );
     let response: Response;
     try {
       response = await this.http(url, {
@@ -151,38 +180,57 @@ export class AzureDevOps {
         redirect: 'error',
       });
     } catch {
-      throw new Error(
-        'Azure DevOps est inaccessible ou le délai de 20 secondes a expiré. Réessaie.',
-      );
+      throw networkError();
     }
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403)
-        throw new Error(
-          'Azure DevOps refuse l’accès. Vérifie le jeton, son expiration et les droits de lecture du service demandé (Code, Build, Test Management ou Work Items). L’écriture Code est nécessaire pour gérer les PR ; les commentaires nécessitent aussi les droits de discussion. Identity en lecture permet la recherche de relecteurs.',
-        );
-      if (response.status === 404)
-        throw new Error(
-          'Organisation, projet ou dépôt Azure DevOps introuvable. Vérifie la configuration.',
-        );
-      if (response.status === 429)
-        throw new Error('Azure DevOps limite les requêtes. Réessaie plus tard.');
-      throw new Error(`Azure DevOps : erreur HTTP ${response.status}.`);
-    }
-    const reader = response.body?.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    if (!reader) throw new Error('Réponse Azure DevOps vide.');
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > 8_000_000) {
-        await reader.cancel();
-        throw new Error('Réponse Azure DevOps trop volumineuse.');
+      const guidance: Record<number, string> = {
+        400: 'Azure DevOps refuse les données envoyées. Vérifie les champs de la PR et ses relecteurs.',
+        401: 'Azure DevOps refuse l’accès. Reconnecte ton compte avec un jeton valide et non expiré.',
+        403: 'Azure DevOps refuse l’accès. Vérifie les droits du compte et du jeton : Code pour les PR, discussion pour les commentaires, Identity en lecture pour les relecteurs, Work Items pour les tickets.',
+        404: 'Ressource Azure DevOps introuvable. Vérifie l’organisation, le projet, le dépôt et le numéro de PR ; la ressource peut aussi avoir été supprimée.',
+        409: 'La PR ou la branche a changé dans Azure DevOps. Actualise et prépare un nouvel aperçu.',
+        422: 'Azure DevOps ne peut pas appliquer ces données. Vérifie les champs et les relecteurs de la PR.',
+        429: 'Azure DevOps limite les requêtes. Réessaie plus tard.',
+      };
+      let detail = '';
+      try {
+        const data: unknown = JSON.parse(await responseText(response, 64000));
+        if (
+          data &&
+          typeof data === 'object' &&
+          'message' in data &&
+          typeof data.message === 'string'
+        ) {
+          detail = redact(
+            data.message
+              .split(Buffer.from(':' + token).toString('base64'))
+              .join('[secret masqué]')
+              .split(token)
+              .join('[secret masqué]'),
+          )
+            .replace(/[\x00-\x1f\x7f]/g, ' ')
+            .slice(0, 1500)
+            .trim();
+        }
+      } catch {
+        /* An unreadable error body must not hide the HTTP status. */
       }
-      chunks.push(value);
+      throw new AzureDevOpsHttpError(
+        response.status,
+        `${guidance[response.status] ?? 'Azure DevOps rencontre une erreur. Réessaie dans quelques instants.'} (HTTP ${response.status})${detail ? `\nDétail Azure : ${detail}` : ''}`,
+      );
     }
-    const raw = Buffer.concat(chunks).toString('utf8');
+    let raw: string;
+    try {
+      raw = await responseText(response, 8_000_000);
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        (error instanceof Error && ['AbortError', 'TimeoutError', 'TypeError'].includes(error.name))
+      )
+        throw networkError();
+      throw error;
+    }
     try {
       return {
         data: object.parse(JSON.parse(raw)),
@@ -708,9 +756,11 @@ export class AzureDevOps {
       url: `${this.base()}/_git/${encodeURIComponent(this.config.repository)}/pullrequest/${id}`,
     };
   }
-  async branchHead(branch: string): Promise<string | undefined> {
+  async branchHead(branch: string, signal?: AbortSignal): Promise<string | undefined> {
     const result = await this.request(
       `${this.repo()}/refs?filter=${encodeURIComponent('heads/' + branch)}&$top=100&api-version=7.1`,
+      undefined,
+      signal,
     );
     return z
       .array(z.object({ name: z.string(), objectId: z.string() }))
@@ -732,9 +782,11 @@ export class AzureDevOps {
       },
     );
   }
-  async findOpenPullRequests(branch: string, target: string) {
+  async findOpenPullRequests(branch: string, target: string, signal?: AbortSignal) {
     const result = await this.request(
       `${this.repo()}/pullrequests?searchCriteria.status=active&searchCriteria.sourceRefName=${encodeURIComponent('refs/heads/' + branch)}&searchCriteria.targetRefName=${encodeURIComponent('refs/heads/' + target)}&$top=100&api-version=7.1`,
+      undefined,
+      signal,
     );
     return z
       .array(z.record(z.string(), z.unknown()))

@@ -1,4 +1,7 @@
 import { PrAdministration } from './PrAdministration';
+import { DevOpsActionError } from './DevOpsActionError';
+import { DeliveryFeedback } from './DeliveryFeedback';
+import { DeliveryStages } from './DeliveryStages';
 import { PullRequestPreparation } from './PullRequestPreparation';
 import type { AgentProfile } from '../src/shared/types';
 import { useEffect, useState, useRef } from 'react';
@@ -587,6 +590,23 @@ function DevOpsContent({
       state.snapshot?.branch &&
       (state.deliverySession?.branch ?? chosenFeature?.branch) !== state.snapshot.branch,
   );
+  const prBlocker = busy
+    ? 'Une opération est en cours. Attends sa fin avant de préparer la PR.'
+    : !state.config || !state.authenticated
+      ? 'Configure le dépôt et connecte Azure DevOps dans la section Configuration et connexion.'
+      : !state.snapshot
+        ? 'Actualise les fichiers du dépôt avant de préparer la PR.'
+        : branchMismatch
+          ? 'La branche courante ne correspond pas à la session choisie. Vérifie la branche dans ton outil Git puis actualise.'
+          : state.deliverySession && state.snapshot.files.length
+            ? 'Termine le commit des fichiers de cette session avant de préparer la PR.'
+            : !target.trim()
+              ? 'Renseigne la branche cible de la PR.'
+              : target.trim() === state.snapshot.branch
+                ? 'Les branches source et cible doivent être différentes.'
+                : !prTitle.trim()
+                  ? 'Renseigne le titre de la PR ou fais-le rédiger par l’agent.'
+                  : undefined;
   const inputConfig = (key: keyof DevOpsConfig, label: string) => (
     <label>
       {label}
@@ -604,8 +624,96 @@ function DevOpsContent({
       paths: selected,
       intent,
     });
+  const deliveryPreview = state.preview && (
+    <section className="devops-card delivery-preview">
+      <h2>
+        Aperçu à confirmer ·{' '}
+        {state.preview.kind === 'commit'
+          ? 'Commit local'
+          : state.preview.kind === 'push'
+            ? 'Publication de branche'
+            : state.preview.isDraft === false
+              ? 'PR prête à relire'
+              : 'PR brouillon'}
+      </h2>
+      <strong>{state.preview.title}</strong>
+      <p>
+        {state.preview.branch}
+        {state.preview.target ? ` → ${state.preview.target}` : ''} ·{' '}
+        {state.preview.head.slice(0, 12)}
+      </p>
+      {state.preview.remote && (
+        <p>
+          Destination : {state.preview.remote} · {state.snapshot?.remoteUrl}
+        </p>
+      )}
+      {state.preview.description && <pre className="devops-text">{state.preview.description}</pre>}
+      {state.preview.kind === 'pr' && (
+        <details open>
+          <summary>
+            Diff de la PR · point commun avec {state.preview.target} → {state.preview.branch}
+          </summary>
+          {state.preview.targetHead && (
+            <p>Commit cible relu : {state.preview.targetHead.slice(0, 12)}</p>
+          )}
+          <pre className="delivery-diff">
+            {state.preview.diff ?? 'Comparaison à vérifier dans Azure DevOps.'}
+          </pre>
+          {state.preview.diffTruncated && (
+            <p>
+              Diff tronqué à 100 000 caractères. Relisez la comparaison complète avant publication.
+            </p>
+          )}
+          {!!state.snapshot?.files.length && (
+            <p>
+              Les {state.snapshot.files.length} fichiers encore modifiés dans le dossier de travail
+              ne sont pas inclus dans cette PR tant qu’ils ne sont pas commités et publiés.
+            </p>
+          )}
+        </details>
+      )}
+      {state.preview.paths.length > 0 && (
+        <ul>
+          {state.preview.paths.map((p) => (
+            <li key={p}>
+              <code>{p}</code>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p>
+        Un changement de fichiers, d’index, de branche ou de destination invalide cet aperçu. Une
+        confirmation VS Code sera demandée.
+      </p>
+      {state.preview.kind === 'commit' && (
+        <p>
+          Valide avec le bouton « Valider le commit » près du titre. Hooks et signature Git non
+          exécutés dans ce mode. Utilise le terminal si ton projet les impose.
+        </p>
+      )}
+      {state.preview.kind !== 'commit' && (
+        <button
+          disabled={busy || previewNeedsRefresh}
+          onClick={() =>
+            send({
+              type: 'deliveryExecute',
+              kind: state.preview!.kind,
+              fingerprint: state.preview!.fingerprint,
+            })
+          }
+        >
+          {state.preview.kind === 'push' ? 'Confirmer le push' : 'Confirmer la création de PR'}
+        </button>
+      )}
+      {previewNeedsRefresh && state.preview.kind !== 'commit' && (
+        <p>Actualise l’aperçu pour prendre en compte les champs ou la sélection modifiés.</p>
+      )}
+    </section>
+  );
   return (
-    <div className={`devops-panel ${state.deliverySession ? 'delivery-with-session' : ''}`}>
+    <div
+      className={`devops-panel ${mode === 'delivery' ? 'delivery-workspace' : ''} ${state.deliverySession ? 'delivery-with-session' : ''}`}
+    >
       <header>
         <div>
           <h1>
@@ -781,14 +889,18 @@ function DevOpsContent({
       ) : (
         <>
           <section className="devops-card delivery-session-context">
-            <h2>Votre livraison, étape par étape</h2>
+            <span className="delivery-eyebrow">Du code à la revue</span>
+            <h2>Ta livraison, une étape à la fois</h2>
             {state.deliverySession && (
-              <p>
-                Espace de session : <code>{state.deliverySession.path}</code>{' '}
+              <details className="delivery-workspace-location">
+                <summary>Espace de travail de la session</summary>
+                <p>
+                  <code>{state.deliverySession.path}</code>
+                </p>
                 <button disabled={busy} onClick={() => send({ type: 'deliverySelectSession' })}>
                   Livrer le dossier du projet
                 </button>
-              </p>
+              </details>
             )}
             {state.existingPr && (
               <p role="status">
@@ -799,15 +911,7 @@ function DevOpsContent({
                 </a>
               </p>
             )}
-            <ol className="delivery-stages">
-              <li>Commit local</li>
-              <li>Publication de la branche</li>
-              <li>Préparation et création de la PR</li>
-            </ol>
-            <p>
-              Le brouillon et vos choix sont conservés dans ce projet. Après un échec, préparez un
-              nouvel aperçu pour reprendre à l’étape concernée.
-            </p>
+            <DeliveryStages state={state} />
             <dl className="devops-metadata">
               <div>
                 <dt>Dépôt configuré</dt>
@@ -825,15 +929,8 @@ function DevOpsContent({
                     : 'Actualiser pour inspecter le dépôt'}
                 </dd>
               </div>
-              <div>
-                <dt>Commit courant</dt>
-                <dd>{state.snapshot?.head.slice(0, 12) ?? 'À inspecter'}</dd>
-              </div>
             </dl>
           </section>
-          {state.deliverySession && (
-            <PrAdministration state={state} agents={agents} dispatch={send} />
-          )}
           {!state.deliverySession && (
             <section className="devops-card">
               <h2>Conversation</h2>
@@ -877,8 +974,14 @@ function DevOpsContent({
             </section>
           )}
           <details
-            className="devops-card"
-            open={!state.deliverySession || !!state.snapshot?.files.length}
+            id="delivery-commit"
+            className="devops-card delivery-step"
+            open={
+              !state.deliverySession ||
+              !!state.snapshot?.files.length ||
+              state.deliveryResults?.commit?.status === 'error' ||
+              state.deliveryProgress?.kind === 'commit'
+            }
           >
             <summary>1. Préparer le commit</summary>
             <p>
@@ -962,6 +1065,7 @@ function DevOpsContent({
                 Générer le titre du commit
               </button>
               <button
+                className="delivery-primary"
                 disabled={busy || !selected.length || !title.trim() || !state.snapshot}
                 onClick={() =>
                   send({
@@ -975,29 +1079,70 @@ function DevOpsContent({
                 Valider le commit
               </button>
             </div>
+            {(!selected.length || !title.trim()) && (
+              <p className="delivery-hint">
+                {!selected.length
+                  ? 'Sélectionne les fichiers à inclure dans le commit.'
+                  : 'Saisis un titre ou génère-le à partir de ton intention.'}
+              </p>
+            )}
+            <DevOpsActionError state={state} actions={['deliveryPreviewCommit']} />
+            {state.deliveryResults?.commit?.status !== 'error' && (
+              <DevOpsActionError state={state} actions={['deliveryCommit']} />
+            )}
             <p>
               {selected.length} fichier(s) sélectionné(s). Le titre peut être modifié ou saisi
               directement. La validation crée un commit local après confirmation VS Code ; le push
               reste séparé. La génération du titre est locale, sans consommation de crédits.
             </p>
+            {state.preview?.kind === 'commit' && deliveryPreview}
           </details>
+          <DeliveryFeedback state={state} kind="commit" />
           <div className="devops-columns">
-            <section className="devops-card">
+            <section id="delivery-push" className="devops-card delivery-step">
               <h2>2. Publier la branche</h2>
+              <p className="delivery-hint">
+                Envoie le commit <code>{state.snapshot?.head.slice(0, 12) ?? 'à inspecter'}</code>{' '}
+                de <strong>{state.snapshot?.branch ?? 'ta branche'}</strong> vers le dépôt distant.
+              </p>
               <label>
                 Remote Git
                 <input value={remote} onChange={(e) => setRemote(e.target.value)} maxLength={100} />
               </label>
               <p>{state.snapshot?.remoteUrl ?? 'Vérifie la destination dans l’aperçu.'}</p>
+              {!!state.snapshot?.files.length && (
+                <p className="delivery-warning">
+                  {state.snapshot.files.length} fichier(s) ne sont pas commités et ne seront pas
+                  envoyés par le push.
+                  {state.deliveryResults?.commit?.status === 'error'
+                    ? ' Corrige d’abord l’erreur du commit ci-dessus pour publier ces changements.'
+                    : ''}
+                </p>
+              )}
               <button
+                className="delivery-primary"
                 disabled={busy || !remote}
                 onClick={() => send({ type: 'deliveryPreviewPush', remote })}
               >
                 Préparer le push
               </button>
+              <DevOpsActionError state={state} actions={['deliveryPreviewPush']} />
+              <DeliveryFeedback state={state} kind="push" />
+              {state.preview?.kind === 'push' && deliveryPreview}
             </section>
-            <section className="devops-card">
-              <h2>3. Créer une PR Azure DevOps</h2>
+            <details
+              id="delivery-pr"
+              className="devops-card delivery-step"
+              open={
+                !state.deliverySession ||
+                (!state.existingPr && !state.snapshot?.files.length) ||
+                !!state.prGeneration ||
+                !!state.prGenerating ||
+                state.preview?.kind === 'pr' ||
+                !!prTitle
+              }
+            >
+              <summary>3. Créer une PR Azure DevOps</summary>
               <p>
                 {state.config
                   ? `${state.config.organization} / ${state.config.project} / ${state.config.repository}`
@@ -1056,7 +1201,7 @@ function DevOpsContent({
               )}
               <label>
                 Branche cible
-                <input value={target} onChange={(e) => setTarget(e.target.value)} />
+                <input maxLength={200} value={target} onChange={(e) => setTarget(e.target.value)} />
               </label>
               <PullRequestPreparation
                 state={state}
@@ -1119,14 +1264,9 @@ function DevOpsContent({
                 </pre>
               </details>
               <button
-                disabled={
-                  busy ||
-                  !state.authenticated ||
-                  !prTitle.trim() ||
-                  !target ||
-                  branchMismatch ||
-                  (!!state.deliverySession && !!state.snapshot?.files.length)
-                }
+                className="delivery-primary"
+                disabled={!!prBlocker}
+                aria-describedby="pr-create-blocker"
                 onClick={() =>
                   send({
                     type: 'deliveryPreviewPr',
@@ -1142,102 +1282,14 @@ function DevOpsContent({
               >
                 {isDraft ? 'Préparer la PR brouillon' : 'Préparer la PR prête à relire'}
               </button>
-            </section>
+              {prBlocker && <p id="pr-create-blocker">{prBlocker}</p>}
+              <DevOpsActionError state={state} actions={['deliveryPreviewPr']} />
+              <DeliveryFeedback state={state} kind="pr" />
+              {state.preview?.kind === 'pr' && deliveryPreview}
+            </details>
           </div>
-          {state.preview && (
-            <section className="devops-card delivery-preview">
-              <h2>
-                Aperçu à confirmer ·{' '}
-                {state.preview.kind === 'commit'
-                  ? 'Commit local'
-                  : state.preview.kind === 'push'
-                    ? 'Publication de branche'
-                    : state.preview.isDraft === false
-                      ? 'PR prête à relire'
-                      : 'PR brouillon'}
-              </h2>
-              <strong>{state.preview.title}</strong>
-              <p>
-                {state.preview.branch}
-                {state.preview.target ? ` → ${state.preview.target}` : ''} ·{' '}
-                {state.preview.head.slice(0, 12)}
-              </p>
-              {state.preview.remote && (
-                <p>
-                  Destination : {state.preview.remote} · {state.snapshot?.remoteUrl}
-                </p>
-              )}
-              {state.preview.description && (
-                <pre className="devops-text">{state.preview.description}</pre>
-              )}
-              {state.preview.kind === 'pr' && (
-                <details open>
-                  <summary>
-                    Diff de la PR · point commun avec {state.preview.target} →{' '}
-                    {state.preview.branch}
-                  </summary>
-                  {state.preview.targetHead && (
-                    <p>Commit cible relu : {state.preview.targetHead.slice(0, 12)}</p>
-                  )}
-                  <pre className="delivery-diff">
-                    {state.preview.diff ?? 'Comparaison à vérifier dans Azure DevOps.'}
-                  </pre>
-                  {state.preview.diffTruncated && (
-                    <p>
-                      Diff tronqué à 100 000 caractères. Relisez la comparaison complète avant
-                      publication.
-                    </p>
-                  )}
-                  {!!state.snapshot?.files.length && (
-                    <p>
-                      Les {state.snapshot.files.length} fichiers encore modifiés dans le dossier de
-                      travail ne sont pas inclus dans cette PR tant qu’ils ne sont pas commités et
-                      publiés.
-                    </p>
-                  )}
-                </details>
-              )}
-              {state.preview.paths.length > 0 && (
-                <ul>
-                  {state.preview.paths.map((p) => (
-                    <li key={p}>
-                      <code>{p}</code>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p>
-                Un changement de fichiers, d’index, de branche ou de destination invalide cet
-                aperçu. Une confirmation VS Code sera demandée.
-              </p>
-              {state.preview.kind === 'commit' && (
-                <p>
-                  Valide avec le bouton « Valider le commit » près du titre. Hooks et signature Git
-                  non exécutés dans ce mode. Utilise le terminal si ton projet les impose.
-                </p>
-              )}
-              {state.preview.kind !== 'commit' && (
-                <button
-                  disabled={busy || previewNeedsRefresh}
-                  onClick={() =>
-                    send({
-                      type: 'deliveryExecute',
-                      kind: state.preview!.kind,
-                      fingerprint: state.preview!.fingerprint,
-                    })
-                  }
-                >
-                  {state.preview.kind === 'push'
-                    ? 'Confirmer le push'
-                    : 'Confirmer la création de PR'}
-                </button>
-              )}
-              {previewNeedsRefresh && state.preview.kind !== 'commit' && (
-                <p>
-                  Actualise l’aperçu pour prendre en compte les champs ou la sélection modifiés.
-                </p>
-              )}
-            </section>
+          {state.deliverySession && (
+            <PrAdministration state={state} agents={agents} dispatch={send} />
           )}
         </>
       )}

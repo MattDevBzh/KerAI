@@ -35,6 +35,54 @@ async function metadataDashboard(fields: Record<string, unknown>, pr: Record<str
   return { data: await api.dashboard(), calls };
 }
 describe('Azure DevOps API boundary', () => {
+  it('reports useful Azure rejection details without echoing credentials', async () => {
+    const token = 'private-pat';
+    const api = new AzureDevOps(config, secrets(), async () =>
+      reply(
+        {
+          message: `TF401027: Missing PullRequestContribute permission. ${token} ${Buffer.from(':' + token).toString('base64')}`,
+        },
+        403,
+      ),
+    );
+    await api.authenticate(token);
+    const error = await api
+      .administration()
+      .updateField({ id: 42 } as never, 'title', 'Titre')
+      .catch((error: Error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('PullRequestContribute');
+    expect((error as Error).message).toContain('HTTP 403');
+    expect((error as Error).message).not.toContain(token);
+    expect((error as Error).message).not.toContain(Buffer.from(':' + token).toString('base64'));
+  });
+  it('distinguishes cancellation from a network failure, including while reading the response', async () => {
+    const abort = new AbortController();
+    const api = new AzureDevOps(
+      config,
+      secrets(),
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              abort.abort();
+              controller.error(new DOMException('aborted', 'AbortError'));
+            },
+          }),
+        ),
+    );
+    await api.authenticate('private-pat');
+    await expect(api.branchHead('main', abort.signal)).rejects.toThrow('arrêtée à ta demande');
+  });
+  it('retains a useful HTTP error when the response body is HTML', async () => {
+    const api = new AzureDevOps(
+      config,
+      secrets(),
+      async () => new Response('<html>Proxy failure</html>', { status: 502 }),
+    );
+    await api.authenticate('private-pat');
+    await expect(api.branchHead('main')).rejects.toThrow('HTTP 502');
+  });
   it('detects modern HTTPS, SSH, legacy URLs and rejects foreign/credential remotes', () => {
     expect(detectAzureRemote('git@ssh.dev.azure.com:v3/my-org/My%20Project/repo')).toEqual({
       ...config,

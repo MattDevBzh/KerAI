@@ -1,17 +1,20 @@
 import { z } from 'zod';
 import type { PrAdminSnapshot, PrDiffBlock, PrThreadStatus } from '../shared/prAdministration';
 const sha = z.string().regex(/^[a-f0-9]{40}$/i);
-const record = z.record(z.string(), z.unknown());
 export const prThreadSchema = z.object({
   id: z.number().int().positive(),
-  status: z.string(),
+  // Azure system threads (merge attempts, votes…) have no discussion status.
+  status: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? 'unknown'),
   isDeleted: z.boolean().optional(),
   comments: z
     .array(
       z.object({
         id: z.number().int().positive(),
-        content: z.string().optional(),
-        author: z.object({ id: z.string() }).optional(),
+        content: z.string().nullish(),
+        author: z.object({ id: z.string() }).nullish(),
         isDeleted: z.boolean().optional(),
         parentCommentId: z.number().optional(),
       }),
@@ -46,6 +49,10 @@ export class PrAdministrationApi {
   async snapshot(id: number): Promise<PrAdminSnapshot> {
     const route = this.route(id);
     const pr = await this.request(`${route}?api-version=7.1`);
+    if (pr.status !== 'active')
+      throw new Error(
+        'Cette PR n’est plus active. Ouvre une PR active pour préparer des interventions.',
+      );
     if (pr.forkSource)
       throw new Error(
         'Cette intervention nécessite une PR dont la branche source appartient au dépôt de la session.',
@@ -57,8 +64,14 @@ export class PrAdministrationApi {
       )
       .parse(iterations.value);
     const iteration = rows.sort((a, b) => b.id - a.id)[0];
-    const sourceHead = sha.parse(record.parse(pr.lastMergeSourceCommit).commitId),
-      targetHead = sha.parse(record.parse(pr.lastMergeTargetCommit).commitId);
+    const source = z.object({ commitId: sha }).safeParse(pr.lastMergeSourceCommit),
+      target = z.object({ commitId: sha }).safeParse(pr.lastMergeTargetCommit);
+    if (!source.success || !target.success)
+      throw new Error(
+        'Azure n’a pas encore calculé le diff de cette PR. Attends sa mise à jour dans Azure puis réessaie.',
+      );
+    const sourceHead = source.data.commitId,
+      targetHead = target.data.commitId;
     if (!iteration || iteration.sourceRefCommit.commitId !== sourceHead)
       throw new Error('Azure actualise encore la PR. Réessaie après la mise à jour du diff.');
     const sourceBranch = z.string().startsWith('refs/heads/').parse(pr.sourceRefName);
@@ -82,7 +95,12 @@ export class PrAdministrationApi {
     const comparison = await this.request(
       `/diffs/commits?baseVersion=${targetHead}&baseVersionType=commit&targetVersion=${sourceHead}&targetVersionType=commit&diffCommonCommit=true&$top=1&api-version=7.1`,
     );
-    const baseHead = sha.parse(comparison.commonCommit);
+    const base = sha.safeParse(comparison.commonCommit);
+    if (!base.success)
+      throw new Error(
+        'Azure ne fournit pas de commit commun aux deux branches. Vérifie leur historique et le diff dans Azure avant de réessayer.',
+      );
+    const baseHead = base.data;
     return {
       id,
       url: this.webUrl(id),

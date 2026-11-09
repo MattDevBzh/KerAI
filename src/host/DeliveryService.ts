@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { deliveryGitError } from './DeliveryGitErrors';
 import { createHash } from 'node:crypto';
 import {
   copyFile,
@@ -78,7 +79,7 @@ export class DeliveryService {
               'commit.gpgSign=false',
               ...args,
             ],
-            { cwd: this.root, shell: false, env },
+            { cwd: this.root, shell: false, windowsHide: true, env },
           );
           let stdout = '',
             stderr = '',
@@ -113,10 +114,7 @@ export class DeliveryService {
   }
   private async git(args: string[], options?: { env?: Record<string, string>; input?: string }) {
     const result = await this.run(args, options);
-    if (result.code)
-      throw new Error(
-        `Git refuse ${args[0]} (code ${result.code}). Consulte Git dans le terminal pour le diagnostic ; aucune sortie susceptible de contenir un secret n’est transmise.`,
-      );
+    if (result.code) throw deliveryGitError(args, result);
     return result.stdout;
   }
   private async filters() {
@@ -230,7 +228,9 @@ export class DeliveryService {
         blocked,
       });
     }
-    const index = await readFile(await this.indexPath());
+    // Editors refresh index timestamps/cache extensions without changing staged content.
+    // Compare staged entries and flags, not the volatile binary representation of the index.
+    const index = await this.git(['ls-files', '--stage', '-v', '-z']);
     const remoteResult = await this.run(['remote', 'get-url', '--push', remote]);
     const remoteUrl = remoteResult.code ? undefined : remoteResult.stdout.trim();
     const publicRemote = remoteUrl?.replace(/(https?:\/\/)[^/@]+@/, '$1');
@@ -362,6 +362,10 @@ export class DeliveryService {
       if (headUpdated)
         throw new Error(
           'Le commit a été créé mais la mise à jour de l’index a échoué. Ne relance pas : inspecte Git et son fichier index.lock.',
+        );
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+        throw new Error(
+          'Le commit n’a pas été créé : l’index Git est verrouillé (index.lock). Termine les autres opérations Git puis actualise et réessaie.',
         );
       throw error;
     } finally {

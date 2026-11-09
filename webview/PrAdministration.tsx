@@ -1,6 +1,6 @@
 import { PR_CONTEXT_MAX_SELECTED } from '../src/shared/prSessionContext';
 import { PrSessionContextPicker } from './PrSessionContextPicker';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AgentProfile } from '../src/shared/types';
 import type { DevOpsClientMessage, DevOpsState } from '../src/shared/devops';
 import {
@@ -26,13 +26,23 @@ export function PrAdministration({
   const administration = state.prAdministration;
   const saved = administration?.settings ?? defaultPrAdministrationSettings;
   const [settings, setSettings] = useState(saved);
+  const previousSaved = useRef(saved);
+  useEffect(() => {
+    const previous = previousSaved.current;
+    previousSaved.current = saved;
+    setSettings((current) =>
+      JSON.stringify(current) === JSON.stringify(previous) ? saved : current,
+    );
+  }, [saved]);
   const suggested =
     state.existingPr?.id ??
     state.pullRequests.find(
-      (pr) => pr.sourceBranch === `refs/heads/${state.deliverySession?.branch}`,
+      (pr) =>
+        pr.status === 'active' && pr.sourceBranch === `refs/heads/${state.deliverySession?.branch}`,
     )?.id;
-  const [chosen, setChosen] = useState('');
-  const prId = Number(chosen || suggested || '');
+  const [chosen, setChosen] = useState<string>();
+  const prNumber = chosen ?? (suggested ? String(suggested) : '');
+  const prId = Number(prNumber);
   const changed = JSON.stringify(settings) !== JSON.stringify(saved);
   const available = agents.some((agent) => agent.id === settings.agentId);
   const busy = state.busy || !!administration?.generating;
@@ -49,11 +59,36 @@ export function PrAdministration({
           size + (contextItems.find((item) => item.id === selection.id)?.content.length ?? 0),
         0,
       ) > PR_CONTEXT_MAX_SELECTED);
+  const missionBlocker = !state.config
+    ? 'Configure le dépôt Azure DevOps dans la section Configuration et connexion.'
+    : !available
+      ? 'L’agent choisi est indisponible. Choisis un agent dans la mission de PR puis enregistre-la.'
+      : !settings.comments && !settings.title && !settings.description
+        ? 'Coche au moins un type de proposition : commentaires, titre ou description.'
+        : contextInvalid
+          ? 'Le contexte sélectionné a changé ou dépasse la limite. Relis les sources et ajuste la sélection.'
+          : undefined;
+  const blocker = busy
+    ? 'Une opération est en cours. Attends sa fin ou arrête la préparation.'
+    : (missionBlocker ??
+      (!state.authenticated
+        ? 'Connecte Azure DevOps dans la section Configuration et connexion.'
+        : !state.deliverySession
+          ? 'Ouvre la préparation depuis la session associée à la PR.'
+          : changed
+            ? 'Enregistre la mission avant de préparer les propositions.'
+            : !/^[1-9]\d*$/.test(prNumber.trim()) || !Number.isSafeInteger(prId)
+              ? 'Renseigne un numéro de PR entier et positif, par exemple 123.'
+              : undefined));
+  const error = state.errorAction?.startsWith('deliveryPrAdmin')
+    ? state.error
+    : administration?.error;
 
   return (
     <details
+      id="pr-administration"
       className="devops-card pr-administration"
-      open={!!suggested || !!administration?.preview || undefined}
+      open={!!suggested || !!administration?.preview || !!error || undefined}
     >
       <summary>Intervenir sur une PR avec un agent</summary>
       <p>
@@ -143,23 +178,19 @@ export function PrAdministration({
           dès qu’une personne répond ou le modifie, KerAI le laisse à la discussion humaine.
         </p>
         <button
-          disabled={
-            contextInvalid ||
-            !available ||
-            !state.config ||
-            (!settings.comments && !settings.title && !settings.description)
-          }
+          disabled={!!missionBlocker}
+          aria-describedby="pr-mission-blocker"
           onClick={() => dispatch({ type: 'deliveryPrAdminSettings', settings })}
         >
           Enregistrer la mission de PR
         </button>
+        {missionBlocker && <p id="pr-mission-blocker">{missionBlocker}</p>}
       </fieldset>
-      {changed && <p>Enregistre la mission avant de préparer les propositions.</p>}
       <label>
         Numéro de la PR à accompagner
         <input
           inputMode="numeric"
-          value={chosen || (suggested ? String(suggested) : '')}
+          value={prNumber}
           disabled={busy}
           onChange={(e) => setChosen(e.target.value)}
           placeholder="Ex. 123"
@@ -172,15 +203,9 @@ export function PrAdministration({
       </p>
       <div className="devops-actions">
         <button
-          disabled={
-            busy ||
-            changed ||
-            contextInvalid ||
-            !available ||
-            !state.authenticated ||
-            !Number.isSafeInteger(prId) ||
-            prId < 1
-          }
+          className="delivery-primary"
+          disabled={!!blocker}
+          aria-describedby="pr-admin-blocker"
           onClick={() => dispatch({ type: 'deliveryPrAdminPreview', pullRequestId: prId })}
         >
           Préparer les interventions
@@ -191,14 +216,28 @@ export function PrAdministration({
           </button>
         )}
       </div>
-      {administration?.generating && <p role="status">L’agent prépare les interventions…</p>}
-      {administration?.error && <p role="alert">{administration.error}</p>}
+      {blocker && !administration?.generating && <p id="pr-admin-blocker">{blocker}</p>}
+      {administration?.progress ? (
+        <p role="status">{administration.progress}</p>
+      ) : (
+        administration?.generating && <p role="status">L’agent prépare les interventions…</p>
+      )}
+      {error && (
+        <p className="devops-error" role="alert">
+          {error}
+        </p>
+      )}
       {administration?.result && <p role="status">{administration.result}</p>}
       {administration?.preview && (
         <AdministrationPreview
           key={administration.preview.id}
           preview={administration.preview}
-          busy={busy || changed || contextInvalid || prId !== administration.preview.snapshot.id}
+          blocked={
+            blocker ??
+            (prId !== administration.preview.snapshot.id
+              ? 'Cet aperçu appartient à une autre PR. Remets son numéro ou prépare de nouvelles interventions.'
+              : undefined)
+          }
           dispatch={dispatch}
         />
       )}
@@ -207,11 +246,11 @@ export function PrAdministration({
 }
 function AdministrationPreview({
   preview,
-  busy,
+  blocked,
   dispatch,
 }: {
   preview: PrAdminPreview;
-  busy: boolean;
+  blocked?: string;
   dispatch: (message: DevOpsClientMessage) => void;
 }) {
   const [edits, setEdits] = useState(
@@ -275,7 +314,7 @@ function AdministrationPreview({
       {preview.actions.map((action, index) => {
         const done = preview.completed.includes(action.id);
         const disabled =
-          busy || done || action.operation === 'protected' || action.operation === 'unchanged';
+          !!blocked || done || action.operation === 'protected' || action.operation === 'unchanged';
         const title =
           action.kind === 'comment'
             ? `${action.block!.path} · lignes ${action.block!.startLine}–${action.block!.endLine} (${action.block!.side === 'right' ? 'après' : 'avant'})`
@@ -342,7 +381,9 @@ function AdministrationPreview({
         suivantes s’arrêtent ; celles déjà publiées restent visibles.
       </p>
       <button
-        disabled={busy || !chosen.length || invalid}
+        className="delivery-primary"
+        disabled={!!blocked || !chosen.length || invalid}
+        aria-describedby="pr-publication-blocker"
         onClick={() =>
           dispatch({
             type: 'deliveryPrAdminApply',
@@ -353,6 +394,16 @@ function AdministrationPreview({
       >
         Publier la sélection ({chosen.length})
       </button>
+      <p id="pr-publication-blocker">
+        {blocked ??
+          (invalid
+            ? 'Une proposition sélectionnée est vide ou trop longue. Corrige son texte avant publication.'
+            : !actionable.length
+              ? 'Aucune proposition à publier : elles sont déjà publiées, inchangées ou protégées.'
+              : !chosen.length
+                ? 'Coche au moins une proposition à publier après l’avoir relue.'
+                : `${chosen.length} proposition(s) prête(s) à publier.`)}
+      </p>
     </section>
   );
 }

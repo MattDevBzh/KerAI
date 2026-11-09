@@ -586,6 +586,10 @@ describe('controller safety and persistence', () => {
     });
     expect(options.confirm).toHaveBeenCalledOnce();
     expect(delivery.commit).not.toHaveBeenCalled();
+    expect(controller.getState().deliveryResults?.commit).toMatchObject({
+      status: 'cancelled',
+      message: expect.stringContaining('Aucune action effectuée'),
+    });
   });
   it('validates the direct commit request before any operation', () => {
     const message = {
@@ -663,6 +667,14 @@ describe('controller safety and persistence', () => {
     };
     await expect(controller.handle({ type: 'devopsAuthenticate' })).rejects.toThrow(
       'Lecture seule',
+    );
+    expect(controller.getState()).toMatchObject({
+      error: 'Lecture seule',
+      errorAction: 'devopsAuthenticate',
+      busy: false,
+    });
+    expect(options.publish).toHaveBeenLastCalledWith(
+      expect.objectContaining({ error: 'Lecture seule' }),
     );
     expect(options.requestToken).not.toHaveBeenCalled();
   });
@@ -929,4 +941,35 @@ it('defers the full delivery inspection while retaining remote configuration and
   expect(delivery.inspect).toHaveBeenCalledOnce();
   expect(controller.getState().snapshot?.fingerprint).toBe(snapshot.fingerprint);
   await controller.dispose();
+});
+
+it('publishes the pending confirmation and a local commit failure, then allows a successful retry', async () => {
+  const { controller, delivery, options } = await fixture();
+  options.confirm = async () => {
+    expect(controller.getState().deliveryProgress).toMatchObject({
+      kind: 'commit',
+      message: expect.stringContaining('boîte de dialogue'),
+    });
+    return true;
+  };
+  vi.mocked(delivery.commit).mockRejectedValueOnce(new Error('Identité Git absente'));
+  const message = {
+    type: 'deliveryCommit' as const,
+    paths: ['a.ts'],
+    title: 'fix: test',
+    fingerprint: snapshot.fingerprint,
+  };
+  await controller.handle(message);
+  expect(controller.getState()).toMatchObject({
+    busy: false,
+    errorAction: 'deliveryCommit',
+    deliveryResults: { commit: { status: 'error', message: 'Identité Git absente' } },
+  });
+  expect(controller.getState().deliveryProgress).toBeUndefined();
+  await controller.handle(message);
+  expect(controller.getState().error).toBeUndefined();
+  expect(controller.getState().deliveryResults?.commit).toMatchObject({
+    status: 'success',
+    head: 'c'.repeat(40),
+  });
 });
