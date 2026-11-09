@@ -95,9 +95,19 @@ describe.skipIf(!executablePath)('Chromium CDP targeted source and CSS inspectio
     await page.goto(origin);
   });
   afterAll(async () => {
-    await context?.close();
-    await browser?.close();
-    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    try {
+      if (server?.listening) {
+        const closed = new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+        // The oversized fixture deliberately leaves an incomplete response body.
+        // Close its sockets before Chromium shuts down instead of awaiting keep-alive expiry.
+        server.closeAllConnections();
+        await closed;
+      }
+    } finally {
+      await browser?.close();
+    }
   });
   it('returns matching CSS selectors, safe properties and stylesheet line without page mutation', async () => {
     const before = await page.content();
