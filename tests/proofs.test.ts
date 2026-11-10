@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { reviewApprovalRequest } from '../src/shared/reviewApproval';
 import { proofDossier, proofDossierMarkdown } from '../src/shared/proofs';
 import { proofTools } from '../src/host/ProofTools';
 import { WorkflowEngine } from '../src/core/workflow';
@@ -115,7 +116,9 @@ it('keeps superseded conclusions, catches missing evidence and blocks a current 
     },
   ];
   expect(proofDossier(feature).claims[0].stale).toBe(true);
-  expect(approvalBlockers(feature, step, 'human').join()).toContain('contredite');
+  expect(approvalBlockers(feature, step, 'human')).toEqual([]);
+  expect(approvalBlockers(feature, step, 'autopilot').join()).toContain('contredite');
+  expect(reviewApprovalRequest(feature, step)?.proofClaims).toHaveLength(1);
   attempt.proofClaims[1].proofIds = ['unknown'];
   expect(proofDossier(feature).claims[1].missingIds).toEqual(['unknown']);
   attempt.revision!++;
@@ -154,4 +157,31 @@ it('never accepts model supplied origins and does not expose image pixels in the
       claim: { text: 'x', proofIds: [], verdict: 'unverified', author: 'agent' },
     }),
   ).toThrow();
+});
+
+it('requires explicit, current human confirmation for a proof contradiction without review comments', () => {
+  const { engine, feature, step, attempt } = fixture();
+  attempt.proofClaims = [
+    {
+      id: randomUUID(),
+      text: 'Le nettoyage supprime des utilisateurs non demandés.',
+      proofIds: ['runtime:view1'],
+      verdict: 'contradicted',
+      author: 'agent',
+      at: 'now',
+      reportRevision: attempt.revision!,
+    },
+  ];
+  expect(() => engine.approveStep(feature.id, step.id)).toThrow(/Confirme/);
+  expect(() => engine.approveStep(feature.id, step.id, 'autopilot')).toThrow(/contredite/);
+  const oldKey = reviewApprovalRequest(feature, step)!.key;
+  attempt.proofClaims[0].text = 'Conclusion révisée';
+  expect(() =>
+    engine.approveStep(feature.id, step.id, 'human', attempt.id, attempt.revision, oldKey),
+  ).toThrow(/changé/);
+  const warning = reviewApprovalRequest(feature, step)!;
+  engine.approveStep(feature.id, step.id, 'human', attempt.id, attempt.revision, warning.key);
+  expect(step.status).toBe('approved');
+  expect(attempt.reviewAcceptance?.proofClaims).toEqual(attempt.proofClaims);
+  expect(proofDossier(feature).claims[0].verdict).toBe('contradicted');
 });

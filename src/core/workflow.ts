@@ -489,6 +489,7 @@ export class WorkflowEngine {
         revision: warning.revision,
         review: warning.review,
         comments: warning.comments,
+        ...(warning.proofClaims ? { proofClaims: warning.proofClaims } : {}),
       });
     else delete attempt.reviewAcceptance;
     step.status = attempt.status = 'approved';

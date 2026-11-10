@@ -1,10 +1,12 @@
 import type { Feature, FeatureStep, ReviewComment, ReviewReport } from './types';
 import { stepResolved } from './optionalSteps';
+import { proofDossier, type ProofClaim } from './proofs';
 
 export interface ReviewAcceptance {
   revision: number;
   review?: ReviewReport;
   comments: ReviewComment[];
+  proofClaims?: ProofClaim[];
 }
 export interface ReviewApprovalRequest extends ReviewAcceptance {
   attemptId: string;
@@ -95,8 +97,33 @@ export function reviewApprovalRequest(
     )
     .map(commentSnapshot);
   const review = reviewSnapshot(attempt.review);
-  if (review?.verdict !== 'changes_requested' && !review?.findings.length && !comments.length)
+  const proofClaims = proofDossier(feature)
+    .claims.filter(
+      (claim) => claim.attemptId === attempt.id && !claim.stale && claim.verdict === 'contradicted',
+    )
+    .map(({ id, supersedes, text, proofIds, verdict, author, at, reportRevision }) => ({
+      id,
+      supersedes,
+      text,
+      proofIds,
+      verdict,
+      author,
+      at,
+      reportRevision,
+    }));
+  if (
+    review?.verdict !== 'changes_requested' &&
+    !review?.findings.length &&
+    !comments.length &&
+    !proofClaims.length
+  )
     return;
-  const snapshot = { attemptId: attempt.id, revision: attempt.revision ?? 0, review, comments };
+  const snapshot = {
+    attemptId: attempt.id,
+    revision: attempt.revision ?? 0,
+    review,
+    comments,
+    ...(proofClaims.length ? { proofClaims } : {}),
+  };
   return { ...snapshot, key: JSON.stringify(snapshot) };
 }

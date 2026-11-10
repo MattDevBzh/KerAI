@@ -218,6 +218,7 @@ const attempt = z.object({
       revision: z.number().int().nonnegative(),
       review: reviewSchema.optional(),
       comments: z.array(commentSchema).max(1000),
+      proofClaims: z.array(proofClaimSchema).max(300).optional(),
     })
     .strict()
     .optional(),

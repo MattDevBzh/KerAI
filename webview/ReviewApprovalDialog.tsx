@@ -17,7 +17,10 @@ export function ReviewApprovalDialog({
   const ref = useRef<HTMLDivElement>(null),
     titleId = useId();
   useDialogAccessibility(ref, onClose);
-  const count = (warning.review?.findings.length ?? 0) + warning.comments.length;
+  const count =
+    (warning.review?.findings.length ?? 0) +
+    warning.comments.length +
+    (warning.proofClaims?.length ?? 0);
   return (
     <div className="modal-backdrop">
       <div
@@ -35,9 +38,9 @@ export function ReviewApprovalDialog({
           </button>
         </div>
         <p>
-          La relecture contient des remarques. En confirmant, tu valides l’étape en l’état et
-          débloques la suite. Les remarques restent visibles et ne sont pas marquées comme
-          corrigées.
+          Des remarques ou des conclusions contredites restent présentes. En confirmant, tu valides
+          l’étape en l’état et débloques la suite. Les remarques restent visibles et ne sont pas
+          marquées comme corrigées.
         </p>
         <div className="review-approval-warnings">
           {warning.review && (
@@ -54,6 +57,16 @@ export function ReviewApprovalDialog({
             </p>
           )}
           <ul>
+            {warning.proofClaims?.map((claim) => (
+              <li key={`proof-${claim.id}`}>
+                <strong>Conclusion contredite</strong> — {claim.text}
+                <small>
+                  {' '}
+                  · Preuves :{' '}
+                  {claim.proofIds.length ? claim.proofIds.join(', ') : 'aucune référence'}
+                </small>
+              </li>
+            ))}
             {warning.review?.findings.map((finding) => (
               <li key={`finding-${finding.id}`}>
                 <strong>

@@ -67,6 +67,17 @@ describe('durable versioned store', () => {
         createdAt: new Date().toISOString(),
       },
     ];
+    attempt.proofClaims = [
+      {
+        id: '01c76d50-412c-4f26-83db-98a533d997f3',
+        text: 'Conclusion contredite',
+        proofIds: [],
+        verdict: 'contradicted',
+        author: 'agent',
+        at: attempt.startedAt,
+        reportRevision: attempt.revision ?? 0,
+      },
+    ];
     const key = reviewApprovalRequest(item, item.steps[0])!.key;
     await store.save(engine.features, defaultSettings);
     const pending = (await store.load()).features[0];

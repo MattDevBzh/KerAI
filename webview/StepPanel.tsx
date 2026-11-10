@@ -254,6 +254,10 @@ export function StepPanel({
   }
   const approvalReasons =
     step.status === 'awaiting_review' ? approvalBlockers(feature, step, 'human') : [];
+  const contradictedClaims =
+    step.status === 'awaiting_review'
+      ? (reviewApprovalRequest(feature, step)?.proofClaims ?? [])
+      : [];
   useEffect(
     () =>
       subscribe((message) => {
@@ -538,6 +542,22 @@ export function StepPanel({
             </button>
           </div>
         </details>
+        {contradictedClaims.length > 0 && (
+          <div className="session-attention" role="status">
+            <strong>
+              {contradictedClaims.length} conclusion(s) contredite(s) dans les preuves.
+            </strong>
+            <ul>
+              {contradictedClaims.map((claim) => (
+                <li key={claim.id}>{claim.text}</li>
+              ))}
+            </ul>
+            <p>Tu peux valider l’étape en confirmant l’avertissement.</p>
+            <button className="text-button" onClick={() => setTab('evidence')}>
+              Voir les conclusions et leurs preuves
+            </button>
+          </div>
+        )}
         {approvalReasons.length > 0 && (
           <p className="session-attention" role="status">
             {approvalReasons.length} point(s) à résoudre avant validation.{' '}

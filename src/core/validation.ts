@@ -105,6 +105,7 @@ export function approvalBlockers(
     attempt = step.attempts.at(-1);
   if (!attempt) return ['Aucune tentative à valider.'];
   if (
+    actor !== 'human' &&
     proofDossier(feature).claims.some(
       (c) => c.attemptId === attempt.id && !c.stale && c.verdict === 'contradicted',
     )

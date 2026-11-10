@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.42.2 — 2026-11-10
+
+- Les conclusions contredites du dossier de preuves peuvent être acceptées manuellement après un avertissement explicite, même sans commentaire de relecture.
+- Affichage des conclusions concernées et accès direct à leurs preuves depuis la session.
+- Conservation des contradictions et de la confirmation humaine dans la session ; une modification des conclusions invalide une confirmation ouverte. L’autopilot reste bloqué.
+
 ## 1.42.1 — 2026-11-09
 
 - Correction du commit refusé lorsque VS Code actualise les métadonnées de l’index Git sans changer les fichiers ; les modifications réelles continuent d’invalider l’aperçu.

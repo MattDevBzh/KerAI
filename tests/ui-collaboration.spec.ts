@@ -461,3 +461,44 @@ test('correction and report editor remain usable at narrow viewport without hori
     true,
   );
 });
+
+test('conclusion contredite : accès aux preuves et validation humaine explicite sans commentaires', async ({
+  page,
+}) => {
+  const state = scenario();
+  const feature = state.features[0],
+    step = feature.steps.at(-1)!,
+    attempt = step.attempts[0];
+  feature.criteria = [];
+  feature.reviewComments = [];
+  attempt.review = undefined;
+  attempt.proofClaims = [
+    {
+      id: '01c76d50-412c-4f26-83db-98a533d997f3',
+      text: 'Le nettoyage supprime des utilisateurs non demandés.',
+      proofIds: [],
+      verdict: 'contradicted',
+      author: 'agent',
+      at: attempt.startedAt,
+      reportRevision: 0,
+    },
+  ];
+  await open(page, state);
+  await expect(page.getByText('Validation bloquée', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Voir les conclusions et leurs preuves' }).click();
+  await expect(page.getByRole('tab', { name: 'Preuves', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const validate = page.getByRole('button', { name: 'Valider cette étape', exact: true });
+  await expect(validate).toBeEnabled();
+  await validate.click();
+  const dialog = page.getByRole('dialog', { name: 'Valider malgré les remarques ?' });
+  await expect(dialog).toContainText(attempt.proofClaims[0].text);
+  expect(await messages(page, 'approveStep')).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Valider malgré les remarques', exact: true }).click();
+  await expect.poll(() => messages(page, 'approveStep')).toHaveLength(1);
+  expect((await messages(page, 'approveStep'))[0]).toMatchObject({
+    expectedReviewWarningsKey: reviewApprovalRequest(feature, step)!.key,
+  });
+});
