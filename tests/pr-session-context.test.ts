@@ -192,3 +192,37 @@ describe('selected session context for PRs', () => {
     expect(bounded.warnings.join('')).toContain('Catalogue partiel');
   });
 });
+
+it('warns about the automatic excerpt and preserves late audit findings in the selected full report', () => {
+  const feature = structuredClone(demoState.features[0]);
+  const step = feature.steps[0];
+  feature.steps = [step];
+  const content =
+    'F01 — premier constat\n' +
+    'Contexte du bilan. '.repeat(700) +
+    '\nF04 — migration\nF11 et F12 — mandat';
+  step.attempts = [
+    {
+      id: 'long-audit',
+      startedAt: 'now',
+      status: 'approved',
+      feedback: '',
+      logs: [],
+      questions: [],
+      answers: {},
+      changedFiles: [],
+      artifact: { name: 'Bilan.md', content, updatedAt: 'now' },
+    },
+  ];
+  const catalog = prSessionContext(feature, devops);
+  expect(catalog.summary).not.toContain('F04');
+  expect(catalog.warnings.join()).toContain('3 500');
+  const parts = catalog.items.filter((item) => item.kind === 'report');
+  expect(parts.length).toBeGreaterThan(1);
+  const selected = selectPrSessionContext(
+    catalog,
+    parts.map(({ id, digest }) => ({ id, digest })),
+  );
+  expect(selected.sources.map((source) => source.content).join('')).toBe(content);
+  expect(selected.sources.map((source) => source.content).join('')).toContain('F11 et F12');
+});

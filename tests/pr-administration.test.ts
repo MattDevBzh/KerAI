@@ -219,16 +219,21 @@ describe('PR administration diff and publication', () => {
     });
     expect(f.service.getState()!.progress).toBeUndefined();
   });
-  it('allows retry after an explicit Azure rejection without creating a permanent uncertain annotation', async () => {
-    const f = await fixture();
-    f.api.createThread.mockRejectedValueOnce(new AzureDevOpsHttpError(403, 'Droits insuffisants'));
-    await f.prepare();
-    await expect(f.apply()).rejects.toThrow('Droits insuffisants');
-    expect(f.service.records['repo:session'].annotations['42']).toEqual([]);
-    await f.apply();
-    expect(f.remote.threads).toHaveLength(1);
-    expect(f.service.getState()!.preview!.completed).toHaveLength(1);
-  });
+  it.each([400, 403])(
+    'allows retry after an explicit Azure %i rejection without creating a permanent uncertain annotation',
+    async (status) => {
+      const f = await fixture();
+      f.api.createThread.mockRejectedValueOnce(
+        new AzureDevOpsHttpError(status, 'Refus explicite Azure'),
+      );
+      await f.prepare();
+      await expect(f.apply()).rejects.toThrow('Refus explicite Azure');
+      expect(f.service.records['repo:session'].annotations['42']).toEqual([]);
+      await f.apply();
+      expect(f.remote.threads).toHaveLength(1);
+      expect(f.service.getState()!.preview!.completed).toHaveLength(1);
+    },
+  );
   it('does not strand an annotation when saving its intent fails before the request', async () => {
     const f = await fixture();
     await f.prepare();
@@ -562,88 +567,101 @@ it.each([
   await expect(api.snapshot(42)).rejects.toThrow(message);
 });
 
-it('Azure adapter verifies current refs and merge base, and writes only the selected fields and verified line context', async () => {
-  let moved = false;
-  const request = vi.fn(
-    async (suffix: string, body?: unknown, _method?: 'PATCH'): Promise<Record<string, unknown>> => {
-      if (body) return { id: 1, status: 'byDesign', comments: [{ id: 1, content: 'Explanation' }] };
-      if (suffix.includes('/refs?')) {
-        const branch = new URL('https://local' + suffix).searchParams.get('filter')!;
+it.each([
+  { side: 'left' as const, endLine: 7 },
+  { side: 'left' as const, endLine: 8 },
+  { side: 'right' as const, endLine: 7 },
+  { side: 'right' as const, endLine: 8 },
+])(
+  'Azure adapter uses accepted offsets for $side comment ending on line $endLine and verifies refs',
+  async ({ side, endLine }) => {
+    let moved = false;
+    const request = vi.fn(
+      async (
+        suffix: string,
+        body?: unknown,
+        _method?: 'PATCH',
+      ): Promise<Record<string, unknown>> => {
+        if (body)
+          return { id: 1, status: 'byDesign', comments: [{ id: 1, content: 'Explanation' }] };
+        if (suffix.includes('/refs?')) {
+          const branch = new URL('https://local' + suffix).searchParams.get('filter')!;
+          return {
+            value: [
+              {
+                name: 'refs/' + branch,
+                objectId:
+                  branch === 'heads/main'
+                    ? initial.targetHead
+                    : moved
+                      ? 'c'.repeat(40)
+                      : initial.sourceHead,
+              },
+            ],
+          };
+        }
+        if (suffix.includes('/diffs/')) return { commonCommit: initial.baseHead };
+        if (suffix.includes('/iterations?'))
+          return { value: [{ id: 1, sourceRefCommit: { commitId: initial.sourceHead } }] };
         return {
-          value: [
-            {
-              name: 'refs/' + branch,
-              objectId:
-                branch === 'heads/main'
-                  ? initial.targetHead
-                  : moved
-                    ? 'c'.repeat(40)
-                    : initial.sourceHead,
-            },
-          ],
+          title: initial.title,
+          description: initial.description,
+          sourceRefName: initial.sourceBranch,
+          targetRefName: initial.targetBranch,
+          status: 'active',
+          lastMergeSourceCommit: { commitId: initial.sourceHead },
+          lastMergeTargetCommit: { commitId: initial.targetHead },
         };
-      }
-      if (suffix.includes('/diffs/')) return { commonCommit: initial.baseHead };
-      if (suffix.includes('/iterations?'))
-        return { value: [{ id: 1, sourceRefCommit: { commitId: initial.sourceHead } }] };
-      return {
-        title: initial.title,
-        description: initial.description,
-        sourceRefName: initial.sourceBranch,
-        targetRefName: initial.targetBranch,
-        status: 'active',
-        lastMergeSourceCommit: { commitId: initial.sourceHead },
-        lastMergeTargetCommit: { commitId: initial.targetHead },
-      };
-    },
-  );
-  const api = new PrAdministrationApi(
-    request,
-    () => initial.url,
-    async () => 'actor',
-  );
-  expect(await api.snapshot(42)).toEqual(initial);
-  await api.updateField(initial, 'title', 'New');
-  expect(request).toHaveBeenLastCalledWith(
-    '/pullrequests/42?api-version=7.1',
-    { title: 'New' },
-    'PATCH',
-  );
-  const block = {
-    id: 'b',
-    stableKey: 's',
-    path: 'app.ts',
-    side: 'left' as const,
-    startLine: 7,
-    endLine: 8,
-    changeTrackingId: 12,
-    code: '-old',
-  };
-  await api.createThread(initial, block, 'Explanation', 'wontFix');
-  expect(request).toHaveBeenLastCalledWith(
-    '/pullrequests/42/threads?api-version=7.1',
-    expect.objectContaining({
-      status: 'wontFix',
-      threadContext: {
-        filePath: '/app.ts',
-        leftFileStart: { line: 7, offset: 0 },
-        leftFileEnd: { line: 8, offset: 1 },
       },
-      pullRequestThreadContext: {
-        changeTrackingId: 12,
-        iterationContext: { firstComparingIteration: 1, secondComparingIteration: 1 },
-      },
-    }),
-  );
-  await api.updateComment(initial, 1, 1, 'New');
-  expect(request).toHaveBeenLastCalledWith(
-    '/pullrequests/42/threads/1/comments/1?api-version=7.1',
-    { content: 'New' },
-    'PATCH',
-  );
-  moved = true;
-  await expect(api.snapshot(42)).rejects.toThrow('branche a changé');
-});
+    );
+    const api = new PrAdministrationApi(
+      request,
+      () => initial.url,
+      async () => 'actor',
+    );
+    expect(await api.snapshot(42)).toEqual(initial);
+    await api.updateField(initial, 'title', 'New');
+    expect(request).toHaveBeenLastCalledWith(
+      '/pullrequests/42?api-version=7.1',
+      { title: 'New' },
+      'PATCH',
+    );
+    const block = {
+      id: 'b',
+      stableKey: 's',
+      path: 'app.ts',
+      side,
+      startLine: 7,
+      endLine,
+      changeTrackingId: 12,
+      code: '-old',
+    };
+    await api.createThread(initial, block, 'Explanation', 'wontFix');
+    expect(request).toHaveBeenLastCalledWith(
+      '/pullrequests/42/threads?api-version=7.1',
+      expect.objectContaining({
+        status: 'wontFix',
+        threadContext: {
+          filePath: '/app.ts',
+          [`${side}FileStart`]: { line: 7, offset: 1 },
+          [`${side}FileEnd`]: { line: endLine, offset: 1 },
+        },
+        pullRequestThreadContext: {
+          changeTrackingId: 12,
+          iterationContext: { firstComparingIteration: 1, secondComparingIteration: 1 },
+        },
+      }),
+    );
+    await api.updateComment(initial, 1, 1, 'New');
+    expect(request).toHaveBeenLastCalledWith(
+      '/pullrequests/42/threads/1/comments/1?api-version=7.1',
+      { content: 'New' },
+      'PATCH',
+    );
+    moved = true;
+    await expect(api.snapshot(42)).rejects.toThrow('branche a changé');
+  },
+);
 it('administrator uses the selected model with rules and no tool access', async () => {
   const proposal: PrAdminModelProposal = { summary: 'No evidence', comments: [] };
   const run = vi.fn(async (_input: RunInput) => ({
@@ -807,4 +825,28 @@ it('rejects an unrelated session catalogue and forged context before calling the
   });
   await expect(f.prepare()).rejects.toThrow('autre session');
   expect(f.options.generate).not.toHaveBeenCalled();
+});
+
+it('accepts grouped audit findings from supplied context and rejects the missing component before publication', async () => {
+  const f = await fixture();
+  const generate = f.options.generate;
+  let rule = 'F11/F12';
+  f.options.generate = vi.fn(async (input) => {
+    const result = await generate(input);
+    result.proposal.comments[0].rule = rule;
+    return result;
+  });
+  await f.service.handle({
+    type: 'deliveryPrAdminSettings',
+    settings: {
+      ...defaultPrAdministrationSettings,
+      context: 'F04 — migration\nF11 et F12 — mandat et vérifications',
+    },
+  });
+  await f.prepare();
+  expect(f.service.getState()!.preview!.actions[0].rule).toBe('F11/F12');
+  expect(f.api.createThread).not.toHaveBeenCalled();
+  rule = 'F11/F99';
+  await expect(f.prepare()).rejects.toThrow(/f99.*Sélectionne toutes les parties/);
+  expect(f.api.createThread).not.toHaveBeenCalled();
 });

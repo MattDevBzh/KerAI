@@ -1,4 +1,5 @@
 import { selectPrSessionContext } from './PrSessionContext';
+import { missingPrRuleReferences } from '../shared/prRuleReferences';
 import { AzureDevOpsHttpError, devOpsErrorMessage } from './DevOpsErrors';
 import type { PrSessionContextCatalog, PrSessionContextSnapshot } from '../shared/prSessionContext';
 import { randomUUID } from 'node:crypto';
@@ -280,14 +281,15 @@ export class PrAdministrationService {
       const block = blocks.find((block) => block.id === item.blockId);
       if (!block)
         throw new Error('L’agent a désigné un bloc absent du diff vérifié. Aucune publication.');
-      if (
-        item.rule &&
-        !`${settings.instructions}\n${settings.context}\n${sessionContext?.summary ?? ''}\n${sessionContext?.sources.map((source) => source.content).join('\n') ?? ''}`
-          .toLocaleLowerCase()
-          .includes(item.rule.toLocaleLowerCase())
-      )
+      const missingRules = missingPrRuleReferences(item.rule, [
+        settings.instructions,
+        settings.context,
+        sessionContext?.summary ?? '',
+        ...(sessionContext?.sources.map((source) => source.content) ?? []),
+      ]);
+      if (missingRules.length)
         throw new Error(
-          `La règle « ${item.rule} » n’est pas présente dans les consignes ou le contexte fourni. Aucune publication.`,
+          `Référence(s) introuvable(s) dans les textes transmis : ${missingRules.join(', ')} (proposition « ${item.rule} »). Le résumé automatique contient seulement un extrait du compte rendu. Sélectionne toutes les parties du bilan dans « Ajouter du contexte depuis la session », ou colle le texte complet dans « Règles et contexte de la session », puis enregistre la mission. Aucune publication.`,
         );
       const key = prHash(`${block.stableKey}:${item.rule.toLocaleLowerCase()}`);
       if (keys.has(key))

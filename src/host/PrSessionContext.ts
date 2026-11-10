@@ -19,6 +19,14 @@ import {
 export function prSessionContext(feature: Feature, devops: DevOpsState): PrSessionContextCatalog {
   const items: PrSessionContextItem[] = [],
     warnings = new Set<string>();
+  const latestReport = [...feature.steps]
+    .reverse()
+    .find((step) => step.attempts.at(-1)?.artifact)
+    ?.attempts.at(-1)?.artifact;
+  if ((latestReport?.content.trim().length ?? 0) > 3500)
+    warnings.add(
+      'Le dernier compte rendu dépasse les 3 500 caractères repris dans le résumé automatique. Sélectionne toutes ses parties pour transmettre le rapport complet, notamment ses constats de fin.',
+    );
   let characters = 0;
   function add(
     key: string,

@@ -52,9 +52,11 @@ export function PrSessionContextPicker({
     <section aria-label="Contexte issu de la session" className="pr-session-context">
       <h3>Ajouter du contexte depuis la session</h3>
       <p>
-        Le résumé du besoin, le dernier compte rendu et les preuves sont inclus automatiquement.
-        Choisis ici les échanges, autres comptes rendus, consignes et documents importés utiles à
-        cette PR. Les textes longs sont découpés en parties ; les originaux restent inchangés.
+        Un extrait du besoin et du dernier compte rendu (3 500 caractères chacun), ainsi qu’un
+        résumé des preuves, sont inclus automatiquement. Choisis ici les échanges, autres comptes
+        rendus, consignes et documents importés utiles à cette PR. Pour utiliser un rapport complet,
+        sélectionne toutes ses parties. Les textes longs sont découpés en parties ; les originaux
+        restent inchangés.
       </p>
       <button type="button" disabled={busy} onClick={load}>
         {catalog ? 'Actualiser les sources de la session' : 'Charger les sources de la session'}

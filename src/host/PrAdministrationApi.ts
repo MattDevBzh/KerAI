@@ -160,7 +160,8 @@ export class PrAdministrationApi {
         status,
         threadContext: {
           filePath: '/' + block.path,
-          [`${block.side}FileStart`]: { line: block.startLine, offset: 0 },
+          // Azure rejects offset 0 when creating inline threads (on either diff side).
+          [`${block.side}FileStart`]: { line: block.startLine, offset: 1 },
           [`${block.side}FileEnd`]: { line: block.endLine, offset: 1 },
         },
         pullRequestThreadContext: {

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.42.6 — 2026-11-10
+
+- Les blocs transmis à l’agent pour annoter une PR portent des références courtes (B1, B2…), résolues exclusivement vers les blocs du diff vérifié par le host.
+- La correction automatique contrôle désormais les références de blocs, les constats, les permissions et les doublons, en plus du format JSON. Une seule nouvelle génération est autorisée.
+- Une plage absente du diff publié doit être signalée dans le bilan, sans rattachement arbitraire à un autre emplacement. Les contrôles avant publication restent actifs.
+- Inclut les correctifs précédents des propositions, du contexte d’audit et des positions Azure DevOps.
+
+## 1.42.5 — 2026-11-10
+
+- Les références regroupées aux constats d’audit (F11/F12, F11 et F12, etc.) sont vérifiées identifiant par identifiant dans le contexte transmis.
+- Les identifiants doivent être complets : F04 ne correspond plus à F040. Les constats absents restent refusés, avec une explication et les étapes pour transmettre le bilan complet.
+- Le sélecteur de contexte précise que le résumé automatique ne reprend que 3 500 caractères du compte rendu ; un avertissement signale les rapports plus longs.
+- Inclut les corrections du format des propositions et des positions de commentaires Azure DevOps.
+
+## 1.42.4 — 2026-11-10
+
+- Correction du HTTP 400 à la publication d’un commentaire de PR Azure DevOps : la position de départ utilise désormais l’offset 1, sur les deux côtés du diff.
+- Régression couverte pour les commentaires sur une ou plusieurs lignes et le réessai après un refus HTTP 400 explicite.
+- Inclut la correction du format des propositions de PR de la version 1.42.3.
+
+## 1.42.3 — 2026-11-10
+
+- Préparation des interventions sur PR : prise en charge des champs optionnels vides ou nuls et des références facultatives absentes.
+- Une réponse mal formée fait l’objet d’une seule demande automatique de correction à l’agent. Les limites et les champs attendus sont explicités dans sa consigne.
+- En cas d’échec persistant, le message indique les champs invalides sans afficher leur contenu. Les contrôles des permissions, des blocs du diff et la confirmation avant publication sont conservés.
+
 ## 1.42.2 — 2026-11-10
 
 - Les conclusions contredites du dossier de preuves peuvent être acceptées manuellement après un avertissement explicite, même sans commentaire de relecture.
